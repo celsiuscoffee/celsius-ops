@@ -54,6 +54,67 @@ export async function GET() {
   });
 }
 
+// PATCH: withdraw my own leave request while it is still undecided.
+// Body: { id, action: "cancel" }. Approved leave can't be self-cancelled — the
+// days are already banked, so that goes through a manager (backoffice Cancel).
+export async function PATCH(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = (await req.json().catch(() => ({}))) as { id?: string; action?: string };
+  if (!body.id || body.action !== "cancel") {
+    return NextResponse.json({ error: "id and action=cancel required" }, { status: 400 });
+  }
+
+  const { data: existing } = await supabase
+    .from("hr_leave_requests")
+    .select("user_id, status, leave_type, total_days, start_date")
+    .eq("id", body.id)
+    .maybeSingle();
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (existing.user_id !== session.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!["pending", "ai_escalated"].includes(existing.status)) {
+    return NextResponse.json(
+      {
+        error: ["approved", "ai_approved"].includes(existing.status)
+          ? "This leave is already approved. Ask your manager to cancel it."
+          : "Only a pending request can be withdrawn.",
+      },
+      { status: 400 },
+    );
+  }
+
+  // Compare-and-set so a manager deciding at the same moment can't both win.
+  const { data: rows, error } = await supabase
+    .from("hr_leave_requests")
+    .update({ status: "cancelled", rejection_reason: "Withdrawn by staff", updated_at: new Date().toISOString() })
+    .eq("id", body.id)
+    .eq("status", existing.status)
+    .select("id");
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!rows || rows.length === 0) {
+    return NextResponse.json({ error: "This request was just decided by your manager — refresh to see it." }, { status: 409 });
+  }
+
+  // Release the hold taken at submit time (same start-year row).
+  const balanceYear = Number(String(existing.start_date).slice(0, 4));
+  const { data: bal } = await supabase
+    .from("hr_leave_balances")
+    .select("id, pending_days")
+    .eq("user_id", session.id)
+    .eq("year", balanceYear)
+    .eq("leave_type", existing.leave_type)
+    .maybeSingle();
+  if (bal) {
+    await supabase
+      .from("hr_leave_balances")
+      .update({ pending_days: Math.max(0, Number(bal.pending_days) - Number(existing.total_days)) })
+      .eq("id", bal.id);
+  }
+
+  return NextResponse.json({ success: true });
+}
+
 // POST: submit a leave request (AI processes inline)
 export async function POST(req: NextRequest) {
   const session = await getSession();

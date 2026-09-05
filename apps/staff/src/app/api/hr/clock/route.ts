@@ -114,6 +114,31 @@ async function findRosterShift(userId: string, clockIn: Date): Promise<{ schedul
   return { scheduled_start: best.shift.start_time, scheduled_end: best.shift.end_time, scheduled_date: best.shift.shift_date };
 }
 
+// Day-type inputs for the pay-hours split (employment type, PH, rostered rest
+// day) — the same three reads the backoffice processor and auto-close use.
+async function loadDayContext(userId: string, mytDate: string) {
+  const [profileResp, holidayResp, restResp] = await Promise.all([
+    supabase.from("hr_employee_profiles").select("employment_type").eq("user_id", userId).maybeSingle(),
+    // limit(1): the holiday table is unique on (date, name), so a date can
+    // hold a national AND a state row; maybeSingle() errors on two rows and
+    // the shift would price as a normal weekday.
+    supabase.from("hr_public_holidays").select("date").eq("date", mytDate).limit(1).maybeSingle(),
+    supabase
+      .from("hr_schedule_shifts")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("shift_date", mytDate)
+      .ilike("role_type", REST_DAY_ROLE_PATTERN)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  return {
+    employmentType: (profileResp.data?.employment_type as string | null) || "full_time",
+    isPublicHoliday: !!holidayResp.data,
+    isRestDay: !!restResp.data,
+  };
+}
+
 // GET: current clock-in status for the logged-in user
 export async function GET(req: NextRequest) {
   const session = await getUser(req.headers);
@@ -168,11 +193,124 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { action, latitude, longitude, photo } = body as {
-    action: "clock_in" | "clock_out";
+    action: "clock_in" | "clock_out" | "close_stale";
     latitude?: number;
     longitude?: number;
     photo?: string; // base64 data URL
   };
+
+  // Self-service exit from a forgotten clock-out. The 15-minute cron closes a
+  // stale log after 1am at the rostered end, but only when it trusts the
+  // reference (no roster + no outlet close time, or a bad stamp, leaves the
+  // log open). The staffer then arrives next morning still "clocked in": the
+  // button says Clock Out, the clock-out gate wants GPS at yesterday's outlet,
+  // and tapping it would close yesterday's shift NOW, ~14h later. This closes
+  // it exactly as the cron would have — at the rostered end (or outlet close),
+  // paid regular hours, OT = 0, marked as a system close so the processor and
+  // OT generator treat it identically — without GPS or a photo.
+  if (action === "close_stale") {
+    const { data: staleLog } = await supabase
+      .from("hr_attendance_logs")
+      .select("*")
+      .eq("user_id", session.id)
+      .is("clock_out", null)
+      .order("clock_in", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!staleLog) return NextResponse.json({ error: "Not clocked in" }, { status: 400 });
+
+    const clockIn = new Date(staleLog.clock_in);
+    const clockInDate = mytDateString(clockIn);
+    const shiftDate: string = staleLog.scheduled_date ?? clockInDate;
+    // Only a log clocked in on a PREVIOUS MYT day. Today's open log is a live
+    // shift — that goes through the normal clock-out (GPS + photo), never this
+    // path, or anyone could end a live shift from home.
+    if (clockInDate >= mytDateString(new Date())) {
+      return NextResponse.json(
+        { error: "This shift started today — use Clock Out when you finish.", notStale: true },
+        { status: 409 },
+      );
+    }
+
+    // Close reference, same order as the cron: rostered end (rolled past
+    // midnight for a closing shift), else the outlet's close time on the
+    // shift date. Never fabricate one.
+    let closeAt: Date | null = null;
+    let reference: "roster" | "outlet_close" | null = null;
+    const schedStart = mytInstant(shiftDate, staleLog.scheduled_start);
+    let schedEnd = mytInstant(shiftDate, staleLog.scheduled_end);
+    if (schedEnd && schedStart && schedEnd.getTime() <= schedStart.getTime()) {
+      schedEnd = new Date(schedEnd.getTime() + 24 * 3600 * 1000);
+    }
+    if (schedEnd && schedEnd > clockIn) {
+      closeAt = schedEnd;
+      reference = "roster";
+    } else {
+      const { data: outlet } = await supabase
+        .from("Outlet")
+        .select("closeTime")
+        .eq("id", staleLog.outlet_id)
+        .maybeSingle();
+      const outletClose = mytInstant(shiftDate, (outlet?.closeTime as string | null) ?? null);
+      if (outletClose && outletClose > clockIn) {
+        closeAt = outletClose;
+        reference = "outlet_close";
+      }
+    }
+    if (!closeAt || !reference) {
+      return NextResponse.json(
+        { error: "There is no rostered end time for that shift, so it can't be closed automatically. Ask your manager to fix the times.", noReference: true },
+        { status: 409 },
+      );
+    }
+    if (closeAt > new Date()) closeAt = new Date();
+
+    const ctx = await loadDayContext(session.id, clockInDate);
+    const derived = deriveHours({
+      clockIn,
+      clockOut: closeAt,
+      employmentType: ctx.employmentType,
+      isPublicHoliday: ctx.isPublicHoliday,
+      isRestDay: ctx.isRestDay,
+      scheduledStart: mytInstant(shiftDate, staleLog.scheduled_start),
+      scheduledEnd: mytInstant(shiftDate, staleLog.scheduled_end),
+    });
+    const priorFlags: string[] = Array.isArray(staleLog.ai_flags) ? staleLog.ai_flags : [];
+    const flags = [...priorFlags, "auto_closed_forgot_clockout", ...derived.dayTypeFlags]
+      .filter((f, i, a) => f !== "overtime_detected" && a.indexOf(f) === i);
+
+    const { data: closedRow, error } = await supabase
+      .from("hr_attendance_logs")
+      .update({
+        clock_out: closeAt.toISOString(),
+        // "system" on purpose: the processor zeroes OT on a system close and
+        // the OT-request generator skips it, exactly as for the cron's close.
+        clock_out_method: "system",
+        total_hours: derived.totalHours,
+        regular_hours: derived.regularHours,
+        overtime_hours: 0,
+        overtime_type: derived.overtimeType,
+        ai_flags: flags,
+        excused: true,
+        excused_reason: "Forgot to clock out — closed by staff at the rostered end (no OT)",
+        review_notes: `Self-closed by staff the next day at the ${reference === "roster" ? "rostered end" : "outlet close time"}; paid to shift end, OT excluded`,
+      })
+      .eq("id", staleLog.id)
+      .is("clock_out", null)
+      .select()
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!closedRow) {
+      return NextResponse.json({ error: "That shift was already closed.", alreadyClosed: true }, { status: 409 });
+    }
+    return NextResponse.json({
+      success: true,
+      log: closedRow,
+      closedAt: closeAt.toISOString(),
+      reference,
+      totalHours: Math.round(derived.totalHours * 100) / 100,
+    });
+  }
 
   // Resolve the outlet the staffer is ACTUALLY at (nearest of their assigned
   // outlets by GPS), not a fixed session.outletId — the multi-outlet fix.
@@ -363,27 +501,13 @@ export async function POST(req: NextRequest) {
     // profile-based read defaulted NULL to Sunday and mis-stamped 107 of 108
     // rest-day logs. Same source as the AI processor and the auto-close cron.
     const clockInDate = mytDateString(clockIn);
-    const [profileResp, holidayResp, restResp] = await Promise.all([
-      supabase.from("hr_employee_profiles").select("employment_type").eq("user_id", session.id).maybeSingle(),
-      // limit(1): the holiday table is unique on (date, name), so a date can
-      // hold a national AND a state row; maybeSingle() errors on two rows and
-      // the shift would price as a normal weekday.
-      supabase.from("hr_public_holidays").select("date").eq("date", clockInDate).limit(1).maybeSingle(),
-      supabase
-        .from("hr_schedule_shifts")
-        .select("id")
-        .eq("user_id", session.id)
-        .eq("shift_date", clockInDate)
-        .ilike("role_type", REST_DAY_ROLE_PATTERN)
-        .limit(1)
-        .maybeSingle(),
-    ]);
+    const ctx = await loadDayContext(session.id, clockInDate);
     const derived = deriveHours({
       clockIn,
       clockOut,
-      employmentType: profileResp.data?.employment_type || "full_time",
-      isPublicHoliday: !!holidayResp.data,
-      isRestDay: !!restResp.data,
+      employmentType: ctx.employmentType,
+      isPublicHoliday: ctx.isPublicHoliday,
+      isRestDay: ctx.isRestDay,
       // The paid window: only time inside the rostered shift counts. Must match
       // the backoffice processor — this tap-out writes regular_hours directly.
       scheduledStart: mytInstant(activeLog.scheduled_date ?? clockInDate, activeLog.scheduled_start),

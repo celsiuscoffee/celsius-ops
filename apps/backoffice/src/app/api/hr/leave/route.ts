@@ -65,8 +65,106 @@ export async function PATCH(req: NextRequest) {
 
   const body = await req.json();
   const { id, action, reason, allow_negative_balance } = body as {
-    id: string; action: "approve" | "reject"; reason?: string; allow_negative_balance?: boolean;
+    id: string; action: "approve" | "reject" | "cancel"; reason?: string; allow_negative_balance?: boolean;
   };
+
+  if (action === "cancel") {
+    // Cancellation is the missing third outcome. Reject refused anything
+    // already approved ("cancel/restore the approved request instead") but no
+    // such path existed, so an approved leave the person did not take stayed
+    // approved: the days stayed burned and payroll's unpaid-leave deduction
+    // (which reads approved rows) still applied. Rules:
+    //   pending / ai_escalated → any reviewer in scope; releases the hold.
+    //   approved / ai_approved → OWNER/ADMIN with a reason; restores used_days.
+    const { data: request } = await hrSupabaseAdmin
+      .from("hr_leave_requests")
+      .select("user_id, leave_type, total_days, status, start_date, end_date")
+      .eq("id", id)
+      .maybeSingle();
+    if (!request) return NextResponse.json({ error: "Request not found" }, { status: 404 });
+
+    const wasApproved = ["approved", "ai_approved"].includes(request.status);
+    const wasPending = ["pending", "ai_escalated"].includes(request.status);
+    if (!wasApproved && !wasPending) {
+      return NextResponse.json(
+        { error: `Cannot cancel a request in status '${request.status}'` },
+        { status: 400 },
+      );
+    }
+    if (session.role === "MANAGER") {
+      if (wasApproved) {
+        return NextResponse.json(
+          { error: "Only an owner/admin can cancel an approved leave — it has already been banked against the balance." },
+          { status: 403 },
+        );
+      }
+      const visibleIds = await resolveVisibleUserIds(session);
+      if (!visibleIds || !visibleIds.includes(request.user_id)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+    const cancelReason = (reason ?? "").trim();
+    if (wasApproved && cancelReason.length < 3) {
+      return NextResponse.json(
+        { error: "A reason is required to cancel an approved leave.", reason: "reason_required" },
+        { status: 422 },
+      );
+    }
+
+    // Compare-and-set on the status we read, so two operators (or a staff
+    // self-cancel racing a manager) can't both move the balance.
+    const { data: cancelledRows, error } = await hrSupabaseAdmin
+      .from("hr_leave_requests")
+      .update({
+        status: "cancelled",
+        rejection_reason: cancelReason ? `Cancelled: ${cancelReason}` : "Cancelled by manager",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("status", request.status)
+      .select("id");
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!cancelledRows || cancelledRows.length === 0) {
+      return NextResponse.json({ error: "This request was already decided" }, { status: 409 });
+    }
+
+    const year = new Date(request.start_date).getFullYear();
+    const { data: balance } = await hrSupabaseAdmin
+      .from("hr_leave_balances")
+      .select("id, used_days, pending_days")
+      .eq("user_id", request.user_id)
+      .eq("year", year)
+      .eq("leave_type", request.leave_type)
+      .maybeSingle();
+    if (balance) {
+      await hrSupabaseAdmin
+        .from("hr_leave_balances")
+        .update(
+          wasApproved
+            ? { used_days: Math.max(0, Number(balance.used_days) - Number(request.total_days)) }
+            : { pending_days: Math.max(0, Number(balance.pending_days) - Number(request.total_days)) },
+        )
+        .eq("id", balance.id);
+    }
+
+    await logActivity({
+      actorId: session.id,
+      action: wasApproved ? "leave.cancel_approved" : "leave.cancel_pending",
+      module: "hr",
+      targetId: id,
+      targetName: `${request.leave_type} ${request.start_date}→${request.end_date} (${request.total_days}d)`,
+      details: {
+        user_id: request.user_id,
+        previous_status: request.status,
+        reason: cancelReason || null,
+        days_restored: wasApproved ? Number(request.total_days) : 0,
+        had_balance_row: !!balance,
+      },
+      request: req,
+    });
+
+    return NextResponse.json({ success: true, restored_days: wasApproved ? Number(request.total_days) : 0 });
+  }
 
   if (action === "approve") {
     // Get the request to update balance + verify it's still actionable.
@@ -211,7 +309,7 @@ export async function PATCH(req: NextRequest) {
     // pending states — surface a clear error for the operator.
     if (!["pending", "ai_escalated"].includes(request.status)) {
       return NextResponse.json(
-        { error: `Cannot reject a request in status '${request.status}' — cancel/restore the approved request instead.` },
+        { error: `Cannot reject a request in status '${request.status}' — use Cancel on the approved request instead (owner/admin, restores the days).` },
         { status: 400 },
       );
     }

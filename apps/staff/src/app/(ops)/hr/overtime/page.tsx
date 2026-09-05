@@ -4,6 +4,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import Link from "next/link";
 import { Clock, Plus, Loader2, CheckCircle2, XCircle, AlertTriangle, X, ArrowLeft } from "lucide-react";
+import { FetchError } from "@/components/fetch-error";
 
 type OTRequest = {
   id: string;
@@ -20,7 +21,7 @@ type OTRequest = {
 };
 
 export default function StaffOTPage() {
-  const { data, mutate } = useFetch<{ requests: OTRequest[] }>("/api/hr/overtime");
+  const { data, error, mutate } = useFetch<{ requests: OTRequest[] }>("/api/hr/overtime");
   const [form, setForm] = useState<null | { date: string; hours: string; ot_type: string; reason: string; start: string; end: string }>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -100,6 +101,10 @@ export default function StaffOTPage() {
 
       {result && (
         <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">{result}</div>
+      )}
+
+      {!data && error && (
+        <FetchError error={error} onRetry={() => mutate()} what="your OT requests" />
       )}
 
       {/* Pending */}

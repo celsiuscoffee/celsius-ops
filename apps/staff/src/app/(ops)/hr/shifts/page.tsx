@@ -4,6 +4,7 @@ import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import Link from "next/link";
 import { CalendarDays, Clock, ArrowLeftRight, Loader2, CheckCircle2, XCircle, ArrowLeft, Sunrise, Sun, Moon, Coffee, MapPin } from "lucide-react";
+import { FetchError } from "@/components/fetch-error";
 
 type Shift = {
   id: string;
@@ -113,7 +114,7 @@ function classifyShift(startTime: string, endTime: string, roleType: string | nu
 }
 
 export default function MyShiftsPage() {
-  const { data } = useFetch<{ shifts: Shift[] }>("/api/hr/shifts");
+  const { data, error: shiftsError, mutate: mutateShifts } = useFetch<{ shifts: Shift[] }>("/api/hr/shifts");
   const { data: swapData, mutate: mutateSwaps } = useFetch<{ sent: SwapRequest[]; pendingConsent: SwapRequest[] }>("/api/hr/swap");
   const [swapAction, setSwapAction] = useState<string | null>(null);
 
@@ -221,6 +222,12 @@ export default function MyShiftsPage() {
           days.push(d.toISOString().slice(0, 10));
         }
         const hasAnyShift = shifts.some((s) => s.shift_date >= today);
+
+        // A failed fetch is not "no shifts" — the old empty state told a
+        // staffer with an expired session that the schedule wasn't published.
+        if (!data && shiftsError) {
+          return <FetchError error={shiftsError} onRetry={() => mutateShifts()} what="your shifts" />;
+        }
 
         if (!hasAnyShift) {
           return (

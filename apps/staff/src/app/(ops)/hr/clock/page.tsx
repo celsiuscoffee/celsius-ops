@@ -4,12 +4,15 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import Link from "next/link";
 import { Clock, MapPin, LogIn, LogOut, Loader2, CheckCircle2, AlertTriangle, Camera, RefreshCw, ArrowLeft } from "lucide-react";
+import { FetchError } from "@/components/fetch-error";
 
 type ClockStatus = {
   activeLog: {
     id: string;
     clock_in: string;
     outlet_id: string;
+    scheduled_date: string | null;
+    scheduled_end: string | null;
   } | null;
   geofence: {
     name: string;
@@ -24,10 +27,11 @@ export default function ClockPage() {
   const [gps, setGps] = useState<{ lat: number; lng: number } | null>(null);
   // Pass GPS to the status call so a multi-outlet staffer sees the geofence for
   // the outlet they're ACTUALLY at (GET picks nearest by coords), not a fallback.
-  const { data: status, mutate } = useFetch<ClockStatus>(
+  const { data: status, error: statusError, mutate } = useFetch<ClockStatus>(
     gps ? `/api/hr/clock?lat=${gps.lat}&lng=${gps.lng}` : "/api/hr/clock",
   );
   const [loading, setLoading] = useState(false);
+  const [closingStale, setClosingStale] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsLoading, setGpsLoading] = useState(true);
   const [result, setResult] = useState<{ success: boolean; message: string; withinGeofence?: boolean } | null>(null);
@@ -42,6 +46,47 @@ export default function ClockPage() {
   const streamRef = useRef<MediaStream | null>(null);
 
   const isClockedIn = !!status?.activeLog;
+
+  // A log still open from a PREVIOUS Malaysian day is a forgotten clock-out,
+  // not a live shift. Until now the page just showed "Clock Out" with a 14h
+  // elapsed timer, and tapping it needed GPS at yesterday's outlet and closed
+  // the shift at the tap time. Offer the same close the overnight cron does.
+  const mytDate = (iso: string) => new Date(new Date(iso).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const todayMyt = mytDate(new Date().toISOString());
+  const staleLog = status?.activeLog && mytDate(status.activeLog.clock_in) < todayMyt
+    ? status.activeLog
+    : null;
+  const staleDayLabel = staleLog
+    ? new Date(mytDate(staleLog.clock_in) + "T00:00:00").toLocaleDateString("en-MY", { weekday: "short", day: "numeric", month: "short" })
+    : "";
+  const staleEndLabel = staleLog?.scheduled_end ? staleLog.scheduled_end.slice(0, 5) : null;
+
+  const closeStaleShift = useCallback(async () => {
+    if (!staleLog) return;
+    const at = staleEndLabel ? `at ${staleEndLabel}` : "at the rostered end";
+    if (!window.confirm(`End your ${staleDayLabel} shift ${at}?\n\nIt will be paid to the rostered end with no overtime. If you worked later than that, ask your manager to fix the times instead.`)) return;
+    setClosingStale(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/hr/clock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "close_stale" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok && !data.alreadyClosed) {
+        setResult({ success: false, message: data.error || "Couldn't close that shift" });
+        return;
+      }
+      const hours = data.totalHours ? ` (${data.totalHours}h)` : "";
+      setResult({ success: true, message: data.alreadyClosed ? "That shift was already closed." : `${staleDayLabel} shift closed${hours}. You can clock in now.` });
+      mutate();
+    } catch {
+      setResult({ success: false, message: "Network error" });
+    } finally {
+      setClosingStale(false);
+    }
+  }, [staleLog, staleDayLabel, staleEndLabel, mutate]);
 
   // Get GPS on mount
   useEffect(() => {
@@ -230,6 +275,21 @@ export default function ClockPage() {
     </Link>
   );
 
+  // The status call failed (expired session, server error): without this the
+  // button stayed disabled forever with no explanation.
+  if (!status && statusError) {
+    return (
+      <div className="relative flex min-h-[80vh] flex-col items-center justify-center px-4">
+        {backBtn}
+        <Clock className="mb-3 h-10 w-10 text-gray-300" />
+        <h1 className="mb-4 text-xl font-bold">Time Clock</h1>
+        <div className="w-full max-w-xs">
+          <FetchError error={statusError} onRetry={() => mutate()} what="the time clock" />
+        </div>
+      </div>
+    );
+  }
+
   // Short-circuit: staff without an assigned outlet can't use the time clock.
   // Show just the banner instead of an empty camera / stuck GPS spinner.
   if (status && !status.outletId) {
@@ -305,8 +365,27 @@ export default function ClockPage() {
         <canvas ref={canvasRef} className="hidden" />
       </div>
 
+      {/* Forgotten clock-out from a previous day */}
+      {staleLog && (
+        <div className="mb-4 w-full max-w-xs rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center">
+          <p className="text-sm font-semibold text-amber-800">Still clocked in from {staleDayLabel}</p>
+          <p className="mt-0.5 text-xs text-amber-700">
+            Looks like you forgot to clock out. End that shift {staleEndLabel ? `at ${staleEndLabel}` : "at its rostered end"} so you can clock in for today.
+          </p>
+          <button
+            onClick={closeStaleShift}
+            disabled={closingStale || loading}
+            className="mt-2 inline-flex items-center gap-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            {closingStale ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+            End {staleDayLabel} shift{staleEndLabel ? ` at ${staleEndLabel}` : ""}
+          </button>
+          <p className="mt-1.5 text-[10px] text-amber-600">Worked later than that? Ask your manager to fix the times instead.</p>
+        </div>
+      )}
+
       {/* Elapsed Time (when clocked in) */}
-      {isClockedIn && elapsed && (
+      {isClockedIn && !staleLog && elapsed && (
         <div className="mb-4 text-center">
           <p className="text-3xl font-bold tabular-nums text-terracotta">{elapsed}</p>
           <p className="mt-0.5 text-xs text-gray-500">

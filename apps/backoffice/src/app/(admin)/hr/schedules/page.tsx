@@ -714,7 +714,21 @@ export default function SchedulesPage() {
           body: JSON.stringify({ outlet_id: selectedOutlet, week_start: weekStart, action, ...extra }),
         });
 
-      let res = await publishOnce({});
+      let res: Response;
+      if (action === "unpublish") {
+        // Staff have already been notified of these shifts; the server refuses
+        // without a reason (owner/admin only) and logs it.
+        const reason = prompt("Unpublish this week? Staff were already notified of these shifts.\n\nReason for unpublishing:");
+        if (!reason) return;
+        res = await publishOnce({ reason });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}) as { error?: string });
+          alert(err.error || `Unpublish failed (${res.status})`);
+          return;
+        }
+      } else {
+        res = await publishOnce({});
+      }
       if (action === "publish" && !res.ok) {
         // The labour gate pushed back — amber needs a reason, red needs an
         // owner override; blockers just get reported.
