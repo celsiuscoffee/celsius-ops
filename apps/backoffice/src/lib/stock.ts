@@ -1,4 +1,16 @@
 import { prisma } from "./prisma";
+import type { Prisma, PrismaClient } from "@celsius/db";
+
+/**
+ * Any Prisma client — the global one or an interactive-transaction client.
+ * Every helper here takes one as its LAST optional argument (default: the
+ * global client) so a caller inside `prisma.$transaction` can pass `tx` and the
+ * stock write commits or rolls back together with the receiving / order /
+ * invoice rows it belongs to. Before this, a receiving could commit while its
+ * stock credit failed (or vice versa), and Pay & Claim ran its stock adjust
+ * outside the transaction entirely.
+ */
+export type StockDb = PrismaClient | Prisma.TransactionClient;
 
 /**
  * Update stock balance for a product+package at an outlet.
@@ -7,21 +19,23 @@ import { prisma } from "./prisma";
  * @param productId - Product ID
  * @param delta - Positive to add stock, negative to subtract
  * @param productPackageId - Optional package ID (tracks stock per SKU)
+ * @param db - Prisma client or transaction client (default: global prisma)
  */
 export async function adjustStockBalance(
   outletId: string,
   productId: string,
   delta: number,
   productPackageId?: string | null,
+  db: StockDb = prisma,
 ) {
   const pkgId = productPackageId ?? null;
 
-  const existing = await prisma.stockBalance.findFirst({
+  const existing = await db.stockBalance.findFirst({
     where: { outletId, productId, productPackageId: pkgId },
   });
 
   if (existing) {
-    await prisma.stockBalance.update({
+    await db.stockBalance.update({
       where: { id: existing.id },
       data: {
         quantity: { increment: delta },
@@ -29,7 +43,7 @@ export async function adjustStockBalance(
       },
     });
   } else {
-    await prisma.stockBalance.create({
+    await db.stockBalance.create({
       data: {
         outletId,
         productId,
@@ -41,7 +55,7 @@ export async function adjustStockBalance(
   }
 
   // Clamp to zero (stock can't go negative)
-  await prisma.stockBalance.updateMany({
+  await db.stockBalance.updateMany({
     where: {
       outletId,
       productId,
@@ -60,15 +74,16 @@ export async function setStockBalance(
   productId: string,
   quantity: number,
   productPackageId?: string | null,
+  db: StockDb = prisma,
 ) {
   const pkgId = productPackageId ?? null;
 
-  const existing = await prisma.stockBalance.findFirst({
+  const existing = await db.stockBalance.findFirst({
     where: { outletId, productId, productPackageId: pkgId },
   });
 
   if (existing) {
-    await prisma.stockBalance.update({
+    await db.stockBalance.update({
       where: { id: existing.id },
       data: {
         quantity: Math.max(0, quantity),
@@ -76,7 +91,7 @@ export async function setStockBalance(
       },
     });
   } else {
-    await prisma.stockBalance.create({
+    await db.stockBalance.create({
       data: {
         outletId,
         productId,
@@ -144,13 +159,13 @@ export function baseTotalsFromPackages(
   return baseTotals;
 }
 
-export async function adjustStockByPackages(outletId: string, items: PackageLine[]) {
+export async function adjustStockByPackages(outletId: string, items: PackageLine[], db: StockDb = prisma) {
   const pkgIds = [
     ...new Set(items.map((i) => i.productPackageId ?? null).filter((id): id is string => id != null)),
   ];
   const cfMap = new Map<string, number>();
   if (pkgIds.length > 0) {
-    const pkgs = await prisma.productPackage.findMany({
+    const pkgs = await db.productPackage.findMany({
       where: { id: { in: pkgIds } },
       select: { id: true, conversionFactor: true },
     });
@@ -159,9 +174,10 @@ export async function adjustStockByPackages(outletId: string, items: PackageLine
 
   const baseTotals = baseTotalsFromPackages(items, cfMap);
 
-  await Promise.all(
-    [...baseTotals].map(([productId, baseQty]) =>
-      adjustStockBalance(outletId, productId, baseQty, null),
-    ),
-  );
+  // Sequential, not Promise.all: an interactive-transaction client runs on one
+  // connection, and interleaving find/create pairs for several products on it
+  // is how a balance row gets created twice.
+  for (const [productId, baseQty] of baseTotals) {
+    await adjustStockBalance(outletId, productId, baseQty, null, db);
+  }
 }

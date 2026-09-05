@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { guardOrderLinePrices } from "@/lib/po-price-guard";
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -83,12 +84,13 @@ export async function POST(req: NextRequest) {
       purchaseDate: string;
       photos: string[];
       notes?: string;
-      items?: { productId: string; quantity: number; unitPrice: number }[];
+      items?: { productId: string; productPackageId?: string | null; quantity: number; unitPrice: number }[];
       // Flow split — REQUEST = finance pays a one-off vendor directly
       // (staff submits the request, doesn't front the money). CLAIM is
       // the original "I paid, reimburse me" flow.
       flow?: "CLAIM" | "REQUEST";
       vendorName?: string;
+      overridePriceGuard?: boolean;
     };
 
     const requestFlow: "CLAIM" | "REQUEST" = flow === "REQUEST" ? "REQUEST" : "CLAIM";
@@ -137,6 +139,17 @@ export async function POST(req: NextRequest) {
         { error: "amount must be a positive number" },
         { status: 400 },
       );
+    }
+
+    // Itemised claims book PO-style lines, so they get the same price↔package
+    // guard as a PO (400 PRICE_PACKAGE_MISMATCH; body.overridePriceGuard to
+    // demote to a warning). A claim line at the wrong pack's price feeds the
+    // same 12-month price history the guard itself reads from.
+    if (items?.length) {
+      const priceGuard = await guardOrderLinePrices(items, {
+        override: body.overridePriceGuard === true,
+      });
+      if (!priceGuard.ok) return priceGuard.response;
     }
 
     // A non-manager can only file a reimbursement for THEMSELVES at THEIR OWN
@@ -229,6 +242,7 @@ export async function POST(req: NextRequest) {
                 items: {
                   create: items.map((i) => ({
                     productId: i.productId,
+                    productPackageId: i.productPackageId || null,
                     quantity: i.quantity,
                     unitPrice: i.unitPrice,
                     totalPrice: i.quantity * i.unitPrice,
