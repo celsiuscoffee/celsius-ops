@@ -11,6 +11,33 @@ current month.
 
 ## Verified facts
 
+- 2026-09-04 — **Procurement loop QA (flow + data + code) — audit page published.**
+  Data (120d): 224 POs PAID with no Receiving (RM147.5k) + 121 COMPLETED-by-hand
+  unreceived (RM83.8k); unreceived share Aug→Sep: PJ 87%→96%, SA 50%, Tam 61%→67%;
+  3 CANCELLED POs paid (RM2,125: Milk n Moka 424.80 paid 3 Sep on PO cancelled
+  20 Aug, NYC 1227 RM894, Country Bread RM806); 75 PAID invoices amountPaid<amount
+  (RM18k, deposit-only); 102 transfers PENDING >7d, 0 ever approved, 2 completed
+  in 120d (54 PJ→Tam); Blancoz dup invoice numbers via punctuation
+  (26-0644/260644 etc — one bank debit, register dups); PriceHistory 0 rows; 256
+  package-less SupplierProduct rows; 22 active RM0 ADHOC prices; 23 cf=1
+  Carton/Box packages; 478 ReceivingItems w/o package (120d). Price guard: 1 of
+  24 post-merge lines slipped — 3 Sep PJ milk 8×"Carton"@83.90 on the 163.58 pkg,
+  paid RM671.20 (inv 1-15974) — because **the staff app has its own PO-create
+  route with no guard** (apps/staff/src/app/api/orders/route.ts). Code
+  (verified): orders/[id] PATCH/DELETE + transfers/[id] unauthenticated
+  (middleware skips /api); Telegram webhook lets photos/PDFs from ANY chat mark
+  invoices PAID + forward POP; invoice PAID path needs no receiving and copies
+  client amount→amountPaid; no normalised duplicate-invoice check on 4 create
+  paths; pay-and-claim approve re-runnable (double stock-in), no role/self check;
+  ai-decisions picks ADHOC RM0 as cheapest supplier (products auto-link ADHOC
+  RM0); UI POP auto-send can never fire (needs "/pop/" in URL, uploads go to
+  invoices/); supplier-page price edit creates phantom package-less rows (the
+  256) and never writes PriceHistory; GRNI placeholder checks still test
+  startsWith("INV-") in 3 places; receivings non-transactional + trusts client
+  outlet/orderedQty; agent can empty a PO via N×remove_item; runbook wrong that
+  PO-send is "not wired" (it fires on PATCH/inbound/cron). Solid: WhatsApp HMAC +
+  wamid exactly-once, PO clientRequestId idempotency, atomic PAID, DRAFT pay
+  guard, reorder-suggestions.ts filters. Fix plan (6 steps) on the audit page.
 - 2026-09-03 — **Inventory → Reports rewired to live sales.** COGS Report and
   Usage Variance read `SalesTransaction` (StoreHub feed, dead since
   2026-04-11) so they showed zero sales for five months. Both now read the
@@ -2472,6 +2499,14 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-04 — **Procurement QA delivered; owner to pick fixes.** Highest-value
+  first: (1) auth+role on all inventory/transfer writes + Telegram allowlist;
+  (2) PAID requires receiving/override + shared duplicate-invoice assert + price
+  guard in staff routes/PATCH/pay-and-claim; (3) ADHOC exclusion in ai-decisions +
+  supplier-page package id + catalog cleanup; (4) POP URL on invoice, GRNI
+  checks, transactional receiving, transfer receive+chaser. PR #1216 (reports
+  wiring) still open/green.
 
 - 2026-09-02 — **August COGS + bank recon session closed.** PR #1207
   (menu_margins v2, migration 109 already applied to prod) is green +
