@@ -16,6 +16,9 @@ import { prisma } from "@/lib/prisma";
 
 export const DUPLICATE_WINDOW_DAYS = 14;
 
+/** Matches that refuse the write; everything else is advisory (flag only). */
+export const BLOCKING_REASONS = new Set(["same_number", "suffix_variant"]);
+
 /** Canonical form for comparing invoice numbers across sloppy re-keying. */
 export function normalizeInvoiceNumber(n: string | null | undefined): string {
   if (!n) return "";
@@ -121,6 +124,13 @@ export async function assertNoDuplicateInvoice(
   const match = await findDuplicateInvoice(input);
   if (!match) return { ok: true, match: null };
   if (opts?.override) return { ok: true, match };
+  // Only number-based matches block. A same-amount match inside the window is
+  // returned for the caller to FLAG, never to refuse: replaying 60 days of
+  // production invoices, exact/suffix matches fired 4 times (all true
+  // duplicates) while same-amount-within-14-days fired 204 times — weekly
+  // standing orders (NYC Treats RM924 every week, BGS RM475.35 monthly) look
+  // identical by amount and blocking them would stop normal work.
+  if (match.reason === "same_amount_window") return { ok: true, match };
   const why =
     match.reason === "same_number"
       ? "the same invoice number"

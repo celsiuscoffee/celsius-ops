@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeInvoiceNumber, stripReclaimSuffix } from "./invoice-dedupe";
+import { normalizeInvoiceNumber, stripReclaimSuffix, BLOCKING_REASONS } from "./invoice-dedupe";
 
 describe("normalizeInvoiceNumber", () => {
   it("drops punctuation and case so re-keyed numbers collide", () => {
@@ -24,5 +24,13 @@ describe("stripReclaimSuffix", () => {
     expect(stripReclaimSuffix("12427")).toBeNull();
     expect(stripReclaimSuffix("ivct00012381")).toBeNull();
     expect(stripReclaimSuffix("a9axh9vjgw9brav")).toBeNull(); // letter after letter, not digit
+  });
+});
+
+describe("blocking policy", () => {
+  it("blocks only number-based matches; same-amount is advisory", () => {
+    expect(BLOCKING_REASONS.has("same_number")).toBe(true);
+    expect(BLOCKING_REASONS.has("suffix_variant")).toBe(true);
+    expect(BLOCKING_REASONS.has("same_amount_window")).toBe(false);
   });
 });
