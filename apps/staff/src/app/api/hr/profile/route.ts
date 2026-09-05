@@ -37,6 +37,12 @@ const SELF_EDITABLE_FIELDS = [
 
 type SelfEditableKey = (typeof SELF_EDITABLE_FIELDS)[number];
 
+// What a staffer may SEE of their own row — GET and the PATCH echo both use
+// it, so a save never returns the columns the read withholds.
+const PROFILE_SELECT =
+  "user_id, position, employment_type, join_date, schedule_required, profile_completed_at, profile_self_updated_at, " +
+  SELF_EDITABLE_FIELDS.join(", ");
+
 // Fields that count toward "profile complete" — only the ones we actually
 // need for statutory/operational use. Optional metadata (t-shirt size,
 // dietary) doesn't gate the banner.
@@ -62,15 +68,19 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Explicit projection: `select("*")` returned the whole HR row to the
+  // staffer, including `notes` (internal HR notes, resignation reasons),
+  // manager links, EPF overrides and lifecycle stamps. Only what the profile
+  // screen shows and what the person may edit.
   const { data, error } = await supabase
     .from("hr_employee_profiles")
-    .select("*")
+    .select(PROFILE_SELECT)
     .eq("user_id", session.id)
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const profile = data || {};
+  const profile = (data || {}) as Record<string, unknown>;
   const filled = COMPLETENESS_FIELDS.filter((f) => {
     const v = (profile as Record<string, unknown>)[f];
     return v !== null && v !== undefined && v !== "";
@@ -146,14 +156,14 @@ export async function PATCH(req: NextRequest) {
       .from("hr_employee_profiles")
       .update(patch)
       .eq("user_id", session.id)
-      .select()
+      .select(PROFILE_SELECT)
       .single();
     result = r;
   } else {
     const r = await supabase
       .from("hr_employee_profiles")
       .insert({ user_id: session.id, ...patch })
-      .select()
+      .select(PROFILE_SELECT)
       .single();
     result = r;
   }

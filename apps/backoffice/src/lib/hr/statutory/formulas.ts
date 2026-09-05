@@ -44,6 +44,10 @@ export function resolveEpfEmployerOverride(args: {
   if (r == null || !Number.isFinite(Number(r)) || Number(r) <= 0) return undefined;
   const rate = Number(r);
   if (args.wage <= 5000 && rate === args.scheduleAbove5000 && rate < args.scheduleBelow5000) return undefined;
+  // The column's old DEFAULT was 12 for every profile regardless of category.
+  // On a schedule where 12 is not a real rate (category B/C: 4%/6.5%) a
+  // lingering 12 is the default, not a decision.
+  if (rate === 12 && args.scheduleBelow5000 !== 12 && args.scheduleAbove5000 !== 12) return undefined;
   return rate;
 }
 

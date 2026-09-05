@@ -23,6 +23,9 @@ export async function GET(req: NextRequest) {
     .select("id, clock_in, clock_out, total_hours, regular_hours, overtime_hours, overtime_type, ai_status, ai_flags, final_status, outlet_id")
     .eq("user_id", session.id)
     .gte("clock_in", since.toISOString())
+    // Synthetic OT-approval rows (09:00, no hours) are not the person's
+    // clock-ins; they showed as a phantom day in the list and in daysWorked.
+    .neq("clock_in_method", "ot_approval")
     .order("clock_in", { ascending: false })
     .limit(100);
 

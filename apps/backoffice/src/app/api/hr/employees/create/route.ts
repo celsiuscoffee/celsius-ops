@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { hashPin } from "@celsius/auth";
+import { pinInUse } from "@/lib/hr/pin-policy";
 import { applyStaffPreset } from "@/lib/staff-access-presets";
 import { seedLeaveBalancesForHire } from "@/lib/hr/leave-seed";
 
@@ -25,6 +26,26 @@ export async function POST(req: NextRequest) {
 
   if (!name || !role) {
     return NextResponse.json({ error: "name and role are required" }, { status: 400 });
+  }
+  // Privilege-escalation guard (2026-09-03 QA): this route took `role` from
+  // the body unchecked, so an ADMIN could create an OWNER account and log in
+  // as it. The OWNER role is OWNER-only to grant, same as [id]/access.
+  if (!["STAFF", "MANAGER", "ADMIN", "OWNER"].includes(role)) {
+    return NextResponse.json({ error: `Invalid role: ${String(role)}` }, { status: 400 });
+  }
+  if (role === "OWNER" && session.role !== "OWNER") {
+    return NextResponse.json({ error: "Only an OWNER can create an OWNER account" }, { status: 403 });
+  }
+  // PIN-only logins share one namespace across every backoffice-capable user
+  // (api/auth/pin tries each hash), so a PIN must be 6 digits like the staff
+  // app requires and must not collide with anyone else's.
+  if (pin != null && pin !== "") {
+    if (!/^\d{6}$/.test(String(pin))) {
+      return NextResponse.json({ error: "PIN must be exactly 6 digits" }, { status: 400 });
+    }
+    if (await pinInUse(String(pin))) {
+      return NextResponse.json({ error: "That PIN is already used by another account — choose a different one" }, { status: 409 });
+    }
   }
 
   // Phone is optional now — contract staff / HR-only records don't need one.

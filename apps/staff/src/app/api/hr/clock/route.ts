@@ -93,7 +93,15 @@ async function findRosterShift(userId: string, clockIn: Date): Promise<{ schedul
     // A generous grace keeps the case this lookback exists for: clocking in just
     // after midnight for a shift that ran to 23:30 the previous evening, or
     // arriving a little late onto a shift already underway.
-    const endInstant = s.end_time ? mytInstant(s.shift_date, s.end_time) : null;
+    let endInstant = s.end_time ? mytInstant(s.shift_date, s.end_time) : null;
+    // A closing shift that ends after midnight (22:00–02:00) has its end on
+    // the NEXT calendar day. Read on the shift date it sat ~20h before the
+    // clock-in, so the shift was skipped as "already over" and the log went
+    // out with no roster window: paid unbounded, no OT tail, no auto-close
+    // reference, no clock-out reminder.
+    if (endInstant && endInstant.getTime() <= startInstant.getTime()) {
+      endInstant = new Date(endInstant.getTime() + 24 * 3600 * 1000);
+    }
     if (endInstant && clockIn.getTime() - endInstant.getTime() > ROSTER_STALE_GRACE_MS) continue;
 
     const diff = Math.abs(clockIn.getTime() - startInstant.getTime());
@@ -357,7 +365,10 @@ export async function POST(req: NextRequest) {
     const clockInDate = mytDateString(clockIn);
     const [profileResp, holidayResp, restResp] = await Promise.all([
       supabase.from("hr_employee_profiles").select("employment_type").eq("user_id", session.id).maybeSingle(),
-      supabase.from("hr_public_holidays").select("date").eq("date", clockInDate).maybeSingle(),
+      // limit(1): the holiday table is unique on (date, name), so a date can
+      // hold a national AND a state row; maybeSingle() errors on two rows and
+      // the shift would price as a normal weekday.
+      supabase.from("hr_public_holidays").select("date").eq("date", clockInDate).limit(1).maybeSingle(),
       supabase
         .from("hr_schedule_shifts")
         .select("id")
@@ -396,11 +407,26 @@ export async function POST(req: NextRequest) {
         overtime_type: derived.overtimeType,
       })
       .eq("id", activeLog.id)
+      // Compare-and-set: the 15-minute auto-close cron may have closed this
+      // log between our read and this write. Without the guard the real tap
+      // overwrote the close but kept its "excused / system auto-close" markers
+      // on a row that now carried app-clocked hours.
+      .is("clock_out", null)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (!data) {
+      // The cron closed it first. Hand back the closed row so the app shows
+      // the real state instead of a spinner on a stale "clocked in".
+      const { data: closed } = await supabase.from("hr_attendance_logs").select().eq("id", activeLog.id).maybeSingle();
+      return NextResponse.json({
+        error: "This shift was already closed by the system at the rostered end. If you worked later than that, ask your manager to fix the times.",
+        log: closed,
+        alreadyClosed: true,
+      }, { status: 409 });
     }
 
     return NextResponse.json({

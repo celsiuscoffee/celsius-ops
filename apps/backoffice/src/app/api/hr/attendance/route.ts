@@ -422,7 +422,7 @@ async function setTimes(
   // NONE on one of the 161 genuinely rostered rest days.
   const [profResp, phResp, restResp] = await Promise.all([
     hrSupabaseAdmin.from("hr_employee_profiles").select("employment_type").eq("user_id", log.user_id).maybeSingle(),
-    hrSupabaseAdmin.from("hr_public_holidays").select("date").eq("date", mytDate).maybeSingle(),
+    hrSupabaseAdmin.from("hr_public_holidays").select("date").eq("date", mytDate).limit(1).maybeSingle(),
     hrSupabaseAdmin
       .from("hr_schedule_shifts")
       .select("id")

@@ -471,8 +471,8 @@ function prettyAllowance(key: string): string {
 export type PayslipYtd = { gross: number; epf: number; socso: number; eis: number; pcb: number; net: number };
 
 export type PayslipRunRow = {
-  period_month: number;
-  period_year: number;
+  period_month: number | null; // null on weekly (part-timer) runs
+  period_year: number | null;
   payday?: string | null;
   period_start?: string | null;
   period_end?: string | null;
@@ -555,8 +555,10 @@ export function mapPayslipData(
     taxNumber: p?.tax_number || null,
     bankName: u?.bankName || null,
     bankAccountNumber: u?.bankAccountNumber || null,
-    periodMonth: run.period_month,
-    periodYear: run.period_year,
+    // Weekly (part-timer) runs carry period_start/end and NULL month/year —
+    // the banner printed "undefined null". Derive from the period start.
+    periodMonth: run.period_month ?? (run.period_start ? Number(String(run.period_start).slice(5, 7)) : 0),
+    periodYear: run.period_year ?? (run.period_start ? Number(String(run.period_start).slice(0, 4)) : 0),
     paymentDate: fmtPayDate(run.payday),
     periodStart: run.period_start || null,
     periodEnd: run.period_end || null,

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { computeLateMinutes, mytDateString } from "@/lib/hr/hours";
 import { GRACE_PERIOD_MINUTES } from "@/lib/hr/constants";
+import { fetchAllRows } from "@/lib/hr/fetch-all";
 import { computeWeekDemand, SERVICE_FLOOR } from "@/lib/hr/demand";
 import { allocateStationCounts, STATION_ANCHOR_TARGET, type ShiftWindow } from "@/lib/hr/shift-allocation";
 import { isManagementPosition } from "@/lib/hr/labour-gate-lib";
@@ -137,10 +138,14 @@ export async function GET(req: NextRequest) {
   // Reliability: on-time rate over the last 60 days (Bayesian-shrunk so thin
   // histories aren't over-trusted). Uses the same lateness math as the roster view.
   const since = new Date(dateMs - 60 * 86400000).toISOString();
-  const { data: att } = poolIds.length
-    ? await hrSupabaseAdmin.from("hr_attendance_logs").select("user_id, clock_in, scheduled_start, scheduled_date").in("user_id", poolIds).gte("clock_in", since).not("clock_out", "is", null).not("scheduled_start", "is", null)
-    : { data: [] as AttRow[] };
   type AttRow = { user_id: string; clock_in: string; scheduled_start: string | null; scheduled_date: string | null };
+  // Paged: 40 staff × 60 days is past PostgREST's 1000-row cap, which would
+  // silently score reliability on an arbitrary subset.
+  const att: AttRow[] = poolIds.length
+    ? await fetchAllRows<AttRow>(() =>
+        hrSupabaseAdmin.from("hr_attendance_logs").select("user_id, clock_in, scheduled_start, scheduled_date").in("user_id", poolIds).gte("clock_in", since).not("clock_out", "is", null).not("scheduled_start", "is", null),
+      )
+    : [];
   const relAgg = new Map<string, { onTime: number; total: number }>();
   for (const a of (att || []) as AttRow[]) {
     const late = computeLateMinutes(a.clock_in, a.scheduled_start, a.scheduled_date ?? mytDateString(a.clock_in));
