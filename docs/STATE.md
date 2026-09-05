@@ -11,6 +11,55 @@ current month.
 
 ## Verified facts
 
+- 2026-09-05 — **Procurement hardening shipped on PR #1216 (all 25 QA findings
+  addressed in code; warn-first rollout).** Three parallel streams merged
+  (63 files, +3.8k/−1.2k): (A) auth+roles — orders/[id] GET needs session,
+  PATCH/DELETE OWNER/ADMIN/MANAGER with a PO status-transition table
+  (`lib/inventory/po-status.ts`, 409 INVALID_STATUS_TRANSITION), item writes
+  scoped {id,orderId}, price guard on PATCH price edits, totalAmount override
+  OWNER/ADMIN only; transfers/[id] session + manager for approve/complete;
+  apply-proposal/send requireRole; Telegram webhook timing-safe secret, chat
+  allowlist `TELEGRAM_ALLOWED_CHAT_IDS` (unset = log-only "[telegram] unlisted
+  chat" warns, set = enforce), invoice capture DRAFT+aiPrefilled + dedupe,
+  number/photos only rewritten when unpaid; supplier-chat-agent escalates
+  mass removals (≥50% lines), fences supplier text, delivery_date only
+  today..+60d and never on escalated turns. (B) payments/receiving —
+  `lib/inventory/invoice-dedupe.ts` shared guard (number/suffix matches block
+  409 DUPLICATE_INVOICE; same-amount-in-14d is FLAG-only after a 60-day replay:
+  4 true dups vs 204 standing-order collisions) wired into all 4 create paths;
+  PAID needs manager+ (403 FORBIDDEN_PAYMENT_ROLE); receipt-before-pay is
+  `INVOICE_PAY_REQUIRE_RECEIPT=warn` (default, flag NO_RECEIVING_AT_PAYMENT) |
+  `block`; amount+status in one call → 400; PAID rows locked (LOCKED_AFTER_
+  PAYMENT unless OWNER/ADMIN+reason); overpay → 400 unless allowOverpay;
+  AMOUNT_VS_ORDER_MISMATCH flag; pay-and-claim approve manager-only, once,
+  no self-approval, single tx; receivings POST derives outlet/supplier/
+  orderedQty from the PO, one $transaction + FOR UPDATE, transfer transition
+  check, ad-hoc receivings manager-only; `lib/stock.ts` helpers take a tx;
+  GRNI placeholder checks use isPlaceholderNumber; POP receipts upload to
+  folder "pop" (upload route whitelists folders) so auto-send can fire; staff
+  app orders+claims POST now run the price guard (`apps/staff/src/lib/
+  po-price-guard.ts` copy) — closes the 3 Sep milk slip path; claim batches
+  refuse DRAFT/unverified. (C) catalog/reports/engine — ai-decisions requires
+  price>0, ACTIVE non-ADHOC supplier, package; PENDING_APPROVAL counted open;
+  daysUntilStockout null for zero-usage (UI renders n/a); supplier page sends
+  productPackageId and the route refuses package-less rows for packaged
+  products; products/[id] package-index fix + pre-flight delete blockers;
+  price-history surfaces `priceHistoryWritten`; stock-valuation latest
+  SUBMITTED/REVIEWED count per outlet, null counts skipped; scorecard MYT
+  calendar-day on-time; purchase-summary inclusive MYT day + per-line prices;
+  wastage excludes engine rows; on-hand-value nets all loss types, excludes
+  DRAFT invoices; consumption-post atomic + rejects today; par-calc isDefault
+  pick + lead-time 0 honoured; stock-checks POST removed (no caller);
+  receiving-requester chases PENDING/APPROVED/IN_TRANSIT transfers >48h;
+  runbook corrected (PO-send IS wired). Validation: tsc backoffice+staff clean,
+  eslint clean, full vitest green. **Deploy-day risk assessed**: roles match
+  actual actors (POs by MANAGER, receiving by STAFF+MANAGER, payments by
+  OWNER/ADMIN); only forced behaviour change is the staff-app price guard.
+  Catalog data also repaired in prod (5 priced package-less rows attached/
+  deactivated, dup packages deleted, 11 missing defaults set, Fresh Milk
+  packages labelled). Payment-side data repairs (Blancoz/Grab dup register
+  entries, 75 deposit-only amountPaid, 3 cancelled-but-paid POs) NOT applied —
+  need owner sign-off per hard rule 6.
 - 2026-09-04 — **Procurement loop QA (flow + data + code) — audit page published.**
   Data (120d): 224 POs PAID with no Receiving (RM147.5k) + 121 COMPLETED-by-hand
   unreceived (RM83.8k); unreceived share Aug→Sep: PJ 87%→96%, SA 50%, Tam 61%→67%;
@@ -2499,6 +2548,16 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-05 — **Hardening PR #1216 ready for review/merge.** After merge:
+  set `TELEGRAM_ALLOWED_CHAT_IDS` from the warn logs, then consider
+  `INVOICE_PAY_REQUIRE_RECEIPT=block` once unreceived-PO share drops; tell
+  finance Telegram-captured invoices now land as DRAFT; add an override
+  control to the staff PO form (guard currently blocks without one). Still
+  open: payment-side data repairs (owner sign-off), deactivating the 22 active
+  RM0 ADHOC rows (safe now that ai-decisions excludes them; staff picker relies
+  on the ADHOC row being ACTIVE — so leave active), (e) split-payment support
+  in ap-match.ts.
 
 - 2026-09-04 — **Procurement QA delivered; owner to pick fixes.** Highest-value
   first: (1) auth+role on all inventory/transfer writes + Telegram allowlist;
