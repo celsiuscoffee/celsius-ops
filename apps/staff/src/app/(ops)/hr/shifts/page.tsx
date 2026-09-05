@@ -27,8 +27,28 @@ type SwapRequest = {
   target_shift: Shift;
   target_id: string;
   requester_id: string;
+  requester_name?: string | null;
+  target_name?: string | null;
   created_at: string;
 };
+
+type SwapCandidate = {
+  shift_id: string;
+  user_id: string;
+  name: string;
+  shift_date: string;
+  start_time: string;
+  end_time: string;
+  role_type: string | null;
+};
+
+// "Sat 12 Sep" from a YYYY-MM-DD, parsed as UTC so the label matches the MYT
+// calendar date whatever the device timezone.
+function dayLabel(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00Z");
+  return `${DAY_NAMES[d.getUTCDay()]} ${d.getUTCDate()} ${d.toLocaleDateString("en-MY", { month: "short", timeZone: "UTC" })}`;
+}
+const hhmm = (t: string | null | undefined) => (t ?? "").slice(0, 5);
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -117,6 +137,11 @@ export default function MyShiftsPage() {
   const { data, error: shiftsError, mutate: mutateShifts } = useFetch<{ shifts: Shift[] }>("/api/hr/shifts");
   const { data: swapData, mutate: mutateSwaps } = useFetch<{ sent: SwapRequest[]; pendingConsent: SwapRequest[] }>("/api/hr/swap");
   const [swapAction, setSwapAction] = useState<string | null>(null);
+  // Swap picker: which of MY shifts I'm offering. The request action has
+  // existed in /api/hr/swap since launch, but nothing in the app called it —
+  // staff could only accept swaps that a coworker somehow raised.
+  const [swapFor, setSwapFor] = useState<Shift | null>(null);
+  const [swapNotice, setSwapNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
   const shifts = data?.shifts || [];
   const pendingConsent = swapData?.pendingConsent || [];
@@ -125,19 +150,34 @@ export default function MyShiftsPage() {
   // 08:00 MYT and badges the wrong day.
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
 
-  const handleSwapResponse = async (swapId: string, action: "consent" | "decline") => {
+  const handleSwapResponse = async (swapId: string, action: "consent" | "decline" | "cancel") => {
+    if (action === "cancel" && !window.confirm("Withdraw this swap request?")) return;
     setSwapAction(swapId);
+    setSwapNotice(null);
     try {
-      await fetch("/api/hr/swap", {
+      const res = await fetch("/api/hr/swap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, swap_id: swapId }),
       });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        setSwapNotice({ ok: false, text: j?.error ?? `Couldn't update the swap (${res.status}).` });
+      } else if (action === "consent") {
+        setSwapNotice({ ok: true, text: "Accepted — your manager will confirm the swap." });
+      } else if (action === "cancel") {
+        setSwapNotice({ ok: true, text: "Swap request withdrawn." });
+      }
       mutateSwaps();
+    } catch {
+      setSwapNotice({ ok: false, text: "Network error — nothing was changed." });
     } finally {
       setSwapAction(null);
     }
   };
+
+  const openSwaps = sentSwaps.filter((s) => s.status === "pending_consent" || s.status === "pending_approval");
+  const shiftsInOpenSwap = new Set(openSwaps.map((s) => s.requester_shift?.id).filter(Boolean));
 
   const statusBadge = (status: string) => {
     const map: Record<string, { label: string; color: string }> = {
@@ -165,6 +205,14 @@ export default function MyShiftsPage() {
         <h1 className="text-2xl font-bold">My Shifts</h1>
       </div>
 
+      {swapNotice && (
+        <div className={`mb-4 rounded-xl px-4 py-2.5 text-sm font-medium ${
+          swapNotice.ok ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+        }`}>
+          {swapNotice.text}
+        </div>
+      )}
+
       {/* Pending swap consent requests FROM coworkers */}
       {pendingConsent.length > 0 && (
         <div className="mb-6">
@@ -172,10 +220,10 @@ export default function MyShiftsPage() {
           {pendingConsent.map((swap) => (
             <div key={swap.id} className="mb-2 rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <p className="text-sm font-medium">
-                Wants to swap your{" "}
-                <strong>{swap.target_shift.shift_date} {swap.target_shift.start_time?.slice(0, 5)}-{swap.target_shift.end_time?.slice(0, 5)}</strong>
+                <strong>{swap.requester_name ?? "A coworker"}</strong> wants to swap your{" "}
+                <strong>{dayLabel(swap.target_shift.shift_date)} {hhmm(swap.target_shift.start_time)}-{hhmm(swap.target_shift.end_time)}</strong>
                 {" "}with their{" "}
-                <strong>{swap.requester_shift.shift_date} {swap.requester_shift.start_time?.slice(0, 5)}-{swap.requester_shift.end_time?.slice(0, 5)}</strong>
+                <strong>{dayLabel(swap.requester_shift.shift_date)} {hhmm(swap.requester_shift.start_time)}-{hhmm(swap.requester_shift.end_time)}</strong>
               </p>
               {swap.reason && <p className="mt-1 text-xs text-gray-500">{swap.reason}</p>}
               <div className="mt-3 flex gap-2">
@@ -332,10 +380,23 @@ export default function MyShiftsPage() {
                             </p>
                           )}
                         </div>
-                        {isToday && (
+                        {isToday ? (
                           <span className="rounded-full bg-terracotta px-2 py-0.5 text-[10px] font-bold text-white">
                             TODAY
                           </span>
+                        ) : shiftsInOpenSwap.has(shift.id) ? (
+                          <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold text-gray-500">
+                            Swap pending
+                          </span>
+                        ) : (
+                          // Only future days: the API refuses same-day swaps.
+                          <button
+                            onClick={() => { setSwapNotice(null); setSwapFor(shift); }}
+                            aria-label="Request a swap for this shift"
+                            className="flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-sm active:scale-95"
+                          >
+                            <ArrowLeftRight className="h-3 w-3" /> Swap
+                          </button>
                         )}
                       </div>
                     );
@@ -347,6 +408,18 @@ export default function MyShiftsPage() {
         );
       })()}
 
+      {swapFor && (
+        <SwapPicker
+          shift={swapFor}
+          onClose={() => setSwapFor(null)}
+          onDone={(text) => {
+            setSwapFor(null);
+            setSwapNotice({ ok: true, text });
+            mutateSwaps();
+          }}
+        />
+      )}
+
       {/* My Sent Swap Requests */}
       {sentSwaps.length > 0 && (
         <div className="mt-6">
@@ -354,23 +427,202 @@ export default function MyShiftsPage() {
             <ArrowLeftRight className="h-4 w-4" /> My Swap Requests
           </h2>
           <div className="space-y-2">
-            {sentSwaps.map((swap) => (
-              <div key={swap.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3">
-                <ArrowLeftRight className="h-4 w-4 text-gray-400" />
-                <div className="flex-1">
-                  <p className="text-sm">
-                    {swap.requester_shift?.shift_date} ↔ {swap.target_shift?.shift_date}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {new Date(swap.created_at).toLocaleDateString("en-MY")}
-                  </p>
+            {sentSwaps.map((swap) => {
+              const cancellable = swap.status === "pending_consent" || swap.status === "pending_approval";
+              return (
+                <div key={swap.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3">
+                  <ArrowLeftRight className="h-4 w-4 shrink-0 text-gray-400" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm">
+                      {swap.requester_shift ? dayLabel(swap.requester_shift.shift_date) : "?"}
+                      {" ↔ "}
+                      {swap.target_shift ? dayLabel(swap.target_shift.shift_date) : "?"}
+                      {swap.target_name ? <span className="text-gray-500"> with {swap.target_name}</span> : null}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Sent {new Date(swap.created_at).toLocaleDateString("en-MY")}
+                    </p>
+                  </div>
+                  {statusBadge(swap.status)}
+                  {cancellable && (
+                    <button
+                      onClick={() => handleSwapResponse(swap.id, "cancel")}
+                      disabled={swapAction === swap.id}
+                      aria-label="Withdraw swap request"
+                      title="Withdraw this request"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 disabled:opacity-50"
+                    >
+                      {swapAction === swap.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                    </button>
+                  )}
                 </div>
-                {statusBadge(swap.status)}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Bottom sheet: pick a coworker's shift to swap `shift` with, add an optional
+// note, send. Candidates come from /api/hr/swap/candidates (same outlet,
+// published, future, not already in a swap).
+function SwapPicker({
+  shift,
+  onClose,
+  onDone,
+}: {
+  shift: Shift;
+  onClose: () => void;
+  onDone: (message: string) => void;
+}) {
+  const { data, error, isLoading } = useFetch<{ myShiftBusy?: boolean; candidates: SwapCandidate[] }>(
+    `/api/hr/swap/candidates?shift_id=${shift.id}`,
+  );
+  const [picked, setPicked] = useState<SwapCandidate | null>(null);
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const candidates = data?.candidates ?? [];
+  const byDate = new Map<string, SwapCandidate[]>();
+  for (const c of candidates) {
+    const list = byDate.get(c.shift_date) ?? [];
+    list.push(c);
+    byDate.set(c.shift_date, list);
+  }
+
+  const submit = async () => {
+    if (!picked) return;
+    setSubmitting(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/hr/swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "request",
+          my_shift_id: shift.id,
+          target_shift_id: picked.shift_id,
+          target_id: picked.user_id,
+          reason: reason.trim() || null,
+        }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        setErr(j?.error ?? `Couldn't send the request (${res.status}).`);
+        return;
+      }
+      onDone(`Swap request sent to ${picked.name}. They need to accept, then your manager confirms.`);
+    } catch {
+      setErr("Network error — the request was not sent.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // The fetch hook throws a bare status on non-2xx; the candidates route
+  // answers 409 with a reason for shifts that can't be swapped at all.
+  const fetchMessage = error
+    ? /\b409\b/.test(String((error as Error).message))
+      ? "This shift can't be swapped (it may be unpublished, a rest day, or already today)."
+      : /\b401\b/.test(String((error as Error).message))
+        ? "Your session has expired — sign in again."
+        : "Couldn't load coworkers' shifts. Try again."
+    : null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 pb-8"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label="Request a shift swap"
+      >
+        <div className="mb-1 flex items-center justify-between">
+          <h2 className="text-base font-bold">Swap this shift</h2>
+          <button onClick={onClose} aria-label="Close" className="rounded-full p-1 text-gray-400 active:bg-gray-100">
+            <XCircle className="h-5 w-5" />
+          </button>
+        </div>
+        <p className="mb-4 text-sm text-gray-600">
+          Your <strong>{dayLabel(shift.shift_date)} {hhmm(shift.start_time)}–{hhmm(shift.end_time)}</strong>
+          {shift.outlet_name ? <span> at {shift.outlet_name}</span> : null}
+        </p>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8 text-gray-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : fetchMessage ? (
+          <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">{fetchMessage}</p>
+        ) : data?.myShiftBusy ? (
+          <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            This shift already has a swap request in progress. Withdraw it first.
+          </p>
+        ) : candidates.length === 0 ? (
+          <p className="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-500">
+            No coworker shifts to swap with in the two weeks around this one. Ask your manager instead.
+          </p>
+        ) : (
+          <>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Take over a coworker&apos;s shift</p>
+            <div className="mb-4 max-h-[40vh] space-y-3 overflow-y-auto pr-1">
+              {Array.from(byDate.entries()).map(([date, list]) => (
+                <div key={date}>
+                  <p className="mb-1 text-xs font-semibold text-gray-500">{dayLabel(date)}</p>
+                  <div className="space-y-1.5">
+                    {list.map((c) => {
+                      const selected = picked?.shift_id === c.shift_id;
+                      return (
+                        <button
+                          key={c.shift_id}
+                          onClick={() => setPicked(c)}
+                          className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left ${
+                            selected ? "border-terracotta bg-orange-50" : "border-gray-200 bg-white"
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">{c.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {hhmm(c.start_time)}–{hhmm(c.end_time)}{c.role_type ? ` · ${c.role_type}` : ""}
+                            </p>
+                          </div>
+                          {selected && <CheckCircle2 className="h-4 w-4 shrink-0 text-terracotta" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <label className="mb-3 block">
+              <span className="mb-1 block text-xs font-medium text-gray-500">Note to your coworker (optional)</span>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={2}
+                maxLength={500}
+                placeholder="e.g. Family event that evening"
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+              />
+            </label>
+            {err && <p className="mb-3 text-sm font-medium text-red-600">{err}</p>}
+            <button
+              onClick={submit}
+              disabled={!picked || submitting}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-terracotta py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
+              {picked ? `Ask ${picked.name} to swap` : "Pick a shift"}
+            </button>
+            <p className="mt-2 text-center text-[11px] text-gray-400">
+              They accept first, then your manager confirms. Nothing changes until then.
+            </p>
+          </>
+        )}
+      </div>
     </div>
   );
 }
