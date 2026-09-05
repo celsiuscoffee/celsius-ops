@@ -5,8 +5,18 @@ import { linkChecklistsToSchedule } from "@/lib/hr/agents/checklist-linker";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { gateSchedule } from "@/lib/hr/labour-gate";
 import { sendOpsPush } from "@/lib/ops-push";
+import { logActivity } from "@/lib/activity-log";
+import { getMYTToday } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
+
+// Last calendar day (YYYY-MM-DD) of the roster week that starts on week_start.
+function weekEndOf(weekStart: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) return null;
+  const d = new Date(`${weekStart}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(d.getTime() + 6 * 86400000).toISOString().slice(0, 10);
+}
 
 // POST: preview, publish, or unpublish a weekly schedule.
 // Body: { outlet_id, week_start, action: 'preview' | 'publish' | 'unpublish',
@@ -160,11 +170,60 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "unpublish") {
-    const { error } = await hrSupabaseAdmin
+    // Unpublish was the loophole around the published-roster guard: the cell
+    // route locks past dates on a published week (roster-guard.ts), but any
+    // manager could flip the week back to draft, edit freely, and re-publish —
+    // rewriting the pay basis for hours already worked with nothing logged.
+    // Same policy as a retro edit: OWNER/ADMIN only, a typed reason, refused
+    // once the whole week has passed (there is nothing left to re-plan; fix a
+    // past day through the cell route's retro_reason path so each change is
+    // logged individually), and activity-logged.
+    if (schedule.status !== "published") {
+      return NextResponse.json({ error: "This week is not published" }, { status: 409 });
+    }
+    if (!["OWNER", "ADMIN"].includes(session.role)) {
+      return NextResponse.json(
+        { error: "Only an owner/admin can unpublish a roster — staff have already been notified of these shifts. Edit the cells directly (today and future days are always editable)." },
+        { status: 403 },
+      );
+    }
+    const unpublishReason = (reason ?? "").trim();
+    if (unpublishReason.length < 5) {
+      return NextResponse.json(
+        { error: "A reason is required to unpublish a roster staff have already been told about.", reason: "reason_required" },
+        { status: 422 },
+      );
+    }
+    const weekEnd = weekEndOf(week_start);
+    if (weekEnd && weekEnd < getMYTToday()) {
+      return NextResponse.json(
+        { error: "This week has already ended — it is the pay basis for hours worked and cannot be unpublished. Correct a specific day through the roster grid (owner/admin, with a reason)." },
+        { status: 409 },
+      );
+    }
+
+    const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+    const note = `[unpublished ${stamp}] by ${session.role.toLowerCase()}: ${unpublishReason}`;
+    const aiNotes = schedule.ai_notes ? `${schedule.ai_notes}\n${note}` : note;
+    const { data: reverted, error } = await hrSupabaseAdmin
       .from("hr_schedules")
-      .update({ status: "draft", published_at: null })
-      .eq("id", schedule.id);
+      .update({ status: "draft", published_at: null, ai_notes: aiNotes })
+      .eq("id", schedule.id)
+      .eq("status", "published")
+      .select("id");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!reverted || reverted.length === 0) {
+      return NextResponse.json({ error: "This week was already unpublished" }, { status: 409 });
+    }
+    await logActivity({
+      actorId: session.id,
+      action: "roster.unpublish",
+      module: "hr",
+      targetId: schedule.id,
+      targetName: `${outlet_id.slice(0, 8)} · week of ${week_start}`,
+      details: { outlet_id, week_start, reason: unpublishReason },
+      request: req,
+    });
     return NextResponse.json({ success: true });
   }
 

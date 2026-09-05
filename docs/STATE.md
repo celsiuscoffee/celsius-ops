@@ -2595,8 +2595,13 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   merge it.** It now carries: the hardening (25 QA findings), the live-sales
   wiring that fixes "Expected RM0.00" on the reports, the split-payment AP
   matcher, and the shared filter/sort/CSV table across all six procurement
-  reports. CI green on every push; branch previews are CANCELED by Vercel so
-  the owner cannot see any of it until merge. After merge:
+  reports. **CI has NOT run on the last three commits** (2967b972, 85696f9e,
+  bb8be838) — GitHub Actions never dispatched them, while every earlier push
+  on this branch ran green; validated locally instead (1122 tests, tsc clean
+  in backoffice+staff, eslint clean, `next build` OK). Branch previews show
+  "Canceled by Ignored Build Step" — a Vercel project setting skips preview
+  builds, so the owner cannot see any of this until merge; judge unmerged UI
+  from the diff. After merge:
   set `TELEGRAM_ALLOWED_CHAT_IDS` from the warn logs, then consider
   `INVOICE_PAY_REQUIRE_RECEIPT=block` once unreceived-PO share drops; tell
   finance Telegram-captured invoices now land as DRAFT; add an override
@@ -2613,6 +2618,24 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   supplier-page package id + catalog cleanup; (4) POP URL on invoice, GRNI
   checks, transactional receiving, transfer receive+chaser. PR #1216 (reports
   wiring) still open/green.
+- 2026-09-05 (round 3) — **HR QA web backlog, no owner decision needed**
+  (branch `claude/hr-qa-round3`). Unpublish now OWNER/ADMIN + reason,
+  refused once the week has ended, activity-logged (`roster.unpublish`) —
+  it was the bypass around the published-roster retro-edit guard. Leave
+  gained a third outcome: backoffice `cancel` (pending → any reviewer in
+  scope, releases the hold; approved → OWNER/ADMIN with reason, restores
+  `used_days`, logged) and a staff self-withdraw for pending requests.
+  Staff web clock page: a log still open from a previous MYT day shows an
+  "End yesterday's shift at HH:MM" banner → `close_stale` action closes it
+  exactly as the cron would (rostered end / outlet close, `system` method,
+  OT 0, `auto_closed_forgot_clockout`), no GPS needed; a live shift can't
+  use it. `FetchError` card on every staff HR page (401 → "session expired
+  → sign in"; other → retry) instead of the empty state. My Attendance
+  shows OT tails ≥0.5 h (was ≥1). Backoffice `agents/leave-manager.ts`
+  (unused duplicate) deleted. Still open: native PR #1219 (owner to say
+  "merge 1219"; OTA to manager phones), swap request UI, shared
+  recomputeTotals, and the owner decisions listed under round 2.
+
 - 2026-09-03 (round 2) — **HR module code + flow QA, five parallel reviews.**
   Report: `docs/design/hr-qa-round2-2026-09-03.md` (11 security, 16 money,
   17 flow, 9 staff-app findings; ~35 fixed on `claude/hr-qa-round2`).
