@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { ArrowLeft, Loader2, TrendingDown, TrendingUp, Package, DollarSign, AlertTriangle, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { ArrowLeft, Loader2, TrendingDown, TrendingUp, Package, DollarSign, AlertTriangle } from "lucide-react";
+import { ReportTable, type ReportColumn } from "@/components/reports/report-table";
 
 type Outlet = { id: string; name: string };
 
@@ -45,8 +45,6 @@ function fmt(n: number) {
 
 export default function StockValuationPage() {
   const [outletId, setOutletId] = useState("");
-  const [search, setSearch] = useState("");
-  const [showVarianceOnly, setShowVarianceOnly] = useState(false);
 
   const url = outletId
     ? `/api/inventory/reports/stock-valuation?outletId=${outletId}`
@@ -54,14 +52,6 @@ export default function StockValuationPage() {
 
   const { data, isLoading } = useFetch<ValuationData>(url);
 
-  const filtered = (data?.items ?? []).filter((item) => {
-    if (showVarianceOnly && (item.variance === null || item.variance === 0)) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return item.name.toLowerCase().includes(q) || item.sku.toLowerCase().includes(q);
-    }
-    return true;
-  });
 
   return (
     <div className="p-3 sm:p-6">
@@ -156,24 +146,6 @@ export default function StockValuationPage() {
             <option key={b.id} value={b.id}>{b.name}</option>
           ))}
         </select>
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input
-            placeholder="Search product..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <label className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600">
-          <input
-            type="checkbox"
-            checked={showVarianceOnly}
-            onChange={(e) => setShowVarianceOnly(e.target.checked)}
-            className="h-4 w-4 rounded accent-terracotta"
-          />
-          Variance only
-        </label>
       </div>
 
       {/* Loading */}
@@ -185,84 +157,80 @@ export default function StockValuationPage() {
 
       {/* Table */}
       {data && (
-        <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Product</th>
-                {!outletId && <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>}
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Category</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">System Qty</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Counted Qty</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Variance</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Cost/Unit</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">System Value</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Value Diff</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-400">
-                    No items found
-                  </td>
-                </tr>
-              )}
-              {filtered.map((item, idx) => (
-                <tr key={`${item.outletId}-${item.productId}`} className={`border-b border-gray-50 ${idx % 2 === 0 ? "" : "bg-gray-50/30"}`}>
-                  <td className="px-4 py-2.5">
-                    <p className="font-medium text-gray-900">{item.name}</p>
-                    <code className="text-xs text-gray-400">{item.sku}</code>
-                  </td>
-                  {!outletId && <td className="px-4 py-2.5 text-gray-600">{item.outletName}</td>}
-                  <td className="px-4 py-2.5">
-                    <Badge variant="outline" className="text-xs">{item.category}</Badge>
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-gray-900">
-                    {fmt(item.systemQty)} <span className="text-xs text-gray-400">{item.baseUom}</span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-gray-900">
-                    {item.lastCountedQty !== null ? (
-                      <>{fmt(item.lastCountedQty)} <span className="text-xs text-gray-400">{item.baseUom}</span></>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono">
-                    {item.variance !== null ? (
-                      <span className={item.variance < 0 ? "text-red-600" : item.variance > 0 ? "text-green-600" : "text-gray-400"}>
-                        {item.variance > 0 ? "+" : ""}{fmt(item.variance)}
-                        {item.variance !== 0 && (
-                          <AlertTriangle className="ml-1 inline h-3 w-3" />
-                        )}
-                      </span>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-gray-600">
-                    {item.costPerUnit > 0 ? (
-                      <>RM {fmt(item.costPerUnit)}<span className="text-xs text-gray-400">/{item.baseUom}</span></>
-                    ) : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-gray-900">
-                    RM {fmt(item.systemValue)}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono">
-                    {item.valueDiff !== null && item.valueDiff !== 0 ? (
-                      <span className={item.valueDiff < 0 ? "text-red-600 font-medium" : "text-green-600 font-medium"}>
-                        {item.valueDiff > 0 ? "+" : ""}RM {fmt(Math.abs(item.valueDiff))}
-                      </span>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ReportTable<ValuationItem>
+          rows={data.items}
+          rowKey={(it) => `${it.outletId}-${it.productId}`}
+          csvFilename="stock-valuation"
+          emptyMessage="No items found."
+          searchPlaceholder="Search product, SKU or category…"
+          searchText={(it) => `${it.name} ${it.sku} ${it.category} ${it.outletName}`}
+          initialSort={{ key: "systemValue", dir: "desc" }}
+          minWidth={860}
+          facets={[
+            { key: "outlet", label: "Outlets", value: (it) => it.outletName },
+            { key: "category", label: "Categories", value: (it) => it.category },
+          ]}
+          toggles={[
+            { key: "variance", label: "Variance only", predicate: (it) => it.variance !== null && it.variance !== 0 },
+            { key: "uncounted", label: "Never counted", predicate: (it) => it.lastCountedQty === null },
+          ]}
+          columns={valuationColumns}
+        />
       )}
     </div>
   );
 }
+
+const valuationColumns: ReportColumn<ValuationItem>[] = [
+  {
+    key: "name", header: "Product", sortValue: (it) => it.name, csv: (it) => it.name,
+    render: (it) => (
+      <>
+        <p className="font-medium text-gray-900">{it.name}</p>
+        <code className="text-xs text-gray-400">{it.sku}</code>
+      </>
+    ),
+  },
+  { key: "outletName", header: "Outlet", sortValue: (it) => it.outletName, render: (it) => <span className="text-gray-600">{it.outletName}</span> },
+  {
+    key: "category", header: "Category", sortValue: (it) => it.category,
+    render: (it) => <Badge variant="outline" className="text-xs">{it.category}</Badge>,
+  },
+  {
+    key: "systemQty", header: "System Qty", align: "right", sortValue: (it) => it.systemQty,
+    render: (it) => <span className="font-mono text-gray-900">{fmt(it.systemQty)} <span className="text-xs text-gray-400">{it.baseUom}</span></span>,
+  },
+  {
+    key: "lastCountedQty", header: "Counted Qty", align: "right", sortValue: (it) => it.lastCountedQty,
+    render: (it) => it.lastCountedQty !== null
+      ? <span className="font-mono text-gray-900">{fmt(it.lastCountedQty)} <span className="text-xs text-gray-400">{it.baseUom}</span></span>
+      : <span className="text-gray-300">—</span>,
+  },
+  {
+    key: "variance", header: "Variance", align: "right", sortValue: (it) => it.variance,
+    render: (it) => it.variance !== null ? (
+      <span className={`font-mono ${it.variance < 0 ? "text-red-600" : it.variance > 0 ? "text-green-600" : "text-gray-400"}`}>
+        {it.variance > 0 ? "+" : ""}{fmt(it.variance)}
+        {it.variance !== 0 && <AlertTriangle className="ml-1 inline h-3 w-3" />}
+      </span>
+    ) : <span className="text-gray-300">—</span>,
+  },
+  {
+    key: "costPerUnit", header: "Cost/Unit", align: "right", sortValue: (it) => (it.costPerUnit > 0 ? it.costPerUnit : null),
+    render: (it) => it.costPerUnit > 0
+      ? <span className="font-mono text-gray-600">RM {fmt(it.costPerUnit)}<span className="text-xs text-gray-400">/{it.baseUom}</span></span>
+      : <span className="text-gray-300">—</span>,
+  },
+  {
+    key: "systemValue", header: "System Value", align: "right", sortValue: (it) => it.systemValue,
+    render: (it) => <span className="font-mono text-gray-900">RM {fmt(it.systemValue)}</span>,
+  },
+  {
+    key: "valueDiff", header: "Value Diff", align: "right", sortValue: (it) => it.valueDiff,
+    render: (it) => it.valueDiff !== null && it.valueDiff !== 0 ? (
+      <span className={`font-mono font-medium ${it.valueDiff < 0 ? "text-red-600" : "text-green-600"}`}>
+        {it.valueDiff > 0 ? "+" : ""}RM {fmt(Math.abs(it.valueDiff))}
+      </span>
+    ) : <span className="text-gray-300">—</span>,
+  },
+];
