@@ -1,7 +1,12 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { NOT_CONSUMPTION_ENGINE_WHERE } from "@/lib/inventory/consumption-marker";
 
+// USED_NOT_RECORDED is kept for MANUAL "we used it, nobody logged it" entries;
+// the consumption engine's automatic USED_NOT_RECORDED postings (reason
+// "auto-consumption:<date>") are excluded below — they are normal sales
+// depletion, and counting them made every armed day read as 100% waste.
 const WASTE_TYPES = [
   "WASTAGE",
   "BREAKAGE",
@@ -39,6 +44,7 @@ export async function GET(req: NextRequest) {
         adjustmentType: { in: [...WASTE_TYPES] },
         createdAt: { gte: from, lte: to },
         ...(outletId ? { outletId } : {}),
+        ...NOT_CONSUMPTION_ENGINE_WHERE,
       },
       include: {
         product: {

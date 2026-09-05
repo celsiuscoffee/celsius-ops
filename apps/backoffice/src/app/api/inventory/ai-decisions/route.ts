@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { validateSupplierOrder, boundedReorderQty, type OrderWarning } from "@/lib/inventory/order-validation";
+import { ADHOC_SUPPLIER_CODE, isPriceSourceCandidate } from "@/lib/inventory/supplier-candidates";
 
 // ─── GET /api/inventory/ai-decisions ────────────────────────────────────
 // Returns executable decisions: draft POs to create, transfers to make,
@@ -48,15 +49,23 @@ export async function GET(request: NextRequest) {
           avgDailyUsage: true,
         },
       }),
+      // Price-source candidates only (mirrors reorder-suggestions.ts): priced,
+      // packaged, from an ACTIVE non-ADHOC supplier. The RM0 ADHOC pay-and-claim
+      // placeholder rows used to win "cheapest" and emit RM0 draft POs.
       prisma.supplierProduct.findMany({
-        where: { isActive: true },
+        where: {
+          isActive: true,
+          price: { gt: 0 },
+          productPackageId: { not: null },
+          supplier: { status: "ACTIVE", NOT: { supplierCode: ADHOC_SUPPLIER_CODE } },
+        },
         select: {
           supplierId: true,
           productId: true,
           productPackageId: true,
           price: true,
           moq: true,
-          supplier: { select: { id: true, name: true, leadTimeDays: true } },
+          supplier: { select: { id: true, name: true, leadTimeDays: true, status: true, supplierCode: true } },
           productPackage: { select: { id: true, conversionFactor: true, packageName: true, packageLabel: true } },
         },
       }),
@@ -83,10 +92,12 @@ export async function GET(request: NextRequest) {
       // that are already on the way (the #1 overpurchase cause). PARTIALLY_RECEIVED
       // is excluded on purpose: the receivings reconcile overwrites OrderItem.quantity
       // with the received total, so its lines no longer represent what's still owed.
+      // PENDING_APPROVAL is open too (same set as reorder-suggestions.ts) — a PO
+      // waiting on a manager is still incoming stock, not a reason to draft again.
       prisma.order.findMany({
         where: {
           orderType: "PURCHASE_ORDER",
-          status: { in: ["APPROVED", "SENT", "CONFIRMED", "AWAITING_DELIVERY"] },
+          status: { in: ["PENDING_APPROVAL", "APPROVED", "SENT", "CONFIRMED", "AWAITING_DELIVERY"] },
           ...(outletId ? { outletId } : {}),
         },
         select: {
@@ -182,6 +193,8 @@ export async function GET(request: NextRequest) {
 
     const supplierOptionsMap: Record<string, SupplierOption[]> = {};
     for (const sp of supplierProducts) {
+      // Belt-and-braces re-check of the DB filter above (pure, unit-tested).
+      if (!isPriceSourceCandidate(sp)) continue;
       const conv = sp.productPackage ? Number(sp.productPackage.conversionFactor) : 1;
       const unitCost = Number(sp.price) / conv;
       if (!supplierOptionsMap[sp.productId]) supplierOptionsMap[sp.productId] = [];
@@ -222,7 +235,7 @@ export async function GET(request: NextRequest) {
       totalPrice: number;
       productPackageId: string | null;
       packageName: string | null;
-      daysUntilStockout: number;
+      daysUntilStockout: number | null; // null = no usage data (avgDaily 0) — "n/a", NOT "0 days"
       capNote: string | null; // why orderQty was capped (overstock / shelf-life), if any
       alternatives: { supplierName: string; price: number; moq: number }[]; // next-cheapest sources
     };
@@ -343,6 +356,7 @@ export async function GET(request: NextRequest) {
         // Find cheapest supplier
         const supplier = cheapestSupplier[product.id];
         if (!supplier) continue; // no supplier = can't order
+        if (!(supplier.price > 0)) continue; // never emit a RM0 PO line
 
         // Order quantity: enough to reach par (after transfers), floored by MOQ,
         // but capped so we don't overstock past maxLevel or order more than can be
@@ -360,7 +374,9 @@ export async function GET(request: NextRequest) {
         });
         const orderQty = bounded.orderQty;
         const totalPrice = orderQty * supplier.price;
-        const daysLeft = avgDaily > 0 ? Math.round(currentQty / avgDaily) : 0;
+        // No usage rate → unknown horizon (null), not "0 days left": a zero here
+        // used to flag every never-sold item as urgent.
+        const daysLeft: number | null = avgDaily > 0 ? Math.round(currentQty / avgDaily) : null;
 
         let capNote: string | null = null;
         if (bounded.moqForced) {
@@ -436,7 +452,7 @@ export async function GET(request: NextRequest) {
         const supplierInfo = cheapestSupplier[items[0].productId];
         const total = items.reduce((s, i) => s + i.totalPrice, 0);
         const hasCritical = items.some((i) => i.currentQty <= 0);
-        const hasLow = items.some((i) => i.daysUntilStockout <= 2);
+        const hasLow = items.some((i) => i.daysUntilStockout !== null && i.daysUntilStockout <= 2);
 
         poRecommendations.push({
           type: "purchase_order",

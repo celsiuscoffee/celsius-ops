@@ -2747,6 +2747,22 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   factor) armed 2026-08-25 09:00 UTC — restore landed Aug 15 14:46, so it
   gets ~10 post-restore days.
 
+- 2026-09-05 — **RM70 fleet test status + "redo shah alam".** Putrajaya
+  fired Aug 31 (49.86→70, clean guard) and Tamarind fired Sep 1 (46.32→70 —
+  its guard read clean after the Aug 31 rollback partially restored the
+  budget); both delivering at RM70 (Google flexing to RM74-100 on single
+  days) with clean guards through Sep 4. SHAH ALAM's Aug 31 raise was
+  REVERTED after ONE day (Sep 1 19:04, raw 0.96/adj 0.95 — its pre-existing
+  borderline window, breached-or-borderline since ~Aug 22, knifed the raise
+  before the test ran). Owner: "redo shah alam" → directive gains a redo
+  leg: passes ONLY the original pre-Sep-5 revert (a post-redo revert is
+  final) and fires only on the THIRD consecutive clean guard night
+  (priorCleanNights from the last 2 agent_actions runs + tonight). SA
+  streak at ship time: 0 (Sep 4 raw 0.94) — earliest fire ~Sep 8 if SA
+  cleans up. Watch: SA's ongoing mild softness (mom 0.97, anchor 1.08 —
+  not Tamarind-class) is its own open question. First raised weekend
+  (Sep 5-6) = first data for the owner's weekend-ads hypothesis; interim
+  read ~Sep 14 with weekday/weekend split; machine verdicts ~Sep 28-29.
 - 2026-08-31 — **Owner: "lets try to increase back the gads spending and
   see" → "let us do all rm70/day", Tamarind included.** ownerDirective
   rewritten (supersedes the Aug-25 two-leg probe-up; Putrajaya's leg had
