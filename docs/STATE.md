@@ -2469,9 +2469,15 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   use it. `FetchError` card on every staff HR page (401 → "session expired
   → sign in"; other → retry) instead of the empty state. My Attendance
   shows OT tails ≥0.5 h (was ≥1). Backoffice `agents/leave-manager.ts`
-  (unused duplicate) deleted. Still open: native PR #1219 (owner to say
-  "merge 1219"; OTA to manager phones), swap request UI, shared
-  recomputeTotals, and the owner decisions listed under round 2.
+  (unused duplicate) deleted. Follow-up branch `claude/hr-swap-request-ui`
+  (stacked on round 3): staff can now RAISE a swap — "Swap" on a future
+  My Shifts card → `/api/hr/swap/candidates` (same outlet, published,
+  future, not rest, not already in a swap) → `action=request`, which now
+  validates the same rules and refuses duplicates; sent swaps show the
+  coworker's name and can be withdrawn. No push to the target yet (staff
+  app has no ops-push sender). Still open: native PR #1219 (owner to say
+  "merge 1219"; OTA to manager phones), shared recomputeTotals, and the
+  owner decisions listed under round 2.
 
 - 2026-09-03 (round 2) — **HR module code + flow QA, five parallel reviews.**
   Report: `docs/design/hr-qa-round2-2026-09-03.md` (11 security, 16 money,
