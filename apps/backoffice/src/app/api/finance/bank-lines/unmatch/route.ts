@@ -3,13 +3,16 @@
 // Reverses exactly what the match wrote: the line loses its invoice link (and
 // re-keys its GL journal); the invoice's payment state is reverted ONLY when
 // this match is what marked it paid (paidVia stamps 'bank-ap-match' /
-// 'bank-ap-match-multi:<lineId>') — a link-only match against an invoice paid
-// via POP/migration leaves that invoice untouched. The pair is recorded as
+// 'bank-ap-match-multi:<lineId>' / 'bank-ap-match-split') — a link-only match
+// against an invoice paid via POP/migration leaves that invoice untouched. A
+// split-paid invoice is REDUCED by this leg (remaining linked legs decide
+// PAID / PARTIALLY_PAID / PENDING), not zeroed. The pair is recorded as
 // rejected so the auto-matcher never re-applies it.
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { SPLIT_PAID_VIA } from "@/lib/finance/ap-match";
 import { getFinanceClient } from "@/lib/finance/supabase";
 import { logBankLineEvents } from "@/lib/finance/bank-line-events";
 
@@ -44,6 +47,12 @@ export async function POST(req: NextRequest) {
     },
     select: { id: true },
   });
+  // Split-paid: the invoice's payment state is the SUM of its linked legs.
+  const splitPaid = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { id: true, amount: true, depositAmount: true, paidVia: true },
+  });
+  const isSplit = splitPaid?.paidVia === SPLIT_PAID_VIA;
 
   await prisma.$transaction(async (tx) => {
     await tx.bankStatementLine.update({
@@ -54,6 +63,23 @@ export async function POST(req: NextRequest) {
       await tx.invoice.updateMany({
         where: { id: { in: paidByThisMatch.map((i) => i.id) } },
         data: { status: "PENDING", amountPaid: 0, paidAt: null, paidVia: null },
+      });
+    }
+    if (isSplit && splitPaid) {
+      const rest = await tx.bankStatementLine.aggregate({ where: { apInvoiceId: invoiceId }, _sum: { amount: true } });
+      const paid = Math.round(Number(rest._sum.amount ?? 0) * 100) / 100;
+      const amount = Number(splitPaid.amount);
+      const depositAmt = splitPaid.depositAmount != null ? Number(splitPaid.depositAmount) : null;
+      await tx.invoice.update({
+        where: { id: invoiceId },
+        data: paid <= 0.01
+          ? { status: "PENDING", amountPaid: 0, paidAt: null, paidVia: null, depositPaidAt: null }
+          : paid >= amount - 0.01
+            ? { status: "PAID", amountPaid: amount }
+            : {
+                status: depositAmt != null && Math.abs(paid - depositAmt) <= 0.01 ? "DEPOSIT_PAID" : "PARTIALLY_PAID",
+                amountPaid: paid, paidAt: null,
+              },
       });
     }
     // Re-key the whole day-aggregate journal the line posted under.

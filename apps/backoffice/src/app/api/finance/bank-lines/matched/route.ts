@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
         payee,
         invoiceAmount: inv ? round2(Number(inv.amount)) : null,
         // paid by this match vs already settled elsewhere (link-only)
-        paidByMatch: inv?.paidVia === "bank-ap-match" || inv?.paidVia === `bank-ap-match-multi:${l.id}`,
+        paidByMatch: inv?.paidVia === "bank-ap-match" || inv?.paidVia === `bank-ap-match-multi:${l.id}` || inv?.paidVia === "bank-ap-match-split",
       };
     })
     .filter((r) => !q ||
