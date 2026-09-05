@@ -11,6 +11,48 @@ current month.
 
 ## Verified facts
 
+- 2026-09-05 — **The live Usage Variance / COGS "Expected = RM0.00" is a
+  PRODUCTION bug, already fixed on PR #1216 (unmerged).** `main`'s
+  `reports/ingredient-variance` still reads `prisma.salesTransaction` — the
+  StoreHub feed that has had no rows since 2026-04-11 — so expected usage is
+  zero for every ingredient and the "No sales in this window" data-quality
+  line fires. The window and outlet mapping are fine: Putrajaya has 1,986
+  completed `pos_orders` (5,687 sold lines incl. the pickup app) between the
+  2026-07-31 and 2026-08-20 counts. Commit adbae563 repoints both reports at
+  `lib/inventory/report-sales.ts`. **Every branch preview deployment on Vercel
+  is CANCELED** (only `main` production builds reach READY), so branch work
+  cannot be previewed before merge — judge unmerged UI from the diff/CI, and
+  tell the owner a fix is invisible to them until it lands on main.
+
+- 2026-09-05 — **Split payments (deposit + balance) now matched — ap-match
+  item (e) done.** Third pass in `lib/finance/ap-match.ts`, after the single
+  and multi-invoice passes, over leftovers only: gathers unused DR lines that
+  carry the invoice's payee identity, then `pickSplitLegs` takes the legs that
+  settle the REMAINING balance (amount − already linked/paid), else the
+  ref-confirmed legs forming a partial. `writeSplitMatch` links every leg and
+  moves the invoice by the legs' total (PAID / DEPOSIT_PAID / PARTIALLY_PAID;
+  link-only when already PAID elsewhere); unmatch RECOMPUTES from the
+  remaining linked legs instead of zeroing. Manual path
+  `POST /api/finance/bank-lines/match-split`; recon page has a Split payments
+  card. **Two guards came from replaying 120 days of prod:** every leg must
+  carry the payee name/alias, and `isDateLikeNumber` disqualifies date-shaped
+  "invoice numbers" — ad-hoc claims are numbered by week ("LALA CCT WEEK
+  24082026") and bank narration quotes dates ("DR/CARD SALES M/N 2612988 DATED
+  24082026"), which pointed 8 card-fee lines at a RM61.30 cleaning claim.
+  Replay after the guards: 59 already-PAID invoices reconcile RM74,184 of legs
+  out of OTHER_OUTFLOW (link-only), 4 open invoices settle (held for EOM),
+  deposit-only stragglers surface for review.
+
+- 2026-09-05 — **All six procurement reports share one analysis table.**
+  `components/reports/report-table.tsx` + pure `lib/reports/table-utils.ts`
+  (tested): multi-term search, click-to-sort every column with blanks pinned
+  last, per-report value filters built from the rows present, quick toggles
+  (high variance, over-used, variance only, never counted, short deliveries,
+  margin <50%, losing money, under-received, not fully invoiced), CSV export
+  of the filtered+sorted set with a UTF-8 BOM, page size + show-more. Supplier
+  Scorecard gained a table view beside its cards (cards could not be sorted or
+  compared at all).
+
 - 2026-09-05 — **Procurement hardening shipped on PR #1216 (all 25 QA findings
   addressed in code; warn-first rollout).** Three parallel streams merged
   (63 files, +3.8k/−1.2k): (A) auth+roles — orders/[id] GET needs session,
@@ -2549,15 +2591,20 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
-- 2026-09-05 — **Hardening PR #1216 ready for review/merge.** After merge:
+- 2026-09-05 — **PR #1216 is the whole procurement/reports batch — review and
+  merge it.** It now carries: the hardening (25 QA findings), the live-sales
+  wiring that fixes "Expected RM0.00" on the reports, the split-payment AP
+  matcher, and the shared filter/sort/CSV table across all six procurement
+  reports. CI green on every push; branch previews are CANCELED by Vercel so
+  the owner cannot see any of it until merge. After merge:
   set `TELEGRAM_ALLOWED_CHAT_IDS` from the warn logs, then consider
   `INVOICE_PAY_REQUIRE_RECEIPT=block` once unreceived-PO share drops; tell
   finance Telegram-captured invoices now land as DRAFT; add an override
   control to the staff PO form (guard currently blocks without one). Still
   open: payment-side data repairs (owner sign-off), deactivating the 22 active
   RM0 ADHOC rows (safe now that ai-decisions excludes them; staff picker relies
-  on the ADHOC row being ACTIVE — so leave active), (e) split-payment support
-  in ap-match.ts.
+  on the ADHOC row being ACTIVE — so leave active). Item (e) split-payment
+  support in ap-match.ts is DONE (2026-09-05).
 
 - 2026-09-04 — **Procurement QA delivered; owner to pick fixes.** Highest-value
   first: (1) auth+role on all inventory/transfer writes + Telegram allowlist;
@@ -2593,8 +2640,8 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   Unique Paper INU-26-23275 (RM639.28 marked paid, no debit), the Ariff
   conversation now bank-evidenced (2× RM128.30), CATELUX same-day RM181×2,
   kitchen to confirm Chicken Tomyam Carbonara 80ml-olive-oil BOM line.
-  System follow-ups: (e) split-payment support in `ap-match.ts` (deposit +
-  "Bal" legs keyed by invoice no. in description — approved, not built);
+  System follow-ups: (e) split-payment support in `ap-match.ts` — BUILT
+  2026-09-05, see the verified fact above;
   receive-on-arrival + transfer-receipt discipline (15/15 Aug transfers
   PENDING, 55/63 PJ POs unreceived — this is what makes per-outlet COGS
   precise); catalog hygiene (3 uncosted ingredients, ~100 unit/pkt/slices
