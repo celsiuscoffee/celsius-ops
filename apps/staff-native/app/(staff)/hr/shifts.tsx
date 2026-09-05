@@ -13,13 +13,16 @@ import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { fetchShifts, type Shift } from "../../../lib/hr/api";
 import { buildShiftIcsUrl, formatDuration } from "../../../lib/hr/calendar";
+import { calendarDayParts, isRestDayRow, mytToday, wallTime } from "../../../lib/hr/myt";
 
 export default function ShiftsScreen() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["hr-shifts"],
     queryFn: fetchShifts,
   });
-  const shifts = data?.shifts ?? [];
+  // Rest-day markers (00:00–00:00 / "Rest Day") are roster rows, not shifts:
+  // they rendered as a 24 h shift with an add-to-calendar button.
+  const shifts = (data?.shifts ?? []).filter((s) => !isRestDayRow(s));
 
   return (
     <Screen edges={["top", "left", "right"]}>
@@ -58,24 +61,20 @@ export default function ShiftsScreen() {
   );
 }
 
-// "Today" / "Tomorrow" / null for a shift date, comparing calendar days in
-// local time (dates come back as plain YYYY-MM-DD).
+// "Today" / "Tomorrow" / null for a shift date, comparing MALAYSIA calendar
+// days (roster dates are plain YYYY-MM-DD in Malaysia time; the phone's zone
+// is irrelevant).
 function relativeDay(dateISO: string): string | null {
-  const [y, m, d] = dateISO.split("-").map(Number);
-  const shift = new Date(y, m - 1, d);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const days = Math.round((shift.getTime() - today.getTime()) / 86_400_000);
+  const days = Math.round((Date.parse(`${dateISO}T00:00:00Z`) - Date.parse(`${mytToday()}T00:00:00Z`)) / 86_400_000);
   if (days === 0) return "Today";
   if (days === 1) return "Tomorrow";
   return null;
 }
 
 function ShiftCard({ shift }: { shift: Shift }) {
-  const d = new Date(shift.shift_date);
-  const dayName = d.toLocaleDateString([], { weekday: "short" });
-  const dayNum = d.toLocaleDateString([], { day: "numeric" });
-  const monthName = d.toLocaleDateString([], { month: "short" });
+  // Never `new Date("YYYY-MM-DD")`: that is UTC midnight, the previous evening
+  // on any phone west of Greenwich, so the card showed the wrong day.
+  const { dayName, dayNum, monthName } = calendarDayParts(shift.shift_date);
   const rel = relativeDay(shift.shift_date);
   const duration = formatDuration(shift.start_time, shift.end_time);
 
@@ -125,6 +124,9 @@ function ShiftCard({ shift }: { shift: Shift }) {
               </View>
             ) : null}
           </View>
+          {shift.outlet_name ? (
+            <Text className="mt-1 text-xs font-body-medium text-muted-fg">{shift.outlet_name}</Text>
+          ) : null}
         </View>
 
         {/* Relative-day badge */}
@@ -154,11 +156,9 @@ function ShiftCard({ shift }: { shift: Shift }) {
   );
 }
 
+// Roster times are Malaysia wall-clock strings already; show them as such.
 function fmtTime(t: string): string {
-  const [h, m] = t.split(":");
-  const d = new Date();
-  d.setHours(Number(h), Number(m), 0, 0);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return wallTime(t);
 }
 
 // Route-level boundary: a throw in this screen degrades to an inline retry

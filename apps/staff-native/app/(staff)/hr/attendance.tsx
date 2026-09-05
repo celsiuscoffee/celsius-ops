@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, Text, View } from "react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { fetchAttendance, type AttendanceItem } from "../../../lib/hr/api";
+import { mytDayLabel, mytTime } from "../../../lib/hr/myt";
 
 export default function AttendanceScreen() {
   const { data, isLoading, error } = useQuery({
@@ -73,33 +74,39 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function AttendanceCard({ item }: { item: AttendanceItem }) {
-  const ci = new Date(item.clock_in);
-  const co = item.clock_out ? new Date(item.clock_out) : null;
-  const dayLabel = ci.toLocaleDateString([], {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
+  // Malaysia time, whatever zone the phone is in.
+  const dayLabel = mytDayLabel(item.clock_in);
+  const ot = Number(item.overtime_hours ?? 0);
+  // OT pays in 30-minute brackets (owner 2026-09-03: "pay the 0.5h"); the
+  // stats card counted from 0.5 h while rows hid anything under 1 h, so the
+  // total and the rows disagreed. OT only reaches payroll once a manager has
+  // approved the day, so say which state it is in — the web app does.
+  const otApproved = item.final_status === "approved" || item.final_status === "adjusted";
+  const status =
+    item.final_status === "rejected" ? "Rejected"
+    : item.final_status === "adjusted" ? "Times fixed"
+    : item.final_status === "approved" ? null
+    : item.ai_status === "flagged" ? "Awaiting review"
+    : null;
   return (
     <View className="rounded-2xl border border-border bg-surface p-4">
       <View className="flex-row items-center justify-between">
         <Text className="text-base font-body-semi text-espresso">{dayLabel}</Text>
         <Text className="text-sm font-display-medium text-espresso">
-          {item.total_hours != null ? `${item.total_hours.toFixed(2)}h` : "-"}
+          {item.total_hours != null ? `${Number(item.total_hours).toFixed(2)}h` : "-"}
         </Text>
       </View>
       <Text className="mt-1 text-xs text-muted-fg">
-        {fmtTime(ci)} → {co ? fmtTime(co) : "still in"}
-        {item.overtime_hours && Number(item.overtime_hours) >= 1
-          ? `  ·  OT ${item.overtime_hours}h`
-          : ""}
+        {mytTime(item.clock_in)} → {item.clock_out ? mytTime(item.clock_out) : "still in"}
+        {ot >= 0.5 ? `  ·  OT ${ot}h${otApproved ? "" : " (pending)"}` : ""}
       </Text>
+      {status ? (
+        <Text className={`mt-1 text-[11px] font-body-semi ${item.final_status === "rejected" ? "text-danger" : "text-muted"}`}>
+          {status}
+        </Text>
+      ) : null}
     </View>
   );
-}
-
-function fmtTime(d: Date): string {
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 // Route-level boundary: a throw in this screen degrades to an inline retry

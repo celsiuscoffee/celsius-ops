@@ -54,6 +54,40 @@ export default function PayslipsScreen() {
   );
 }
 
+// The earnings lines exactly as the backoffice run page and the PDF label
+// them (packages/shared/src/hr/pay-lines.ts): OT by rate with the hours, and
+// the day-type pay — the 2× line carries the public-holiday second-day wage
+// and the 1× line the rest-day day-pay, which are not overtime and were shown
+// here as "Overtime".
+function earningLinesFor(p: Payslip): Array<{ label: string; value: number }> {
+  const n = (v: unknown) => Number(v ?? 0) || 0;
+  const d = p.computation_details ?? {};
+  const phPay = n(d.ph_premium_amount);
+  const restPay = n(d.rest_day_pay_amount);
+  const hrs = (h: number | undefined) => (h && h > 0 ? ` · ${h}h` : "");
+  const lines: Array<{ label: string; value: number }> = [];
+  const ot1 = n(p.ot_1x_amount) - restPay;
+  const ot15 = n(p.ot_1_5x_amount);
+  const ot2 = n(p.ot_2x_amount) - phPay;
+  const ot3 = n(p.ot_3x_amount);
+  if (ot1 > 0.004) lines.push({ label: `OT 1.0× (Plain Rate)${hrs(d.ot_hours_1x)}`, value: ot1 });
+  if (ot15 > 0.004) lines.push({ label: `OT 1.5× (Weekday)${hrs(d.ot_hours_1_5x)}`, value: ot15 });
+  if (ot2 > 0.004) lines.push({ label: `OT 2.0× (Rest Day)${hrs(d.ot_hours_2x)}`, value: ot2 });
+  if (ot3 > 0.004) lines.push({ label: `OT 3.0× (Public Holiday)${hrs(d.ot_hours_3x)}`, value: ot3 });
+  if (phPay > 0.004) {
+    const days = n(d.ph_days_worked);
+    lines.push({ label: `Public Holiday Pay (${days || 1} day${days === 1 || !days ? "" : "s"} × 2)`, value: phPay });
+  }
+  if (restPay > 0.004) {
+    const days = n(d.rest_day_days_worked);
+    lines.push({ label: `Rest Day Pay (${days || 1} day${days === 1 || !days ? "" : "s"})`, value: restPay });
+  }
+  // Older items have no detail block: fall back to one overtime line so the
+  // gross still ties out.
+  if (lines.length === 0 && n(p.overtime_pay) > 0.004) lines.push({ label: "Overtime", value: n(p.overtime_pay) });
+  return lines;
+}
+
 // "18,040.67" with thousands separators. Hermes Intl is unreliable for grouping,
 // so format the integer part by hand.
 function amount(n: number): string {
@@ -111,9 +145,9 @@ function PayslipCard({ payslip }: { payslip: Payslip }) {
   }
 
   const base = Number(payslip.base_salary ?? 0);
-  const ot = Number(payslip.overtime_pay ?? 0);
   const allow = Number(payslip.allowances ?? 0);
   const gross = Number(payslip.total_gross ?? 0);
+  const earningLines = earningLinesFor(payslip);
 
   const epf = Number(payslip.epf_employee ?? 0);
   const socso = Number(payslip.socso_employee ?? 0);
@@ -173,9 +207,11 @@ function PayslipCard({ payslip }: { payslip: Payslip }) {
           {/* Earnings */}
           <SectionLabel>Earnings</SectionLabel>
           <View className="gap-1">
-            <PayRow label="Basic salary" value={base} />
-            {ot > 0 ? <PayRow label="Overtime" value={ot} /> : null}
-            {allow > 0 ? <PayRow label="Allowances" value={allow} /> : null}
+            <PayRow label={isWeekly ? "Hourly wages" : "Basic salary"} value={base} />
+            {earningLines.map((l) => (
+              <PayRow key={l.label} label={l.label} value={l.value} />
+            ))}
+            {allow > 0 ? <PayRow label="Performance Allowance" value={allow} /> : null}
           </View>
           <Subtotal label="Gross pay" value={gross} />
 
