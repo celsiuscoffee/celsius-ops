@@ -189,7 +189,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Auto-link to ADHOC supplier so product is available for pay & claim
+  // Auto-link to ADHOC supplier so product is available for pay & claim.
+  //
+  // This row is a PLACEHOLDER, not a price: RM0, no package. It must stay
+  // `isActive: true` because the staff/backoffice `suppliers/products` pickers
+  // filter on isActive and expand this package-less ADHOC row into one option
+  // per package for pay-and-claim. It must NEVER be a price source — the reorder
+  // engines (ai-decisions, reorder-suggestions) exclude ADHOC / RM0 /
+  // package-less rows via lib/inventory/supplier-candidates.ts.
   const adhocSupplier = await prisma.supplier.findFirst({ where: { supplierCode: "ADHOC" } });
   if (adhocSupplier) {
     await prisma.supplierProduct.create({
