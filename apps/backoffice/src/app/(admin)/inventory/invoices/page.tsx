@@ -478,7 +478,11 @@ export default function InvoicesPage() {
       for (const file of Array.from(files)) {
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("folder", "invoices");
+        // This is the PAYMENT RECEIPT (proof of payment), not a supplier invoice.
+        // It must live under `pop/` — the WhatsApp POP auto-send only forwards a
+        // document whose URL contains "/pop/" (procurement-whatsapp.ts), so a
+        // receipt filed under "invoices" was never sent to the supplier.
+        formData.append("folder", "pop");
         const res = await fetch("/api/inventory/upload", { method: "POST", body: formData });
         if (res.ok) {
           const data = await res.json();

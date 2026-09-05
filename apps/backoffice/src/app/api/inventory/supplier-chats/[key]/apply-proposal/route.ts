@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserFromHeaders } from "@/lib/auth";
+import { AuthError, requireRole, type SessionUser } from "@/lib/auth";
 
 // Human applies the supplier-chat agent's held proposal to the PO — the
 // "AI proposes / human approves" handoff, now one click from the chat instead
@@ -15,8 +15,15 @@ import { getUserFromHeaders } from "@/lib/auth";
 //    and the same proposal can't be applied twice.
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ key: string }> }) {
-  const caller = await getUserFromHeaders(req.headers);
-  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Applying a proposal edits a live PO / invoice — purchasing roles only
+  // (a bare session used to be enough).
+  let caller: SessionUser;
+  try {
+    caller = await requireRole(req.headers, "OWNER", "ADMIN", "MANAGER");
+  } catch (e) {
+    if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
+    return NextResponse.json({ error: "Auth error" }, { status: 500 });
+  }
 
   const { key } = await params;
   const body = await req.json().catch(() => ({}));

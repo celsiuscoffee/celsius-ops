@@ -9,7 +9,7 @@ type ReorderItem = {
   productId: string; productName: string; sku: string; baseUom: string;
   currentQty: number; parLevel: number; reorderPoint: number; avgDailyUsage: number;
   orderQty: number; unitPrice: number; totalPrice: number;
-  productPackageId: string | null; packageName: string | null; daysUntilStockout: number;
+  productPackageId: string | null; packageName: string | null; daysUntilStockout: number | null;
 };
 
 type PORecommendation = {
@@ -233,7 +233,7 @@ export function AIInsightBanner({
                           <td className="py-1 text-gray-700">{item.productName} {item.packageName && <span className="text-gray-400">({item.packageName})</span>}</td>
                           <td className="py-1 text-right">Stock: <span className={item.currentQty <= 0 ? "text-red-600 font-medium" : ""}>{item.currentQty}</span></td>
                           <td className="py-1 text-right">Par: {item.parLevel}</td>
-                          <td className="py-1 text-right">{item.daysUntilStockout}d left</td>
+                          <td className="py-1 text-right">{item.daysUntilStockout == null ? "cover n/a" : `${item.daysUntilStockout}d left`}</td>
                           <td className="py-1 text-right font-medium text-gray-700">Order: {item.orderQty}</td>
                           <td className="py-1 text-right">RM {item.totalPrice.toFixed(2)}</td>
                         </tr>

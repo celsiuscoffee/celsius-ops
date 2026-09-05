@@ -211,10 +211,12 @@ export async function recalcOutletParLevels(outletId: string, opts: ParCalcOptio
   }
 
   // Shortest lead time per product across its suppliers.
+  // `??` not `||`: a supplier with an explicit 0-day lead (same-day / walk-in)
+  // must stay 0, not be bumped to the 1-day default.
   const leadTimeMap: Record<string, number> = {};
   for (const sp of supplierProducts) {
-    const lt = sp.supplier.leadTimeDays || PAR_DEFAULTS.leadTimeDays;
-    if (!leadTimeMap[sp.productId] || lt < leadTimeMap[sp.productId]) leadTimeMap[sp.productId] = lt;
+    const lt = sp.supplier.leadTimeDays ?? PAR_DEFAULTS.leadTimeDays;
+    if (leadTimeMap[sp.productId] === undefined || lt < leadTimeMap[sp.productId]) leadTimeMap[sp.productId] = lt;
   }
   const orderable = new Set(supplierProducts.map((sp) => sp.productId));
 
@@ -277,12 +279,21 @@ export async function recalcOutletParLevels(outletId: string, opts: ParCalcOptio
     })),
   );
 
-  // Package factor per product for rounding (bulk preferred).
+  // Package factor per product for rounding: the DEFAULT package (what the
+  // outlet actually buys), falling back to the largest factor. The list is
+  // ordered by conversionFactor desc, so the first row seen is the largest.
   const packageMap: Record<string, number> = {};
+  const packageIsDefault: Record<string, boolean> = {};
   for (const pkg of productPackages) {
     const cf = Number(pkg.conversionFactor);
-    if (!packageMap[pkg.productId]) packageMap[pkg.productId] = cf;
-    if (pkg.containsPackageId && cf > 0) packageMap[pkg.productId] = cf;
+    if (!(cf > 0)) continue;
+    if (packageIsDefault[pkg.productId]) continue; // default already chosen
+    if (pkg.isDefault) {
+      packageMap[pkg.productId] = cf;
+      packageIsDefault[pkg.productId] = true;
+    } else if (packageMap[pkg.productId] === undefined) {
+      packageMap[pkg.productId] = cf;
+    }
   }
   const packageSize = (productId: string) => {
     const cf = packageMap[productId];
@@ -298,7 +309,7 @@ export async function recalcOutletParLevels(outletId: string, opts: ParCalcOptio
   const upserts = Object.entries(usageByProduct)
     .map(([productId, data]) => {
       if (data.dailyUsage <= 0) return null;
-      const leadTime = leadTimeMap[productId] || PAR_DEFAULTS.leadTimeDays;
+      const leadTime = leadTimeMap[productId] ?? PAR_DEFAULTS.leadTimeDays;
       const valueClass = classByProduct[productId] ?? "C";
       const classParams = VALUE_CLASS_PARAMS[valueClass];
       const coverageDays = coverageOverride ?? classParams.coverageDays;

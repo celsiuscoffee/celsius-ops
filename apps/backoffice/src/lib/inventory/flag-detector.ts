@@ -21,7 +21,22 @@ export type InvoiceFlagCode =
   // rejected rather than written — the model read a delivery date, a statement
   // date, or the previous invoice in the same document. Someone has to enter
   // the real balance due date, otherwise the invoice ages with none.
-  | "DUE_DATE_BEFORE_ISSUE";
+  | "DUE_DATE_BEFORE_ISSUE"
+  // A PURCHASE_ORDER invoice was marked PAID with no Receiving on the order —
+  // the payer confirmed payWithoutReceipt. Goods may still be outstanding.
+  | "NO_RECEIVING_AT_PAYMENT"
+  // At payment the invoice amount differed from the order total by more than
+  // max(RM5, 2%). Not blocking — supplier bills legitimately drift — but a
+  // human should see it.
+  | "AMOUNT_VS_ORDER_MISMATCH"
+  // amountPaid was allowed to exceed the invoice amount (allowOverpay).
+  | "OVERPAID"
+  // The dedupe guard found a probable duplicate and the caller overrode it
+  // (overrideDuplicate). meta.match holds the matching invoice.
+  | "DUPLICATE_SUSPECT"
+  // invoiceNumber/amount was edited AFTER money moved, by OWNER/ADMIN with a
+  // reason. meta records who, what and why.
+  | "EDITED_AFTER_PAYMENT";
 
 export type InvoiceFlag = {
   code: InvoiceFlagCode;
@@ -42,6 +57,11 @@ const FLAG_LABEL: Record<InvoiceFlagCode, string> = {
   POP_VERIFIER: "AI: a payment may have been missed — verify",
   NUMBER_FORMAT_MISMATCH: "Invoice number doesn't match this supplier's numbering",
   DUE_DATE_BEFORE_ISSUE: "Due date read before the issue date — enter the real one",
+  NO_RECEIVING_AT_PAYMENT: "Paid before any goods were received",
+  AMOUNT_VS_ORDER_MISMATCH: "Invoice amount differs from the order total",
+  OVERPAID: "Paid more than the invoice amount",
+  DUPLICATE_SUSPECT: "Probable duplicate invoice (recorded anyway)",
+  EDITED_AFTER_PAYMENT: "Number/amount edited after payment",
 };
 
 export function flagLabel(code: InvoiceFlagCode) {

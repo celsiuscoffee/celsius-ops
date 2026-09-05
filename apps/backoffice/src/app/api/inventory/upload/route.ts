@@ -20,6 +20,14 @@ const ALLOWED_MIME = new Set([
   "application/pdf",
 ]);
 
+// Storage folders a client may target, inside the `invoices` bucket. The
+// folder is part of the object path, so it is whitelisted rather than trusted
+// (a client-chosen path is a traversal / bucket-litter vector). `pop/` matters
+// beyond tidiness: the POP auto-send to suppliers only ever forwards a document
+// stored under `/pop/` (procurement-whatsapp.ts), so a payment receipt uploaded
+// anywhere else is silently never sent.
+const ALLOWED_FOLDERS = new Set(["invoices", "pop", "checklist-photos"]);
+
 export async function POST(req: NextRequest) {
   // Auth check — previously this endpoint accepted anonymous uploads
   // to a PUBLIC Supabase bucket, which was a wide open door.
@@ -33,6 +41,13 @@ export async function POST(req: NextRequest) {
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+
+    if (!ALLOWED_FOLDERS.has(folder)) {
+      return NextResponse.json(
+        { error: `Unknown upload folder "${folder}"`, code: "INVALID_FOLDER" },
+        { status: 400 },
+      );
     }
 
     // Size check — before reading the body so we don't allocate huge buffers

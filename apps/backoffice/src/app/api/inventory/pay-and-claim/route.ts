@@ -3,7 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { adjustStockByPackages } from "@/lib/stock";
 import { guardReceiptPackages } from "@/lib/inventory/receipt-guard";
-import type { ResolvedReceiptPackage } from "@celsius/db";
+import { guardOrderLinePrices } from "@/lib/inventory/po-price-guard";
+import { assertNoDuplicateInvoice } from "@/lib/inventory/invoice-dedupe";
+import type { InvoiceFlag } from "@/lib/inventory/flag-detector";
+import type { Prisma, ResolvedReceiptPackage } from "@celsius/db";
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -250,6 +253,43 @@ export async function POST(req: NextRequest) {
   // Use explicit amount if provided (from quick upload full form), else use items total
   const totalAmount = (bodyAmount && Number(bodyAmount) > 0) ? Number(bodyAmount) : itemsTotal;
 
+  // Price↔package guard on every itemised line, draft or not — these lines feed
+  // the same 12-month price history the guard reads from, and a claim line at
+  // the wrong pack's price is as corrupting as a PO line. 400
+  // PRICE_PACKAGE_MISMATCH; body.overridePriceGuard demotes it to a warning.
+  const priceWarnings: string[] = [];
+  if (items?.length) {
+    const priceGuard = await guardOrderLinePrices(items, { override: body.overridePriceGuard === true });
+    if (!priceGuard.ok) return priceGuard.response;
+    priceWarnings.push(...priceGuard.warnings);
+  }
+
+  // Duplicate-invoice guard for the invoice each branch below creates. A
+  // re-keyed number (409 DUPLICATE_INVOICE unless body.overrideDuplicate) is
+  // refused; a same-supplier same-amount match inside the window is advisory
+  // and lands on the new invoice as a DUPLICATE_SUSPECT flag.
+  const dedupe = await assertNoDuplicateInvoice(
+    {
+      supplierId: supplierId || null,
+      invoiceNumber: bodyInvoiceNumber?.trim() || null,
+      amount: totalAmount,
+      issueDate: purchaseDate ? new Date(purchaseDate) : null,
+    },
+    { override: body.overrideDuplicate === true },
+  );
+  if (!dedupe.ok) return dedupe.response;
+  const dedupeFlags: InvoiceFlag[] = dedupe.match
+    ? [{
+        code: "DUPLICATE_SUSPECT",
+        message: `Matches ${dedupe.match.invoiceNumber} (${dedupe.match.status}, RM ${dedupe.match.amount.toFixed(2)}, ${dedupe.match.issueDate}) — ${dedupe.match.reason.replace(/_/g, " ")}. Check before paying.`,
+        detectedAt: new Date().toISOString(),
+        meta: { match: dedupe.match, source: "pay-and-claim", overridden: body.overrideDuplicate === true },
+      }]
+    : [];
+  const dedupeFlagData = dedupeFlags.length > 0
+    ? { flags: dedupeFlags as unknown as Prisma.InputJsonValue }
+    : {};
+
   // Store AI-extracted data in notes for draft/quick-upload review
   const orderNotes = (isDraft || isQuickUpload) && aiExtracted
     ? JSON.stringify({ userNotes: notes || null, aiExtracted })
@@ -350,6 +390,7 @@ export async function POST(req: NextRequest) {
               notes: isDraft
                 ? (notes ? `Draft: ${notes}` : `Draft ${category.toLowerCase()} ${requestFlow === "REQUEST" ? "payment request" : "claim"}`)
                 : (notes ? `Quick upload: ${notes}` : `Quick upload ${category.toLowerCase()} ${requestFlow === "REQUEST" ? "payment request" : "claim"}`),
+              ...dedupeFlagData,
             },
           });
           break;
@@ -386,28 +427,29 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      return { order, invoice, receiving };
-    });
+      // 4. Stock — in the SAME transaction as the receiving it books, so the
+      //    two can never disagree (previously a post-commit side effect).
+      if (receiving) {
+        await adjustStockByPackages(
+          outletId,
+          items.map((i: { productId: string; quantity: number }, idx: number) => ({
+            productId: i.productId,
+            productPackageId: pcResolved[idx].productPackageId,
+            quantity: i.quantity,
+          })),
+          tx,
+        );
+      }
 
-    // Post-commit side effect — stock adjustments. Doesn't run in the tx because
-    // adjustStockBalance uses the global prisma client. If this fails, the
-    // financial records still exist and stock can be reconciled separately.
-    if (willCreateReceiving) {
-      await adjustStockByPackages(
-        outletId,
-        items.map((i: { productId: string; quantity: number }, idx: number) => ({
-          productId: i.productId,
-          productPackageId: pcResolved[idx].productPackageId,
-          quantity: i.quantity,
-        })),
-      );
-    }
+      return { order, invoice, receiving };
+    }, { timeout: 20_000 });
 
     return NextResponse.json(
       {
         order: { id: result.order.id, orderNumber: result.order.orderNumber },
         ...(result.receiving ? { receiving: { id: result.receiving.id } } : {}),
         invoice: { id: result.invoice.id, invoiceNumber: result.invoice.invoiceNumber },
+        ...(priceWarnings.length ? { warnings: priceWarnings } : {}),
       },
       { status: 201 },
     );
@@ -521,6 +563,7 @@ export async function POST(req: NextRequest) {
             issueDate: purchaseDate ? new Date(purchaseDate) : new Date(),
             dueDate: dueDate ? new Date(dueDate) : null,
             notes: notes ? `${noteLabel}: ${notes}` : noteLabel,
+            ...dedupeFlagData,
           },
         });
         break;
@@ -530,26 +573,28 @@ export async function POST(req: NextRequest) {
     }
     if (!invoice) throw new Error("Failed to generate unique invoice number after 5 attempts");
 
-    return { order, invoice, receiving };
-  });
+    // 4. Stock — same transaction as the receiving (see the draft path above).
+    if (receiving) {
+      await adjustStockByPackages(
+        outletId,
+        items.map((i: { productId: string; quantity: number }, idx: number) => ({
+          productId: i.productId,
+          productPackageId: fullResolved[idx].productPackageId,
+          quantity: i.quantity,
+        })),
+        tx,
+      );
+    }
 
-  // Post-commit stock adjustments
-  if (willCreateFullReceiving) {
-    await adjustStockByPackages(
-      outletId,
-      items.map((i: { productId: string; quantity: number }, idx: number) => ({
-        productId: i.productId,
-        productPackageId: fullResolved[idx].productPackageId,
-        quantity: i.quantity,
-      })),
-    );
-  }
+    return { order, invoice, receiving };
+  }, { timeout: 20_000 });
 
   return NextResponse.json(
     {
       order: { id: result.order.id, orderNumber: result.order.orderNumber },
       receiving: result.receiving ? { id: result.receiving.id } : null,
       invoice: { id: result.invoice.id, invoiceNumber: result.invoice.invoiceNumber },
+      ...(priceWarnings.length ? { warnings: priceWarnings } : {}),
     },
     { status: 201 },
   );

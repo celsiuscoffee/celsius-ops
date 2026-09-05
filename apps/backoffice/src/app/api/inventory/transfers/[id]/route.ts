@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { adjustStockByPackages } from "@/lib/stock";
-import { getUserFromHeaders } from "@/lib/auth";
+import { AuthError, requireRole, type SessionUser } from "@/lib/auth";
 
 // Valid status transitions
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -12,13 +12,30 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING: ["COMPLETED", "CANCELLED"],
 };
 
+// Every target status except PENDING_APPROVAL either moves stock (approve /
+// dispatch / receive / complete / cancel-after-approval) or is an approval
+// decision (reject) — purchasing roles only. Submitting a draft stays open to
+// any signed-in backoffice user.
+const PRIVILEGED_TARGETS = new Set(["APPROVED", "IN_TRANSIT", "RECEIVED", "COMPLETED", "CANCELLED"]);
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const body = await req.json();
     const { status, rejectionReason } = body;
 
-    const user = await getUserFromHeaders(req.headers);
+    // Middleware skips /api/*: this handler used to tolerate a missing session
+    // and still move stock. A session is now mandatory, and stock-moving /
+    // approval transitions need OWNER / ADMIN / MANAGER.
+    let user: SessionUser;
+    try {
+      user = PRIVILEGED_TARGETS.has(String(status))
+        ? await requireRole(req.headers, "OWNER", "ADMIN", "MANAGER")
+        : await requireRole(req.headers, "OWNER", "ADMIN", "MANAGER", "STAFF");
+    } catch (e) {
+      if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
+      return NextResponse.json({ error: "Auth error" }, { status: 500 });
+    }
 
     const existing = await prisma.stockTransfer.findUnique({
       where: { id },

@@ -10,6 +10,11 @@ type ApMatch = {
   bankLineId: string; bankDesc: string; bankDate: string; bankCategory: string | null;
   score: number; tier: "auto" | "review"; reasons: string[]; alreadyPaid: boolean;
 };
+type SplitLeg = { bankLineId: string; bankDesc: string; bankDate: string; amount: number; refConfirmed: boolean; named: boolean };
+type ApSplitMatch = {
+  invoiceId: string; invoiceNumber: string | null; payee: string; amount: number; previouslyPaid: number; legsTotal: number;
+  settles: boolean; issueDate: string; legs: SplitLeg[]; tier: "auto" | "review"; reasons: string[]; linkOnly: boolean;
+};
 type CashIn = {
   from: string; to: string; salesGross: number; settlementsTotal: number; gap: number; gapPct: number | null;
   settlementsByChannel: { channel: string; amount: number; n: number }[];
@@ -20,10 +25,11 @@ type UnmatchedLine = { bankLineId: string; desc: string; date: string; amount: n
 type ReconData = {
   summary: {
     auto: number; review: number; doublePayments: number; unmatchedInvoices: number;
+    split: number; splitPartial: number;
     unmatchedOutflows: number; unmatchedOutflowValue: number;
     unmatchedInflows: number; unmatchedInflowValue: number;
   };
-  auto: ApMatch[]; review: ApMatch[]; doublePayments: ApMatch[];
+  auto: ApMatch[]; review: ApMatch[]; doublePayments: ApMatch[]; split: ApSplitMatch[];
   unmatchedInvoices: { invoiceId: string; invoiceNumber: string | null; payee: string; amount: number; issueDate: string }[];
   unmatchedOutflows: UnmatchedLine[];
   unmatchedInflows: UnmatchedLine[];
@@ -105,7 +111,7 @@ export default function ReconPage() {
           <nav className="mt-4 flex flex-wrap gap-1 border-b border-gray-200">
             {([
               ["categorise", "To categorise", data.summary.unmatchedOutflows + data.summary.unmatchedInflows],
-              ["review", "To review", data.summary.review + data.summary.doublePayments],
+              ["review", "To review", data.summary.review + data.summary.doublePayments + data.summary.split],
               ["matched", "Matched", null],
               ["invoices", "Open invoices", data.summary.unmatchedInvoices],
               ["cashin", "Cash-in", null],
@@ -142,6 +148,11 @@ export default function ReconPage() {
                 {data.doublePayments.length > 0 && (
                   <QueueCard title="⚠ Possible double payments" desc="Invoice already settled but another bank payment matches it.">
                     <MatchTable rows={data.doublePayments} />
+                  </QueueCard>
+                )}
+                {data.split.length > 0 && (
+                  <QueueCard title="Split payments — one invoice, several transfers" desc="Deposit + balance or instalment legs that together settle one invoice (the bank line quotes the invoice number). Confirm links every leg and moves the invoice to PAID, or to DEPOSIT_PAID / PARTIALLY_PAID when the balance is still outstanding. A PAID invoice whose legs fall short was probably marked paid on the deposit alone.">
+                    <SplitTable rows={data.split} onDone={() => mutate()} />
                   </QueueCard>
                 )}
                 <QueueCard title="Needs review" desc="Likely matches not certain enough to auto-clear. Confirm links the line and marks the invoice paid (unless settled elsewhere); Reject dismisses it for good. Select rows for bulk.">
@@ -1015,6 +1026,90 @@ function MatchTable({ rows, showReasons, actionable, onDone }: { rows: ApMatch[]
         </tbody>
       </table>
       {filtered.length > pageSize && <p className="px-3 py-2 text-[11px] text-gray-400">Showing {pageSize} of {filtered.length}. Increase rows above to see more.</p>}
+    </div>
+  );
+}
+
+// Split-payment proposals: one row per invoice, its legs listed underneath.
+// Confirm posts every leg in one call (match-split); Reject records each
+// (leg, invoice) pair so the matcher never proposes the bundle again.
+function SplitTable({ rows, onDone }: { rows: ApSplitMatch[]; onDone?: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+
+  async function act(m: ApSplitMatch, action: "confirm" | "reject") {
+    setBusy(m.invoiceId);
+    let err: string | null = null;
+    try {
+      if (action === "confirm") {
+        const res = await fetch("/api/finance/bank-lines/match-split", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ invoiceId: m.invoiceId, bankLineIds: m.legs.map((l) => l.bankLineId) }),
+        });
+        if (!res.ok) err = (await res.json().catch(() => ({}))).error ?? `Failed (${res.status})`;
+      } else {
+        for (const l of m.legs) {
+          const res = await fetch("/api/finance/bank-lines/reject-match", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bankLineId: l.bankLineId, invoiceId: m.invoiceId }),
+          });
+          if (!res.ok) { err = (await res.json().catch(() => ({}))).error ?? `Failed (${res.status})`; break; }
+        }
+      }
+    } catch (e) { err = e instanceof Error ? e.message : String(e); }
+    if (err) setNotes((n) => ({ ...n, [m.invoiceId]: err! }));
+    else onDone?.();
+    setBusy(null);
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] text-sm">
+        <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+          <th className="px-3 py-2 font-medium">Invoice payee</th><th className="px-3 py-2 text-right font-medium">Invoice</th>
+          <th className="px-3 py-2 font-medium">Bank legs</th><th className="px-3 py-2 text-right font-medium">Legs total</th>
+          <th className="px-3 py-2 font-medium">Outcome</th><th className="px-3 py-2 font-medium">Decide</th>
+        </tr></thead>
+        <tbody className="divide-y">
+          {rows.map((m) => (
+            <tr key={m.invoiceId} className="hover:bg-gray-50 align-top">
+              <td className="px-3 py-2 text-xs text-gray-700">{m.payee}{m.invoiceNumber ? <span className="text-gray-400"> · {m.invoiceNumber}</span> : ""}<div className="text-[10px] text-gray-400">{m.issueDate}{m.tier === "auto" ? " · auto-tier" : ""}</div></td>
+              <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{fmtRM(m.amount)}{m.previouslyPaid > 0 && <div className="text-[10px] font-sans text-gray-400">{fmtRM(m.previouslyPaid)} already paid</div>}</td>
+              <td className="px-3 py-2 text-xs text-gray-600">
+                {m.legs.map((l) => (
+                  <div key={l.bankLineId} className="flex items-baseline gap-2">
+                    <span className="font-mono text-[11px] text-gray-700 tabular-nums">{fmtRM(l.amount)}</span>
+                    <span className="truncate">{l.bankDesc}</span>
+                    <span className="text-[10px] text-gray-400 whitespace-nowrap">{l.bankDate}{l.refConfirmed ? " · inv no ✓" : ""}</span>
+                  </div>
+                ))}
+              </td>
+              <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{fmtRM(m.legsTotal)}</td>
+              <td className="px-3 py-2 text-[11px]">
+                <span className={m.settles ? "text-green-700" : "text-amber-700"}>
+                  {m.linkOnly ? (m.settles ? "link legs (already PAID)" : "PAID on register, bank short") : m.settles ? "→ PAID" : `→ partial, RM ${(m.amount - m.previouslyPaid - m.legsTotal).toFixed(2)} outstanding`}
+                </span>
+                <div className="text-[10px] text-gray-400">{m.reasons.join(", ")}</div>
+              </td>
+              <td className="whitespace-nowrap px-3 py-2">
+                {notes[m.invoiceId] ? <span className="text-[10px] text-rose-600">{notes[m.invoiceId]}</span> : (
+                  <span className="flex items-center gap-1.5">
+                    <button onClick={() => act(m, "confirm")} disabled={busy === m.invoiceId}
+                      className="rounded border border-green-600/30 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+                      Confirm
+                    </button>
+                    <button onClick={() => act(m, "reject")} disabled={busy === m.invoiceId}
+                      className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                      Reject
+                    </button>
+                    {busy === m.invoiceId && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -1,12 +1,37 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserFromHeaders } from "@/lib/auth";
+import { AuthError, getUserFromHeaders, requireRole, type SessionUser } from "@/lib/auth";
 import { computeDepositAmount } from "@/lib/inventory/deposit";
 import { mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
 import { sendPurchaseOrder } from "@/lib/inventory/procurement-po-send";
+import { guardOrderLinePrices, type PoLineInput } from "@/lib/inventory/po-price-guard";
+import { poTransitionError } from "@/lib/inventory/po-status";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// Middleware skips /api/*, so every handler gates itself. Reading a PO needs a
+// backoffice session; changing or deleting one needs a purchasing role.
+const PO_WRITE_ROLES = ["OWNER", "ADMIN", "MANAGER"] as const;
+// A manual `totalAmount` override (no item edits) is an accounting correction —
+// owner/admin only. Managers change the total through the line items.
+const TOTAL_OVERRIDE_ROLES: readonly string[] = ["OWNER", "ADMIN"];
+
+async function requirePoWriter(req: NextRequest): Promise<SessionUser | NextResponse> {
   try {
+    return await requireRole(req.headers, ...PO_WRITE_ROLES);
+  } catch (e) {
+    if (e instanceof AuthError) return NextResponse.json({ error: e.message }, { status: e.status });
+    return NextResponse.json({ error: "Auth error" }, { status: 500 });
+  }
+}
+
+const isMoney = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
+
+type ItemEdit = { id: string; quantity?: number; unitPrice?: number; remove?: boolean };
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const caller = await getUserFromHeaders(req.headers);
+    if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
     const { id } = await params;
     const order = await prisma.order.findUnique({
       where: { id },
@@ -27,12 +52,43 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const auth = await requirePoWriter(req);
+    if (auth instanceof NextResponse) return auth;
+    const caller = auth;
+
     const { id } = await params;
     const body = await req.json();
     const { status, totalAmount, deliveryDate, items, invoicePhotos } = body;
     const deliveryChargeInput: number | null | undefined = body.deliveryCharge;
 
+    // Load the current row first: the status machine needs the FROM state and
+    // every line edit below must be scoped to lines that belong to THIS PO.
+    const existingOrder = await prisma.order.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        deliveryCharge: true,
+        items: { select: { id: true, productId: true, productPackageId: true, quantity: true, unitPrice: true } },
+      },
+    });
+    if (!existingOrder) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const lineById = new Map(existingOrder.items.map((i) => [i.id, i]));
+
     const data: Record<string, unknown> = {};
+
+    // Status machine — refuse anything the table doesn't allow (a stale tab
+    // re-approving a COMPLETED PO, DRAFT → COMPLETED with nothing received, …).
+    if (status !== undefined) {
+      const transitionError = poTransitionError(existingOrder.status, status);
+      if (transitionError) {
+        return NextResponse.json(
+          { error: transitionError, code: "INVALID_STATUS_TRANSITION", from: existingOrder.status, to: status },
+          { status: 409 },
+        );
+      }
+    }
+    const statusChanged = !!status && status !== existingOrder.status;
 
     // Block PO cancellation if any linked invoice is INITIATED / DEPOSIT_PAID
     // / PAID — those represent payments mid-flight or money already moved
@@ -84,11 +140,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (status) {
       data.status = status;
 
-      if (status === "APPROVED") {
-        const caller = await getUserFromHeaders(req.headers);
-        if (!caller) {
-          return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+      if (status === "APPROVED" && statusChanged) {
         data.approvedById = caller.id;
         data.approvedAt = new Date();
       }
@@ -97,7 +149,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // state. Order flow used to step through SENT before AWAITING_DELIVERY,
       // but the new flow goes straight to AWAITING_DELIVERY — both should
       // stamp sentAt so audit/lead-time analytics keep working.
-      if (status === "SENT" || status === "AWAITING_DELIVERY") {
+      if ((status === "SENT" || status === "AWAITING_DELIVERY") && statusChanged) {
         data.sentAt = new Date();
       }
     }
@@ -118,27 +170,66 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       effectiveDeliveryCharge = deliveryChargeInput;
     }
 
-    // Update individual items (quantity, unitPrice, or remove)
-    if (items && Array.isArray(items)) {
-      for (const item of items as { id: string; quantity?: number; unitPrice?: number; remove?: boolean }[]) {
+    // Validate item edits BEFORE writing anything, so a refused line leaves
+    // the PO untouched: every id must be one of this PO's lines, and a changed
+    // unit price goes through the price↔package guard (same rule as create).
+    let itemEdits: ItemEdit[] | null = null;
+    if (items !== undefined) {
+      if (!Array.isArray(items)) {
+        return NextResponse.json({ error: "items must be an array" }, { status: 400 });
+      }
+      itemEdits = [];
+      const guardLines: PoLineInput[] = [];
+      for (const raw of items as Partial<ItemEdit>[]) {
+        if (!raw || typeof raw.id !== "string") {
+          return NextResponse.json({ error: "Each item edit needs an id" }, { status: 400 });
+        }
+        const line = lineById.get(raw.id);
+        if (!line) {
+          return NextResponse.json({ error: `Line ${raw.id} does not belong to this PO` }, { status: 400 });
+        }
+        if (raw.remove) {
+          itemEdits.push({ id: raw.id, remove: true });
+          continue;
+        }
+        if (raw.quantity !== undefined && !isMoney(raw.quantity)) {
+          return NextResponse.json({ error: "quantity must be a non-negative number" }, { status: 400 });
+        }
+        if (raw.unitPrice !== undefined && !isMoney(raw.unitPrice)) {
+          return NextResponse.json({ error: "unitPrice must be a non-negative number" }, { status: 400 });
+        }
+        if (raw.unitPrice !== undefined && raw.unitPrice !== Number(line.unitPrice)) {
+          guardLines.push({ productId: line.productId, productPackageId: line.productPackageId, unitPrice: raw.unitPrice });
+        }
+        itemEdits.push({ id: raw.id, quantity: raw.quantity, unitPrice: raw.unitPrice });
+      }
+      if (guardLines.length > 0) {
+        const priceGuard = await guardOrderLinePrices(guardLines, {
+          override: body.overridePriceGuard === true,
+        });
+        if (!priceGuard.ok) return priceGuard.response;
+      }
+    }
+
+    // Update individual items (quantity, unitPrice, or remove) — every write
+    // is scoped to { id, orderId } so a foreign line id can't be touched.
+    if (itemEdits) {
+      for (const item of itemEdits) {
         if (item.remove) {
-          await prisma.orderItem.delete({ where: { id: item.id } });
-        } else {
-          const itemData: Record<string, unknown> = {};
-          if (item.quantity !== undefined) itemData.quantity = item.quantity;
-          if (item.unitPrice !== undefined) itemData.unitPrice = item.unitPrice;
-          if (item.quantity !== undefined || item.unitPrice !== undefined) {
-            // Recalculate totalPrice
-            const existing = await prisma.orderItem.findUnique({ where: { id: item.id } });
-            if (existing) {
-              const qty = item.quantity ?? Number(existing.quantity);
-              const price = item.unitPrice ?? Number(existing.unitPrice);
-              itemData.totalPrice = qty * price;
-            }
-          }
-          if (Object.keys(itemData).length > 0) {
-            await prisma.orderItem.update({ where: { id: item.id }, data: itemData });
-          }
+          await prisma.orderItem.deleteMany({ where: { id: item.id, orderId: id } });
+          continue;
+        }
+        const line = lineById.get(item.id);
+        if (!line) continue;
+        const itemData: Record<string, unknown> = {};
+        if (item.quantity !== undefined) itemData.quantity = item.quantity;
+        if (item.unitPrice !== undefined) itemData.unitPrice = item.unitPrice;
+        if (item.quantity !== undefined || item.unitPrice !== undefined) {
+          // Recalculate totalPrice
+          const qty = item.quantity ?? Number(line.quantity);
+          const price = item.unitPrice ?? Number(line.unitPrice);
+          itemData.totalPrice = qty * price;
+          await prisma.orderItem.updateMany({ where: { id: item.id, orderId: id }, data: itemData });
         }
       }
 
@@ -148,14 +239,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // someone edits items without touching delivery.
       const remaining = await prisma.orderItem.findMany({ where: { orderId: id } });
       const itemsTotal = remaining.reduce((sum, i) => sum + Number(i.totalPrice), 0);
-      let dc = effectiveDeliveryCharge;
-      if (dc === null) {
-        const existing = await prisma.order.findUnique({ where: { id }, select: { deliveryCharge: true } });
-        dc = existing?.deliveryCharge ? Number(existing.deliveryCharge) : 0;
-      }
+      const dc = effectiveDeliveryCharge ?? (existingOrder.deliveryCharge ? Number(existingOrder.deliveryCharge) : 0);
       data.totalAmount = itemsTotal + dc;
     } else if (totalAmount !== undefined) {
-      // Manual total override (only if no item edits)
+      // Manual total override (only if no item edits) — owner/admin only.
+      if (!TOTAL_OVERRIDE_ROLES.includes(caller.role)) {
+        return NextResponse.json(
+          { error: "Only an owner or admin can override the PO total directly — edit the line items instead." },
+          { status: 403 },
+        );
+      }
+      if (!isMoney(totalAmount)) {
+        return NextResponse.json({ error: "totalAmount must be a non-negative number" }, { status: 400 });
+      }
       data.totalAmount = totalAmount;
     } else if (effectiveDeliveryCharge !== null) {
       // Delivery charge changed but items didn't — recompute total from
@@ -209,9 +305,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Auto-create invoice + receiving when order is confirmed (AWAITING_DELIVERY)
     if (status === "AWAITING_DELIVERY") {
-      const caller = await getUserFromHeaders(req.headers);
-      void caller; // currently unused but kept for future audit fields
-
       try {
         // Ensure invoice exists — saveEdit() usually creates it, but
         // guard against edge cases (PATCH called before saveEdit ran,
@@ -272,8 +365,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const auth = await requirePoWriter(req);
+    if (auth instanceof NextResponse) return auth;
+
     const { id } = await params;
 
     const order = await prisma.order.findUnique({ where: { id }, select: { status: true } });

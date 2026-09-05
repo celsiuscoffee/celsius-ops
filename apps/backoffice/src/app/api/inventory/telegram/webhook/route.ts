@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
-import { randomBytes } from "crypto";
+import { randomBytes, timingSafeEqual } from "crypto";
 import { v2 as cloudinary } from "cloudinary";
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import { mintPlaceholderNumber, isPlaceholderNumber, normalizeInvoiceRef } from "@/lib/inventory/placeholder-number";
+import { assertNoDuplicateInvoice, DUPLICATE_WINDOW_DAYS } from "@/lib/inventory/invoice-dedupe";
+import { gateTelegramChat, resolveTelegramGate } from "@/lib/inventory/telegram-allowlist";
 import { createShortLink } from "@/lib/shortlink";
 import { detectPaymentFlags, appendInvoiceFlags } from "@/lib/inventory/flag-detector";
 import { computeDepositAmount } from "@/lib/inventory/deposit";
@@ -42,10 +44,48 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ─── Webhook Entry Point ────────────────────────────────────
 
+// Header-secret check that doesn't leak the secret's length or prefix through
+// timing: both sides present, equal length, byte-identical.
+function webhookSecretMatches(provided: string | null, expected: string | undefined): boolean {
+  if (!provided || !expected) return false;
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+// Chat gate for the money-moving paths (photo/document → invoice or POP,
+// callback → POP match). Modes live in lib/inventory/telegram-allowlist:
+// TELEGRAM_ALLOWED_CHAT_IDS unset → log-only (process, warn so the real chat
+// ids can be harvested from logs); set → enforce (refuse everything not in the
+// set ∪ TELEGRAM_OWNER_CHAT_ID). Logged once per chat+kind per process so a
+// stranger can't flood the logs.
+const unlistedChatsLogged = new Set<string>();
+function admitChat(chatId: number | undefined, kind: "photo" | "document" | "callback"): boolean {
+  const gate = resolveTelegramGate({
+    TELEGRAM_ALLOWED_CHAT_IDS: process.env.TELEGRAM_ALLOWED_CHAT_IDS,
+    TELEGRAM_OWNER_CHAT_ID: process.env.TELEGRAM_OWNER_CHAT_ID,
+  });
+  const decision = gateTelegramChat(chatId, gate);
+  if (decision.unlisted) {
+    const key = `${String(chatId)}:${kind}`;
+    if (!unlistedChatsLogged.has(key)) {
+      unlistedChatsLogged.add(key);
+      console.warn(
+        `[telegram] unlisted chat ${String(chatId)} attempted ${kind} — ${
+          decision.process
+            ? "processed (TELEGRAM_ALLOWED_CHAT_IDS unset: log-only mode)"
+            : "refused (allowlist enforced)"
+        }`,
+      );
+    }
+  }
+  return decision.process;
+}
+
 export async function POST(request: NextRequest) {
-  // Verify secret token
+  // Verify secret token (constant-time compare)
   const secret = request.headers.get("x-telegram-bot-api-secret-token");
-  if (secret !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+  if (!webhookSecretMatches(secret, process.env.TELEGRAM_WEBHOOK_SECRET)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -59,6 +99,8 @@ export async function POST(request: NextRequest) {
   // Inline-button tap on a multi-match POP disambiguation message.
   if (update.callback_query) {
     const cb = update.callback_query;
+    // A refused chat still gets 200 so Telegram stops retrying the update.
+    if (!admitChat(cb.message?.chat.id, "callback")) return NextResponse.json({ ok: true });
     after(async () => {
       try {
         await processCallback(cb);
@@ -99,6 +141,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (!hasPhoto && !hasDoc) {
+    return NextResponse.json({ ok: true });
+  }
+
+  // Photos/documents create invoices and mark them PAID — gate the chat first.
+  // A refused chat still gets 200 so Telegram stops retrying the update.
+  if (!admitChat(message.chat.id, hasPhoto ? "photo" : "document")) {
     return NextResponse.json({ ok: true });
   }
 
@@ -257,7 +305,7 @@ async function processMessage(message: TelegramMessage) {
     return;
   }
 
-  console.log("[telegram] Classified as:", extracted.documentType, JSON.stringify(extracted));
+  console.log("[telegram] Classified as:", summarizeExtracted(extracted));
 
   // 5. Route to matching logic
   if (extracted.documentType === "MULTI_POP") {
@@ -328,6 +376,19 @@ type MultiPopData = {
 };
 
 type ClassifiedDoc = PopData | InvoiceData | MultiPopData | null;
+
+// Log-safe summary of an extraction. POP payloads carry the payee's bank
+// account number (recipientAccount) — that must never land in application
+// logs, so log ids/amounts only.
+function summarizeExtracted(doc: NonNullable<ClassifiedDoc>): string {
+  if (doc.documentType === "MULTI_POP") {
+    return `MULTI_POP payments=${doc.payments.length} amounts=[${doc.payments.map((p) => p.amount ?? "?").join(",")}]`;
+  }
+  if (doc.documentType === "POP") {
+    return `POP amount=${doc.amount ?? "?"} ref=${doc.referenceNumber ?? "-"} invoiceRef=${doc.invoiceReference ?? "-"} date=${doc.date ?? "-"}`;
+  }
+  return `INVOICE supplier=${doc.supplierName ?? "?"} number=${doc.invoiceNumber ?? "-"} amount=${doc.amount ?? "?"} delivery=${doc.deliveryCharge ?? 0} lines=${doc.items?.length ?? 0}`;
+}
 
 async function classifyAndExtract(url: string, isPdf: boolean, pdfBuffer?: Buffer): Promise<ClassifiedDoc> {
   // Fetch product + supplier + outlet catalogs + unpaid invoices for matching
@@ -1472,15 +1533,21 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
       ? await computeDepositAmount(order.supplierId, effectiveAmount)
       : null;
 
-    await prisma.invoice.update({
-      where: { id: existingInvoice.id },
-      data: {
-        photos: { push: renamedUrl },
-        ...(inv.invoiceNumber ? { invoiceNumber: inv.invoiceNumber } : {}),
-        ...(shouldCorrectAmount ? { amount: effectiveAmount } : {}),
-        ...(backfilledDeposit ? { depositAmount: backfilledDeposit } : {}),
-      },
-    });
+    // A settled invoice (PAID / DEPOSIT_PAID / PARTIALLY_PAID) is a closed
+    // record: a later upload must not rewrite its number or photo set (same
+    // isUnpaid gate the amount correction already has). The photo is still
+    // attached to the PO above, so nothing is lost.
+    if (isUnpaid) {
+      await prisma.invoice.update({
+        where: { id: existingInvoice.id },
+        data: {
+          photos: { push: renamedUrl },
+          ...(inv.invoiceNumber ? { invoiceNumber: inv.invoiceNumber } : {}),
+          ...(shouldCorrectAmount ? { amount: effectiveAmount } : {}),
+          ...(backfilledDeposit ? { depositAmount: backfilledDeposit } : {}),
+        },
+      });
+    }
 
     const correctionLine = shouldCorrectAmount
       ? `\n💡 Amount corrected: RM ${storedAmount.toFixed(2)} → RM ${effectiveAmount.toFixed(2)} (delivery ${deliveryCharge ? `+RM ${deliveryCharge.toFixed(2)}` : "included"})`
@@ -1488,9 +1555,13 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
     const depositLine = backfilledDeposit
       ? `\n💡 Deposit required: RM ${backfilledDeposit.toFixed(2)}`
       : "";
+    const heading = isUnpaid
+      ? "✅ <b>Invoice photo added</b>"
+      : `ℹ️ <b>Invoice already ${existingInvoice.status.toLowerCase().replace(/_/g, " ")}</b> — record left unchanged`;
+    const footer = isUnpaid ? "📎 Uploaded to PO + Invoice" : "📎 Photo attached to the PO only";
     await sendMessage(
       chatId,
-      `✅ <b>Invoice photo added</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nAmount: RM ${effectiveAmount.toFixed(2)}\nInvoice #: ${inv.invoiceNumber ?? existingInvoice.id.slice(0, 8)}${correctionLine}${depositLine}\n\n📎 Uploaded to PO + Invoice`,
+      `${heading}\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nAmount: RM ${effectiveAmount.toFixed(2)}\nInvoice #: ${inv.invoiceNumber ?? existingInvoice.id.slice(0, 8)}${correctionLine}${depositLine}\n\n${footer}`,
       msgId,
     );
   } else {
@@ -1498,8 +1569,42 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
     // delivery; deposit is computed off that so a supplier charging 10%
     // deposit on RM 105 (RM 100 items + RM 5 delivery) gets RM 10.50, not
     // RM 10.00.
+    const issueDate = inv.date && !Number.isNaN(Date.parse(inv.date)) ? new Date(inv.date) : new Date();
+
+    // Duplicate guard — same normalised number, a suffix variant, or the same
+    // supplier + amount inside the window. Refuse and say so in the chat rather
+    // than creating a second payable (the photo is already on the PO).
+    const dedupe = await assertNoDuplicateInvoice({
+      supplierId: order.supplierId,
+      invoiceNumber: inv.invoiceNumber,
+      amount: effectiveAmount,
+      issueDate,
+    });
+    if (!dedupe.ok) {
+      const m = dedupe.match;
+      const why =
+        m.reason === "same_number"
+          ? "same invoice number"
+          : m.reason === "suffix_variant"
+            ? "variant of the same number"
+            : `same amount within ${DUPLICATE_WINDOW_DAYS} days`;
+      await sendMessage(
+        chatId,
+        `⚠️ <b>Not recorded — possible duplicate</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nThis invoice: ${inv.invoiceNumber ?? "(no number)"} — RM ${effectiveAmount.toFixed(2)}\nExisting: ${m.invoiceNumber} — RM ${m.amount.toFixed(2)}, ${m.status}, dated ${m.issueDate} (${why})\n\nCheck before recording it again. The photo is attached to the PO.`,
+        msgId,
+      );
+      return;
+    }
+
     const invoiceNumber = inv.invoiceNumber || (await mintPlaceholderNumber(prisma, order.outlet.id));
     const depositAmount = await computeDepositAmount(order.supplierId, effectiveAmount);
+    // Mirror the WhatsApp capture path: an AI-read invoice lands as a DRAFT with
+    // the prefilled fields recorded, for a human to verify before it is payable.
+    const prefilled = [
+      ...(inv.invoiceNumber ? ["invoiceNumber"] : []),
+      ...(amount != null ? ["amount"] : []),
+      ...(inv.date ? ["issueDate"] : []),
+    ];
 
     await prisma.invoice.create({
       data: {
@@ -1508,10 +1613,12 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
         outletId: order.outlet.id,
         supplierId: order.supplierId ?? undefined,
         amount: effectiveAmount,
-        status: "PENDING",
+        status: "DRAFT",
         paymentType: "SUPPLIER",
         photos: [renamedUrl],
-        issueDate: inv.date ? new Date(inv.date) : new Date(),
+        issueDate,
+        aiPrefilledAt: new Date(),
+        aiPrefilledFields: JSON.stringify(prefilled),
         ...(depositAmount ? { depositAmount } : {}),
       },
     });
@@ -1520,7 +1627,7 @@ async function handleInvoice(chatId: number, msgId: number, photoUrl: string, in
     const depositLine = depositAmount ? `\nDeposit: RM ${depositAmount.toFixed(2)}` : "";
     await sendMessage(
       chatId,
-      `✅ <b>Invoice created</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nInvoice: ${invoiceNumber}\nAmount: RM ${effectiveAmount.toFixed(2)}${deliveryLine}${depositLine}\n\n📎 Uploaded to PO + Invoice`,
+      `✅ <b>Draft invoice created</b>\n\nPO: ${order.orderNumber}\nSupplier: ${order.supplier?.name ?? "?"}\nInvoice: ${invoiceNumber}\nAmount: RM ${effectiveAmount.toFixed(2)}${deliveryLine}${depositLine}\n\n📎 Uploaded to PO + Invoice (DRAFT — verify the amount before it becomes payable)`,
       msgId,
     );
   }

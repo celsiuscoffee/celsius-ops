@@ -18,6 +18,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import { createReSourcePO } from "@/lib/inventory/agents/resource-po";
+import { guardOrderLinePrices } from "@/lib/inventory/po-price-guard";
 
 // Whole message is essentially just "yes" (EN/Malay) — strict, so questions like
 // "boleh tak hantar esok?" don't match.
@@ -197,6 +198,18 @@ async function applySubstitution(
     const replConvRaw = repl.productPackage ? Number(repl.productPackage.conversionFactor) : 1;
     const replConv = replConvRaw > 0 ? replConvRaw : 1;
     const qty = Math.max(1, Math.ceil(baseQty / replConv));
+    // Price↔package sanity check on the line we are about to write. Warn-only
+    // here (override: true never refuses): the price comes from the supplier's
+    // own catalog row, and a chat "ok" is not the place to bounce a 400 — but a
+    // catalog row carrying the wrong pack's price is exactly how bad lines get
+    // in, so leave a trace in the logs for procurement.
+    const priceCheck = await guardOrderLinePrices(
+      [{ productId: repl.product.id, productPackageId: repl.productPackageId, unitPrice: Number(repl.price) }],
+      { override: true },
+    );
+    if (priceCheck.ok && priceCheck.warnings.length > 0) {
+      console.warn(`[human-approval] substitute price guard (${key}): ${priceCheck.warnings.join(" | ")}`);
+    }
     await prisma.orderItem.create({
       data: {
         orderId,

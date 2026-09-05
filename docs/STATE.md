@@ -11,6 +11,142 @@ current month.
 
 ## Verified facts
 
+- 2026-09-05 — **The live Usage Variance / COGS "Expected = RM0.00" is a
+  PRODUCTION bug, already fixed on PR #1216 (unmerged).** `main`'s
+  `reports/ingredient-variance` still reads `prisma.salesTransaction` — the
+  StoreHub feed that has had no rows since 2026-04-11 — so expected usage is
+  zero for every ingredient and the "No sales in this window" data-quality
+  line fires. The window and outlet mapping are fine: Putrajaya has 1,986
+  completed `pos_orders` (5,687 sold lines incl. the pickup app) between the
+  2026-07-31 and 2026-08-20 counts. Commit adbae563 repoints both reports at
+  `lib/inventory/report-sales.ts`. **Every branch preview deployment on Vercel
+  is CANCELED** (only `main` production builds reach READY), so branch work
+  cannot be previewed before merge — judge unmerged UI from the diff/CI, and
+  tell the owner a fix is invisible to them until it lands on main.
+
+- 2026-09-05 — **Split payments (deposit + balance) now matched — ap-match
+  item (e) done.** Third pass in `lib/finance/ap-match.ts`, after the single
+  and multi-invoice passes, over leftovers only: gathers unused DR lines that
+  carry the invoice's payee identity, then `pickSplitLegs` takes the legs that
+  settle the REMAINING balance (amount − already linked/paid), else the
+  ref-confirmed legs forming a partial. `writeSplitMatch` links every leg and
+  moves the invoice by the legs' total (PAID / DEPOSIT_PAID / PARTIALLY_PAID;
+  link-only when already PAID elsewhere); unmatch RECOMPUTES from the
+  remaining linked legs instead of zeroing. Manual path
+  `POST /api/finance/bank-lines/match-split`; recon page has a Split payments
+  card. **Two guards came from replaying 120 days of prod:** every leg must
+  carry the payee name/alias, and `isDateLikeNumber` disqualifies date-shaped
+  "invoice numbers" — ad-hoc claims are numbered by week ("LALA CCT WEEK
+  24082026") and bank narration quotes dates ("DR/CARD SALES M/N 2612988 DATED
+  24082026"), which pointed 8 card-fee lines at a RM61.30 cleaning claim.
+  Replay after the guards: 59 already-PAID invoices reconcile RM74,184 of legs
+  out of OTHER_OUTFLOW (link-only), 4 open invoices settle (held for EOM),
+  deposit-only stragglers surface for review.
+
+- 2026-09-05 — **All six procurement reports share one analysis table.**
+  `components/reports/report-table.tsx` + pure `lib/reports/table-utils.ts`
+  (tested): multi-term search, click-to-sort every column with blanks pinned
+  last, per-report value filters built from the rows present, quick toggles
+  (high variance, over-used, variance only, never counted, short deliveries,
+  margin <50%, losing money, under-received, not fully invoiced), CSV export
+  of the filtered+sorted set with a UTF-8 BOM, page size + show-more. Supplier
+  Scorecard gained a table view beside its cards (cards could not be sorted or
+  compared at all).
+
+- 2026-09-05 — **Procurement hardening shipped on PR #1216 (all 25 QA findings
+  addressed in code; warn-first rollout).** Three parallel streams merged
+  (63 files, +3.8k/−1.2k): (A) auth+roles — orders/[id] GET needs session,
+  PATCH/DELETE OWNER/ADMIN/MANAGER with a PO status-transition table
+  (`lib/inventory/po-status.ts`, 409 INVALID_STATUS_TRANSITION), item writes
+  scoped {id,orderId}, price guard on PATCH price edits, totalAmount override
+  OWNER/ADMIN only; transfers/[id] session + manager for approve/complete;
+  apply-proposal/send requireRole; Telegram webhook timing-safe secret, chat
+  allowlist `TELEGRAM_ALLOWED_CHAT_IDS` (unset = log-only "[telegram] unlisted
+  chat" warns, set = enforce), invoice capture DRAFT+aiPrefilled + dedupe,
+  number/photos only rewritten when unpaid; supplier-chat-agent escalates
+  mass removals (≥50% lines), fences supplier text, delivery_date only
+  today..+60d and never on escalated turns. (B) payments/receiving —
+  `lib/inventory/invoice-dedupe.ts` shared guard (number/suffix matches block
+  409 DUPLICATE_INVOICE; same-amount-in-14d is FLAG-only after a 60-day replay:
+  4 true dups vs 204 standing-order collisions) wired into all 4 create paths;
+  PAID needs manager+ (403 FORBIDDEN_PAYMENT_ROLE); receipt-before-pay is
+  `INVOICE_PAY_REQUIRE_RECEIPT=warn` (default, flag NO_RECEIVING_AT_PAYMENT) |
+  `block`; amount+status in one call → 400; PAID rows locked (LOCKED_AFTER_
+  PAYMENT unless OWNER/ADMIN+reason); overpay → 400 unless allowOverpay;
+  AMOUNT_VS_ORDER_MISMATCH flag; pay-and-claim approve manager-only, once,
+  no self-approval, single tx; receivings POST derives outlet/supplier/
+  orderedQty from the PO, one $transaction + FOR UPDATE, transfer transition
+  check, ad-hoc receivings manager-only; `lib/stock.ts` helpers take a tx;
+  GRNI placeholder checks use isPlaceholderNumber; POP receipts upload to
+  folder "pop" (upload route whitelists folders) so auto-send can fire; staff
+  app orders+claims POST now run the price guard (`apps/staff/src/lib/
+  po-price-guard.ts` copy) — closes the 3 Sep milk slip path; claim batches
+  refuse DRAFT/unverified. (C) catalog/reports/engine — ai-decisions requires
+  price>0, ACTIVE non-ADHOC supplier, package; PENDING_APPROVAL counted open;
+  daysUntilStockout null for zero-usage (UI renders n/a); supplier page sends
+  productPackageId and the route refuses package-less rows for packaged
+  products; products/[id] package-index fix + pre-flight delete blockers;
+  price-history surfaces `priceHistoryWritten`; stock-valuation latest
+  SUBMITTED/REVIEWED count per outlet, null counts skipped; scorecard MYT
+  calendar-day on-time; purchase-summary inclusive MYT day + per-line prices;
+  wastage excludes engine rows; on-hand-value nets all loss types, excludes
+  DRAFT invoices; consumption-post atomic + rejects today; par-calc isDefault
+  pick + lead-time 0 honoured; stock-checks POST removed (no caller);
+  receiving-requester chases PENDING/APPROVED/IN_TRANSIT transfers >48h;
+  runbook corrected (PO-send IS wired). Validation: tsc backoffice+staff clean,
+  eslint clean, full vitest green. **Deploy-day risk assessed**: roles match
+  actual actors (POs by MANAGER, receiving by STAFF+MANAGER, payments by
+  OWNER/ADMIN); only forced behaviour change is the staff-app price guard.
+  Catalog data also repaired in prod (5 priced package-less rows attached/
+  deactivated, dup packages deleted, 11 missing defaults set, Fresh Milk
+  packages labelled). Payment-side data repairs (Blancoz/Grab dup register
+  entries, 75 deposit-only amountPaid, 3 cancelled-but-paid POs) NOT applied —
+  need owner sign-off per hard rule 6.
+- 2026-09-04 — **Procurement loop QA (flow + data + code) — audit page published.**
+  Data (120d): 224 POs PAID with no Receiving (RM147.5k) + 121 COMPLETED-by-hand
+  unreceived (RM83.8k); unreceived share Aug→Sep: PJ 87%→96%, SA 50%, Tam 61%→67%;
+  3 CANCELLED POs paid (RM2,125: Milk n Moka 424.80 paid 3 Sep on PO cancelled
+  20 Aug, NYC 1227 RM894, Country Bread RM806); 75 PAID invoices amountPaid<amount
+  (RM18k, deposit-only); 102 transfers PENDING >7d, 0 ever approved, 2 completed
+  in 120d (54 PJ→Tam); Blancoz dup invoice numbers via punctuation
+  (26-0644/260644 etc — one bank debit, register dups); PriceHistory 0 rows; 256
+  package-less SupplierProduct rows; 22 active RM0 ADHOC prices; 23 cf=1
+  Carton/Box packages; 478 ReceivingItems w/o package (120d). Price guard: 1 of
+  24 post-merge lines slipped — 3 Sep PJ milk 8×"Carton"@83.90 on the 163.58 pkg,
+  paid RM671.20 (inv 1-15974) — because **the staff app has its own PO-create
+  route with no guard** (apps/staff/src/app/api/orders/route.ts). Code
+  (verified): orders/[id] PATCH/DELETE + transfers/[id] unauthenticated
+  (middleware skips /api); Telegram webhook lets photos/PDFs from ANY chat mark
+  invoices PAID + forward POP; invoice PAID path needs no receiving and copies
+  client amount→amountPaid; no normalised duplicate-invoice check on 4 create
+  paths; pay-and-claim approve re-runnable (double stock-in), no role/self check;
+  ai-decisions picks ADHOC RM0 as cheapest supplier (products auto-link ADHOC
+  RM0); UI POP auto-send can never fire (needs "/pop/" in URL, uploads go to
+  invoices/); supplier-page price edit creates phantom package-less rows (the
+  256) and never writes PriceHistory; GRNI placeholder checks still test
+  startsWith("INV-") in 3 places; receivings non-transactional + trusts client
+  outlet/orderedQty; agent can empty a PO via N×remove_item; runbook wrong that
+  PO-send is "not wired" (it fires on PATCH/inbound/cron). Solid: WhatsApp HMAC +
+  wamid exactly-once, PO clientRequestId idempotency, atomic PAID, DRAFT pay
+  guard, reorder-suggestions.ts filters. Fix plan (6 steps) on the audit page.
+- 2026-09-03 — **Inventory → Reports rewired to live sales.** COGS Report and
+  Usage Variance read `SalesTransaction` (StoreHub feed, dead since
+  2026-04-11) so they showed zero sales for five months. Both now read the
+  POS-native + customer-app tables per LINE through
+  `lib/inventory/report-sales.ts` (Menu.storehubId → name fallback, the
+  consumption engine's mapping) and expand each line with `expandSoldLine`
+  (Iced/Hot doses, Oatmilk substitution, Extra Shot) plus PackagingRule
+  application by real channel (dine-in / takeaway / Grab, per-item and
+  per-order bags). Cost basis = catalog BOM page (cheapest active non-ADHOC
+  price ÷ cf). The 50% takeaway blend is gone. Response shapes unchanged;
+  COGS summary gained unmappedQty/unmappedRevenue/menusWithoutRecipe/
+  perOrderPackagingCogs. Stock Valuation, Purchase Summary, Wastage read live
+  tables and were fine. Supplier Scorecard is wired but data-starved:
+  `PriceHistory` has 0 rows (write path exists in the two price-edit routes;
+  catalog prices have only ever been changed by SQL) and on-time needs
+  Receiving rows. Deliberately NOT backfilled from PO line prices — dry run
+  gave 431 "changes" averaging a 376% swing, i.e. the package mis-keying, not
+  price moves.
 - 2026-09-02 — **August COGS closed: chain ran ON-RECIPE (~34% of gross incl.
   discounts; expected RM109.8k vs actual ~RM110.3k).** Canonical expected =
   the catalog BOM page engine (`/api/inventory/menus`: cheapest active
@@ -2455,6 +2591,33 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-09-05 — **PR #1216 is the whole procurement/reports batch — review and
+  merge it.** It now carries: the hardening (25 QA findings), the live-sales
+  wiring that fixes "Expected RM0.00" on the reports, the split-payment AP
+  matcher, and the shared filter/sort/CSV table across all six procurement
+  reports. **CI has NOT run on the last three commits** (2967b972, 85696f9e,
+  bb8be838) — GitHub Actions never dispatched them, while every earlier push
+  on this branch ran green; validated locally instead (1122 tests, tsc clean
+  in backoffice+staff, eslint clean, `next build` OK). Branch previews show
+  "Canceled by Ignored Build Step" — a Vercel project setting skips preview
+  builds, so the owner cannot see any of this until merge; judge unmerged UI
+  from the diff. After merge:
+  set `TELEGRAM_ALLOWED_CHAT_IDS` from the warn logs, then consider
+  `INVOICE_PAY_REQUIRE_RECEIPT=block` once unreceived-PO share drops; tell
+  finance Telegram-captured invoices now land as DRAFT; add an override
+  control to the staff PO form (guard currently blocks without one). Still
+  open: payment-side data repairs (owner sign-off), deactivating the 22 active
+  RM0 ADHOC rows (safe now that ai-decisions excludes them; staff picker relies
+  on the ADHOC row being ACTIVE — so leave active). Item (e) split-payment
+  support in ap-match.ts is DONE (2026-09-05).
+
+- 2026-09-04 — **Procurement QA delivered; owner to pick fixes.** Highest-value
+  first: (1) auth+role on all inventory/transfer writes + Telegram allowlist;
+  (2) PAID requires receiving/override + shared duplicate-invoice assert + price
+  guard in staff routes/PATCH/pay-and-claim; (3) ADHOC exclusion in ai-decisions +
+  supplier-page package id + catalog cleanup; (4) POP URL on invoice, GRNI
+  checks, transactional receiving, transfer receive+chaser. PR #1216 (reports
+  wiring) still open/green.
 - 2026-09-05 (round 3) — **HR QA web backlog, no owner decision needed**
   (branch `claude/hr-qa-round3`). Unpublish now OWNER/ADMIN + reason,
   refused once the week has ended, activity-logged (`roster.unpublish`) —
@@ -2500,8 +2663,8 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   Unique Paper INU-26-23275 (RM639.28 marked paid, no debit), the Ariff
   conversation now bank-evidenced (2× RM128.30), CATELUX same-day RM181×2,
   kitchen to confirm Chicken Tomyam Carbonara 80ml-olive-oil BOM line.
-  System follow-ups: (e) split-payment support in `ap-match.ts` (deposit +
-  "Bal" legs keyed by invoice no. in description — approved, not built);
+  System follow-ups: (e) split-payment support in `ap-match.ts` — BUILT
+  2026-09-05, see the verified fact above;
   receive-on-arrival + transfer-receipt discipline (15/15 Aug transfers
   PENDING, 55/63 PJ POs unreceived — this is what makes per-outlet COGS
   precise); catalog hygiene (3 uncosted ingredients, ~100 unit/pkt/slices

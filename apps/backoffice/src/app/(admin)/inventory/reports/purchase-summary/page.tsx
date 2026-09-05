@@ -3,14 +3,13 @@
 import { useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import Link from "next/link";
+import { ReportTable, type ReportColumn } from "@/components/reports/report-table";
 import {
   ArrowLeft,
   Loader2,
   ShoppingCart,
   DollarSign,
-  Search,
   TrendingUp,
   Package,
   ChevronDown,
@@ -74,7 +73,6 @@ export default function PurchaseSummaryPage() {
   const [supplierId, setSupplierId] = useState("");
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
-  const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const queryParts: string[] = [];
@@ -87,15 +85,6 @@ export default function PurchaseSummaryPage() {
   const { data, isLoading } = useFetch<PurchaseSummaryData>(
     `/api/inventory/reports/purchase-summary${qs}`
   );
-
-  const filtered = (data?.items ?? []).filter((item) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      item.supplierName.toLowerCase().includes(q) ||
-      item.topProducts.some((p) => p.toLowerCase().includes(q))
-    );
-  });
 
   function toggleExpand(supplierId: string) {
     setExpanded((prev) => {
@@ -217,15 +206,6 @@ export default function PurchaseSummaryPage() {
           value={to}
           onChange={(e) => setTo(e.target.value)}
         />
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input
-            placeholder="Search supplier or product..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
       </div>
 
       {/* Loading */}
@@ -237,146 +217,77 @@ export default function PurchaseSummaryPage() {
 
       {/* Table */}
       {data && (
-        <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="w-8 px-4 py-3" />
-                <th className="px-4 py-3 text-left font-medium text-gray-500">
-                  Supplier
-                </th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">
-                  Orders
-                </th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">
-                  Total Amount (RM)
-                </th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">
-                  Received (RM)
-                </th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">
-                  Products
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">
-                  Top Products
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-8 text-center text-sm text-gray-400"
-                  >
-                    No purchase data found
-                  </td>
-                </tr>
-              )}
-              {filtered.map((item, idx) => (
-                <>
-                  <tr
-                    key={item.supplierId}
-                    className={`cursor-pointer border-b border-gray-50 transition-colors hover:bg-gray-50 ${
-                      idx % 2 === 0 ? "" : "bg-gray-50/30"
-                    }`}
-                    onClick={() => toggleExpand(item.supplierId)}
-                  >
-                    <td className="px-4 py-2.5 text-gray-400">
-                      {expanded.has(item.supplierId) ? (
-                        <ChevronDown className="h-4 w-4" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4" />
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5 font-medium text-gray-900">
-                      {item.supplierName}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-gray-900">
-                      {item.totalOrders}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-gray-900">
-                      {fmt(item.totalAmount)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-gray-900">
-                      {fmt(item.totalReceived)}
-                    </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-gray-600">
-                      {item.productCount}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex flex-wrap gap-1">
-                        {item.topProducts.map((p) => (
-                          <Badge
-                            key={p}
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            {p}
-                          </Badge>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-
-                  {/* Expanded product breakdown */}
-                  {expanded.has(item.supplierId) && (
-                    <tr key={`${item.supplierId}-details`}>
-                      <td colSpan={7} className="bg-gray-50 px-4 py-3">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="text-gray-500">
-                              <th className="px-3 py-1.5 text-left font-medium">
-                                Product
-                              </th>
-                              <th className="px-3 py-1.5 text-left font-medium">
-                                SKU
-                              </th>
-                              <th className="px-3 py-1.5 text-right font-medium">
-                                Qty Ordered
-                              </th>
-                              <th className="px-3 py-1.5 text-right font-medium">
-                                Qty Received
-                              </th>
-                              <th className="px-3 py-1.5 text-right font-medium">
-                                Amount (RM)
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {item.productBreakdown.map((p) => (
-                              <tr
-                                key={p.sku}
-                                className="border-t border-gray-100"
-                              >
-                                <td className="px-3 py-1.5 text-gray-900">
-                                  {p.productName}
-                                </td>
-                                <td className="px-3 py-1.5 font-mono text-gray-400">
-                                  {p.sku}
-                                </td>
-                                <td className="px-3 py-1.5 text-right font-mono text-gray-900">
-                                  {fmt(p.qtyOrdered)}
-                                </td>
-                                <td className="px-3 py-1.5 text-right font-mono text-gray-900">
-                                  {fmt(p.qtyReceived)}
-                                </td>
-                                <td className="px-3 py-1.5 text-right font-mono text-gray-900">
-                                  {fmt(p.amount)}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </td>
-                    </tr>
-                  )}
-                </>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ReportTable<SupplierRow>
+          rows={data.items}
+          rowKey={(it) => it.supplierId}
+          csvFilename="purchase-summary"
+          emptyMessage="No purchase data found."
+          searchPlaceholder="Search supplier or product…"
+          searchText={(it) => `${it.supplierName} ${it.topProducts.join(" ")} ${it.productBreakdown.map((p) => `${p.productName} ${p.sku}`).join(" ")}`}
+          initialSort={{ key: "totalAmount", dir: "desc" }}
+          minWidth={880}
+          toggles={[
+            { key: "underReceived", label: "Under-received", predicate: (it) => it.totalReceived < it.totalAmount - 0.01 },
+            { key: "underInvoiced", label: "Not fully invoiced", predicate: (it) => it.totalInvoiced < it.totalAmount - 0.01 },
+          ]}
+          onRowClick={(it) => toggleExpand(it.supplierId)}
+          columns={purchaseColumns(expanded)}
+          subRow={(it) => expanded.has(it.supplierId) ? <ProductBreakdownTable rows={it.productBreakdown} /> : null}
+        />
       )}
     </div>
+  );
+}
+
+const purchaseColumns = (expanded: Set<string>): ReportColumn<SupplierRow>[] => [
+  {
+    key: "supplierName", header: "Supplier", sortValue: (it) => it.supplierName, csv: (it) => it.supplierName,
+    render: (it) => (
+      <span className="flex items-center gap-1.5 font-medium text-gray-900">
+        {expanded.has(it.supplierId) ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+        {it.supplierName}
+      </span>
+    ),
+  },
+  { key: "totalOrders", header: "Orders", align: "right", sortValue: (it) => it.totalOrders, render: (it) => <span className="font-mono text-gray-900">{it.totalOrders}</span> },
+  { key: "totalAmount", header: "Total Amount (RM)", align: "right", sortValue: (it) => it.totalAmount, render: (it) => <span className="font-mono text-gray-900">{fmt(it.totalAmount)}</span> },
+  { key: "totalReceived", header: "Received (RM)", align: "right", sortValue: (it) => it.totalReceived, render: (it) => <span className="font-mono text-gray-900">{fmt(it.totalReceived)}</span> },
+  { key: "totalInvoiced", header: "Invoiced (RM)", align: "right", sortValue: (it) => it.totalInvoiced, render: (it) => <span className="font-mono text-gray-900">{fmt(it.totalInvoiced)}</span> },
+  { key: "productCount", header: "Products", align: "right", sortValue: (it) => it.productCount, render: (it) => <span className="font-mono text-gray-600">{it.productCount}</span> },
+  {
+    key: "topProducts", header: "Top Products", sortValue: (it) => it.topProducts[0] ?? null,
+    csv: (it) => it.topProducts.join(" | "),
+    render: (it) => (
+      <div className="flex flex-wrap gap-1">
+        {it.topProducts.map((p) => <Badge key={p} variant="outline" className="text-xs">{p}</Badge>)}
+      </div>
+    ),
+  },
+];
+
+function ProductBreakdownTable({ rows }: { rows: ProductBreakdown[] }) {
+  return (
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="text-gray-500">
+          <th className="px-3 py-1.5 text-left font-medium">Product</th>
+          <th className="px-3 py-1.5 text-left font-medium">SKU</th>
+          <th className="px-3 py-1.5 text-right font-medium">Qty Ordered</th>
+          <th className="px-3 py-1.5 text-right font-medium">Qty Received</th>
+          <th className="px-3 py-1.5 text-right font-medium">Amount (RM)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((p) => (
+          <tr key={p.sku} className="border-t border-gray-100">
+            <td className="px-3 py-1.5 text-gray-900">{p.productName}</td>
+            <td className="px-3 py-1.5 font-mono text-gray-400">{p.sku}</td>
+            <td className="px-3 py-1.5 text-right font-mono text-gray-900">{fmt(p.qtyOrdered)}</td>
+            <td className="px-3 py-1.5 text-right font-mono text-gray-900">{fmt(p.qtyReceived)}</td>
+            <td className="px-3 py-1.5 text-right font-mono text-gray-900">{fmt(p.amount)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

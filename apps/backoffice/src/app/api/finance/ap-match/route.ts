@@ -48,6 +48,8 @@ export async function GET(req: NextRequest) {
       auto: result.auto.length,
       review: result.review.length,
       doublePayments: result.doublePayments.length,
+      split: result.split.length,
+      splitPartial: result.split.filter((m) => !m.settles).length,
       unmatchedInvoices: result.unmatchedInvoices.length,
       unmatchedOutflows: result.unmatchedOutflows.length,
       unmatchedOutflowValue: Math.round(result.unmatchedOutflows.reduce((s, o) => s + o.amount, 0)),
