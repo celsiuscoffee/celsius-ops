@@ -5,6 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Award, FileText, ArrowLeft, CheckCircle2, Loader2, Megaphone, Bell } from "lucide-react";
 import { usePrompt } from "@celsius/ui";
+import { FetchError } from "@/components/fetch-error";
 
 type Memo = {
   id: string;
@@ -31,7 +32,7 @@ const TYPE_META = {
 } as const;
 
 export default function StaffMemosPage() {
-  const { data, mutate } = useFetch<{ memos: Memo[]; unacknowledgedCount: number }>("/api/hr/memos");
+  const { data, error, mutate } = useFetch<{ memos: Memo[]; unacknowledgedCount: number }>("/api/hr/memos");
   const [busy, setBusy] = useState<string | null>(null);
   const { prompt, PromptDialog } = usePrompt();
 
@@ -73,7 +74,9 @@ export default function StaffMemosPage() {
         <h1 className="text-2xl font-bold">Memos</h1>
       </div>
 
-      {memos.length === 0 ? (
+      {!data && error ? (
+        <FetchError error={error} onRetry={() => mutate()} what="your memos" />
+      ) : memos.length === 0 ? (
         <div className="flex flex-col items-center rounded-2xl border border-gray-200 bg-gray-50 py-16">
           <FileText className="mb-2 h-10 w-10 text-gray-300" />
           <p className="font-semibold text-gray-500">No memos</p>

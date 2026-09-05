@@ -5,6 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Receipt, ChevronDown, ChevronUp, ArrowLeft, Download } from "lucide-react";
 import { PAYROLL_UI_ENABLED } from "@/lib/hr/constants";
+import { FetchError } from "@/components/fetch-error";
 import { otLineLabel, otHoursFromDetails, publicHolidayPayLabel, restDayPayLabel } from "@celsius/shared/src/hr/pay-lines";
 
 type AllowanceItem = { amount: number; base?: number; score?: number };
@@ -70,7 +71,7 @@ function fmtDate(iso: string | null | undefined): string {
 
 export default function PayslipsPage() {
   // Payroll hidden pre-launch: don't fetch (SWR skips null keys) and show a notice.
-  const { data } = useFetch<{ payslips: Payslip[] }>(PAYROLL_UI_ENABLED ? "/api/hr/payslips" : null);
+  const { data, error, mutate } = useFetch<{ payslips: Payslip[] }>(PAYROLL_UI_ENABLED ? "/api/hr/payslips" : null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const payslips = data?.payslips || [];
@@ -111,7 +112,9 @@ export default function PayslipsPage() {
         <h1 className="text-2xl font-bold">Payslips</h1>
       </div>
 
-      {payslips.length === 0 ? (
+      {!data && error ? (
+        <FetchError error={error} onRetry={() => mutate()} what="your payslips" />
+      ) : payslips.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 py-16 text-center">
           <Receipt className="mb-3 h-12 w-12 text-gray-300" />
           <p className="font-semibold text-gray-500">No payslips yet</p>

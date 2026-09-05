@@ -2,8 +2,8 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import { CheckCircle2, XCircle, Loader2, Bot } from "lucide-react";
-import { toast } from "@celsius/ui";
+import { CheckCircle2, XCircle, Loader2, Bot, Ban } from "lucide-react";
+import { toast, useConfirm, usePrompt } from "@celsius/ui";
 import { HrPageHeader } from "@/components/hr/page-header";
 import type { LeaveRequest } from "@/lib/hr/types";
 
@@ -15,22 +15,29 @@ export default function LeaveReviewPage() {
   const [filter, setFilter] = useState("needs_review");
   const { data, mutate } = useFetch<{ requests: EnrichedLeaveRequest[] }>(`/api/hr/leave?status=${filter === "needs_review" ? "all" : filter}`);
   const [actioning, setActioning] = useState<string | null>(null);
+  const { confirm, ConfirmDialog } = useConfirm();
+  const { prompt, PromptDialog } = usePrompt();
 
   const requests = (data?.requests || []).filter((r) =>
     filter === "needs_review" ? r.status === "pending" || r.status === "ai_escalated" : true,
   );
 
-  const handleAction = async (id: string, action: "approve" | "reject") => {
+  const handleAction = async (id: string, action: "approve" | "reject" | "cancel", reason?: string) => {
     setActioning(id);
     try {
       const res = await fetch("/api/hr/leave", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action }),
+        body: JSON.stringify({ id, action, ...(reason ? { reason } : {}) }),
       });
       const j = await res.json().catch(() => null);
       if (!res.ok) { toast.error(j?.error ?? `Failed (${res.status}) — nothing was changed.`); return; }
-      toast.success(action === "approve" ? "Leave approved" : "Leave rejected");
+      toast.success(
+        action === "approve" ? "Leave approved"
+          : action === "reject" ? "Leave rejected"
+          : j?.restored_days ? `Leave cancelled — ${j.restored_days} day(s) restored to the balance`
+          : "Leave cancelled",
+      );
       mutate();
     } catch {
       toast.error("Network error — nothing was changed.");
@@ -39,8 +46,38 @@ export default function LeaveReviewPage() {
     }
   };
 
+  // Cancel: a pending request just needs a confirm (releases the hold); an
+  // approved one is a balance restore, so it asks for a reason (owner/admin —
+  // the API refuses managers and says so).
+  const handleCancel = async (req: EnrichedLeaveRequest) => {
+    const approved = req.status === "approved" || req.status === "ai_approved";
+    if (approved) {
+      const reason = await prompt({
+        title: "Cancel approved leave?",
+        description: `${req.total_days} day(s) will be returned to the ${req.leave_type} balance. Only an owner/admin can do this.`,
+        placeholder: "Why is this leave being cancelled? (e.g. staff came to work)",
+        required: true,
+        confirmLabel: "Cancel leave",
+      });
+      if (reason === null) return;
+      await handleAction(req.id, "cancel", reason);
+      return;
+    }
+    const ok = await confirm({
+      title: "Cancel this leave request?",
+      description: "The request is withdrawn without a decision and the held days are released.",
+      confirmLabel: "Cancel request",
+      cancelLabel: "Keep it",
+      destructive: true,
+    });
+    if (!ok) return;
+    await handleAction(req.id, "cancel");
+  };
+
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+      <ConfirmDialog />
+      <PromptDialog />
       <HrPageHeader
         title="Leave Requests"
         description={`${requests.length} request${requests.length !== 1 ? "s" : ""}`}
@@ -57,6 +94,7 @@ export default function LeaveReviewPage() {
             <option value="ai_approved">AI Approved</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
+            <option value="cancelled">Cancelled</option>
           </select>
         }
       />
@@ -118,6 +156,27 @@ export default function LeaveReviewPage() {
                     className="flex items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
                   >
                     <XCircle className="h-3 w-3" /> Reject
+                  </button>
+                  <button
+                    onClick={() => handleCancel(req)}
+                    disabled={actioning === req.id}
+                    className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                    title="Withdraw without a decision (releases the held days)"
+                  >
+                    <Ban className="h-3 w-3" /> Cancel
+                  </button>
+                </div>
+              )}
+              {(req.status === "approved" || req.status === "ai_approved") && (
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={() => handleCancel(req)}
+                    disabled={actioning === req.id}
+                    className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                    title="Cancel this approved leave and return the days to the balance (owner/admin)"
+                  >
+                    {actioning === req.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3" />}
+                    Cancel leave
                   </button>
                 </div>
               )}

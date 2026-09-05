@@ -2455,6 +2455,24 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-09-05 (round 3) — **HR QA web backlog, no owner decision needed**
+  (branch `claude/hr-qa-round3`). Unpublish now OWNER/ADMIN + reason,
+  refused once the week has ended, activity-logged (`roster.unpublish`) —
+  it was the bypass around the published-roster retro-edit guard. Leave
+  gained a third outcome: backoffice `cancel` (pending → any reviewer in
+  scope, releases the hold; approved → OWNER/ADMIN with reason, restores
+  `used_days`, logged) and a staff self-withdraw for pending requests.
+  Staff web clock page: a log still open from a previous MYT day shows an
+  "End yesterday's shift at HH:MM" banner → `close_stale` action closes it
+  exactly as the cron would (rostered end / outlet close, `system` method,
+  OT 0, `auto_closed_forgot_clockout`), no GPS needed; a live shift can't
+  use it. `FetchError` card on every staff HR page (401 → "session expired
+  → sign in"; other → retry) instead of the empty state. My Attendance
+  shows OT tails ≥0.5 h (was ≥1). Backoffice `agents/leave-manager.ts`
+  (unused duplicate) deleted. Still open: native PR #1219 (owner to say
+  "merge 1219"; OTA to manager phones), swap request UI, shared
+  recomputeTotals, and the owner decisions listed under round 2.
+
 - 2026-09-03 (round 2) — **HR module code + flow QA, five parallel reviews.**
   Report: `docs/design/hr-qa-round2-2026-09-03.md` (11 security, 16 money,
   17 flow, 9 staff-app findings; ~35 fixed on `claude/hr-qa-round2`).
