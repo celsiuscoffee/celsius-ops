@@ -28,24 +28,26 @@ describe("classifyRosterEdit", () => {
 });
 
 describe("retroEditRefusal", () => {
-  it("managers can never retro-edit a published week", () => {
-    const r = retroEditRefusal("MANAGER", "typo fix");
+  it("without the retro-edit capability it is refused outright", () => {
+    const r = retroEditRefusal(false, "typo fix");
     expect(r.allowed).toBe(false);
     if (!r.allowed) expect(r.status).toBe(403);
   });
 
-  it("owner/admin without a reason is refused with the how-to", () => {
-    for (const role of ["OWNER", "ADMIN"]) {
-      const r = retroEditRefusal(role, "");
-      expect(r.allowed).toBe(false);
-      if (!r.allowed) expect(r.status).toBe(409);
-    }
-    const blank = retroEditRefusal("OWNER", "   ");
+  it("holding the capability without a reason is refused with the how-to", () => {
+    const r = retroEditRefusal(true, "");
+    expect(r.allowed).toBe(false);
+    if (!r.allowed) expect(r.status).toBe(409);
+    const blank = retroEditRefusal(true, "   ");
     expect(blank.allowed).toBe(false);
+    if (!blank.allowed) expect(blank.status).toBe(409);
   });
 
-  it("owner/admin with an explicit reason proceeds", () => {
-    expect(retroEditRefusal("OWNER", "wrong template published for 12 Aug")).toEqual({ allowed: true });
-    expect(retroEditRefusal("ADMIN", "swap recorded on paper, backfilling")).toEqual({ allowed: true });
+  it("holding the capability with an explicit reason proceeds", () => {
+    expect(retroEditRefusal(true, "wrong template published for 12 Aug")).toEqual({ allowed: true });
+  });
+
+  it("a reason alone never substitutes for the capability", () => {
+    expect(retroEditRefusal(false, "swap recorded on paper, backfilling").allowed).toBe(false);
   });
 });

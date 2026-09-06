@@ -39,6 +39,8 @@ type Employee = {
   username?: string | null;
   appAccess?: string[];
   moduleAccess?: Record<string, unknown>;
+  /** Elevated capability grants — see lib/capabilities.ts. */
+  permissions?: string[];
   status?: string;
   hasPin?: boolean;
   hasPassword?: boolean;
@@ -51,6 +53,27 @@ type Employee = {
 const ROLES = ["OWNER", "ADMIN", "MANAGER", "STAFF"];
 const APP_OPTIONS = ["backoffice", "inventory", "sales", "loyalty", "pickup", "ops"];
 const HR_MODULES = ["dashboard", "attendance", "schedules", "leave", "payroll", "employees", "settings"];
+
+// Elevated capabilities a MANAGER can be granted individually — the keys must
+// match lib/capabilities.ts (the API validates against that list and rejects
+// anything else).
+const CAPABILITY_OPTIONS = [
+  {
+    key: "roster:unpublish",
+    label: "Unpublish a roster",
+    hint: "Take a published week back to draft. Staff were already notified, so a reason is required and logged.",
+  },
+  {
+    key: "roster:retro_edit",
+    label: "Edit a past day on a published roster",
+    hint: "The roster is the pay basis — a retro edit rewrites pay for hours already worked. Reason required and logged.",
+  },
+  {
+    key: "leave:cancel_approved",
+    label: "Cancel approved leave",
+    hint: "Undo an approved leave and return the days to the balance. Reason required and logged.",
+  },
+];
 
 const EMPLOYMENT_TYPES = [
   { value: "full_time", label: "Full Time" },
@@ -322,6 +345,7 @@ export default function EmployeeDetailPage() {
     outletIds: [] as string[],
     hrAccess: false,
     appAccessSet: new Set<string>(),
+    capabilitySet: new Set<string>(),
     pin: "",
     password: "",
   });
@@ -348,6 +372,7 @@ export default function EmployeeDetailPage() {
         outletIds: employee.outletIds || [],
         hrAccess: hrList.length > 0 || employee.role === "OWNER" || employee.role === "ADMIN",
         appAccessSet: new Set(employee.appAccess || []),
+        capabilitySet: new Set(employee.permissions || []),
         pin: "",
         password: "",
       });
@@ -421,6 +446,11 @@ export default function EmployeeDetailPage() {
         outletIds: access.outletIds.filter((oid) => oid !== access.outletId),
         appAccess: Array.from(access.appAccessSet),
         moduleAccess: nextModuleAccess,
+        // OWNER/ADMIN hold every capability implicitly, so don't persist rows
+        // for them — the stored list is only meaningful for a MANAGER.
+        permissions: access.role === "OWNER" || access.role === "ADMIN"
+          ? []
+          : Array.from(access.capabilitySet),
       };
       if (access.pin) payload.pin = access.pin;
       if (access.password) payload.password = access.password;
@@ -449,6 +479,14 @@ export default function EmployeeDetailPage() {
       const next = new Set(a.appAccessSet);
       if (next.has(app)) next.delete(app); else next.add(app);
       return { ...a, appAccessSet: next };
+    });
+  };
+
+  const toggleCapability = (cap: string) => {
+    setAccess((a) => {
+      const next = new Set(a.capabilitySet);
+      if (next.has(cap)) next.delete(cap); else next.add(cap);
+      return { ...a, capabilitySet: next };
     });
   };
 
@@ -1359,6 +1397,47 @@ export default function EmployeeDetailPage() {
                     </label>
                   ))}
                 </div>
+              </div>
+              {/* Elevated capabilities: one action each, past an owner/admin
+                  gate, without an ADMIN promotion (which would also hand over
+                  payroll, finance and staff bank details). For a head of
+                  operations who owns the roster company-wide. */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Elevated Permissions
+                </label>
+                {access.role === "OWNER" || access.role === "ADMIN" ? (
+                  <p className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-[11px] text-muted-foreground">
+                    {access.role} already holds every elevated permission.
+                  </p>
+                ) : access.role === "STAFF" ? (
+                  <p className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-[11px] text-muted-foreground">
+                    Set the role to Manager to grant elevated permissions.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {CAPABILITY_OPTIONS.map((cap) => (
+                      <label
+                        key={cap.key}
+                        className="flex items-start gap-2 rounded-lg border border-gray-200 bg-white p-2 text-xs"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={access.capabilitySet.has(cap.key)}
+                          onChange={() => toggleCapability(cap.key)}
+                        />
+                        <span>
+                          <span className="font-medium">{cap.label}</span>
+                          <span className="block text-[10px] text-muted-foreground">{cap.hint}</span>
+                        </span>
+                      </label>
+                    ))}
+                    <p className="text-[10px] text-muted-foreground">
+                      Each grant is audit-logged. They never include payroll, finance or bank details.
+                    </p>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">HR Module Access</label>

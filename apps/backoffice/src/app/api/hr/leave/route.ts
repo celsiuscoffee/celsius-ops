@@ -4,6 +4,7 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
 import { logActivity } from "@/lib/activity-log";
+import { can } from "@/lib/capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -92,9 +93,12 @@ export async function PATCH(req: NextRequest) {
       );
     }
     if (session.role === "MANAGER") {
-      if (wasApproved) {
+      // Cancelling an APPROVED leave gives days back to the balance and undoes
+      // a payroll input, so it needs the explicit capability; withdrawing a
+      // still-pending request only releases a hold and stays in-scope work.
+      if (wasApproved && !(await can(session, "leave:cancel_approved"))) {
         return NextResponse.json(
-          { error: "Only an owner/admin can cancel an approved leave — it has already been banked against the balance." },
+          { error: "You don't have permission to cancel an approved leave — it has already been banked against the balance. Ask an owner to do it, or to grant you leave-cancellation access." },
           { status: 403 },
         );
       }
