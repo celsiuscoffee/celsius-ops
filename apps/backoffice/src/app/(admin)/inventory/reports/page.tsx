@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DollarSign, Package, ShoppingCart, Trash2, Truck, Scale, ArrowRight } from "lucide-react";
+import { DollarSign, Package, ShoppingCart, Trash2, Truck, Scale, Clock, ArrowRight } from "lucide-react";
 
 const REPORTS = [
   { name: "Stock Valuation", description: "System qty vs last count with RM values — expected vs real inventory", icon: Package, color: "bg-blue-50 text-blue-600", href: "/inventory/reports/stock-valuation" },
@@ -9,6 +9,7 @@ const REPORTS = [
   { name: "COGS Report", description: "Actual vs expected ingredient usage and cost variance per outlet per period", icon: DollarSign, color: "bg-red-50 text-red-600", href: "/inventory/reports/cogs" },
   { name: "Purchase Summary", description: "Total spending by supplier, product, and period with trend comparison", icon: ShoppingCart, color: "bg-green-50 text-green-600", href: "/inventory/reports/purchase-summary" },
   { name: "Wastage Report", description: "Cost of waste by reason (expired, spillage, breakage), outlet, and period", icon: Trash2, color: "bg-terracotta/10 text-terracotta", href: "/inventory/reports/wastage" },
+  { name: "Prep Manhours", description: "Prep hours the period demanded (sales × recipes × prep time) vs rostered hours — is there enough labour to prep?", icon: Clock, color: "bg-indigo-50 text-indigo-600", href: "/inventory/reports/prep-labour" },
   { name: "Supplier Scorecard", description: "On-time delivery rate, short deliveries, price changes per supplier", icon: Truck, color: "bg-purple-50 text-purple-600", href: "/inventory/reports/supplier-scorecard" },
 ];
 
