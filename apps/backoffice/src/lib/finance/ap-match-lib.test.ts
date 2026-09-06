@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc, invoiceSig, descNamesForeignInvoice } from "./ap-match-lib";
+import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc, invoiceSig, descNamesForeignInvoice, pickSplitLegs, isDateLikeNumber } from "./ap-match-lib";
 
 describe("ap-match-lib", () => {
   it("extracts digit runs from bank descriptions", () => {
@@ -66,5 +66,56 @@ describe("ap-match-lib", () => {
     // No alias, no hit
     expect(aliasPhrasesFor(["Yow Seng Sdn Bhd"])).toEqual([]);
     expect(aliasInDesc(adhoc, "transfer fr a/c somebody else entirely")).toBe(false);
+  });
+});
+
+describe("pickSplitLegs — deposit + balance settlement of one invoice", () => {
+  const cp = 281500; // Collective Project IV-02159: RM2,815.00
+  it("settles with the Depo + Bal legs when both quote the invoice number", () => {
+    const legs = [
+      { cents: 28150, ref: true, named: true },   // "IV-02159 Depo"
+      { cents: 33242, ref: false, named: false }, // unrelated same-day web payment
+      { cents: 253350, ref: true, named: true },  // "IV-02159 Bal"
+    ];
+    const pick = pickSplitLegs(legs, cp);
+    expect(pick).toEqual({ idx: [2, 0], settles: true });
+  });
+  it("settles a manually-recorded deposit's balance with the single Bal leg", () => {
+    const pick = pickSplitLegs([{ cents: 253350, ref: false, named: true }], cp - 28150);
+    expect(pick).toEqual({ idx: [0], settles: true });
+  });
+  it("prefers ref-confirmed legs over a name-only combination", () => {
+    const legs = [
+      { cents: 28150, ref: true, named: true },
+      { cents: 253350, ref: true, named: true },
+      { cents: 281500, ref: false, named: true }, // name-only full-amount line
+    ];
+    expect(pickSplitLegs(legs, cp)!.idx.sort()).toEqual([0, 1]);
+  });
+  it("reports a PARTIAL (deposit only) when only the Depo leg has arrived", () => {
+    const pick = pickSplitLegs([{ cents: 28150, ref: true, named: true }], cp);
+    expect(pick).toEqual({ idx: [0], settles: false });
+  });
+  it("never forms a partial from name-only legs, and none when legs overshoot", () => {
+    expect(pickSplitLegs([{ cents: 5000, ref: false, named: true }], cp)).toBeNull();
+    expect(pickSplitLegs([{ cents: 300000, ref: true, named: true }], cp)).toBeNull();
+    expect(pickSplitLegs([], cp)).toBeNull();
+  });
+});
+
+describe("isDateLikeNumber — a date is not an invoice reference", () => {
+  it("rejects week-dated ad-hoc claim numbers", () => {
+    // These matched card-terminal fee lines ("...DATED 24082026") in a replay.
+    expect(isDateLikeNumber("LALA CCT WEEK 24082026")).toBe(true);
+    expect(isDateLikeNumber("CLEANING CCT WEEK 04082026")).toBe(true);
+    expect(isDateLikeNumber("20260824")).toBe(true);
+  });
+  it("keeps genuine supplier invoice numbers usable", () => {
+    expect(isDateLikeNumber("IVCT-00012166")).toBe(false);
+    expect(isDateLikeNumber("INV-006545")).toBe(false);
+    expect(isDateLikeNumber("IV-02159")).toBe(false);
+    expect(isDateLikeNumber("1-15288")).toBe(false);
+    expect(isDateLikeNumber("INU-26-23275")).toBe(false);
+    expect(isDateLikeNumber(null)).toBe(false);
   });
 });

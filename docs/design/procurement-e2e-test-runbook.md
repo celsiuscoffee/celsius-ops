@@ -16,10 +16,14 @@ simulator; the agent and POP send talk to the real WhatsApp Cloud API.
   and escalates substitutions / payment / MOQ / ambiguity.
 - **POP auto-send** — recording a payment that marks the invoice `PAID` fires
   `proof_of_payment` to the supplier.
-- **NOT wired:** automated PO-send to the supplier over WhatsApp (the
-  `purchase_order` / `po_approval` button flow was designed but never shipped).
-  The PO is created in BackOffice; sending the order block to the supplier is still
-  manual. The agent only needs an **open PO to exist** for the supplier.
+- **Automated PO-send** (`apps/backoffice/src/lib/inventory/procurement-po-send.ts`,
+  wired 2026): the order block is sent to the supplier over WhatsApp when the PO
+  is PATCHed to `SENT` / `AWAITING_DELIVERY` (`api/inventory/orders/[id]`), on
+  `orders/[id]/resend-po`, on a supplier inbound referencing an unsent PO
+  (`api/whatsapp/webhook`), and on the `procurement-loop` cron sweep. Do not
+  hand-send the order block during the test — the supplier would get it twice.
+  The `po_approval` interactive buttons were never shipped; confirmation comes
+  back as free text. The agent only needs an **open PO to exist** for the supplier.
 
 ## 0. Prerequisites
 
@@ -155,7 +159,8 @@ but check the log: `[invoices/[id]] POP auto-sent …` or `… POP not sent reas
 
 ## Known gaps (out of scope for this test)
 
-- Automated PO-send + `po_approval` buttons — not wired.
+- `po_approval` interactive buttons — not wired (the PO-send itself is; see
+  the scope section above).
 - Stock accuracy is shadow-only (consumption engine off); reorder still runs off
   receipts − wastage/transfers, not sales. Going live needs unit normalisation +
   a recipe import (see `procurement-qa-2026-06-26.md`).

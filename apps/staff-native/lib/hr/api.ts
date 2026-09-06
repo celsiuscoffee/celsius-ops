@@ -9,6 +9,8 @@ export type Shift = {
   end_time: string;
   position: string | null;
   notes: string | null;
+  // Where the shift is — rotating staff work several outlets in a week.
+  outlet_name?: string | null;
   hr_schedules: { outlet_id: string; week_start: string };
 };
 
@@ -70,6 +72,24 @@ export type Payslip = {
   epf_employer: number;
   socso_employer: number;
   eis_employer: number;
+  // Raw per-rate OT lines and the calculator's detail block, so the app can
+  // label the earnings the way the backoffice and the PDF do (OT by rate,
+  // Public Holiday Pay, Rest Day Pay) instead of one "Overtime" line.
+  ot_1x_amount?: number | null;
+  ot_1_5x_amount?: number | null;
+  ot_2x_amount?: number | null;
+  ot_3x_amount?: number | null;
+  other_deductions?: Record<string, number | string | null> | null;
+  computation_details?: {
+    ot_hours_1x?: number;
+    ot_hours_1_5x?: number;
+    ot_hours_2x?: number;
+    ot_hours_3x?: number;
+    ph_days_worked?: number;
+    ph_premium_amount?: number;
+    rest_day_days_worked?: number;
+    rest_day_pay_amount?: number;
+  } | null;
   hr_payroll_runs: {
     status: string;
     cycle_type: string | null;
@@ -222,6 +242,14 @@ export async function submitLeave(req: {
 
 export function fetchPayslips() {
   return api<{ payslips: Payslip[] }>("/api/hr/payslips");
+}
+
+// Mint a short-lived, item-bound URL for the official payslip PDF. The native
+// app can't carry its Bearer token into an external browser, so we fetch the
+// link over the authenticated API and hand the returned (token-signed) URL to
+// the system browser to download.
+export function fetchPayslipDownloadUrl(itemId: string) {
+  return api<{ url: string }>(`/api/hr/payslips/pdf?item_id=${encodeURIComponent(itemId)}&link=1`);
 }
 
 export function fetchMemos() {

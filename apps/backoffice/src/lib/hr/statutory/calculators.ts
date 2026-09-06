@@ -5,6 +5,7 @@
 import { hrSupabaseAdmin } from "../supabase";
 import {
   epfContribution,
+  resolveEpfEmployerOverride,
   socsoContribution,
   eisContribution,
   roundToCents,
@@ -60,7 +61,13 @@ export async function calcEPF(
     employerRateBelow5000: Number(rate.employer_rate_below_5000),
     employerRateAbove5000: Number(rate.employer_rate_above_5000),
     employeeRateOverride: inputs.employeeRateOverride,
-    employerRateOverride: inputs.employerRateOverride,
+    // The legacy column default (12) is not a decision — see formulas.ts.
+    employerRateOverride: resolveEpfEmployerOverride({
+      profileRate: inputs.employerRateOverride,
+      wage: inputs.wage,
+      scheduleBelow5000: Number(rate.employer_rate_below_5000),
+      scheduleAbove5000: Number(rate.employer_rate_above_5000),
+    }),
   });
 }
 

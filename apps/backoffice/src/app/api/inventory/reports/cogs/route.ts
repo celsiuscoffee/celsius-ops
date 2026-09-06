@@ -1,12 +1,30 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import type { RecipeLine } from "@celsius/db";
+import {
+  fetchSoldLines,
+  loadCatalogCostMap,
+  loadPackagingRules,
+  expandIngredientsForLine,
+  expandPackagingForLine,
+  expandPerOrderPackaging,
+  costOf,
+} from "@/lib/inventory/report-sales";
 
-// StoreHub sales carry no per-item fulfillment channel, so channel-scoped
-// packaging (a takeaway-only cup, a dine-in-only tissue) is blended by an
-// assumed takeaway share. ALL lines are always billed. Tier 2 replaces this
-// blend with the exact per-line split from pos_order_items.fulfillment.
-const DEFAULT_TAKEAWAY_RATIO = 0.5;
+// GET /api/inventory/reports/cogs?outletId=&from=&to=
+//
+// Expected COGS per menu item per outlet = what the recipes say each SOLD line
+// consumed, costed at the catalog BOM page's cost basis. Sales come from the
+// live POS-native + customer-app tables (see report-sales.ts) — the previous
+// version read `SalesTransaction`, which stopped on 2026-04-11.
+//
+// Each line is expanded individually, not per menu, because the line's own
+// modifiers (Iced/Hot dose, Oatmilk substitution, Extra Shot) and its
+// fulfilment channel (dine-in vs takeaway cup) decide which recipe rows and
+// packaging rules apply — the same expansion the consumption engine posts.
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -15,239 +33,88 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const outletId = searchParams.get("outletId");
     const now = new Date();
-    const defaultFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const from = searchParams.get("from")
-      ? new Date(searchParams.get("from")!)
-      : defaultFrom;
-    const to = searchParams.get("to")
-      ? new Date(searchParams.get("to")!)
-      : now;
+    const from = searchParams.get("from") ? new Date(searchParams.get("from")!) : new Date(now.getTime() - 30 * 86_400_000);
+    const to = searchParams.get("to") ? new Date(searchParams.get("to")!) : now;
 
-    // 1. Fetch sales transactions within date range
-    const salesWhere: Record<string, unknown> = {
-      transactedAt: { gte: from, lte: to },
-    };
-    if (outletId) salesWhere.outletId = outletId;
-
-    // Project only the columns we actually use (menuId, outletId,
-    // quantity, grossAmount). Without this, Prisma returns every
-    // column on every SalesTransaction in the date range — for
-    // 30-day windows that's been ~2M rows of unused payload, which
-    // was the single biggest disk-IO consumer per pg_stat_statements.
-    const sales = await prisma.salesTransaction.findMany({
-      where: salesWhere,
-      select: {
-        menuId: true,
-        outletId: true,
-        quantity: true,
-        grossAmount: true,
-      },
-    });
-
-    // 2. Fetch all menu BOM lines (ingredients + packaging)
-    const menuIngredients = await prisma.menuIngredient.findMany({
-      include: {
-        menu: { select: { id: true, name: true, category: true } },
-        product: {
-          select: {
-            id: true,
-            name: true,
-            baseUom: true,
-            itemType: true,
-            group: { select: { name: true } },
-          },
-        },
-      },
-    });
-
-    // A BOM line is "packaging" if the product is tagged itemType=PACKAGING OR
-    // sits in a packaging item-group. In practice nothing is tagged
-    // itemType=PACKAGING yet (cups/lids/bags are classified by group), so the
-    // itemType-only check folded all packaging cost into ingredient cost.
-    const isPackaging = (p: { itemType: string; group: { name: string } | null }) =>
-      p.itemType === "PACKAGING" || /packag/i.test(p.group?.name ?? "");
-
-    // 3. Fetch cheapest active SupplierProduct price per product (with package conversion)
-    // Exclude ADHOC supplier and zero-price entries to get real costs
-    const adhocSupplier = await prisma.supplier.findFirst({ where: { supplierCode: "ADHOC" } });
-    const supplierProducts = await prisma.supplierProduct.findMany({
-      where: {
-        isActive: true,
-        price: { gt: 0 },
-        ...(adhocSupplier ? { supplierId: { not: adhocSupplier.id } } : {}),
-      },
-      include: { productPackage: { select: { conversionFactor: true } } },
-    });
-
-    // Build price map: productId -> cheapest cost per base unit
-    // Price is per package, so divide by conversionFactor to get per-gram/ml/pcs cost
-    const priceMap = new Map<string, number>();
-    for (const sp of supplierProducts) {
-      const conversionFactor = sp.productPackage
-        ? Number(sp.productPackage.conversionFactor)
-        : 1;
-      const costPerBase = Number(sp.price) / conversionFactor;
-      const existing = priceMap.get(sp.productId);
-      if (!existing || costPerBase < existing) {
-        priceMap.set(sp.productId, costPerBase);
-      }
-    }
-
-    // Build recipe map: menuItemId -> array of BOM lines (with kind + channel)
-    const recipeMap = new Map<
-      string,
-      Array<{
-        productId: string;
-        quantityUsed: number;
-        isPackaging: boolean;
-        serviceMode: "ALL" | "DINE_IN" | "TAKEAWAY";
-      }>
-    >();
-    for (const mi of menuIngredients) {
-      const existing = recipeMap.get(mi.menuId) || [];
-      existing.push({
-        productId: mi.productId,
-        quantityUsed: Number(mi.quantityUsed),
-        isPackaging: isPackaging(mi.product),
-        serviceMode: mi.serviceMode,
-      });
-      recipeMap.set(mi.menuId, existing);
-    }
-
-    // Build menu info map
-    const menuInfoMap = new Map<
-      string,
-      { name: string; category: string | null }
-    >();
-    for (const mi of menuIngredients) {
-      if (!menuInfoMap.has(mi.menuId)) {
-        menuInfoMap.set(mi.menuId, {
-          name: mi.menu.name,
-          category: mi.menu.category,
-        });
-      }
-    }
-
-    // 4. Get outlets for filter + name lookup
-    const outlets = await prisma.outlet.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    });
+    const [sales, outlets, costMap, rules] = await Promise.all([
+      fetchSoldLines({ outletIds: outletId ? [outletId] : undefined, from, to }),
+      prisma.outlet.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+      loadCatalogCostMap(),
+      loadPackagingRules(),
+    ]);
     const outletNameMap = new Map(outlets.map((o) => [o.id, o.name]));
 
-    // 5. Aggregate sales by menuId + outletId
-    const salesAgg = new Map<
-      string,
-      {
-        menuId: string;
-        outletId: string;
-        outletName: string;
-        qtySold: number;
-        revenue: number;
-      }
-    >();
-
-    for (const sale of sales) {
-      if (!sale.menuId) continue; // skip sales without a linked menu
-      const key = `${sale.menuId}_${sale.outletId}`;
-      const existing = salesAgg.get(key);
-      if (existing) {
-        existing.qtySold += Number(sale.quantity);
-        existing.revenue += Number(sale.grossAmount);
-      } else {
-        salesAgg.set(key, {
-          menuId: sale.menuId,
-          outletId: sale.outletId,
-          outletName: outletNameMap.get(sale.outletId) || "Unknown",
-          qtySold: Number(sale.quantity),
-          revenue: Number(sale.grossAmount),
-        });
-      }
+    const soldMenuIds = [...new Set(sales.map((s) => s.menuId).filter((m): m is string => !!m))];
+    const [menus, recipeRows] = await Promise.all([
+      soldMenuIds.length
+        ? prisma.menu.findMany({ where: { id: { in: soldMenuIds } }, select: { id: true, name: true, category: true } })
+        : Promise.resolve([]),
+      soldMenuIds.length
+        ? prisma.menuIngredient.findMany({
+            where: { menuId: { in: soldMenuIds } },
+            select: { menuId: true, productId: true, quantityUsed: true, serviceMode: true, modifier: true, replacesProductId: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const menuById = new Map(menus.map((m) => [m.id, m]));
+    const recipeMap = new Map<string, RecipeLine[]>();
+    for (const r of recipeRows) {
+      const arr = recipeMap.get(r.menuId) ?? [];
+      arr.push({ productId: r.productId, quantityUsed: Number(r.quantityUsed), serviceMode: r.serviceMode, modifier: r.modifier, replacesProductId: r.replacesProductId });
+      recipeMap.set(r.menuId, arr);
     }
 
-    // 6. Calculate COGS for each aggregated item
-    const items: Array<{
-      menuName: string;
-      category: string | null;
-      qtySold: number;
-      revenue: number;
-      expectedCogs: number;
-      ingredientCogs: number;
-      packagingCogs: number;
-      margin: number;
-      marginPercent: number;
-      outletId: string;
-      outletName: string;
-    }> = [];
+    // Aggregate per menu × outlet.
+    type Agg = { menuId: string; outletId: string; qtySold: number; revenue: number; ingredientCogs: number; packagingCogs: number };
+    const agg = new Map<string, Agg>();
+    let unmappedQty = 0;
+    let unmappedRevenue = 0;
+    const menusWithoutRecipe = new Set<string>();
+    for (const s of sales) {
+      if (!s.menuId) { unmappedQty += s.qty; unmappedRevenue += s.revenue; continue; }
+      const menu = menuById.get(s.menuId);
+      if (!menu) continue;
+      const recipe = recipeMap.get(s.menuId);
+      if (!recipe) menusWithoutRecipe.add(menu.name);
+      const key = `${s.menuId}_${s.outletId}`;
+      const a = agg.get(key) ?? { menuId: s.menuId, outletId: s.outletId, qtySold: 0, revenue: 0, ingredientCogs: 0, packagingCogs: 0 };
+      a.qtySold += s.qty;
+      a.revenue += s.revenue;
+      if (recipe) a.ingredientCogs += costOf(expandIngredientsForLine(s, recipe), costMap);
+      a.packagingCogs += costOf(expandPackagingForLine(s, menu, rules), costMap);
+      agg.set(key, a);
+    }
+    // Carrier bags etc. are per ORDER, so they sit outside the per-item rows.
+    const perOrderPackagingCogs = round2(costOf(expandPerOrderPackaging(sales, menuById, rules), costMap));
 
-    let totalRevenue = 0;
-    let totalCogs = 0;
-    let totalPackagingCogs = 0;
-
-    // Channel weight for a line: ALL bills every sale; TAKEAWAY / DINE_IN are
-    // blended by the assumed takeaway share (no per-sale channel in StoreHub).
-    const channelWeight = (mode: "ALL" | "DINE_IN" | "TAKEAWAY") =>
-      mode === "TAKEAWAY"
-        ? DEFAULT_TAKEAWAY_RATIO
-        : mode === "DINE_IN"
-          ? 1 - DEFAULT_TAKEAWAY_RATIO
-          : 1;
-
-    for (const agg of salesAgg.values()) {
-      const recipe = recipeMap.get(agg.menuId);
-      const menuInfo = menuInfoMap.get(agg.menuId);
-
-      // Cost per unit, split into ingredient vs packaging
-      let ingredientPerUnit = 0;
-      let packagingPerUnit = 0;
-      if (recipe) {
-        for (const ing of recipe) {
-          const costPerBaseUnit = priceMap.get(ing.productId) || 0;
-          const lineCost = ing.quantityUsed * costPerBaseUnit * channelWeight(ing.serviceMode);
-          if (ing.isPackaging) packagingPerUnit += lineCost;
-          else ingredientPerUnit += lineCost;
-        }
-      }
-
-      const ingredientCogs = Math.round(ingredientPerUnit * agg.qtySold * 100) / 100;
-      const packagingCogs = Math.round(packagingPerUnit * agg.qtySold * 100) / 100;
-      const expectedCogs = Math.round((ingredientCogs + packagingCogs) * 100) / 100;
-      const revenue = Math.round(agg.revenue * 100) / 100;
-      const margin = Math.round((revenue - expectedCogs) * 100) / 100;
-      const marginPercent =
-        revenue > 0 ? Math.round((margin / revenue) * 100 * 100) / 100 : 0;
-
-      totalRevenue += revenue;
-      totalCogs += expectedCogs;
-      totalPackagingCogs += packagingCogs;
-
-      items.push({
-        menuName: menuInfo?.name || "Unknown Item",
-        category: menuInfo?.category || null,
-        qtySold: agg.qtySold,
+    const items = [...agg.values()].map((a) => {
+      const menu = menuById.get(a.menuId)!;
+      const ingredientCogs = round2(a.ingredientCogs);
+      const packagingCogs = round2(a.packagingCogs);
+      const expectedCogs = round2(ingredientCogs + packagingCogs);
+      const revenue = round2(a.revenue);
+      const margin = round2(revenue - expectedCogs);
+      return {
+        menuName: menu.name,
+        category: menu.category,
+        qtySold: round2(a.qtySold),
         revenue,
         expectedCogs,
         ingredientCogs,
         packagingCogs,
         margin,
-        marginPercent,
-        outletId: agg.outletId,
-        outletName: agg.outletName,
-      });
-    }
-
-    // Sort by expectedCogs descending
+        marginPercent: revenue > 0 ? round2((margin / revenue) * 100) : 0,
+        outletId: a.outletId,
+        outletName: outletNameMap.get(a.outletId) ?? "Unknown",
+      };
+    });
     items.sort((a, b) => b.expectedCogs - a.expectedCogs);
 
-    totalRevenue = Math.round(totalRevenue * 100) / 100;
-    totalCogs = Math.round(totalCogs * 100) / 100;
-    totalPackagingCogs = Math.round(totalPackagingCogs * 100) / 100;
-    const totalIngredientCogs = Math.round((totalCogs - totalPackagingCogs) * 100) / 100;
-    const grossMargin = Math.round((totalRevenue - totalCogs) * 100) / 100;
-    const grossMarginPercent =
-      totalRevenue > 0
-        ? Math.round((grossMargin / totalRevenue) * 100 * 100) / 100
-        : 0;
+    const totalRevenue = round2(items.reduce((s, i) => s + i.revenue, 0) + unmappedRevenue);
+    const totalIngredientCogs = round2(items.reduce((s, i) => s + i.ingredientCogs, 0));
+    const totalPackagingCogs = round2(items.reduce((s, i) => s + i.packagingCogs, 0) + perOrderPackagingCogs);
+    const totalCogs = round2(totalIngredientCogs + totalPackagingCogs);
+    const grossMargin = round2(totalRevenue - totalCogs);
 
     return NextResponse.json({
       summary: {
@@ -255,18 +122,22 @@ export async function GET(req: NextRequest) {
         totalCogs,
         totalIngredientCogs,
         totalPackagingCogs,
+        perOrderPackagingCogs,
         grossMargin,
-        grossMarginPercent,
+        grossMarginPercent: totalRevenue > 0 ? round2((grossMargin / totalRevenue) * 100) : 0,
         menuItemCount: items.length,
+        // Data-quality signals: revenue we could not cost (no menu match) and
+        // menus sold without any recipe (their ingredient cost is invisible).
+        unmappedQty: round2(unmappedQty),
+        unmappedRevenue: round2(unmappedRevenue),
+        menusWithoutRecipe: [...menusWithoutRecipe].sort(),
+        salesSource: "pos_native+customer_app",
       },
       outlets,
       items,
     });
   } catch (error) {
     console.error("COGS report error:", error);
-    return NextResponse.json(
-      { error: "Failed to generate COGS report" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to generate COGS report" }, { status: 500 });
   }
 }

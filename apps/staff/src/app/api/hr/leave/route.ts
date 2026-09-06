@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 // anon client reads zero rows (screen shows empty). Access stays scoped by the
 // getSession gate + the per-user filters below.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
-import { leaveDays, getMYTToday } from "@/lib/hr/constants";
+import { leaveDays, getMYTToday, LEAVE_TYPES } from "@/lib/hr/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +52,67 @@ export async function GET() {
     balances,
     requests: requestsRes.data || [],
   });
+}
+
+// PATCH: withdraw my own leave request while it is still undecided.
+// Body: { id, action: "cancel" }. Approved leave can't be self-cancelled — the
+// days are already banked, so that goes through a manager (backoffice Cancel).
+export async function PATCH(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = (await req.json().catch(() => ({}))) as { id?: string; action?: string };
+  if (!body.id || body.action !== "cancel") {
+    return NextResponse.json({ error: "id and action=cancel required" }, { status: 400 });
+  }
+
+  const { data: existing } = await supabase
+    .from("hr_leave_requests")
+    .select("user_id, status, leave_type, total_days, start_date")
+    .eq("id", body.id)
+    .maybeSingle();
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (existing.user_id !== session.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!["pending", "ai_escalated"].includes(existing.status)) {
+    return NextResponse.json(
+      {
+        error: ["approved", "ai_approved"].includes(existing.status)
+          ? "This leave is already approved. Ask your manager to cancel it."
+          : "Only a pending request can be withdrawn.",
+      },
+      { status: 400 },
+    );
+  }
+
+  // Compare-and-set so a manager deciding at the same moment can't both win.
+  const { data: rows, error } = await supabase
+    .from("hr_leave_requests")
+    .update({ status: "cancelled", rejection_reason: "Withdrawn by staff", updated_at: new Date().toISOString() })
+    .eq("id", body.id)
+    .eq("status", existing.status)
+    .select("id");
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!rows || rows.length === 0) {
+    return NextResponse.json({ error: "This request was just decided by your manager — refresh to see it." }, { status: 409 });
+  }
+
+  // Release the hold taken at submit time (same start-year row).
+  const balanceYear = Number(String(existing.start_date).slice(0, 4));
+  const { data: bal } = await supabase
+    .from("hr_leave_balances")
+    .select("id, pending_days")
+    .eq("user_id", session.id)
+    .eq("year", balanceYear)
+    .eq("leave_type", existing.leave_type)
+    .maybeSingle();
+  if (bal) {
+    await supabase
+      .from("hr_leave_balances")
+      .update({ pending_days: Math.max(0, Number(bal.pending_days) - Number(existing.total_days)) })
+      .eq("id", bal.id);
+  }
+
+  return NextResponse.json({ success: true });
 }
 
 // POST: submit a leave request (AI processes inline)
@@ -107,11 +168,34 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Date sanity — end must be on or after start. Without this guard the
-  // AI leave manager will happily auto-approve bogus ranges and decrement
-  // the user's balance.
+  // Date sanity — real ISO dates, end on or after start. A malformed date
+  // used to pass the lexical compare, make the day count NaN (which passed
+  // both bounds checks), upload the MC and THEN fail the insert.
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  if (!ISO_DATE.test(String(start_date)) || !ISO_DATE.test(String(end_date))) {
+    return NextResponse.json({ error: "Dates must be YYYY-MM-DD" }, { status: 400 });
+  }
+  if (!(leave_type in LEAVE_TYPES)) {
+    return NextResponse.json({ error: `Unknown leave type: ${String(leave_type)}` }, { status: 400 });
+  }
   if (end_date < start_date) {
     return NextResponse.json({ error: "End date must be on or after start date" }, { status: 400 });
+  }
+  // One request per date range. A double-tap or a retry after a timeout
+  // created two identical requests and held the balance twice.
+  const { data: clash } = await supabase
+    .from("hr_leave_requests")
+    .select("id, start_date, end_date, status")
+    .eq("user_id", session.id)
+    .in("status", ["pending", "ai_escalated", "ai_approved", "approved"])
+    .lte("start_date", end_date)
+    .gte("end_date", start_date)
+    .limit(1);
+  if (clash && clash.length > 0) {
+    return NextResponse.json(
+      { error: `You already have a ${clash[0].status.replace("_", " ")} leave request covering ${clash[0].start_date} to ${clash[0].end_date}.`, reason: "overlap" },
+      { status: 409 },
+    );
   }
 
   // Recompute total_days server-side instead of trusting the client value.

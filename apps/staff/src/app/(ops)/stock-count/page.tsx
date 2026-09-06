@@ -446,14 +446,34 @@ export default function StockCheckPage() {
     })[0];
   }, []);
 
+  // The unit a fresh count of this product opens in. Piece-based products
+  // default to LOOSE PIECES (packageId null → factor 1): bread only had a
+  // "10pcs Loaf" (×10) line, staff keyed piece numbers into it, and every
+  // bread count landed 10× inflated — Aug 2026's fake "3-6× bread usage"
+  // finding. Staff physically count pieces; the pack options stay one tap
+  // away in the selector for stock that really is in sealed packs.
+  const getDefaultUnit = useCallback(
+    (product: Product): { id: string | null; label: string } => {
+      if (product.packages.length === 0 || product.baseUom === "pcs") {
+        return { id: null, label: product.baseUom };
+      }
+      const pkg = getDefaultPkg(product)!;
+      return { id: pkg.id, label: pkg.label || pkg.name };
+    },
+    [getDefaultPkg],
+  );
+
+  // packageId semantics: a string = that package's units; null = loose base
+  // units (explicitly chosen, factor 1); undefined = not counted yet, show
+  // the default unit.
   const getUomLabel = useCallback((product: Product, packageId?: string | null) => {
     if (packageId) {
       const pkg = product.packages.find((p) => p.id === packageId);
       if (pkg) return pkg.label || pkg.name;
     }
-    const pkg = getDefaultPkg(product);
-    return pkg ? (pkg.label || pkg.name) : product.baseUom;
-  }, [getDefaultPkg]);
+    if (packageId === null) return product.baseUom;
+    return getDefaultUnit(product).label;
+  }, [getDefaultUnit]);
 
   const totalItems = groupedData.reduce((acc, g) => acc + g.items.length, 0);
   const countedItems = groupedData.reduce((acc, g) => acc + g.items.filter((i) => counts[i.id] != null).length, 0);
@@ -476,9 +496,10 @@ export default function StockCheckPage() {
   // ── Keypad ──
   const openKeypad = (product: Product) => {
     const existing = counts[product.id];
-    const defaultPkg = getDefaultPkg(product);
     setKeypadItem(product);
-    setKeypadPkgId(existing?.packageId || defaultPkg?.id || null);
+    // An existing count keeps its unit as-is — including an explicit null
+    // (loose base units), which `|| default` would silently override.
+    setKeypadPkgId(existing ? existing.packageId : getDefaultUnit(product).id);
     setKeypadValue(existing ? String(existing.qty) : "");
   };
 
@@ -1262,30 +1283,30 @@ export default function StockCheckPage() {
               </button>
             </div>
 
-            {/* Package selector — taller pills + bigger text so it's obvious
+            {/* Unit selector — taller pills + bigger text so it's obvious
                 this is tappable. Critical control for unit-confusion: staff
-                should never miss that a smaller package option exists. */}
-            {keypadItem.packages.length > 1 && (
+                should never miss that a smaller unit exists. Whenever any
+                package multiplies (cf ≠ 1) a "Loose <base>" option is offered
+                too — bread only had a ×10 pack line, staff keyed pieces into
+                it, and every bread count came out 10× inflated. */}
+            {keypadItem.packages.some((p) => p.conversion !== 1) && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {keypadItem.packages.map((pkg) => (
+                {[{ id: null as string | null, label: `Loose ${keypadItem.baseUom}` },
+                  ...keypadItem.packages.map((pkg) => ({ id: pkg.id as string | null, label: pkg.label || pkg.name })),
+                ].map((opt) => (
                   <button
-                    key={pkg.id}
-                    onClick={() => setKeypadPkgId(pkg.id)}
+                    key={opt.id ?? "loose-base"}
+                    onClick={() => setKeypadPkgId(opt.id)}
                     className={`shrink-0 rounded-full border-2 px-4 py-2 text-sm font-semibold transition-colors active:scale-95 ${
-                      keypadPkgId === pkg.id
+                      keypadPkgId === opt.id
                         ? "border-terracotta bg-terracotta/10 text-terracotta-dark"
                         : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
                     }`}
                   >
-                    {pkg.label || pkg.name}
+                    {opt.label}
                   </button>
                 ))}
               </div>
-            )}
-            {keypadItem.packages.length === 1 && (
-              <p className="mt-2 text-sm text-gray-500">
-                Count in: <span className="font-semibold text-gray-700">{keypadItem.packages[0].label || keypadItem.packages[0].name}</span>
-              </p>
             )}
           </div>
 
@@ -1306,16 +1327,17 @@ export default function StockCheckPage() {
               {(() => {
                 const typed = parseFloat(keypadValue);
                 if (!keypadValue || isNaN(typed) || typed <= 0) return null;
+                // null = loose base units, factor 1 — no preview needed.
                 const pkg = keypadPkgId
                   ? keypadItem.packages.find((p) => p.id === keypadPkgId)
-                  : getDefaultPkg(keypadItem);
+                  : null;
                 const cf = pkg?.conversion || 1;
                 if (cf <= 1) return null;
                 const total = typed * cf;
                 return (
-                  <p className="mt-3 text-xs text-amber-700">
-                    = <span className="font-semibold">{total.toLocaleString()}</span> {keypadItem.baseUom}
-                    <span className="ml-1 text-amber-500/70">({typed} × {cf.toLocaleString()})</span>
+                  <p className="mt-3 text-sm font-medium text-amber-700">
+                    = <span className="font-bold">{total.toLocaleString()}</span> {keypadItem.baseUom}
+                    <span className="ml-1 font-normal text-amber-500/80">({typed} × {cf.toLocaleString()})</span>
                   </p>
                 );
               })()}

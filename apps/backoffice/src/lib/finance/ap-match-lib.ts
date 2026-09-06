@@ -99,3 +99,62 @@ export function subsetSumIdx(cents: number[], target: number, maxSize = 8): numb
   };
   return dfs(0, target);
 }
+
+// A "number" that is really a DATE must never confirm an invoice. Ad-hoc staff
+// claims are numbered by week ("LALA CCT WEEK 24082026", "CLEANING CCT WEEK
+// 24082026") and ordinary bank narration quotes dates too ("DR/CARD SALES M/N
+// 2612988 DATED 24082026") — replaying 120 days of production, that collision
+// pointed eight card-terminal fee lines (RM0.67-3.23) at a RM61.30 cleaning
+// claim. Any 6- or 8-digit run that parses as a plausible calendar date in
+// either DD-MM-Y or Y-MM-DD order disqualifies the whole number as a reference.
+// Rejecting a genuine number that merely looks like a date only costs a signal;
+// accepting a date costs a wrong match.
+export function isDateLikeNumber(raw: string | null | undefined): boolean {
+  const ok = (y: number, m: number, d: number) => y >= 2020 && y <= 2035 && m >= 1 && m <= 12 && d >= 1 && d <= 31;
+  for (const run of (raw ?? "").match(/\d{6,8}/g) ?? []) {
+    if (run.length === 8) {
+      if (ok(+run.slice(4), +run.slice(2, 4), +run.slice(0, 2))) return true; // DDMMYYYY
+      if (ok(+run.slice(0, 4), +run.slice(4, 6), +run.slice(6))) return true; // YYYYMMDD
+    } else if (run.length === 6) {
+      if (ok(2000 + +run.slice(4), +run.slice(2, 4), +run.slice(0, 2))) return true; // DDMMYY
+      if (ok(2000 + +run.slice(0, 2), +run.slice(2, 4), +run.slice(4))) return true; // YYMMDD
+    }
+  }
+  return false;
+}
+
+// ── Split payments (one invoice, several bank lines) ─────────────────────────
+// Deposit-then-balance suppliers (Collective Project: "IV-02159 Depo" RM281.50
+// then "IV-02159 Bal" RM2,533.50) and instalment payers settle ONE invoice with
+// several transfers, so no single line ever equals the invoice amount and the
+// single-line pass can't see it. Given the candidate legs already filtered to
+// this invoice's identity (invoice no quoted → ref, payee name → named), pick
+// the legs that settle the remaining balance, or — failing that — the
+// ref-confirmed legs that form a PARTIAL payment (deposit paid, balance still
+// outstanding). Partial picks never use name-only legs: any small transfer to
+// the supplier would qualify, which is exactly the loose match we refuse.
+export type SplitLegCandidate = { cents: number; ref: boolean; named: boolean };
+export type SplitPick = { idx: number[]; settles: boolean };
+
+export function pickSplitLegs(legs: SplitLegCandidate[], targetCents: number, maxLegs = 4): SplitPick | null {
+  if (targetCents <= 2 || legs.length === 0) return null;
+  const tryPool = (pool: number[]): number[] | null => {
+    if (pool.length === 0) return null;
+    // a single leg equal to the remaining balance (the "Bal" leg after a
+    // manually recorded deposit) is the commonest case
+    const single = pool.find((i) => Math.abs(legs[i].cents - targetCents) <= 2);
+    if (single !== undefined) return [single];
+    const sub = subsetSumIdx(pool.map((i) => legs[i].cents), targetCents, maxLegs);
+    return sub ? sub.map((j) => pool[j]) : null;
+  };
+  const refIdx = legs.map((l, i) => (l.ref ? i : -1)).filter((i) => i >= 0);
+  const allIdx = legs.map((l, i) => (l.ref || l.named ? i : -1)).filter((i) => i >= 0);
+  const full = tryPool(refIdx) ?? tryPool(allIdx);
+  if (full) return { idx: full, settles: true };
+  // Partial: every ref-confirmed leg, only when together they stay UNDER the
+  // balance (over would mean a stray leg or a different invoice).
+  if (refIdx.length === 0 || refIdx.length > maxLegs) return null;
+  const sum = refIdx.reduce((s, i) => s + legs[i].cents, 0);
+  if (sum <= 0 || sum >= targetCents - 2) return null;
+  return { idx: refIdx, settles: false };
+}

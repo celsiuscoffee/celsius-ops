@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
-import { resolveVisibleUserIds } from "@/lib/hr/scope";
+import { resolveVisibleUserIds, getAccessibleOutletIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +66,20 @@ export async function PATCH(
   }
 
   if (action === "dismiss") {
+    // MANAGER: only penalties at outlets they run. `apply` was scoped by the
+    // attributed users; `dismiss` had no check at all, so a manager holding a
+    // penalty id (the staff app hands them out) could clear another outlet's.
+    if (session.role === "MANAGER") {
+      const { data: row } = await hrSupabaseAdmin
+        .from("hr_review_penalty")
+        .select("outlet_id")
+        .eq("id", id)
+        .maybeSingle();
+      const allowed = await getAccessibleOutletIds(session);
+      if (!row || !allowed || !row.outlet_id || !allowed.includes(row.outlet_id as string)) {
+        return NextResponse.json({ error: "Forbidden — not one of your outlets" }, { status: 403 });
+      }
+    }
     const { data, error } = await hrSupabaseAdmin
       .from("hr_review_penalty")
       .update({

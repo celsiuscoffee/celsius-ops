@@ -120,7 +120,7 @@ type AIReorderItem = {
   productId: string; productName: string; sku: string; baseUom: string;
   currentQty: number; parLevel: number; reorderPoint: number; avgDailyUsage: number;
   orderQty: number; unitPrice: number; totalPrice: number;
-  productPackageId: string | null; packageName: string | null; daysUntilStockout: number;
+  productPackageId: string | null; packageName: string | null; daysUntilStockout: number | null;
 };
 type AIPORecommendation = {
   type: "purchase_order"; outletId: string; outletName: string; outletCode: string;

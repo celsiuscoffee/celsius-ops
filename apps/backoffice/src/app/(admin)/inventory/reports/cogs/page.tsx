@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { ReportTable, type ReportColumn } from "@/components/reports/report-table";
 import {
   ArrowLeft,
   Loader2,
   DollarSign,
   TrendingUp,
-  Search,
   ShoppingCart,
   Percent,
 } from "lucide-react";
@@ -58,7 +58,6 @@ function getDefaultDateRange() {
 export default function CogsReportPage() {
   const defaults = getDefaultDateRange();
   const [outletId, setOutletId] = useState("");
-  const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState(defaults.from);
   const [toDate, setToDate] = useState(defaults.to);
 
@@ -71,42 +70,6 @@ export default function CogsReportPage() {
   }, [outletId, fromDate, toDate]);
 
   const { data, error, isLoading: loading } = useFetch<CogsData>(url);
-
-  // React Compiler can't preserve this manual useMemo (optional-chained
-  // dep) and skips the component — a perf note, not a correctness issue.
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  const filteredItems = useMemo(() => {
-    if (!data?.items) return [];
-    if (!search.trim()) return data.items;
-    const q = search.toLowerCase();
-    return data.items.filter(
-      (item) =>
-        item.menuName.toLowerCase().includes(q) ||
-        (item.category && item.category.toLowerCase().includes(q))
-    );
-  }, [data?.items, search]);
-
-  function getMarginBadge(marginPercent: number) {
-    if (marginPercent >= 70) {
-      return (
-        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-          {marginPercent.toFixed(1)}%
-        </Badge>
-      );
-    }
-    if (marginPercent >= 50) {
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
-          {marginPercent.toFixed(1)}%
-        </Badge>
-      );
-    }
-    return (
-      <Badge className="bg-red-100 text-red-800 hover:bg-red-100">
-        {marginPercent.toFixed(1)}%
-      </Badge>
-    );
-  }
 
   return (
     <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-6">
@@ -209,20 +172,6 @@ export default function CogsReportPage() {
             className="w-[160px]"
           />
         </div>
-        <div className="flex-1 min-w-[200px]">
-          <label className="text-xs font-medium text-gray-500 mb-1 block">
-            Search
-          </label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              placeholder="Search menu item..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        </div>
       </div>
 
       {/* Loading / Error */}
@@ -241,91 +190,55 @@ export default function CogsReportPage() {
 
       {/* Table */}
       {!loading && data && (
-        <div className="bg-white border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-gray-50">
-                  <th className="text-left p-3 font-medium text-gray-600">
-                    Menu Item
-                  </th>
-                  <th className="text-left p-3 font-medium text-gray-600">
-                    Category
-                  </th>
-                  <th className="text-right p-3 font-medium text-gray-600">
-                    Qty Sold
-                  </th>
-                  <th className="text-right p-3 font-medium text-gray-600">
-                    Revenue (RM)
-                  </th>
-                  <th className="text-right p-3 font-medium text-gray-600">
-                    COGS (RM)
-                  </th>
-                  <th className="text-right p-3 font-medium text-gray-600">
-                    Margin (RM)
-                  </th>
-                  <th className="text-right p-3 font-medium text-gray-600">
-                    Margin %
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredItems.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="text-center py-10 text-gray-400"
-                    >
-                      No items found
-                    </td>
-                  </tr>
-                ) : (
-                  filteredItems.map((item, i) => (
-                    <tr
-                      key={`${item.menuName}-${item.outletId}-${i}`}
-                      className="border-b last:border-b-0 hover:bg-gray-50 transition"
-                    >
-                      <td className="p-3">
-                        <div className="font-medium">{item.menuName}</div>
-                        <div className="text-xs text-gray-400">
-                          {item.outletName}
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        {item.category ? (
-                          <Badge variant="outline">{item.category}</Badge>
-                        ) : (
-                          <span className="text-gray-300">-</span>
-                        )}
-                      </td>
-                      <td className="p-3 text-right tabular-nums">
-                        {item.qtySold}
-                      </td>
-                      <td className="p-3 text-right tabular-nums">
-                        {formatCurrency(item.revenue)}
-                      </td>
-                      <td className="p-3 text-right tabular-nums">
-                        {formatCurrency(item.expectedCogs)}
-                      </td>
-                      <td className="p-3 text-right tabular-nums">
-                        {formatCurrency(item.margin)}
-                      </td>
-                      <td className="p-3 text-right">
-                        {getMarginBadge(item.marginPercent)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          {filteredItems.length > 0 && (
-            <div className="border-t px-4 py-3 text-xs text-gray-500">
-              Showing {filteredItems.length} of {data.items.length} {data.items.length === 1 ? 'item' : 'items'}
-            </div>
-          )}
-        </div>
+        <ReportTable<CogsItem>
+          rows={data.items}
+          rowKey={(it, i) => `${it.menuName}-${it.outletId}-${i}`}
+          csvFilename="cogs"
+          emptyMessage="No items found."
+          searchPlaceholder="Search menu item, category or outlet…"
+          searchText={(it) => `${it.menuName} ${it.category ?? ""} ${it.outletName}`}
+          initialSort={{ key: "revenue", dir: "desc" }}
+          minWidth={880}
+          facets={[
+            { key: "outlet", label: "Outlets", value: (it) => it.outletName },
+            { key: "category", label: "Categories", value: (it) => it.category },
+          ]}
+          toggles={[
+            { key: "thin", label: "Margin under 50%", predicate: (it) => it.marginPercent < 50 },
+            { key: "loss", label: "Losing money", predicate: (it) => it.margin < 0 },
+          ]}
+          columns={cogsColumns}
+        />
       )}
     </div>
   );
 }
+
+function getMarginBadge(marginPercent: number) {
+  const tone =
+    marginPercent >= 70 ? "bg-green-100 text-green-800 hover:bg-green-100"
+    : marginPercent >= 50 ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
+    : "bg-red-100 text-red-800 hover:bg-red-100";
+  return <Badge className={tone}>{marginPercent.toFixed(1)}%</Badge>;
+}
+
+const cogsColumns: ReportColumn<CogsItem>[] = [
+  {
+    key: "menuName", header: "Menu Item", sortValue: (it) => it.menuName, csv: (it) => it.menuName,
+    render: (it) => (
+      <>
+        <div className="font-medium">{it.menuName}</div>
+        <div className="text-xs text-gray-400">{it.outletName}</div>
+      </>
+    ),
+  },
+  {
+    key: "category", header: "Category", sortValue: (it) => it.category,
+    render: (it) => it.category ? <Badge variant="outline">{it.category}</Badge> : <span className="text-gray-300">-</span>,
+  },
+  { key: "qtySold", header: "Qty Sold", align: "right", sortValue: (it) => it.qtySold, render: (it) => <span className="tabular-nums">{it.qtySold}</span> },
+  { key: "revenue", header: "Revenue (RM)", align: "right", sortValue: (it) => it.revenue, render: (it) => <span className="tabular-nums">{formatCurrency(it.revenue)}</span> },
+  { key: "expectedCogs", header: "COGS (RM)", align: "right", sortValue: (it) => it.expectedCogs, render: (it) => <span className="tabular-nums">{formatCurrency(it.expectedCogs)}</span> },
+  { key: "margin", header: "Margin (RM)", align: "right", sortValue: (it) => it.margin, render: (it) => <span className="tabular-nums">{formatCurrency(it.margin)}</span> },
+  { key: "marginPercent", header: "Margin %", align: "right", sortValue: (it) => it.marginPercent, render: (it) => getMarginBadge(it.marginPercent) },
+];

@@ -62,10 +62,37 @@ export type ApMultiMatch = {
   tier: MatchTier;
   reasons: string[];
 };
+// One invoice settled by SEVERAL bank lines — deposit + balance ("IV-02159
+// Depo" / "IV-02159 Bal") or instalments. `settles` = the legs (plus anything
+// already paid/linked) reach the invoice amount; otherwise it's a PARTIAL:
+// the deposit has been paid and the balance is still outstanding.
+export type ApSplitLeg = {
+  bankLineId: string;
+  bankDesc: string;
+  bankDate: string;
+  amount: number;
+  refConfirmed: boolean; // invoice number quoted in the description
+  named: boolean;        // payee name / alias in the description
+};
+export type ApSplitMatch = {
+  invoiceId: string;
+  invoiceNumber: string | null;
+  payee: string;
+  amount: number;          // full invoice amount
+  previouslyPaid: number;  // already linked lines or recorded amountPaid
+  legsTotal: number;
+  settles: boolean;
+  issueDate: string;
+  legs: ApSplitLeg[];
+  tier: MatchTier;
+  reasons: string[];
+  linkOnly: boolean;       // invoice PAID via another route — link the legs only
+};
 export type ApMatchResult = {
   auto: ApMatch[];
   review: ApMatch[];
   multi: ApMultiMatch[];
+  split: ApSplitMatch[];
   unmatchedInvoices: { invoiceId: string; invoiceNumber: string | null; payee: string; amount: number; issueDate: string }[];
   unmatchedOutflows: { bankLineId: string; desc: string; date: string; amount: number; category: string | null; expenseMonth: string | null }[];
   doublePayments: ApMatch[];
@@ -91,7 +118,7 @@ function nameInDesc(nameTokens: string[], descLower: string): boolean {
   return hits >= 2 || (hits === 1 && nameTokens.some((t) => t.length >= 5 && descLower.includes(t)));
 }
 
-import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc, invoiceSig, descNamesForeignInvoice } from "./ap-match-lib";
+import { digitRuns, invoiceRefInDesc, subsetSumIdx, aliasPhrasesFor, aliasInDesc, invoiceSig, descNamesForeignInvoice, pickSplitLegs, isDateLikeNumber } from "./ap-match-lib";
 export { digitRuns, invoiceRefInDesc, subsetSumIdx } from "./ap-match-lib";
 
 export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promise<ApMatchResult> {
@@ -115,17 +142,23 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
       where: { issueDate: { gte: since }, status: { not: "DRAFT" } },
       select: {
         id: true, invoiceNumber: true, amount: true, amountPaid: true, status: true,
-        issueDate: true, outletId: true,
+        issueDate: true, outletId: true, depositAmount: true,
         vendorName: true, vendorBankAccountName: true,
         supplier: { select: { name: true } },
       },
     }),
     prisma.bankStatementLine.findMany({
       where: { apInvoiceId: { not: null } },
-      select: { apInvoiceId: true },
+      select: { apInvoiceId: true, amount: true },
     }),
   ]);
   const linkedInvoiceIds = new Set(linkedRows.map((r) => r.apInvoiceId as string));
+  // Money already linked per invoice — a split pass must only chase the REST.
+  const linkedSum = new Map<string, number>();
+  for (const r of linkedRows) {
+    const k = r.apInvoiceId as string;
+    linkedSum.set(k, (linkedSum.get(k) ?? 0) + Number(r.amount));
+  }
   // Open invoices claim lines first; paid-but-unlinked settle for what's left.
   const invoices = [
     ...invoicesRaw.filter((i) => i.status !== "PAID"),
@@ -313,6 +346,107 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
     }
   }
 
+  // ── Split-payment pass ─────────────────────────────────────────────────────
+  // One invoice, several transfers: deposit-then-balance suppliers (Collective
+  // Project pays 10% "Depo" then 90% "Bal", both legs quoting the invoice no)
+  // and instalments. Neither leg equals the invoice, so the passes above never
+  // see them and the legs rot in OTHER_OUTFLOW while the register says PAID.
+  // Runs LAST, on leftovers only: for each still-unmatched invoice, collect the
+  // unused lines that carry its identity (invoice no quoted, or payee name),
+  // then pick the legs that settle the remaining balance — or the ref-confirmed
+  // legs that form a partial (deposit paid, balance outstanding).
+  const split: ApSplitMatch[] = [];
+  // Per-line text work once, not once per invoice × line.
+  const lineMeta = new Map<string, { descLower: string; runs: string[] }>();
+  for (const l of lines) {
+    const descLower = (l.description ?? "").toLowerCase();
+    lineMeta.set(l.id, { descLower, runs: digitRuns(descLower) });
+  }
+  for (const inv of invoices) {
+    if (matchedInvoiceIds.has(inv.id)) continue;
+    const amt = round2(Number(inv.amount));
+    const linkOnly = inv.status === "PAID";
+    // Open invoice: remaining = amount − whatever is already linked or recorded.
+    // Paid-unlinked: nothing is linked by definition, chase the whole amount.
+    const previouslyPaid = linkOnly ? 0 : round2(Math.max(linkedSum.get(inv.id) ?? 0, Number(inv.amountPaid ?? 0)));
+    const remaining = round2(amt - previouslyPaid);
+    if (remaining <= 0.01) continue;
+    const payee = inv.supplier?.name ?? inv.vendorName ?? inv.vendorBankAccountName ?? "(unknown payee)";
+    const nm = [...new Set([...tokens(inv.supplier?.name), ...tokens(inv.vendorName), ...tokens(inv.vendorBankAccountName)])];
+    const aliases = aliasPhrasesFor([inv.supplier?.name, inv.vendorName, inv.vendorBankAccountName]);
+    const issue = inv.issueDate.getTime();
+    // The invoice number may only CONFIRM a leg when it is distinctive: at
+    // least 5 digits (the same bar knownSigs uses) and not a date in disguise.
+    const sigTrusted = invoiceSig(inv.invoiceNumber).length >= 5 && !isDateLikeNumber(inv.invoiceNumber);
+
+    const cands: { line: (typeof lines)[number]; ref: boolean; named: boolean }[] = [];
+    for (const l of lines) {
+      if (usedBankLineIds.has(l.id)) continue;
+      const lAmt = Number(l.amount);
+      if (lAmt > remaining + 0.01) continue; // a leg can't exceed what's owed
+      // deposits are paid at order time — often BEFORE the invoice is issued
+      if (l.txnDate.getTime() < issue - 30 * DAY || l.txnDate.getTime() > issue + 90 * DAY) continue;
+      const { descLower, runs } = lineMeta.get(l.id)!;
+      const ref = sigTrusted && invoiceRefInDesc(inv.invoiceNumber, runs);
+      if (!ref && descNamesForeignInvoice(descLower, knownSigs, inv.invoiceNumber)) continue;
+      // EVERY leg must carry the payee's identity. A split is assembled from
+      // several ordinary-looking transfers, so the invoice number alone is too
+      // weak a thread to hang them on — see isDateLikeNumber. The number then
+      // confirms WHICH invoice the named transfer belongs to.
+      const named = nameInDesc(nm, descLower) || aliasInDesc(aliases, descLower);
+      if (!named) continue;
+      cands.push({ line: l, ref, named });
+      if (cands.length >= 12) break; // bounded: enough for any deposit/instalment plan
+    }
+    if (cands.length === 0) continue;
+
+    const pick = pickSplitLegs(
+      cands.map((c) => ({ cents: Math.round(Number(c.line.amount) * 100), ref: c.ref, named: c.named })),
+      Math.round(remaining * 100),
+    );
+    if (!pick) continue;
+    const legs: ApSplitLeg[] = pick.idx.map((i) => ({
+      bankLineId: cands[i].line.id,
+      bankDesc: (cands[i].line.description ?? "").replace(/\s+/g, " ").slice(0, 60),
+      bankDate: ymd(cands[i].line.txnDate),
+      amount: round2(Number(cands[i].line.amount)),
+      refConfirmed: cands[i].ref,
+      named: cands[i].named,
+    }));
+    const legsTotal = round2(legs.reduce((s, l) => s + l.amount, 0));
+    const refs = legs.filter((l) => l.refConfirmed).length;
+    const allNamed = legs.every((l) => l.named || l.refConfirmed);
+    const depositAmt = inv.depositAmount != null ? round2(Number(inv.depositAmount)) : null;
+    const isDepositLeg = !pick.settles && legs.length === 1 && depositAmt != null && Math.abs(legsTotal - depositAmt) <= 0.01;
+    // AUTO: a full settlement whose legs the bank itself confirms (every leg
+    // quotes the invoice no, or all-but-one do alongside a name hit, or the
+    // single balance leg carries the payee name — same bar as the single pass);
+    // or a partial that is exactly the invoice's recorded deposit, ref-quoted.
+    let tier: MatchTier = "review";
+    if (pick.settles) {
+      if (refs === legs.length) tier = "auto";
+      else if (allNamed && (legs.length === 1 || (refs >= legs.length - 1 && refs >= 1))) tier = "auto";
+    } else if (isDepositLeg && refs === legs.length) {
+      tier = "auto";
+    }
+    const reasons = [
+      pick.settles
+        ? `${legs.length} leg${legs.length === 1 ? "" : "s"}${previouslyPaid ? ` + RM${previouslyPaid.toFixed(2)} already paid` : ""} = invoice`
+        : isDepositLeg
+          ? `deposit leg = recorded deposit RM${depositAmt!.toFixed(2)}; balance RM${round2(remaining - legsTotal).toFixed(2)} outstanding`
+          : `partial: bank shows RM${round2(previouslyPaid + legsTotal).toFixed(2)} of RM${amt.toFixed(2)}`,
+      ...(refs ? [`${refs}/${legs.length} invoice nos in description`] : []),
+      ...(allNamed ? ["payee name in description"] : []),
+      ...(linkOnly ? [pick.settles ? "invoice already paid via another route — link-only" : "invoice marked PAID but bank shows only part of it — deposit-only?"] : []),
+    ];
+    split.push({
+      invoiceId: inv.id, invoiceNumber: inv.invoiceNumber, payee, amount: amt, previouslyPaid, legsTotal,
+      settles: pick.settles, issueDate: ymd(inv.issueDate), legs, tier, reasons, linkOnly,
+    });
+    for (const l of legs) usedBankLineIds.add(l.bankLineId);
+    matchedInvoiceIds.add(inv.id);
+  }
+
   // Unmatched outflows = catch-all/uncategorized DR lines with no invoice match
   // (the real "needs review" cash-out the user asked to see).
   const unmatchedOutflows = lines
@@ -326,11 +460,13 @@ export async function proposeApMatches(opts: { sinceDays?: number } = {}): Promi
   const rejected = await fetchMatchRejections();
   const keep = (m: ApMatch) => !rejected.has(`${m.bankLineId}|${m.invoiceId}`);
   const keepMulti = (m: ApMultiMatch) => m.invoiceIds.every((inv) => !rejected.has(`${m.bankLineId}|${inv}`));
+  const keepSplit = (m: ApSplitMatch) => m.legs.every((l) => !rejected.has(`${l.bankLineId}|${m.invoiceId}`));
 
   return {
     auto: auto.filter(keep),
     review: review.filter(keep),
     multi: multi.filter(keepMulti),
+    split: split.filter(keepSplit),
     unmatchedInvoices: unmatchedInvoices.filter((i) => !matchedInvoiceIds.has(i.invoiceId)),
     unmatchedOutflows, doublePayments,
   };
@@ -433,6 +569,78 @@ export async function writeMultiMatch(m: ApMultiMatch): Promise<void> {
   });
 }
 
+// Rules verifier for a split proposal — the same bar as verifyMatch: auto
+// tier, every leg identity-confirmed in the bank narration, and the legs must
+// either settle the invoice or be exactly its recorded deposit.
+export function verifySplitMatch(m: ApSplitMatch): { ok: boolean; reason?: string } {
+  if (m.tier !== "auto") return { ok: false, reason: "not auto-tier" };
+  if (m.legs.length === 0) return { ok: false, reason: "no legs" };
+  if (!m.legs.every((l) => l.refConfirmed || l.named)) return { ok: false, reason: "a leg carries neither payee name nor invoice no" };
+  if (!m.settles && !m.legs.every((l) => l.refConfirmed)) return { ok: false, reason: "partial payment without invoice no on every leg" };
+  return { ok: true };
+}
+
+export const SPLIT_PAID_VIA = "bank-ap-match-split";
+
+// Apply a split: link every leg to the invoice, then move the invoice's
+// payment state by the legs' total — PAID when the balance is cleared,
+// DEPOSIT_PAID / PARTIALLY_PAID when it isn't (amountPaid = running total, the
+// same semantics the invoices/[id] route keeps). Link-only when the invoice
+// was already PAID via another route. Idempotent per leg + transactional.
+export async function writeSplitMatch(m: ApSplitMatch): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const legs = await tx.bankStatementLine.findMany({
+      where: { id: { in: m.legs.map((l) => l.bankLineId) } },
+      select: { id: true, amount: true, txnDate: true, apInvoiceId: true, category: true },
+    });
+    const fresh = legs.filter((l) => l.apInvoiceId === null);
+    if (fresh.length === 0) return; // every leg already linked — idempotent
+    if (legs.some((l) => l.apInvoiceId && l.apInvoiceId !== m.invoiceId)) return; // a leg belongs to another invoice
+    const inv = await tx.invoice.findUnique({
+      where: { id: m.invoiceId },
+      select: { status: true, amount: true, amountPaid: true, depositAmount: true },
+    });
+    if (!inv) return;
+    if (m.linkOnly ? inv.status !== "PAID" : inv.status === "PAID") return;
+    const alreadyLinked = await tx.bankStatementLine.aggregate({ where: { apInvoiceId: m.invoiceId }, _sum: { amount: true } });
+
+    for (const l of fresh) {
+      await tx.bankStatementLine.update({
+        where: { id: l.id },
+        data: {
+          apInvoiceId: m.invoiceId, apMatchedAt: new Date(), classifiedBy: "ap-match",
+          ...(l.category === null || l.category === "OTHER_OUTFLOW" ? { category: "RAW_MATERIALS" as CashCategory } : {}),
+        },
+      });
+    }
+    if (m.linkOnly) return;
+
+    const amount = Number(inv.amount);
+    const base = Math.max(Number(alreadyLinked._sum.amount ?? 0), Number(inv.amountPaid ?? 0));
+    const freshTotal = fresh.reduce((s, l) => s + Number(l.amount), 0);
+    const paid = round2(Math.min(amount, base + freshTotal));
+    const latest = fresh.map((l) => l.txnDate).sort((a, b) => b.getTime() - a.getTime())[0];
+    if (paid >= amount - 0.01) {
+      await tx.invoice.update({
+        where: { id: m.invoiceId },
+        data: { amountPaid: amount, status: "PAID", paidAt: latest, paidVia: SPLIT_PAID_VIA },
+      });
+    } else {
+      const depositAmt = inv.depositAmount != null ? Number(inv.depositAmount) : null;
+      const isDeposit = depositAmt != null && Math.abs(paid - depositAmt) <= 0.01;
+      await tx.invoice.update({
+        where: { id: m.invoiceId },
+        data: {
+          amountPaid: paid,
+          status: isDeposit ? "DEPOSIT_PAID" : "PARTIALLY_PAID",
+          paidVia: SPLIT_PAID_VIA,
+          ...(isDeposit ? { depositPaidAt: latest } : {}),
+        },
+      });
+    }
+  });
+}
+
 // markOpenPaid gates whether this run may MARK AN OPEN INVOICE PAID from the
 // bank statement. Default FALSE: the Telegram proof-of-payment flow is the
 // primary payer, so the routine (6-hourly) run only RECONCILES — it applies
@@ -445,7 +653,7 @@ export async function applyApMatches(
 ): Promise<ApplyResult> {
   const commit = opts.commit ?? false;
   const markOpenPaid = opts.markOpenPaid ?? false;
-  const { auto, multi } = await proposeApMatches({ sinceDays: opts.sinceDays });
+  const { auto, multi, split } = await proposeApMatches({ sinceDays: opts.sinceDays });
   const skipped: ApplyResult["skipped"] = [];
   let applied = 0;
   for (const m of auto) {
@@ -469,6 +677,19 @@ export async function applyApMatches(
       continue;
     }
     if (commit) await writeMultiMatch(m);
+    applied++;
+  }
+  for (const m of split) {
+    // Link-only splits (invoice PAID on the register, legs unlinked) reconcile
+    // on every run like single link-only matches; anything that moves an open
+    // invoice's payment state waits for the EOM recon unless enabled.
+    if (!m.linkOnly && !markOpenPaid) {
+      skipped.push({ payee: m.payee, amount: m.legsTotal, reason: "split payment on open invoice — held for POP / EOM bank reconciliation" });
+      continue;
+    }
+    const v = verifySplitMatch(m);
+    if (!v.ok) { skipped.push({ payee: m.payee, amount: m.legsTotal, reason: `split: ${v.reason!}` }); continue; }
+    if (commit) await writeSplitMatch(m);
     applied++;
   }
   return { committed: commit, applied, skipped };

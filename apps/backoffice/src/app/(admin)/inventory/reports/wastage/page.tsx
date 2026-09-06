@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Trash2, DollarSign, Search, AlertTriangle, Package } from "lucide-react";
+import { ArrowLeft, Loader2, Trash2, DollarSign, AlertTriangle, Package } from "lucide-react";
+import { ReportTable, type ReportColumn } from "@/components/reports/report-table";
 
 type Outlet = { id: string; name: string };
 
@@ -57,8 +57,6 @@ const TYPE_COLORS: Record<string, string> = {
   USED_NOT_RECORDED: "bg-gray-100 text-gray-700 border-gray-200",
 };
 
-const ALL_TYPES = ["WASTAGE", "EXPIRED", "BREAKAGE", "SPILLAGE", "THEFT", "USED_NOT_RECORDED"];
-
 function fmt(n: number) {
   return n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -79,8 +77,6 @@ export default function WastageReportPage() {
   const [outletId, setOutletId] = useState("");
   const [from, setFrom] = useState(toInputDate(thirtyDaysAgo));
   const [to, setTo] = useState(toInputDate(now));
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
   const [tab, setTab] = useState<"product" | "detail">("product");
 
   const params = new URLSearchParams();
@@ -92,24 +88,6 @@ export default function WastageReportPage() {
   const { data, isLoading } = useFetch<WastageData>(url);
 
   // Filter items
-  const filteredItems = (data?.items ?? []).filter((item) => {
-    if (typeFilter && item.type !== typeFilter) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return item.productName.toLowerCase().includes(q) || item.sku.toLowerCase().includes(q);
-    }
-    return true;
-  });
-
-  // Filter byProduct
-  const filteredProducts = (data?.byProduct ?? []).filter((p) => {
-    if (search) {
-      const q = search.toLowerCase();
-      return p.productName.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
-    }
-    return true;
-  });
-
   const avgCost =
     data && data.summary.adjustmentCount > 0
       ? data.summary.totalWasteCost / data.summary.adjustmentCount
@@ -186,38 +164,6 @@ export default function WastageReportPage() {
           value={to}
           onChange={(e) => setTo(e.target.value)}
         />
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input
-            placeholder="Search product..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-      </div>
-
-      {/* Type filter buttons */}
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          onClick={() => setTypeFilter("")}
-          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-            typeFilter === "" ? "border-gray-900 bg-gray-900 text-white" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-          }`}
-        >
-          All
-        </button>
-        {ALL_TYPES.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTypeFilter(typeFilter === t ? "" : t)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-              typeFilter === t ? "border-gray-900 bg-gray-900 text-white" : `border-gray-200 bg-white text-gray-600 hover:bg-gray-50`
-            }`}
-          >
-            {t.replace(/_/g, " ")}
-          </button>
-        ))}
       </div>
 
       {/* Tab toggle */}
@@ -249,89 +195,80 @@ export default function WastageReportPage() {
 
       {/* By Product table */}
       {data && tab === "product" && (
-        <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Product</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Total Waste Qty</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Total Cost</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Adjustments</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProducts.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400">
-                    No wastage records found
-                  </td>
-                </tr>
-              )}
-              {filteredProducts.map((p, idx) => (
-                <tr key={p.sku} className={`border-b border-gray-50 ${idx % 2 === 0 ? "" : "bg-gray-50/30"}`}>
-                  <td className="px-4 py-2.5">
-                    <p className="font-medium text-gray-900">{p.productName}</p>
-                    <code className="text-xs text-gray-400">{p.sku}</code>
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-gray-900">{fmt(p.totalQty)}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-red-600 font-medium">RM {fmt(p.totalCost)}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-gray-600">{p.count}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ReportTable<ByProduct>
+          rows={data.byProduct}
+          rowKey={(p) => p.sku}
+          csvFilename="wastage-by-product"
+          emptyMessage="No wastage records found."
+          searchPlaceholder="Search product or SKU…"
+          searchText={(p) => `${p.productName} ${p.sku}`}
+          initialSort={{ key: "totalCost", dir: "desc" }}
+          minWidth={640}
+          columns={wastageProductColumns}
+        />
       )}
 
       {/* Detail table */}
       {data && tab === "detail" && (
-        <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Date</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Product</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Type</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Qty</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Cost</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Reason</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Adjusted By</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredItems.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-400">
-                    No wastage records found
-                  </td>
-                </tr>
-              )}
-              {filteredItems.map((item, idx) => (
-                <tr key={item.id} className={`border-b border-gray-50 ${idx % 2 === 0 ? "" : "bg-gray-50/30"}`}>
-                  <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{formatDate(item.date)}</td>
-                  <td className="px-4 py-2.5 text-gray-600">{item.outletName}</td>
-                  <td className="px-4 py-2.5">
-                    <p className="font-medium text-gray-900">{item.productName}</p>
-                    <code className="text-xs text-gray-400">{item.sku}</code>
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Badge variant="outline" className={`text-xs ${TYPE_COLORS[item.type] ?? ""}`}>
-                      {item.type.replace(/_/g, " ")}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-gray-900">
-                    {fmt(item.quantity)} <span className="text-xs text-gray-400">{item.baseUom}</span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-red-600 font-medium">RM {fmt(item.cost)}</td>
-                  <td className="px-4 py-2.5 text-gray-500 text-xs max-w-[200px] truncate">{item.reason || "—"}</td>
-                  <td className="px-4 py-2.5 text-gray-600 text-xs">{item.adjustedBy}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ReportTable<WastageItem>
+          rows={data.items}
+          rowKey={(it) => it.id}
+          csvFilename="wastage-detail"
+          emptyMessage="No wastage records found."
+          searchPlaceholder="Search product, SKU, reason or staff…"
+          searchText={(it) => `${it.productName} ${it.sku} ${it.category} ${it.outletName} ${it.type} ${it.reason ?? ""} ${it.adjustedBy}`}
+          initialSort={{ key: "cost", dir: "desc" }}
+          minWidth={940}
+          facets={[
+            { key: "outlet", label: "Outlets", value: (it) => it.outletName },
+            { key: "type", label: "Types", value: (it) => it.type.replace(/_/g, " ") },
+            { key: "category", label: "Categories", value: (it) => it.category },
+            { key: "staff", label: "Staff", value: (it) => it.adjustedBy },
+          ]}
+          toggles={[{ key: "noReason", label: "No reason given", predicate: (it) => !it.reason }]}
+          columns={wastageDetailColumns}
+        />
       )}
     </div>
   );
 }
+
+const wastageProductColumns: ReportColumn<ByProduct>[] = [
+  {
+    key: "productName", header: "Product", sortValue: (p) => p.productName, csv: (p) => p.productName,
+    render: (p) => (
+      <>
+        <p className="font-medium text-gray-900">{p.productName}</p>
+        <code className="text-xs text-gray-400">{p.sku}</code>
+      </>
+    ),
+  },
+  { key: "totalQty", header: "Total Waste Qty", align: "right", sortValue: (p) => p.totalQty, render: (p) => <span className="font-mono text-gray-900">{fmt(p.totalQty)}</span> },
+  { key: "totalCost", header: "Total Cost", align: "right", sortValue: (p) => p.totalCost, render: (p) => <span className="font-mono font-medium text-red-600">RM {fmt(p.totalCost)}</span> },
+  { key: "count", header: "Adjustments", align: "right", sortValue: (p) => p.count, render: (p) => <span className="font-mono text-gray-600">{p.count}</span> },
+];
+
+const wastageDetailColumns: ReportColumn<WastageItem>[] = [
+  { key: "date", header: "Date", sortValue: (it) => it.date, csv: (it) => it.date, render: (it) => <span className="whitespace-nowrap text-gray-600">{formatDate(it.date)}</span> },
+  { key: "outletName", header: "Outlet", sortValue: (it) => it.outletName, render: (it) => <span className="text-gray-600">{it.outletName}</span> },
+  {
+    key: "productName", header: "Product", sortValue: (it) => it.productName, csv: (it) => it.productName,
+    render: (it) => (
+      <>
+        <p className="font-medium text-gray-900">{it.productName}</p>
+        <code className="text-xs text-gray-400">{it.sku}</code>
+      </>
+    ),
+  },
+  {
+    key: "type", header: "Type", sortValue: (it) => it.type,
+    render: (it) => <Badge variant="outline" className={`text-xs ${TYPE_COLORS[it.type] ?? ""}`}>{it.type.replace(/_/g, " ")}</Badge>,
+  },
+  {
+    key: "quantity", header: "Qty", align: "right", sortValue: (it) => it.quantity,
+    render: (it) => <span className="font-mono text-gray-900">{fmt(it.quantity)} <span className="text-xs text-gray-400">{it.baseUom}</span></span>,
+  },
+  { key: "cost", header: "Cost", align: "right", sortValue: (it) => it.cost, render: (it) => <span className="font-mono font-medium text-red-600">RM {fmt(it.cost)}</span> },
+  { key: "reason", header: "Reason", sortValue: (it) => it.reason, render: (it) => <span className="block max-w-[220px] truncate text-xs text-gray-500">{it.reason || "—"}</span> },
+  { key: "adjustedBy", header: "Adjusted By", sortValue: (it) => it.adjustedBy, render: (it) => <span className="text-xs text-gray-600">{it.adjustedBy}</span> },
+];

@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
       id: true, invoiceNumber: true, amount: true, status: true,
       outletId: true,
       claimBatchId: true, claimedById: true,
+      aiPrefilledAt: true,
       order: { select: { claimedById: true } },
     },
   });
@@ -115,10 +116,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const bad = invoices.filter((i) => !["PENDING", "INITIATED", "DRAFT"].includes(i.status));
+  // Only verified payables go into a transfer batch. DRAFT rows carry a
+  // provisional amount (nobody has approved the claim yet) and an AI-prefilled
+  // row that hasn't been confirmed may be reading the wrong number off the
+  // receipt — batching either pays an unverified figure.
+  const bad = invoices.filter((i) => !["PENDING", "INITIATED"].includes(i.status));
   if (bad.length > 0) {
     return NextResponse.json(
-      { error: `${bad.length} invoice(s) are already paid or in a non-batchable status` },
+      {
+        error: `${bad.length} invoice(s) are draft, already paid or in a non-batchable status — approve drafts before batching`,
+        code: "NON_BATCHABLE_STATUS",
+      },
+      { status: 409 },
+    );
+  }
+  const unverified = invoices.filter((i) => i.aiPrefilledAt != null);
+  if (unverified.length > 0) {
+    return NextResponse.json(
+      {
+        error: `${unverified.length} invoice(s) still carry unconfirmed AI-captured details — verify them before batching`,
+        code: "UNVERIFIED_CAPTURE",
+      },
       { status: 409 },
     );
   }

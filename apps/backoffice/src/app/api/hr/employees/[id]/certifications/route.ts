@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { resolveVisibleUserIds } from "@/lib/hr/scope";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,13 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
+  // MANAGER: subtree only — cert numbers and attachments are personal data.
+  if (session.role === "MANAGER") {
+    const visible = await resolveVisibleUserIds(session);
+    if (!(visible || []).includes(id)) {
+      return NextResponse.json({ error: "Forbidden — outside your subtree" }, { status: 403 });
+    }
+  }
 
   const { data, error } = await hrSupabaseAdmin
     .from("hr_certifications")

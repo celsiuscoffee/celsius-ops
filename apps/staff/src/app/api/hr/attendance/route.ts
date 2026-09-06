@@ -23,6 +23,9 @@ export async function GET(req: NextRequest) {
     .select("id, clock_in, clock_out, total_hours, regular_hours, overtime_hours, overtime_type, ai_status, ai_flags, final_status, outlet_id")
     .eq("user_id", session.id)
     .gte("clock_in", since.toISOString())
+    // Synthetic OT-approval rows (09:00, no hours) are not the person's
+    // clock-ins; they showed as a phantom day in the list and in daysWorked.
+    .neq("clock_in_method", "ot_approval")
     .order("clock_in", { ascending: false })
     .limit(100);
 
@@ -30,8 +33,9 @@ export async function GET(req: NextRequest) {
 
   // Aggregate stats for the period. OT rules:
   //   1. Must be approved (AI or manager) — pending/flagged/rejected don't count
-  //   2. Must be >= 1 hour — anything under an hour is ignored (grace threshold)
-  const OT_MIN_HOURS = 1;
+  //   2. Must be >= one 30-min bracket — matches payroll's OT_MIN_HOURS
+  //      (owner 2026-09-03: "pay the 0.5h"; was 1h)
+  const OT_MIN_HOURS = 0.5;
   const isApproved = (a: { ai_status: string | null; final_status: string | null }) =>
     a.ai_status === "approved" || a.final_status === "approved";
   const countableOT = (a: { overtime_hours: number | null }) => {

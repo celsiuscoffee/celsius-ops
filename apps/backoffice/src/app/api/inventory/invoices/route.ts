@@ -2,9 +2,10 @@ import { NextResponse, NextRequest } from "next/server";
 import type { Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
-import { detectCreationFlags } from "@/lib/inventory/flag-detector";
+import { detectCreationFlags, type InvoiceFlag } from "@/lib/inventory/flag-detector";
+import { assertNoDuplicateInvoice } from "@/lib/inventory/invoice-dedupe";
 import { mytTodayRange } from "@/lib/inventory/myt-today";
-import { mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
+import { isPlaceholderNumber, mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
 import { syncInvoiceOverdue } from "@/lib/inventory/sync-invoice-overdue";
 import { evaluateInvoiceTiming, dueDateIsBelievable } from "@celsius/db";
 
@@ -52,12 +53,19 @@ export async function GET(req: NextRequest) {
 
   // GRNI / "pending invoice" = goods received, supplier hasn't sent the
   // actual invoice yet. Created by the receivings POST side-effect with
-  // an auto-generated INV-NNNN number, no dueDate, status=PENDING, and
-  // linked to the PO. Once the user clicks "Attach Invoice" and fills in
-  // the supplier's real invoice number + dueDate, the row drops out of
-  // this bucket naturally.
+  // an auto-generated placeholder number (GRNI-<outlet>-NNNN today; INV-NNNN
+  // / TRF-NNNN historically — see lib/inventory/placeholder-number), no
+  // dueDate, status=PENDING, and linked to the PO. Once the user clicks
+  // "Attach Invoice" and fills in the supplier's real invoice number +
+  // dueDate, the row drops out of this bucket naturally. The SQL prefix set
+  // here must stay in step with isPlaceholderNumber(), which is what the
+  // per-row `isPendingInvoice` below uses.
   const pendingInvoiceWhere: Prisma.InvoiceWhereInput = {
-    invoiceNumber: { startsWith: "INV-" },
+    OR: [
+      { invoiceNumber: { startsWith: "GRNI-" } },
+      { invoiceNumber: { startsWith: "INV-" } },
+      { invoiceNumber: { startsWith: "TRF-" } },
+    ],
     dueDate: null,
     status: "PENDING",
     orderId: { not: null },
@@ -400,7 +408,7 @@ export async function GET(req: NextRequest) {
     // True when this is a GRNI placeholder — auto-created on receiving,
     // awaiting the supplier to send the actual invoice details.
     isPendingInvoice:
-      inv.invoiceNumber.startsWith("INV-") &&
+      isPlaceholderNumber(inv.invoiceNumber) &&
       inv.dueDate == null &&
       inv.status === "PENDING" &&
       inv.order != null &&
@@ -480,12 +488,36 @@ export async function POST(req: NextRequest) {
       depositAmount = Math.round((Number(amount) * effectivePercent / 100) * 100) / 100;
     }
 
-    const flagsAtCreation = await detectCreationFlags({
+    const flagsAtCreation: InvoiceFlag[] = await detectCreationFlags({
       orderId: orderId || null,
       supplierId: supplierId || null,
       amount: Number(amount ?? 0),
       issueDate: issueDate ? new Date(issueDate) : null,
     });
+
+    // Probable-duplicate guard (same number re-keyed, "12427"/"12427a", same
+    // supplier+amount within 14 days). 409 DUPLICATE_INVOICE unless the caller
+    // passes overrideDuplicate, in which case the match is recorded as a flag.
+    // A freshly minted placeholder number carries no information, so only the
+    // user-supplied number is compared.
+    const dedupe = await assertNoDuplicateInvoice(
+      {
+        supplierId,
+        invoiceNumber: invoiceNumber || null,
+        amount: Number(amount ?? 0),
+        issueDate: issueDate ? new Date(issueDate) : null,
+      },
+      { override: body.overrideDuplicate === true },
+    );
+    if (!dedupe.ok) return dedupe.response;
+    if (dedupe.match) {
+      flagsAtCreation.push({
+        code: "DUPLICATE_SUSPECT",
+        message: `Recorded despite matching ${dedupe.match.invoiceNumber} (${dedupe.match.status}, RM ${dedupe.match.amount.toFixed(2)}, ${dedupe.match.issueDate}) — ${dedupe.match.reason.replace(/_/g, " ")}.`,
+        detectedAt: new Date().toISOString(),
+        meta: { match: dedupe.match, overriddenById: caller.id },
+      });
+    }
 
     const invoice = await prisma.invoice.create({
       data: {

@@ -170,9 +170,6 @@ export default function EmployeesPage() {
         date_of_birth: newEmp.date_of_birth || null,
         gender: newEmp.gender || null,
         pin: wantsLogin ? (newEmp.pin || null) : null,
-        performance_allowance_amount: newEmp.performance_allowance_amount
-          ? parseFloat(newEmp.performance_allowance_amount)
-          : null,
       };
       const res = await fetch("/api/hr/employees/create", {
         method: "POST",
@@ -979,18 +976,10 @@ export default function EmployeesPage() {
                     className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
                 </label>
               </div>
-              {newEmp.employment_type === "full_time" && (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block">
-                    <span className="text-xs font-medium text-muted-foreground">Performance allowance (RM)</span>
-                    <input type="number" step="0.01" min={0}
-                      value={newEmp.performance_allowance_amount}
-                      onChange={(e) => setNewEmp({ ...newEmp, performance_allowance_amount: e.target.value })}
-                      className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-                      placeholder="Blank = global default" />
-                  </label>
-                </div>
-              )}
+              {/* No allowance field here on purpose: the old input wrote
+                  hr_employee_profiles.performance_allowance_amount, a column
+                  payroll never reads. New full-timers start on the scored
+                  RM200 pool; a flat amount is set on the profile afterwards. */}
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
                   <span className="text-xs font-medium text-muted-foreground">IC number</span>

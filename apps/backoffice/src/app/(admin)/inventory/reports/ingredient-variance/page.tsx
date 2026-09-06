@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Badge } from "@/components/ui/badge";
+import { ReportTable, type ReportColumn } from "@/components/reports/report-table";
 import Link from "next/link";
 import { ArrowLeft, Loader2, Scale, AlertTriangle, TrendingUp, TrendingDown, Info } from "lucide-react";
 
@@ -155,59 +156,78 @@ export default function IngredientVariancePage() {
 
       {/* Table */}
       {s && !insufficient && (
-        <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
-          <table className="w-full text-sm min-w-[820px]">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="px-4 py-3 text-left font-medium text-gray-500">Ingredient</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Expected</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Actual</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Variance</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Cost/Unit</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Variance RM</th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">%</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(data?.items ?? []).length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">No ingredient activity in this window.</td></tr>
-              )}
-              {(data?.items ?? []).map((it, idx) => (
-                <tr key={it.productId} className={`border-b border-gray-50 ${idx % 2 ? "bg-gray-50/30" : ""}`}>
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-medium text-gray-900">{it.productName}</span>
-                      {it.flags.includes("HIGH_VARIANCE") && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-                      {it.flags.includes("NO_COST") && <Badge variant="outline" className="text-[10px] text-gray-400">no cost</Badge>}
-                    </div>
-                    {it.category && <span className="text-xs text-gray-400">{it.category}</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-gray-700">{fmt(it.expectedQty)} <span className="text-xs text-gray-400">{it.baseUom}</span></td>
-                  <td className="px-4 py-2.5 text-right font-mono text-gray-700">{fmt(it.actualQty)} <span className="text-xs text-gray-400">{it.baseUom}</span></td>
-                  <td className="px-4 py-2.5 text-right font-mono">
-                    <span className={it.varianceQty > 0 ? "text-red-600" : it.varianceQty < 0 ? "text-blue-600" : "text-gray-400"}>
-                      {it.varianceQty > 0 ? "+" : ""}{fmt(it.varianceQty)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-gray-500">{it.costPerBase > 0 ? `RM ${fmt(it.costPerBase)}` : "—"}</td>
-                  <td className="px-4 py-2.5 text-right font-mono">
-                    {it.costPerBase > 0 ? (
-                      <span className={`font-medium ${it.varianceCost > 0 ? "text-red-600" : it.varianceCost < 0 ? "text-green-600" : "text-gray-400"}`}>
-                        {it.varianceCost > 0 ? <TrendingUp className="mr-0.5 inline h-3 w-3" /> : it.varianceCost < 0 ? <TrendingDown className="mr-0.5 inline h-3 w-3" /> : null}
-                        {it.varianceCost > 0 ? "+" : ""}RM {fmt(Math.abs(it.varianceCost))}
-                      </span>
-                    ) : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-4 py-2.5 text-right font-mono text-gray-500">{it.variancePercent !== null ? `${it.variancePercent}%` : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ReportTable<VarianceItem>
+          rows={data?.items ?? []}
+          rowKey={(it) => it.productId}
+          csvFilename={`usage-variance-${s.outletName.replace(/\s+/g, "-").toLowerCase()}`}
+          emptyMessage="No ingredient activity in this window."
+          searchPlaceholder="Search ingredient, SKU or category…"
+          searchText={(it) => `${it.productName} ${it.sku ?? ""} ${it.category ?? ""}`}
+          initialSort={{ key: "varianceCost", dir: "desc" }}
+          minWidth={880}
+          facets={[{ key: "category", label: "Categories", value: (it) => it.category }]}
+          toggles={[
+            { key: "high", label: "High variance", predicate: (it) => it.flags.includes("HIGH_VARIANCE") },
+            { key: "over", label: "Over-used", predicate: (it) => it.varianceQty > 0 },
+            { key: "costed", label: "Costed only", predicate: (it) => it.costPerBase > 0 },
+          ]}
+          columns={varianceColumns}
+        />
       )}
     </div>
   );
 }
+
+const varianceColumns: ReportColumn<VarianceItem>[] = [
+  {
+    key: "productName", header: "Ingredient", sortValue: (it) => it.productName,
+    csv: (it) => it.productName,
+    render: (it) => (
+      <>
+        <div className="flex items-center gap-1.5">
+          <span className="font-medium text-gray-900">{it.productName}</span>
+          {it.flags.includes("HIGH_VARIANCE") && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+          {it.flags.includes("NO_COST") && <Badge variant="outline" className="text-[10px] text-gray-400">no cost</Badge>}
+        </div>
+        {it.category && <span className="text-xs text-gray-400">{it.category}</span>}
+      </>
+    ),
+  },
+  {
+    key: "expectedQty", header: "Expected", align: "right", sortValue: (it) => it.expectedQty,
+    render: (it) => <span className="font-mono text-gray-700">{fmt(it.expectedQty)} <span className="text-xs text-gray-400">{it.baseUom}</span></span>,
+  },
+  {
+    key: "actualQty", header: "Actual", align: "right", sortValue: (it) => it.actualQty,
+    render: (it) => <span className="font-mono text-gray-700">{fmt(it.actualQty)} <span className="text-xs text-gray-400">{it.baseUom}</span></span>,
+  },
+  {
+    key: "varianceQty", header: "Variance", align: "right", sortValue: (it) => it.varianceQty,
+    render: (it) => (
+      <span className={`font-mono ${it.varianceQty > 0 ? "text-red-600" : it.varianceQty < 0 ? "text-blue-600" : "text-gray-400"}`}>
+        {it.varianceQty > 0 ? "+" : ""}{fmt(it.varianceQty)}
+      </span>
+    ),
+  },
+  {
+    key: "costPerBase", header: "Cost/Unit", align: "right", sortValue: (it) => (it.costPerBase > 0 ? it.costPerBase : null),
+    render: (it) => <span className="font-mono text-gray-500">{it.costPerBase > 0 ? `RM ${fmt(it.costPerBase)}` : "—"}</span>,
+  },
+  {
+    key: "varianceCost", header: "Variance RM", align: "right",
+    sortValue: (it) => (it.costPerBase > 0 ? it.varianceCost : null),
+    render: (it) => it.costPerBase > 0 ? (
+      <span className={`font-mono font-medium ${it.varianceCost > 0 ? "text-red-600" : it.varianceCost < 0 ? "text-green-600" : "text-gray-400"}`}>
+        {it.varianceCost > 0 ? <TrendingUp className="mr-0.5 inline h-3 w-3" /> : it.varianceCost < 0 ? <TrendingDown className="mr-0.5 inline h-3 w-3" /> : null}
+        {it.varianceCost > 0 ? "+" : ""}RM {fmt(Math.abs(it.varianceCost))}
+      </span>
+    ) : <span className="text-gray-300">—</span>,
+  },
+  {
+    key: "variancePercent", header: "%", align: "right", sortValue: (it) => it.variancePercent,
+    render: (it) => <span className="font-mono text-gray-500">{it.variancePercent !== null ? `${it.variancePercent}%` : "—"}</span>,
+  },
+];
 
 function Card({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "good" | "bad" | "warn" }) {
   const valueColor = tone === "bad" ? "text-red-600" : tone === "good" ? "text-green-600" : tone === "warn" ? "text-amber-600" : "text-gray-900";

@@ -2,6 +2,15 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { toBaseQty, buildVarianceRow, round2, type VarianceRow } from "@/lib/inventory/usage-variance";
+import type { RecipeLine } from "@celsius/db";
+import {
+  fetchSoldLines,
+  loadCatalogCostMap,
+  loadPackagingRules,
+  expandIngredientsForLine,
+  expandPackagingForLine,
+  expandPerOrderPackaging,
+} from "@/lib/inventory/report-sales";
 
 // GET /api/inventory/reports/ingredient-variance?outletId=&from=&to=
 //
@@ -18,10 +27,6 @@ import { toBaseQty, buildVarianceRow, round2, type VarianceRow } from "@/lib/inv
 const WASTE_TYPES = ["WASTAGE", "BREAKAGE", "EXPIRED", "SPILLAGE", "THEFT", "USED_NOT_RECORDED"] as const;
 const USABLE_COUNT_STATUS = ["SUBMITTED", "REVIEWED"] as const;
 const ACTIVE_TRANSFER_STATUS = ["PENDING_APPROVAL", "PENDING", "APPROVED", "IN_TRANSIT", "RECEIVED", "COMPLETED"] as const;
-const DEFAULT_TAKEAWAY_RATIO = 0.5;
-
-const channelWeight = (mode: "ALL" | "DINE_IN" | "TAKEAWAY") =>
-  mode === "TAKEAWAY" ? DEFAULT_TAKEAWAY_RATIO : mode === "DINE_IN" ? 1 - DEFAULT_TAKEAWAY_RATIO : 1;
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -76,23 +81,13 @@ export async function GET(req: NextRequest) {
   const end = closing.countDate;
   const windowFilter = { gt: start, lte: end };
 
-  // ── 2. Reference maps: package conversion + cheapest cost per base unit ──
-  const [packages, supplierProducts] = await Promise.all([
+  // ── 2. Reference maps: package conversion + the catalog BOM page's cost basis ──
+  const [packages, costMap, rules] = await Promise.all([
     prisma.productPackage.findMany({ select: { id: true, conversionFactor: true } }),
-    prisma.supplierProduct.findMany({
-      where: { isActive: true, price: { gt: 0 } },
-      select: { productId: true, price: true, productPackage: { select: { conversionFactor: true } } },
-    }),
+    loadCatalogCostMap(),
+    loadPackagingRules(),
   ]);
   const convByPackage = new Map(packages.map((p) => [p.id, Number(p.conversionFactor)]));
-  const costMap = new Map<string, number>();
-  for (const sp of supplierProducts) {
-    const conv = sp.productPackage ? Number(sp.productPackage.conversionFactor) : 0;
-    if (conv <= 0) continue;
-    const costPerBase = Number(sp.price) / conv;
-    const existing = costMap.get(sp.productId);
-    if (!existing || costPerBase < existing) costMap.set(sp.productId, costPerBase);
-  }
 
   // ── 3. Stock-movement terms (all normalised to base UOM) ──
   const addBase = (m: Map<string, number>, productId: string, qty: number) =>
@@ -127,10 +122,9 @@ export async function GET(req: NextRequest) {
       where: { outletId, adjustmentType: { in: WASTE_TYPES as unknown as ("WASTAGE")[] }, createdAt: windowFilter },
       select: { productId: true, quantity: true },
     }),
-    prisma.salesTransaction.findMany({
-      where: { outletId, menuId: { not: null }, transactedAt: windowFilter },
-      select: { menuId: true, quantity: true },
-    }),
+    // Live POS-native + customer-app sales (the old SalesTransaction feed died
+    // 2026-04-11), per line so modifiers and channel can scope the recipe.
+    fetchSoldLines({ outletIds: [outletId], from: start, to: end }),
   ]);
 
   const receiptsQty = new Map<string, number>();
@@ -147,39 +141,46 @@ export async function GET(req: NextRequest) {
   const wastageQty = new Map<string, number>();
   for (const w of wastage) addBase(wastageQty, w.productId, Number(w.quantity)); // already base
 
-  // ── 4. Expected usage = Σ(sales × BOM qty), reusing the COGS recipe approach ──
-  const salesByMenu = new Map<string, number>();
-  for (const s of sales) if (s.menuId) salesByMenu.set(s.menuId, (salesByMenu.get(s.menuId) ?? 0) + s.quantity);
-
-  const recipes = await prisma.menuIngredient.findMany({
-    where: salesByMenu.size ? { menuId: { in: [...salesByMenu.keys()] } } : { menuId: "__none__" },
-    select: {
-      menuId: true, productId: true, quantityUsed: true, uom: true, serviceMode: true,
-      menu: { select: { name: true } },
-      product: { select: { baseUom: true } },
-    },
-  });
-  const expectedQty = new Map<string, number>();
-  const menusWithBom = new Set<string>();
+  // ── 4. Expected usage = Σ over sold LINES of the recipe each line consumed ──
+  // Same expansion the consumption engine posts: Iced/Hot doses, oat-milk
+  // substitution and Extra Shot are read off each line's modifiers, and the
+  // line's channel gates dine-in/takeaway recipe rows and packaging rules.
+  const soldMenuIds = [...new Set(sales.map((s) => s.menuId).filter((m): m is string => !!m))];
+  const [recipes, soldMenus] = await Promise.all([
+    prisma.menuIngredient.findMany({
+      where: soldMenuIds.length ? { menuId: { in: soldMenuIds } } : { menuId: "__none__" },
+      select: {
+        menuId: true, productId: true, quantityUsed: true, uom: true, serviceMode: true, modifier: true, replacesProductId: true,
+        product: { select: { baseUom: true } },
+      },
+    }),
+    soldMenuIds.length
+      ? prisma.menu.findMany({ where: { id: { in: soldMenuIds } }, select: { id: true, name: true, category: true } })
+      : Promise.resolve([]),
+  ]);
+  const recipeMap = new Map<string, RecipeLine[]>();
   const uomMismatches: { productId: string; menuUom: string; baseUom: string }[] = [];
   for (const r of recipes) {
-    menusWithBom.add(r.menuId);
-    const sold = salesByMenu.get(r.menuId) ?? 0;
-    if (sold === 0) continue;
-    addBase(expectedQty, r.productId, sold * Number(r.quantityUsed) * channelWeight(r.serviceMode));
+    const arr = recipeMap.get(r.menuId) ?? [];
+    arr.push({ productId: r.productId, quantityUsed: Number(r.quantityUsed), serviceMode: r.serviceMode, modifier: r.modifier, replacesProductId: r.replacesProductId });
+    recipeMap.set(r.menuId, arr);
     if (r.product.baseUom && r.uom && r.uom.trim().toLowerCase() !== r.product.baseUom.trim().toLowerCase()) {
       uomMismatches.push({ productId: r.productId, menuUom: r.uom, baseUom: r.product.baseUom });
     }
   }
-  // Menus that sold but have no recipe → their ingredient usage is invisible.
-  const menusWithoutBom: string[] = [];
-  if (salesByMenu.size) {
-    const soldMenus = await prisma.menu.findMany({
-      where: { id: { in: [...salesByMenu.keys()] } },
-      select: { id: true, name: true },
-    });
-    for (const m of soldMenus) if (!menusWithBom.has(m.id)) menusWithoutBom.push(m.name);
+  const menuById = new Map(soldMenus.map((m) => [m.id, m]));
+  const expectedQty = new Map<string, number>();
+  for (const s of sales) {
+    if (!s.menuId) continue;
+    const menu = menuById.get(s.menuId);
+    if (!menu) continue;
+    const recipe = recipeMap.get(s.menuId);
+    if (recipe) for (const [pid, q] of expandIngredientsForLine(s, recipe)) addBase(expectedQty, pid, q);
+    for (const [pid, q] of expandPackagingForLine(s, menu, rules)) addBase(expectedQty, pid, q);
   }
+  for (const [pid, q] of expandPerOrderPackaging(sales, menuById, rules)) addBase(expectedQty, pid, q);
+  // Menus that sold but have no recipe → their ingredient usage is invisible.
+  const menusWithoutBom = soldMenus.filter((m) => !recipeMap.has(m.id)).map((m) => m.name).sort();
 
   // ── 5. Build per-product variance rows over the product universe ──
   const universe = new Set<string>([

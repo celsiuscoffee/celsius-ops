@@ -13,9 +13,12 @@
 //                           time; publish/notify flows handle announcement).
 //   published, today      → allowed (same-day coverage moves are ops reality;
 //                           the day's pay isn't settled until the log closes).
-//   published, past date  → BLOCKED, unless an OWNER/ADMIN passes an explicit
+//   published, past date  → BLOCKED, unless the caller holds the
+//                           `roster:retro_edit` capability (OWNER/ADMIN
+//                           implicitly, or an explicitly granted manager such
+//                           as the head of operations) AND passes an explicit
 //                           retro_reason. The override is activity-logged by
-//                           the caller. Managers cannot retro-edit at all.
+//                           the caller.
 
 import { getMYTToday } from "./constants";
 
@@ -32,11 +35,14 @@ export function classifyRosterEdit(
   return "published_past";
 }
 
+// `mayRetroEdit` is the resolved `roster:retro_edit` capability (see
+// lib/capabilities.ts) — kept as a plain boolean so this stays a pure,
+// directly testable policy function.
 export function retroEditRefusal(
-  role: string,
+  mayRetroEdit: boolean,
   retroReason: string | null | undefined,
 ): { allowed: true } | { allowed: false; status: number; error: string } {
-  if (!["OWNER", "ADMIN"].includes(role)) {
+  if (!mayRetroEdit) {
     return {
       allowed: false,
       status: 403,

@@ -175,7 +175,9 @@ export default function SuppliersPage() {
       const res = await fetch(`/api/inventory/suppliers/${selectedSupplier.id}/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId: product.productId, price }),
+        // Send the row's package: without it the API could not find the
+        // packaged row and created a phantom package-less duplicate instead.
+        body: JSON.stringify({ productId: product.productId, productPackageId: product.productPackageId, price }),
       });
       if (res.ok) {
         // Update local state

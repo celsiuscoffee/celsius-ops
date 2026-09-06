@@ -2,15 +2,17 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { processAttendance } from "@/lib/hr/agents/attendance-processor";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { checkCronAuth } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // POST: trigger the AI attendance processor
 export async function POST(req: Request) {
-  // Allow cron or authenticated admin
-  const cronSecret = req.headers.get("authorization")?.replace("Bearer ", "");
-  const isCron = cronSecret === process.env.CRON_SECRET;
+  // Allow cron or authenticated admin. Fail closed: with CRON_SECRET unset the
+  // old compare was `undefined === undefined`, so a request with no header at
+  // all counted as the cron.
+  const isCron = !!req.headers.get("authorization") && checkCronAuth(req.headers).ok;
 
   let userId: string | null = null;
   if (!isCron) {

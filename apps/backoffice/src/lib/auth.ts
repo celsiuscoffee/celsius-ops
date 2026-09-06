@@ -74,6 +74,32 @@ export async function createSession(user: SessionUser) {
   return token;
 }
 
+// Account state is re-checked against the database (cached per instance for
+// ACCOUNT_CHECK_TTL_MS) so a deactivation, demotion or role grant takes
+// effect within a minute instead of at cookie expiry seven days later. The
+// JWT still carries id/name/outlet; role and status come from the row.
+// (2026-09-03 QA: a resigned manager's cookie kept every HR read for a week.)
+const ACCOUNT_CHECK_TTL_MS = 60_000;
+type AccountState = { role: string; active: boolean; checkedAt: number };
+const accountCache = new Map<string, AccountState>();
+
+async function liveAccountState(userId: string): Promise<AccountState | null> {
+  const hit = accountCache.get(userId);
+  if (hit && Date.now() - hit.checkedAt < ACCOUNT_CHECK_TTL_MS) return hit;
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, status: true } });
+    if (!u) return null;
+    const state = { role: u.role, active: u.status === "ACTIVE", checkedAt: Date.now() };
+    accountCache.set(userId, state);
+    return state;
+  } catch {
+    // Database unreachable: fall back to the token rather than logging
+    // everyone out — the check is a tightening, not the only gate.
+    return hit ?? { role: "", active: true, checkedAt: 0 };
+  }
+}
+
 export async function getSession(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
@@ -81,7 +107,12 @@ export async function getSession(): Promise<SessionUser | null> {
 
   try {
     const { payload } = await jwtVerify(token, SECRET, { audience: AUDIENCE });
-    return payload as unknown as SessionUser;
+    const session = payload as unknown as SessionUser;
+    const live = await liveAccountState(session.id);
+    if (live === null) return null; // account deleted
+    if (!live.active) return null; // deactivated / resigned
+    if (live.role && live.role !== session.role) session.role = live.role; // demoted or promoted since login
+    return session;
   } catch {
     return null;
   }

@@ -325,7 +325,10 @@ export async function computeAllowancesForUser(
     .select("id, clock_in, clock_out, scheduled_start, scheduled_date, outlet_id, excused")
     .eq("user_id", userId)
     .gte("clock_in", monthStartIso)
-    .lte("clock_in", monthEndIso);
+    .lte("clock_in", monthEndIso)
+    // Synthetic OT-approval rows are pay carriers, not attendance: counting
+    // them as a clock-in hid a real no-show on a day with pre-approved OT.
+    .neq("clock_in_method", "ot_approval");
   const logs = (logsRaw || []) as AttendanceLog[];
 
   if (!eligible) {

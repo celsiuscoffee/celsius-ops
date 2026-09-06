@@ -6,6 +6,7 @@ import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { findCrossOutletOverlap } from "@/lib/hr/cross-outlet";
 import { classifyRosterEdit, retroEditRefusal } from "@/lib/hr/roster-guard";
 import { logActivity } from "@/lib/activity-log";
+import { can } from "@/lib/capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,28 @@ export async function POST(req: NextRequest) {
   const d = new Date(week_start + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + 6);
   const week_end = d.toISOString().slice(0, 10);
+
+  // The cell must belong to THIS week's schedule row: a shift dated outside
+  // it was costed by the labour gate in the wrong week and pushed with the
+  // wrong publish. Custom times must be real HH:MM with start before end,
+  // and 00:00 is reserved for the rest-day marker (every consumer treats a
+  // 00:00 start as "not a shift").
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  if (!ISO_DATE.test(String(shift_date)) || shift_date < week_start || shift_date > week_end) {
+    return NextResponse.json({ error: `shift_date must fall inside the week ${week_start} → ${week_end}` }, { status: 400 });
+  }
+  if (template_id === "custom" && custom) {
+    const HHMM = /^\d{2}:\d{2}$/;
+    if (!HHMM.test(String(custom.start_time)) || !HHMM.test(String(custom.end_time))) {
+      return NextResponse.json({ error: "Custom shift times must be HH:MM" }, { status: 400 });
+    }
+    if (custom.start_time === "00:00" && custom.end_time === "00:00") {
+      return NextResponse.json({ error: "00:00–00:00 is the rest-day marker — pick Rest Day instead" }, { status: 400 });
+    }
+    if (custom.start_time === custom.end_time) {
+      return NextResponse.json({ error: "A shift must end after it starts" }, { status: 400 });
+    }
+  }
 
   // Employment window: no shifts before join_date or after last day — the
   // grid may still show the row for a partial week, so the manual add is the
@@ -124,11 +147,13 @@ export async function POST(req: NextRequest) {
   // monthly rest days), and this route previously checked neither schedule
   // status nor date — a retroactive cell edit (or clear) on a published week
   // silently rewrote pay for hours already worked, the 2026-08-03 incident
-  // class. Past dates on published weeks now require an OWNER/ADMIN with an
-  // explicit retro_reason, and every published-week edit is activity-logged.
+  // class. Past dates on published weeks now require the `roster:retro_edit`
+  // capability (OWNER/ADMIN, or a manager explicitly granted it — the head of
+  // operations) plus an explicit retro_reason, and every published-week edit
+  // is activity-logged.
   const editClass = classifyRosterEdit(schedule.status, shift_date);
   if (editClass === "published_past") {
-    const verdict = retroEditRefusal(session.role, retro_reason);
+    const verdict = retroEditRefusal(await can(session, "roster:retro_edit"), retro_reason);
     if (!verdict.allowed) {
       return NextResponse.json({ error: verdict.error }, { status: verdict.status });
     }

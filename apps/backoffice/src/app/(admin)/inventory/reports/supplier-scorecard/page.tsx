@@ -1,16 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import Link from "next/link";
+import { ReportTable, type ReportColumn } from "@/components/reports/report-table";
 import {
   ArrowLeft,
   Loader2,
   Truck,
   Star,
-  Search,
   TrendingUp,
   TrendingDown,
   Clock,
@@ -44,8 +43,6 @@ type ScorecardData = {
   outlets: Array<{ id: string; name: string }>;
   suppliers: SupplierScore[];
 };
-
-type SortOption = "score" | "spend" | "name";
 
 function fmt(n: number) {
   return n.toLocaleString("en-MY", {
@@ -100,37 +97,12 @@ export default function SupplierScorecardPage() {
 
   const [from, setFrom] = useState(ninetyDaysAgo.toISOString().split("T")[0]);
   const [to, setTo] = useState(now.toISOString().split("T")[0]);
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<SortOption>("score");
   const [outletId, setOutletId] = useState("");
+  const [view, setView] = useState<"table" | "cards">("table");
 
   const url = `/api/inventory/reports/supplier-scorecard?from=${from}T00:00:00.000Z&to=${to}T23:59:59.999Z${outletId ? `&outletId=${outletId}` : ""}`;
 
   const { data, isLoading } = useFetch<ScorecardData>(url);
-
-  const filtered = useMemo(() => {
-    let list = data?.suppliers ?? [];
-
-    if (search) {
-      const q = search.toLowerCase();
-      list = list.filter((s) => s.name.toLowerCase().includes(q));
-    }
-
-    if (sortBy === "score") {
-      list = [...list].sort((a, b) => {
-        if (a.score === null && b.score === null) return 0;
-        if (a.score === null) return 1;
-        if (b.score === null) return -1;
-        return b.score - a.score;
-      });
-    } else if (sortBy === "spend") {
-      list = [...list].sort((a, b) => b.totalSpend - a.totalSpend);
-    } else if (sortBy === "name") {
-      list = [...list].sort((a, b) => a.name.localeCompare(b.name));
-    }
-
-    return list;
-  }, [data, search, sortBy]);
 
   return (
     <div className="p-3 sm:p-6">
@@ -232,24 +204,19 @@ export default function SupplierScorecardPage() {
             <option key={o.id} value={o.id}>{o.name}</option>
           ))}
         </select>
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input
-            placeholder="Search supplier..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+        <div className="ml-auto flex gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+          {(["table", "cards"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`rounded-md px-3 py-1 text-sm font-medium capitalize transition ${
+                view === v ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {v}
+            </button>
+          ))}
         </div>
-        <select
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as SortOption)}
-        >
-          <option value="score">Sort by Score</option>
-          <option value="spend">Sort by Spend</option>
-          <option value="name">Sort by Name</option>
-        </select>
       </div>
 
       {/* Loading */}
@@ -259,15 +226,36 @@ export default function SupplierScorecardPage() {
         </div>
       )}
 
+      {/* Table view — the analysis surface */}
+      {data && view === "table" && (
+        <ReportTable<SupplierScore>
+          rows={data.suppliers}
+          rowKey={(sp) => sp.id}
+          csvFilename="supplier-scorecard"
+          emptyMessage="No suppliers found."
+          searchPlaceholder="Search supplier…"
+          searchText={(sp) => sp.name}
+          initialSort={{ key: "score", dir: "desc" }}
+          minWidth={980}
+          toggles={[
+            { key: "short", label: "Short deliveries", predicate: (sp) => sp.shortDeliveries > 0 },
+            { key: "late", label: "On-time under 80%", predicate: (sp) => sp.onTimeRate !== null && sp.onTimeRate < 80 },
+            { key: "priceUp", label: "Prices rising", predicate: (sp) => sp.avgPriceChange > 0 },
+            { key: "scored", label: "Scored only", predicate: (sp) => sp.score !== null },
+          ]}
+          columns={scorecardColumns}
+        />
+      )}
+
       {/* Supplier cards */}
-      {data && (
+      {data && view === "cards" && (
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {filtered.length === 0 && (
+          {data.suppliers.length === 0 && (
             <div className="col-span-full rounded-xl border border-gray-200 bg-white px-4 py-12 text-center text-sm text-gray-400">
               No suppliers found
             </div>
           )}
-          {filtered.map((s) => (
+          {data.suppliers.map((s) => (
             <div
               key={s.id}
               className="rounded-xl border border-gray-200 bg-white p-5"
@@ -391,3 +379,48 @@ export default function SupplierScorecardPage() {
     </div>
   );
 }
+
+const pct = (v: number | null) => (v === null ? "—" : `${v}%`);
+
+const scorecardColumns: ReportColumn<SupplierScore>[] = [
+  { key: "name", header: "Supplier", sortValue: (sp) => sp.name, render: (sp) => <span className="font-medium text-gray-900">{sp.name}</span> },
+  { key: "score", header: "Score", align: "right", sortValue: (sp) => sp.score, render: (sp) => scoreBadge(sp.score) },
+  {
+    key: "totalOrders", header: "Orders", align: "right", sortValue: (sp) => sp.totalOrders,
+    csv: (sp) => sp.totalOrders,
+    render: (sp) => <span className="font-mono text-gray-900">{sp.totalOrders}<span className="text-xs text-gray-400"> / {sp.completedOrders} done</span></span>,
+  },
+  {
+    key: "onTimeRate", header: "On-time", align: "right", sortValue: (sp) => sp.onTimeRate,
+    render: (sp) => (
+      <span className={`font-mono ${sp.onTimeRate === null ? "text-gray-300" : sp.onTimeRate >= 80 ? "text-green-600" : sp.onTimeRate >= 60 ? "text-amber-600" : "text-red-600"}`}>
+        {pct(sp.onTimeRate)}
+      </span>
+    ),
+  },
+  {
+    key: "fulfillmentRate", header: "Fulfilment", align: "right", sortValue: (sp) => sp.fulfillmentRate,
+    render: (sp) => (
+      <span className={`font-mono ${sp.fulfillmentRate === null ? "text-gray-300" : sp.fulfillmentRate >= 80 ? "text-green-600" : sp.fulfillmentRate >= 60 ? "text-amber-600" : "text-red-600"}`}>
+        {pct(sp.fulfillmentRate)}
+      </span>
+    ),
+  },
+  {
+    key: "shortDeliveries", header: "Short", align: "right", sortValue: (sp) => sp.shortDeliveries,
+    render: (sp) => sp.shortDeliveries > 0
+      ? <span className="font-mono font-medium text-amber-600"><AlertTriangle className="mr-0.5 inline h-3 w-3" />{sp.shortDeliveries}</span>
+      : <span className="text-gray-300">—</span>,
+  },
+  {
+    key: "avgPriceChange", header: "Price change", align: "right", sortValue: (sp) => (sp.priceChanges > 0 ? sp.avgPriceChange : null),
+    render: (sp) => sp.priceChanges > 0 ? (
+      <span className={`font-mono ${sp.avgPriceChange > 0 ? "text-red-600" : sp.avgPriceChange < 0 ? "text-green-600" : "text-gray-400"}`}>
+        {sp.avgPriceChange > 0 ? "+" : ""}{fmt(sp.avgPriceChange)}%
+        <span className="text-xs text-gray-400"> ({sp.priceChanges})</span>
+      </span>
+    ) : <span className="text-gray-300">—</span>,
+  },
+  { key: "leadTimeDays", header: "Lead", align: "right", sortValue: (sp) => sp.leadTimeDays, render: (sp) => <span className="font-mono text-gray-600">{sp.leadTimeDays}d</span> },
+  { key: "totalSpend", header: "Total Spend", align: "right", sortValue: (sp) => sp.totalSpend, render: (sp) => <span className="font-mono font-medium text-gray-900">RM {fmt(sp.totalSpend)}</span> },
+];

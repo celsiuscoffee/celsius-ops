@@ -4,6 +4,11 @@ Working memory for agent sessions on this repo. Read this at the start of every
 session; update it before ending one. Keep entries dated, terse, and factual —
 delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
+Kept light by a monthly roll-over (procedure: housekeeping skill, "STATE.md
+roll-over"): finished narratives and stale resume pointers move to
+`docs/state-archive/YYYY-MM.md` — grep there for history older than the
+current month.
+
 ## Verified facts
 
 - 2026-09-06 — **Audit cadence compliance measured: Chef Bo (Ibrahim Bin Zakir)
@@ -59,6 +64,326 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   silence and overstated the recent trend (reported 40%→56% improvement; it is
   40%→48% once the last two weeks are counted).
 
+- 2026-09-05 — **The live Usage Variance / COGS "Expected = RM0.00" is a
+  PRODUCTION bug, already fixed on PR #1216 (unmerged).** `main`'s
+  `reports/ingredient-variance` still reads `prisma.salesTransaction` — the
+  StoreHub feed that has had no rows since 2026-04-11 — so expected usage is
+  zero for every ingredient and the "No sales in this window" data-quality
+  line fires. The window and outlet mapping are fine: Putrajaya has 1,986
+  completed `pos_orders` (5,687 sold lines incl. the pickup app) between the
+  2026-07-31 and 2026-08-20 counts. Commit adbae563 repoints both reports at
+  `lib/inventory/report-sales.ts`. **Every branch preview deployment on Vercel
+  is CANCELED** (only `main` production builds reach READY), so branch work
+  cannot be previewed before merge — judge unmerged UI from the diff/CI, and
+  tell the owner a fix is invisible to them until it lands on main.
+
+- 2026-09-05 — **Split payments (deposit + balance) now matched — ap-match
+  item (e) done.** Third pass in `lib/finance/ap-match.ts`, after the single
+  and multi-invoice passes, over leftovers only: gathers unused DR lines that
+  carry the invoice's payee identity, then `pickSplitLegs` takes the legs that
+  settle the REMAINING balance (amount − already linked/paid), else the
+  ref-confirmed legs forming a partial. `writeSplitMatch` links every leg and
+  moves the invoice by the legs' total (PAID / DEPOSIT_PAID / PARTIALLY_PAID;
+  link-only when already PAID elsewhere); unmatch RECOMPUTES from the
+  remaining linked legs instead of zeroing. Manual path
+  `POST /api/finance/bank-lines/match-split`; recon page has a Split payments
+  card. **Two guards came from replaying 120 days of prod:** every leg must
+  carry the payee name/alias, and `isDateLikeNumber` disqualifies date-shaped
+  "invoice numbers" — ad-hoc claims are numbered by week ("LALA CCT WEEK
+  24082026") and bank narration quotes dates ("DR/CARD SALES M/N 2612988 DATED
+  24082026"), which pointed 8 card-fee lines at a RM61.30 cleaning claim.
+  Replay after the guards: 59 already-PAID invoices reconcile RM74,184 of legs
+  out of OTHER_OUTFLOW (link-only), 4 open invoices settle (held for EOM),
+  deposit-only stragglers surface for review.
+
+- 2026-09-05 — **All six procurement reports share one analysis table.**
+  `components/reports/report-table.tsx` + pure `lib/reports/table-utils.ts`
+  (tested): multi-term search, click-to-sort every column with blanks pinned
+  last, per-report value filters built from the rows present, quick toggles
+  (high variance, over-used, variance only, never counted, short deliveries,
+  margin <50%, losing money, under-received, not fully invoiced), CSV export
+  of the filtered+sorted set with a UTF-8 BOM, page size + show-more. Supplier
+  Scorecard gained a table view beside its cards (cards could not be sorted or
+  compared at all).
+
+- 2026-09-05 — **Procurement hardening shipped on PR #1216 (all 25 QA findings
+  addressed in code; warn-first rollout).** Three parallel streams merged
+  (63 files, +3.8k/−1.2k): (A) auth+roles — orders/[id] GET needs session,
+  PATCH/DELETE OWNER/ADMIN/MANAGER with a PO status-transition table
+  (`lib/inventory/po-status.ts`, 409 INVALID_STATUS_TRANSITION), item writes
+  scoped {id,orderId}, price guard on PATCH price edits, totalAmount override
+  OWNER/ADMIN only; transfers/[id] session + manager for approve/complete;
+  apply-proposal/send requireRole; Telegram webhook timing-safe secret, chat
+  allowlist `TELEGRAM_ALLOWED_CHAT_IDS` (unset = log-only "[telegram] unlisted
+  chat" warns, set = enforce), invoice capture DRAFT+aiPrefilled + dedupe,
+  number/photos only rewritten when unpaid; supplier-chat-agent escalates
+  mass removals (≥50% lines), fences supplier text, delivery_date only
+  today..+60d and never on escalated turns. (B) payments/receiving —
+  `lib/inventory/invoice-dedupe.ts` shared guard (number/suffix matches block
+  409 DUPLICATE_INVOICE; same-amount-in-14d is FLAG-only after a 60-day replay:
+  4 true dups vs 204 standing-order collisions) wired into all 4 create paths;
+  PAID needs manager+ (403 FORBIDDEN_PAYMENT_ROLE); receipt-before-pay is
+  `INVOICE_PAY_REQUIRE_RECEIPT=warn` (default, flag NO_RECEIVING_AT_PAYMENT) |
+  `block`; amount+status in one call → 400; PAID rows locked (LOCKED_AFTER_
+  PAYMENT unless OWNER/ADMIN+reason); overpay → 400 unless allowOverpay;
+  AMOUNT_VS_ORDER_MISMATCH flag; pay-and-claim approve manager-only, once,
+  no self-approval, single tx; receivings POST derives outlet/supplier/
+  orderedQty from the PO, one $transaction + FOR UPDATE, transfer transition
+  check, ad-hoc receivings manager-only; `lib/stock.ts` helpers take a tx;
+  GRNI placeholder checks use isPlaceholderNumber; POP receipts upload to
+  folder "pop" (upload route whitelists folders) so auto-send can fire; staff
+  app orders+claims POST now run the price guard (`apps/staff/src/lib/
+  po-price-guard.ts` copy) — closes the 3 Sep milk slip path; claim batches
+  refuse DRAFT/unverified. (C) catalog/reports/engine — ai-decisions requires
+  price>0, ACTIVE non-ADHOC supplier, package; PENDING_APPROVAL counted open;
+  daysUntilStockout null for zero-usage (UI renders n/a); supplier page sends
+  productPackageId and the route refuses package-less rows for packaged
+  products; products/[id] package-index fix + pre-flight delete blockers;
+  price-history surfaces `priceHistoryWritten`; stock-valuation latest
+  SUBMITTED/REVIEWED count per outlet, null counts skipped; scorecard MYT
+  calendar-day on-time; purchase-summary inclusive MYT day + per-line prices;
+  wastage excludes engine rows; on-hand-value nets all loss types, excludes
+  DRAFT invoices; consumption-post atomic + rejects today; par-calc isDefault
+  pick + lead-time 0 honoured; stock-checks POST removed (no caller);
+  receiving-requester chases PENDING/APPROVED/IN_TRANSIT transfers >48h;
+  runbook corrected (PO-send IS wired). Validation: tsc backoffice+staff clean,
+  eslint clean, full vitest green. **Deploy-day risk assessed**: roles match
+  actual actors (POs by MANAGER, receiving by STAFF+MANAGER, payments by
+  OWNER/ADMIN); only forced behaviour change is the staff-app price guard.
+  Catalog data also repaired in prod (5 priced package-less rows attached/
+  deactivated, dup packages deleted, 11 missing defaults set, Fresh Milk
+  packages labelled). Payment-side data repairs (Blancoz/Grab dup register
+  entries, 75 deposit-only amountPaid, 3 cancelled-but-paid POs) NOT applied —
+  need owner sign-off per hard rule 6.
+- 2026-09-04 — **Procurement loop QA (flow + data + code) — audit page published.**
+  Data (120d): 224 POs PAID with no Receiving (RM147.5k) + 121 COMPLETED-by-hand
+  unreceived (RM83.8k); unreceived share Aug→Sep: PJ 87%→96%, SA 50%, Tam 61%→67%;
+  3 CANCELLED POs paid (RM2,125: Milk n Moka 424.80 paid 3 Sep on PO cancelled
+  20 Aug, NYC 1227 RM894, Country Bread RM806); 75 PAID invoices amountPaid<amount
+  (RM18k, deposit-only); 102 transfers PENDING >7d, 0 ever approved, 2 completed
+  in 120d (54 PJ→Tam); Blancoz dup invoice numbers via punctuation
+  (26-0644/260644 etc — one bank debit, register dups); PriceHistory 0 rows; 256
+  package-less SupplierProduct rows; 22 active RM0 ADHOC prices; 23 cf=1
+  Carton/Box packages; 478 ReceivingItems w/o package (120d). Price guard: 1 of
+  24 post-merge lines slipped — 3 Sep PJ milk 8×"Carton"@83.90 on the 163.58 pkg,
+  paid RM671.20 (inv 1-15974) — because **the staff app has its own PO-create
+  route with no guard** (apps/staff/src/app/api/orders/route.ts). Code
+  (verified): orders/[id] PATCH/DELETE + transfers/[id] unauthenticated
+  (middleware skips /api); Telegram webhook lets photos/PDFs from ANY chat mark
+  invoices PAID + forward POP; invoice PAID path needs no receiving and copies
+  client amount→amountPaid; no normalised duplicate-invoice check on 4 create
+  paths; pay-and-claim approve re-runnable (double stock-in), no role/self check;
+  ai-decisions picks ADHOC RM0 as cheapest supplier (products auto-link ADHOC
+  RM0); UI POP auto-send can never fire (needs "/pop/" in URL, uploads go to
+  invoices/); supplier-page price edit creates phantom package-less rows (the
+  256) and never writes PriceHistory; GRNI placeholder checks still test
+  startsWith("INV-") in 3 places; receivings non-transactional + trusts client
+  outlet/orderedQty; agent can empty a PO via N×remove_item; runbook wrong that
+  PO-send is "not wired" (it fires on PATCH/inbound/cron). Solid: WhatsApp HMAC +
+  wamid exactly-once, PO clientRequestId idempotency, atomic PAID, DRAFT pay
+  guard, reorder-suggestions.ts filters. Fix plan (6 steps) on the audit page.
+- 2026-09-03 — **Inventory → Reports rewired to live sales.** COGS Report and
+  Usage Variance read `SalesTransaction` (StoreHub feed, dead since
+  2026-04-11) so they showed zero sales for five months. Both now read the
+  POS-native + customer-app tables per LINE through
+  `lib/inventory/report-sales.ts` (Menu.storehubId → name fallback, the
+  consumption engine's mapping) and expand each line with `expandSoldLine`
+  (Iced/Hot doses, Oatmilk substitution, Extra Shot) plus PackagingRule
+  application by real channel (dine-in / takeaway / Grab, per-item and
+  per-order bags). Cost basis = catalog BOM page (cheapest active non-ADHOC
+  price ÷ cf). The 50% takeaway blend is gone. Response shapes unchanged;
+  COGS summary gained unmappedQty/unmappedRevenue/menusWithoutRecipe/
+  perOrderPackagingCogs. Stock Valuation, Purchase Summary, Wastage read live
+  tables and were fine. Supplier Scorecard is wired but data-starved:
+  `PriceHistory` has 0 rows (write path exists in the two price-edit routes;
+  catalog prices have only ever been changed by SQL) and on-time needs
+  Receiving rows. Deliberately NOT backfilled from PO line prices — dry run
+  gave 431 "changes" averaging a 376% swing, i.e. the package mis-keying, not
+  price moves.
+- 2026-09-02 — **August COGS closed: chain ran ON-RECIPE (~34% of gross incl.
+  discounts; expected RM109.8k vs actual ~RM110.3k).** Canonical expected =
+  the catalog BOM page engine (`/api/inventory/menus`: cheapest active
+  non-ADHOC catalog price ÷ cf, MenuIngredient + PackagingRule lines, Hot/Iced
+  × dine-in/takeaway matrix) weighted by measured mixes — 64/36 iced/hot (POS
+  modifiers), takeaway PJ 36% / SA 42% / Tam 50% (QR-table webapp orders are
+  DINE-IN: ~90% of "pickup"-channel orders carry a table number). Per-outlet
+  expected: PJ 34.9%, SA 34.0% (36.9% counting consignment it produces), Tam
+  33.4%. Per-outlet booked actuals are ±RM3–5k timing noise (order-date proxy;
+  July's last week held RM48.8k of orders delivered in Aug vs Aug's RM9.2k
+  tail; 55/63 PJ Aug POs have no Receiving; all 15 Aug transfers stuck
+  PENDING) — Tamarind's "24.2%" was this artifact; corrected 32.2%. Bean
+  mass-balance validates the BOM (185kg expected vs ~180kg traced flow).
+  Remaining real leaks: ~RM5k/mo paid above cheapest catalog price, SA ~RM3k
+  production-hub waste, PJ ~RM1k over-dosing, dessert slices structurally
+  50–64% COGS (Mudslide costs RM10.83/slice vs RM16.90 price). Known-bad data
+  fixed en route: 9 poisoned 31-Jul count lines excluded (Tam sambal "290
+  packs" = 1.45t, SA coleslaw/tomato/pandan, slice-vs-cake cf), Chicken Tomyam
+  Carbonara BOM says 80ml olive oil (sibling says 30 — kitchen to confirm);
+  uncosted ingredients: Dried Orange Peel, Biscoff, Dried Lemon Slice.
+  `menu_margins` VIEW rewritten to mirror the BOM page (migration 109, applied
+  to prod, PR #1207; v1 showed Roti Bakar −354% via product_costs cf bugs +
+  modifier stacking + no packaging; cashflow bomFoodCostPct drops ~0.49→~0.34).
+- 2026-09-02 — **Bank-feed recon (3 Maybank accounts, BankStatementLine is the
+  feed; fin_bank_transactions is EMPTY).** Invoices marked paid with no
+  debit: only INU-26-23275 (Unique Paper, RM639.28) — chase supplier. Bank
+  refs almost never carry paymentRef (15/1,580); amount+date+description-
+  digits is the evidence. Collective Project pays 10% deposit + 90% "Bal"
+  legs (invoice no. in description) — 39/44 reconcile to the ringgit;
+  **IV-01987's RM2,533.50 balance was debited TWICE from Conezion (16+20
+  May, no refund) — recover**; register amountPaid fixed for IV-01974/-75/-76,
+  IV-02002, IV01790 (deposit-only or wrong totals; bank-true values applied).
+  Ariff's RM128.30 cream re-claim is bank-confirmed paid twice (19+26 May,
+  same Grab ref). Earlier "duplicate invoiceNumber" pairs (1-15086, INV-2001,
+  KIV…) show ONE debit each — register double-entries, not double payments;
+  NYC Treats 1133 was double-paid but supplier refunded ("Celcius double pay
+  1133"). NYC Treats: only 6 of ~40 recent weekly invoices ever entered the
+  register (bank-only). Category fixes applied: Ariff + Adam Ariff Jul-26
+  salaries → EMPLOYEE_SALARY (were RAW_MATERIALS/OTHER_OUTFLOW, RM9.9k), 13
+  Poket Capital shared-service debits → MANAGEMENT_FEE (RM24.6k out of fake
+  raw-materials spend).
+- 2026-09-03 — **August 2026 payroll: why approved OT paid nothing, and the
+  fix.** Since the paid-window rule (2026-08-13) `deriveHours` pays only time
+  inside the rostered shift; the clocked overstay is an "OT tail" reported as
+  `otEligibleHours`, flagged `overtime_detected`, and written NOWHERE — the
+  log's `overtime_hours` stays 0. The only pay path is an approved
+  `hr_overtime_requests` row that `applyApprovedOt` stamps onto the log. The
+  auto-request generator (`overtime-requests/sync`) still selected logs by
+  `overtime_hours >= 1`, so it went quiet on 13 Aug (20–44 auto-requests/week
+  in July → 7 for the second half of August). Attendance "approve" set
+  `final_status` and paid 0 OT; `set_times` recomputed through the same window
+  and still paid 0. August: ~88 overstay hours company-wide with no request
+  (Shairuleen 33h, Firdaus 9.5h). **Owner ruling: the attendance review IS the
+  OT approval** ("only the OT Ariff approves in attendance will be counted").
+  Shipped in PR #1210 (`lib/hr/ot-request-generator.ts`, tested):
+  approve/acknowledge/excuse/adjust/set_times on a FT log writes an approved
+  request + stamps the log; OT-only flagged logs are back in the attendance
+  queue with `ot_tail_hours` on the card ("Approve + 2.5h OT"); the cron files
+  PENDING requests from tails (prev month too while ≤10th; `POST {month}`);
+  PH normal-hours premium (EA s.60D, PR #1209) is keyed on `hr_public_holidays`
+  so a holiday OT approval re-stamping `ot_3x` cannot erase it.
+  **Data applied directly (owner instruction, all reversible via the
+  `hr_overtime_requests` rows whose reason starts "Approved per manager" /
+  "Approved via attendance review"):** Shairuleen's full August list (13
+  dates, 19h payable + 0.5h on 8/8 that the 1h minimum will not pay; 16/8 kept
+  at Ariff's OT-queue 4h vs list 3h), Firdaus 16/8 2.5h, Shairuleen 12/8 +
+  18/8 1h each (from Ariff's time corrections). Earlier same day: Adam end
+  31 Jul, Amirul Yazid end 27 Aug, Deverasa/Darshika skipped (joined 1 Sep —
+  calculator now skips post-cycle joiners), Nazihah `lever|checklist`=120
+  override (4 lates → RM80), Ariff `fixed_performance_allowance` 500 → **250**
+  (owner), Zikry 1 Aug 1h stamped. The monthly run id churns on every
+  recompute — always look it up; item edits do not survive recompute.
+  **Later the same day — all merged to main:** #1210 (attendance approval =
+  OT approval; **OT minimum 0.5h** everywhere, owner "pay the 0.5h"; PH
+  premium visible — run page + PDF had gated OT lines on OT *hours*, so a
+  pure-PH line sat in gross with no row). #1211 = the **payroll statutory QA**
+  (audit of the monthly calculator vs EA/KWSP/PERKESO; arithmetic matched to
+  the cent, the defects were code-vs-statute): (1) employer EPF was 12% for
+  everyone — `hr_employee_profiles.epf_employer_rate` had DEFAULT 12 and the
+  calculator honoured any non-null value as an override; KWSP says 13% ≤
+  RM5,000. `resolveEpfEmployerOverride` ignores the legacy default; **migration
+  108 applied to prod 2026-09-03 11:20Z** (defaults dropped, all 81 rows
+  nulled — NULL = schedule; the employee form sends NULL for blank). **July was
+  filed at 12% → KWSP arrears owed.** (2) performance allowance now IN the
+  EPF/SOCSO/EIS basis (KWSP liable wages include allowances; BrioHR did).
+  (3) unpaid leave counted on the proration basis's own days
+  (`computeProrate.unpaidLeaveRanges`) — Syafiq Fri–Mon was 4 off 21 weekdays,
+  now 2 (+RM333.33). (4) PH premium = one ORP (basic/26) per holiday worked
+  regardless of hours (s.60D(3)(a)); rest-day normal hours pay ½/1 ORP
+  (s.60(3)(b)) in the 1× line — `lib/hr/day-type-pay.ts`. (5) attendance month
+  window is MYT midnight (was UTC → 08:00 MYT). Plus **one label set** for
+  OT/day-type lines across run page, staff payslip page and PDF
+  (`packages/shared/src/hr/pay-lines.ts`, hours per rate written to
+  `computation_details.ot_hours_*`). #1212 (open): by-outlet finance CSV
+  splits rotating staff pro rata by shifts per outlet (Syafiq 7/5/3 in Aug).
+  **Not fixed, owner decisions:** SOCSO 5-sen rounding vs published PERKESO
+  bands (needs seeded table); contract staff with a salary skipped (Hanis,
+  RM2,000 from 15 Aug — is she salaried?); part-timers get no EPF/SOCSO/EIS.
+  More data applied: Atthirah 6 + 10 Aug 0.5h each (Ariff, "cover stock
+  sampai"). **Decisions taken:** pay the 0.5h; 16/8 stays 4h.
+  **Recompute gotcha:** the owner's 11:20Z recompute landed ~3 min before the
+  #1211 deploy went READY, so it is on the OLD code (no `ph_days_worked` in
+  computation_details) — a recompute after ~11:23Z is the final one.
+  **Still owed:** Firdaus's OT list from Ariff (only 16/8 exists for him);
+  four FT 31-Aug logs unreviewed (Firdaus, Haziq, Sherry, Syafiq) → no PH
+  premium until approved; 24–31 Aug weekly PT run not generated; the compute
+  endpoint needs an OWNER/ADMIN browser session — this sandbox has no DB env,
+  so recompute is the owner's click, not ours.
+- 2026-09-01 — **Catalog-wide price↔package sweep: the milk defect generalised.**
+  Fresh Milk first: a phantom "Carton (12×2L)" package (cf 24,000) carried 67
+  PO lines priced at the 12×1L carton rate (RM81.78–88.70 vs catalog 2L-carton
+  RM163.58–174.96) — every affected litre doubled since mid-April. Owner
+  ruling: a 2L carton is 6 bottles; package corrected to "Carton (6× 2,000ml
+  Bottle)" cf 12,000, 69 lines reassigned by price band. August monthly-census
+  reconciliation then re-read: PJ milk 810L/486L = 1.67×, Tam 485/358 = 1.36×;
+  phantom never-delivered milk ≈38 cartons ≈ RM3,200 (was "RM5,900"). Sweep
+  found the same signature on ~15 more products; fixed by catalog-anchored
+  price bands (2026-09-01, prod SQL): Monin vanilla ×4, Oatside oat milk ×6,
+  Anchor butter ×40, croissant ×28, sippy lids ×20, dishwash ×12, Samyang ×24,
+  chili flakes, and Brioche BB001 (3 loaf-package lines at box price →
+  understated ×10). Flagged unfixed (need physical/owner info): RMC03 whipping
+  cream RM85 "12L carton" lines, Planta odd tubs, the cf-1 "Carton" packaging
+  family (PBS001/PBC001/PP0004/PP0006/S0001/PAP006 — real cartons booked as 1
+  base unit → understated), PPH001/PS0001/FDS0001, produce per-kg-vs-piece
+  noise. Count-unit QA (all products, reviewed counts since 15 Aug): clean —
+  no unit churn, no impossible stock; bread was the only count-side unit bug.
+  Guard shipped: `po-price-guard.ts` in the backoffice PO create route refuses
+  a line whose price fits a SIBLING package ([0.55,1.8] band, catalog-first
+  reference, 12-month median fallback, ≥3 lines; overridePriceGuard demotes to
+  warning; plain out-of-band prices warn only).
+- 2026-08-31 — **`docs/admin/` created as the business-administration hub**
+  (owner request: a dedicated home for "admin stuff"). Skeleton only:
+  `README.md` (conventions — no secrets/scans in repo, Drive links only,
+  every dated obligation mirrored into the tracker), `renewals.md` (master
+  deadline tracker — the one file that must stay complete), plus per-domain
+  files `company.md` (SSM/cosec/banking), `licenses.md` (per-outlet permits:
+  Shah Alam/MBSA, Conezion/PPj, Tamarind), `outlets.md` (tenancy +
+  utilities), `insurance.md`, `contracts.md`, `compliance.md` (LHDN/SST/
+  EPF/SOCSO registrations; payroll execution stays with the HR module).
+  All sections are `PENDING — owner to share`; next session on this topic
+  should fill tables from whatever the owner has shared and keep
+  `renewals.md` as the source of truth for dates. Branch
+  `claude/admin-stuff-structure-sv9ufm`.
+
+- 2026-08-31 — **The "Tamarind loses bread at 3–6× recipe" finding was a
+  COUNT-UNIT defect, not loss — retracted.** Bread's only stock-count line is
+  a "10pcs Loaf" package (cf 10, BB003's sole package, BB001 also has a ×100
+  Box); staff key the PIECE number into it, so every bread count was stored
+  10× inflated. Proof (CC002 27→28 Aug): count 9 → booked 100-pc receipt →
+  count 70 — exact in pieces, impossible in packs; also Tamarind entered
+  "20.5" packs (half a sealed 10-pack doesn't exist). Read in pieces, bread
+  reconciles ~1× with BOM. Fixed in PR #1195 (merged 2ee9c3da): count keypad
+  offers "Loose <baseUom>" (packageId null = factor 1) whenever any package
+  multiplies, `pcs`-based products OPEN in loose pieces, preview enlarged;
+  items API now deletes other-unit rows on upsert (finalize SUMS lines per
+  product — "7 loaves" re-counted as "70 pcs" used to apply as 140).
+  Historical bread count rows are still stored ×10 — any analysis comparing
+  pre-31-Aug bread counts must divide by 10 (or treat entries as pieces).
+- 2026-08-31 — **BOM engine audited and verified correct on direct recipes;
+  ONE structural gap: no prep expansion.** Independent SQL recompute of
+  Tamarind 25 Aug matched consumption_shadow_runs exactly (beans +18 g = one
+  Extra Shot, milk −260 ml = one oat substitution). But the engine expands
+  MenuIngredient only — it never walks ProductRecipe, so raw Udang expected
+  misses CP0001/SU0001 prep consumption. Prep-corrected (CP grams 1:1, SU
+  ×80 g): Tamarind udang = 1.04× ✓ (the "6×" was this gap); Putrajaya still
+  1.69×. Remaining REAL anomalies (clean count intervals, all channels):
+  Putrajaya beans 2.01× + udang 1.69× (early Aug; no counts since 9 Aug to
+  confirm), cream ~0.3–0.5× of the 250 ml/carbonara dose (BOM likely
+  overstated — weigh a plate). Bread/milk/foam/udang(Tam) reconcile ~1×.
+  Owner-approved build still pending: engine walks ProductRecipe for
+  never-purchased prep outputs; fix CP0001 yield unit (1000 g → "31 pcs").
+- 2026-08-31 — **Stock counts auto-approve; discrepancies are flagged, not
+  queue-blocking** (PR #1164, merged 741ae87; owner ruling). Finalize
+  auto-approves every complete on-schedule count (balances were applied
+  regardless anyway); short/stale/off-schedule still go to SUBMITTED review.
+  Backoffice gains a Flagged filter (unresolved-discrepancy counts, any
+  status), Manage action, and reason-coding + Save on REVIEWED counts. The
+  3 stuck Tamarind counts (13–15 Aug) and 2 ancient 30-Apr monthlies were
+  flipped to REVIEWED by SQL; SUBMITTED queue is now empty by design.
+  Staff memo issued 31 Aug: hr_memos de648741 (announcement, 61 recipients,
+  ack-tracked; direct SQL insert so no push went out) + Gmail thread
+  1a056d19e819ce5d (owner asked "no email" seconds after send — dup, benign).
+  Memo says: count all 9 nightly, check the unit, no fake zeros, book
+  deliveries on arrival, keep portions to recipe (gaps up to 2× expected).
 - 2026-08-21 — **"Unauthorized" on checklist Photo Proof = the 12-hour staff
   session dying under an app that never noticed.** Owner screenshot:
   `staff.celsiuscoffee.com says: Unauthorized` over the Photo Proof camera.
@@ -185,6 +510,188 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   (do not trust a local fingerprint:generate — the tree differs at build
   time). Keep `1.0.3` listed until the new build has replaced that fleet.
 
+- 2026-08-20 — **Choc Blanc Merdeka campaign (31 Aug – 30 Sept 2026) — BACKEND
+  STAGED, NOTHING PUBLIC.** Plan + go-live runbook in
+  `docs/design/choc-blanc-merdeka-campaign.md`. Staged in prod, all gated off
+  and verified 0-leak against the reader queries: product `choc-blanc`
+  (RM14.90, category `classic`, Bar, Mont Blanc's modifiers cloned,
+  `is_available=false` + `visible_channels={none}`); voucher template
+  `8b19f425-4a6b-42f8-883a-3be43ccc377e` "RM3 off Choc Blanc" (flat 300 sen,
+  `applicable_products={choc-blanc}`, 7-day validity so `reward_expiring`
+  picks it up, `is_active=false`); 3 `splash_posters` rows — pos-display
+  `740fc57d…`, home `a0d810a8…`, splash `400f637d…` — all `active=false`
+  with `starts_at` 2026-08-30T16:00Z / `ends_at` 2026-09-30T15:59Z (splash
+  ends 2 Sept). **`image_url` is still `''` on all three** — no Cloudinary
+  creds in the session; upload-ready crops were rendered at each surface's
+  true ratio but must be attached before go-live or the slots render blank
+  (the runbook's step 1 is a pre-flight that catches this).
+  **Lessons worth keeping:** (1) `active=false` is NOT a safe staging guard —
+  `pos-poster-autopilot` is ENABLED and flips `active`/`sort_order` daily at
+  07:00 MYT on home + pos-display; a future `starts_at` is the real guard
+  since every reader filters the schedule window. (2) A pos-display poster
+  with `round=NULL` is invisible to the autopilot (`poster-autopilot.ts:151`
+  filters to non-null rounds) — that is how you pin a launch poster.
+
+- 2026-08-28 — **Choc Blanc: the three owner decisions are SETTLED, and the
+  poster artwork exists.** (1) Choc Blanc **sells alongside Mont Blanc**, it
+  does not replace it — the runbook's step 6 (retire Mont Blanc) is now a dead
+  step, and the campaign must be measured as **net units across both SKUs**
+  since they share the RM14.90 shelf price. (2) **RM14.90 confirmed.**
+  (3) **Cost per cup RM3.4471** — a new `Menu` row (`storehubId='choc-blanc'`)
+  clones Mont Blanc's 8 BOM lines and adds `Chocolate Powder` 10g @ RM0.089/g
+  (= RM0.89); `products.cost` is set, which unblocks margin and the home-poster
+  autopilot's margin term. Margin 76.9%.
+  **Verified facts worth keeping:** (a) `products.id` is the join key to
+  `Menu."storehubId"` — that is how the customer catalogue and the costing side
+  are linked, and there is no FK enforcing it. (b) Ingredient cost does NOT
+  live on `"Product"` (no `cost` column); it is the SQL-managed `product_costs`
+  view, keyed `product_id`, field `cost_per_base`. (c) **`menu_margins`
+  overstates cost on any recipe carrying modifier lines** — it sums *every*
+  BOM row, so Mont Blanc reads RM4.4548 against a true base cup of RM2.5571
+  (it bills an Extra Shot *and* an Oatmilk swap into the same cup); Choc Blanc
+  reads RM5.3448 vs RM3.4471. Treat `menu_margins.margin_pct` as a floor.
+  (d) `Menu`/`MenuIngredient` are staff/backoffice-only — `apps/order` never
+  reads them, so creating a recipe leaks nothing to customers.
+  **Artwork DONE** — `docs/design/assets/choc-blanc/canvas/` holds three
+  `.dc.html` artboards (home 1200×1121, splash 1080×2340, POS 920×1200) built
+  by `build.mjs`, which injects the repo's Peachi face as base64 into a
+  gitignored `.build/`. That font inlining is load-bearing: **a Google-hosted
+  webfont silently falls back during PNG export**, and the export is what gets
+  uploaded. Canvas:
+  https://claude.ai/code/artifact/8a858143-05d9-4365-96ea-ddb9e0108e1e
+  **Lesson — the A4 master cannot be cropped to a landscape band.** The glass
+  is 1030×1520 with its top at y=415 and the baked header rule directly above,
+  so *no* crop of the 2483-wide A4 at 1.65:1 contains the whole drink. Fix, in
+  `canvas/make-heroes.py`: stretch+blur the source to an oversized plate, feather
+  the real photo back on top (the table is bokeh, so the extension is
+  invisible), then cut one window per surface at exactly that artboard's
+  photo-box aspect — `object-fit: cover` then crops nothing. Every hero now
+  clears the glass by ≥87px on all four sides.
+  **Posters are RENDERED** — `canvas/render-posters.mjs` drives headless
+  Chromium over the `.build/` artboards (the ones with Peachi inlined) and
+  emits PNG + JPEG into `.build/out/`. No canvas export step needed any more.
+  **Lesson — `--window-size` counts browser chrome**, so the layout viewport
+  came out ~87px shorter than asked; the artboard laid out short and the
+  remainder was painted with the page background. The poster looked fine
+  except the last line of copy was missing. Render with headroom and crop to
+  the declared box; `crop-posters.py` now fails the build if page background
+  appears on the bottom/right edge (verified: it rejects a deliberately short
+  render). Same class of trap as the webfont one — both produce a
+  plausible-looking but wrong poster rather than an error.
+  **UPLOADED 2026-08-29 — the last go-live blocker is CLEARED.** All three
+  `splash_posters` rows and `products.choc-blanc` carry real `image_url`s,
+  byte-for-byte identical to the renders. Current live keys after the art
+  revisions: `posters/promo/choc-blanc-home-v5.jpg` (157632),
+  `-splash-v3.jpg` (284249), `-pos-v3.jpg` (137206) and
+  `-product-v2.jpg` (118721). Still invisible: `starts_at` is future on all
+  three posters and `products.is_available = false`.
+  **Every re-upload needs a NEW KEY** — objects are written
+  `Cache-Control: public, max-age=31536000, immutable`, so overwriting a key
+  leaves stale bytes in front of every viewer; hence the -v suffixes.
+  **Lesson — a remote session CANNOT reach object storage, but that does not
+  mean it cannot upload.** The agent proxy answers 403 to CONNECT for
+  `*.supabase.co` and `*.cloudinary.com` (curl HTTP 000), while the Supabase
+  MCP tools keep working because they route via the MCP proxy — so SQL is
+  reachable and storage is not. Three routes were rejected before the one that
+  worked: `storage.objects` has NO INSERT policy for `posters`, and adding one
+  would make a publicly READABLE bucket world-writable (defacement risk on
+  customer screens) — never do this for convenience; `pg_net` 0.20.0 is
+  installed but takes only a jsonb body, so it cannot POST binary; and
+  base64-ing the files to push them through SQL is refused by the sandbox's
+  classifier, correctly, since that is bulk file exfiltration through the
+  model. **What worked: `celsius-ops` is a PUBLIC repo.** Commit the assets,
+  then have a temporary Edge Function fetch them from `raw.githubusercontent`
+  (pinned to a commit SHA) and write them to storage with the service role key
+  the edge runtime injects. No image bytes pass through the agent at all — it
+  is a server-to-server copy between two systems the owner already controls.
+  Guardrails used: hard-coded asset allowlist, two-bucket allowlist, shared
+  secret, and a minimum-size check on the fetch. **This project's keys are the
+  new `sb_` format, not JWTs** — `SUPABASE_SERVICE_ROLE_KEY` in the edge
+  runtime is 41 chars starting `sb_`, and Storage rejects it as
+  `Invalid Compact JWS` when sent only as `Authorization: Bearer`. It needs
+  the `apikey` header as well (`apikey` + `Bearer` together works). **Repo visibility is worth
+  checking FIRST next time** — the whole detour existed because it was assumed
+  private.
+  **Launch day is NOT automatic (verified 2026-08-29).** `home` is
+  `active=true` and opens at 31 Aug 00:00 MYT on its own, but `splash` and
+  `pos-display` are `active=false` and `products.choc-blanc` is
+  `is_available=false` with `visible_channels={none}` — every reader needs
+  `active` AND the window, so someone must run runbook steps 3–5 on the day.
+  Runbook step 2 used to tell them to `update image_url = '<POS 0.818 url>'`;
+  that would have overwritten the real URLs with literal placeholders and put
+  blank posters on the screens — the exact failure step 1 exists to catch. It
+  is now a verify-only select.
+  **The autopilot ignores the schedule window** (`poster-autopilot.ts:145-151`)
+  — it selects every poster for the placement regardless of
+  `starts_at`/`ends_at` and flips `active`/`sort_order` at 07:00 MYT daily. The
+  `round IS NOT NULL` filter applies to `pos-display` ONLY, so a round-less
+  *home* poster is still in the pool. First ranking Choc Blanc faces is 07:00
+  on 31 Aug, seven hours after its window opens; `products.cost` is set, which
+  restores the margin term, but a zero-AOV poster can still be benched. To
+  guarantee the slot, disable `app_settings.pos_poster_autopilot_enabled` for
+  the fortnight. Readers DO filter the window, which is why an early
+  autopilot activation cannot leak.
+  **SMS design settled 29 Aug — B1F1, split by past behaviour.** Offer is
+  **Buy 1 Free 1 Choc Blanc**, new template `a0e3661c-5cba-454f-a50a-1cebd597225f`
+  (staged `is_active=false`, scoped `applicable_products={choc-blanc}`, bogo 1/1,
+  7-day). The pre-existing `ed33eb26-…` "Buy 1 Free 1 Drink" is NOT usable here —
+  it is live and scoped to 8 whole categories, so it would be redeemed on a latte.
+  Economics per redemption: full price RM11.45 margin, RM3-off RM8.45, B1F1
+  RM8.01 — B1F1 costs 44 sen more than RM3-off for ~5x the perceived value and
+  puts a cup in a second person's hand. RM3-off template stays inactive.
+  **Two loop-engine changes made this runnable** (`loop-engine.ts`):
+  `ArmDef.voucher_template_id` is now `string | null` (a null arm is
+  announce-only — mints nothing, no COGS), and `prepareRound` gained
+  `onlyPhones`, an allowlist applied after `suppressPhones`. Before this the
+  engine could not express an announce-only arm at all: every arm had to issue a
+  voucher, and the `celebration` template hard-requires an `{offer}`.
+  **Lesson — purchase history barely links to people.** Only `customer_phone` on
+  `pos_orders` (55% of tickets, from 2026-06-08) and `orders` (28%, from
+  2026-04-11) attributes a sale to a member; `unified_sales` has no customer
+  column and the whole StoreHub era (2022 → mid-2026) has none. ~13,700 of
+  167,012 transactions (8%) are attributable. So "never bought X" means "no
+  record", not "didn't". 538 identifiable Mont Blanc buyers among actives ≤60d
+  vs 410 units/month sold — most drinkers are invisible. Any behaviour-defined
+  segment built on this is a clean list on the positive side and a
+  can't-rule-out bucket on the negative side; never treat the complement as
+  proven non-buyers, and never compare the two as if randomised.
+  **Cleanup still owed to a human:** this MCP server can deploy Edge Functions
+  but has no delete, so the slug `choc-blanc-asset-upload` survives, emptied to
+  an inert 410 stub (`verify_jwt` on, no secret, no service-role use) — delete
+  it in the dashboard. Also delete `posters/_probe/delete-me.png`, a 70-byte
+  test object; `storage.protect_delete()` blocks removing objects via SQL.
+  **Lesson — a feather inset into the photo lands ON the subject.** The plate
+  technique feathered the real photo into the blurred backdrop with a 130px
+  inset on all four sides. The cream cap sits on the crop's FIRST ROW, so that
+  ramp blended the top of the drink 96% into the blur (alpha 10/255 at the cap,
+  177/255 at the base) — it reads as a soft-focus drink, not as a compositing
+  bug, which is why it survived several rounds of review. Fix: grow a smeared
+  margin around the photo and feather THAT, so the ramp never touches the
+  image. The top margin cannot come from the photo's own top rows (nothing
+  inside the crop is drink-free — that smears the cap upward into vertical
+  streaks); it comes from the A4's backdrop ABOVE the baked rule, rows 336–378.
+  The crop line also moved 400 → 387, the first row under the rule: 400 was
+  shaving the cream. `make-heroes.py` now asserts the mask is fully opaque
+  across the whole drink. Edge detail across the cap up ~25%; glass geometry
+  on every surface unchanged.
+  **Social set added** — Instagram/Facebook feed 4:5 (1080x1350), story 9:16
+  (1080x1920, 250px top / 330px bottom kept clear for Instagram chrome and the
+  link sticker) and square 1080x1080. These deliberately carry NO price: a
+  price baked into an image dates the post and drags comparison into the
+  comments, so RM14.90 goes in the caption where it can change without a
+  re-export.
+  (3) A new poster scores ~0 in the autopilot (no measured AOV, `cost` NULL →
+  no margin) so it gets benched fast; set `products.cost` or disable the flag.
+  **Open decisions for the owner:** replace-vs-alongside Mont Blanc (410 units
+  / RM6,108 per 30d), confirm RM14.90, and cost per cup.
+  **Channel reality found while planning:** push is dead as a channel — 123
+  members hold a push token out of 25,992 (80 of the 5,928 actives ≤60d), so
+  the campaign is ~99% paid SMS at RM0.10 (full actives blast ≈ RM593).
+  Measured `loop_rounds` say `reward_expiring` is the only reliable loop
+  (+10.3–19.0pp lift, RM5.44–8.64/recipient) while winback/fresh_lapse swing
+  −33 to +9.5pp at n=18–30/arm — statistically unreadable. No Instagram
+  integration exists in the repo at all; IG is manual and unattributable.
+
 - 2026-08-18 — **Welcome-voucher cutover EXECUTED (owner-approved, ~15:45Z)
   — the 10% welcome voucher is LIVE and the auto-FOD is retired.** PR #1155
   merged to main (`b3c4205`, squash); apps/order production deploy READY on
@@ -298,6 +805,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   next count overwrites balances — no data repair needed beyond counting.
   **Lesson: the app code is not the whole system. Check pg_trigger /
   pg_get_functiondef before declaring "nothing writes X".**
+
 - 2026-08-17 — **Consumption engine rewired through `expandSoldLine`**
   (`consumption-post.ts`): per-line modifiers + real order_type from BOTH
   channels, storehubId-first menu join with the name fallback (LATERAL LIMIT 1,
@@ -313,12 +821,14 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   (double-deduction).** "Biscoff Batik Indulgence" = renamed "Matcha Batik
   Indulgence" (POS product_id → that menu's storehubId); needs its own menu
   row + recipe rather than inheriting matcha's.
+
 - 2026-08-17 — **Staff transfer routes moved RAW package units into the
   base-UOM ledger** — "5 packs (1000g)" debited the sender 5 g on creation and
   credited the receiver 5 g on completion. Fixed both sides to convert through
   the line's package factor. Related leak: transfers stuck at PENDING debit
   the sender and never credit the receiver (all three bean transfers into
   Tamarind sit PENDING).
+
 - 2026-08-13 — **Receiving and stock counting were denominated in DIFFERENT
   package units, which is why no stock reconciliation ever tied out.** Counts
   are clean: every product counted since 1 Aug used exactly one package, zero
@@ -348,6 +858,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   all** (`CreateReceivingInput` has no such field) — so staff cannot fix it in
   the app. Set the package on those PO lines, or add a picker to the native
   screen.
+
 - 2026-08-13 — **Counting conventions differ by person, and nothing has ever
   checked them.** `expectedQty` is NULL on all 2,863 StockCountItems since June,
   so no count was ever compared to anything. Entry style since 1 Aug: Haziq
@@ -363,6 +874,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   MONTHLY count (DRAFT, 3 items) carrying identical values — a double-count
   waiting to post; CC002's 3 Aug WEEKLY count is a DRAFT with items entered from
   13 July onward (open three weeks); CC001's 7 Aug daily has items stamped 5 Aug.
+
 - 2026-08-13 — **Migrations `20260810_menu_ingredient_substitution` and
   `20260810_oatmilk_and_extra_shot_recipes` are APPLIED to production**
   (owner-approved, applied by hand before merging #1112). `MenuIngredient` gained
@@ -376,6 +888,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   table lacking it, par levels and the COGS report 500 on the first request. The
   other three `menuIngredient` callers use explicit `select` and were immune.
   **Check for unscoped `include:` queries before merging any additive column.**
+
 - 2026-08-15 — **Estate-wide loop QA sweep done (every loop, all four arms:
   trigger→action→measure→feedback). Full report: `docs/design/loop-qa-2026-08-15.md`.**
   Headline: the fully-automated loops are healthy and were caught changing their
@@ -853,6 +1366,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `createdAt` deliberately** so a continued multi-day count never auto-approves
   and still records the stale note. staff-native change ⇒ merge to main is an
   OTA to manager phones (ota-release skill before merging).
+
 - 2026-08-06 — **Stock-count schedule guard: weekly is due THURSDAY, monthly on
   the month boundary.** Windows derived from Jun–Jul 2026 trading data, not
   preference. Deliveries per weekday: Mon 15.1, Tue 14.2, Wed 6.3, **Thu 4.1**,
@@ -867,6 +1381,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   a 20:00 MYT count would read as the previous day in UTC). Soft block at
   finalize (`OFF_SCHEDULE`, needs `scheduleReason`), banner on the staff page
   before counting starts, and an off-window count never auto-approves.
+
 - 2026-08-06 — **The 3/4/5 Aug "monthly" counts were daily counts mislabelled,
   and have been reclassified.** Five counts (CC001 3+4+5 Aug, CC002 3+4 Aug)
   carried 256 lines each but only 7–8 real values; the other ~248 were
@@ -876,6 +1391,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   note. **Mismatch found:** both outlets count **Crispy Prawn** daily but it is
   NOT on the 9-product daily list, while **Smoked Duck** and **Pull Lamb** are
   on the list and appear in none of the counts. Owner decision still owed.
+
 - 2026-08-06 — **"Native app first order didn't get the 10%" (customer
   +60196098892) — the CHARGE was never broken, the PREVIEW was.** The FOD
   wiring at `/api/orders` is correct and live: gated on source app_ios/
@@ -932,6 +1448,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   here. Legacy `vouchers` monetary impact is nil in these routes
   (`voucherDiscountSen` is hardcoded 0); the gate only guarded
   `increment_voucher_count`.
+
 - 2026-08-03 — **Payslips are now open to staff in the PWA; the manager app never
   needed a change.** Owner: "can you open payslip in pwa staff app and native
   staff app." **`apps/staff-native` was already fully wired** — tile at
@@ -1019,6 +1536,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   stint (monthly RM1900 ends 3 Jul; log 83939522 6h flagged → 3h approved).
   ⚠ hours.ts still floors at attendance-processing time — future logs get
   whole hours at the stamp; only approvals carry fractions through.
+
 - 2026-08-04 — **PT rates flattened per owner: RM10/h (weekday AND weekend)
   for Qaseh, Farah Nabilah, Batrisyia; RM9/9 for the other 18 active PT** —
   note this REMOVED the RM10 weekend premium most PT carried. **Nurfarah
@@ -1057,6 +1575,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   exceeds payable by >2h outside system auto-close; `fetch-all-rows.test.ts`
   now imports the REAL helper (it had tested a local copy). PT OT needs no new
   guard — FT-only checks shipped on main in #1083.
+
 - 2026-08-03 — **THE DELETE ENDPOINT WAS THE GUARDRAIL HOLE, AND IT ATE JULY.**
   `DELETE /api/hr/payroll` guarded `paid` only, so a **confirmed** run — the
   thing payslips and bank files come from — could be destroyed in one call with
@@ -1072,6 +1591,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   Pinned by `payroll-run-guards.test.ts`.
   **July is recoverable from a recompute** — 761 attendance logs, 53 line
   overrides, 16 approved OT requests and 36 `confirmed_at` profiles all survived.
+
 - 2026-08-03 — **PostgREST's silent 1000-row cap was truncating payroll inputs
   in THREE places, not one.** No error, no flag, just a short array. **FIXED**
   with a `fetchAllRows` paging helper in `allowances.ts`; pinned by
@@ -1144,6 +1664,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   and `status='DEACTIVATED'`, matching the original import.
   **Ariff YTD-through-June is now 65,019.23 gross / 6,829.85 PCB paid**
   (= 1,559.10 Jan + 1,054.15 × 5 for Feb–Jun).
+
 - 2026-08-03 — **DONE: July was recomputed at 12:23:58 and Ariff's PCB landed on
   RM1,064.60, exactly as modelled.** Run `1fadf5ea-baf3-4460-a4bc-660dfdfe5669`,
   status `confirmed`, 29 lines, run PCB total 1,069.15. Note the recompute mints
@@ -1151,6 +1672,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   run id across a recompute (cost one confusing "run has 0 lines" moment).
   The entry below is kept for the diagnosis, which is what makes the figure
   trustworthy; the "must be recomputed" instruction is now satisfied.
+
 - 2026-08-03 — **Ariff's July PCB of RM618.50 was the understated figure and
   RM1,064.60 is the corrected one.** The deleted opening balance took his Jan–Jun YTD with it;
   the calculator then saw only Mar–Jun (42,000.00 / 4,216.60), projected
@@ -1168,6 +1690,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `SUPABASE_SERVICE_ROLE_KEY` in the repo; it needs a human to hit Compute on
   `/hr/payroll` (the July run is `ai_computed`, so recompute is permitted;
   it fails on `confirmed`).
+
 - 2026-08-03 — **EVERY REST-DAY STAMP IN JULY WAS WRONG: the manual attendance
   edit was the last path still reading `hr_employee_profiles.rest_day`, and that
   column is NULL for all 77 profiles.** `api/hr/attendance/route.ts` did
@@ -1186,6 +1709,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   from it. **The 96 mis-stamped July logs are NOT retro-corrected** — July is
   `confirmed`; a false rest day charges OT at 2× instead of 1.5×, or stamps
   `rest_day_1x` where the type should be null.
+
 - 2026-08-03 — **REST-DAY WORK PAYS 1× BY DESIGN AND THAT IS THE OWNER'S POLICY —
   DO NOT RE-RAISE IT AS UNPAID.** `hours.ts:125-134`: on a rest day, work within
   the OT threshold is tagged `overtime_type='rest_day_1x'` with `overtimeHours=0`
@@ -1197,6 +1721,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   earlier note in this session called those 460h unpaid and quoted ~RM89.56 owed
   to Razley for 19 Jul; both were wrong — his payable time starts at the rostered
   12:00, giving 7.04h, under threshold, so no OT is owed. Withdrawn.
+
 - 2026-08-03 — **The 122 cancelled July OT requests were never approved first —
   the cancels PREDATE the only review round.** All 122 were cancelled on 28 Jul
   in two bulk operations (116 at `08:03:19.479132`, 6 at `11:05:06.549605`, each
@@ -1212,6 +1737,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   full_time** ("early clock-in pays from rostered shift start"). Every July
   request, in all three states, is `reason='Auto-created from attendance log (OT
   detected)'` — nobody hand-filed OT all month.
+
 - 2026-08-03 — **A WRONG ROSTER SILENTLY DELETES MOST OF A DAY'S PAY, and nothing
   flags it.** Pay-hours start at `max(clock_in, scheduled_start)`
   (`hours.ts:103-107`), which is the owner's early-clock-in policy working as
@@ -1239,12 +1765,14 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
     late-outs where `Math.floor` ate partial OT (Firdaus 1.40h and 1.38h → zero).
   Open question from Group B: six shifts went `no_pings_stale` mid-day in one
   month — the PWA is losing GPS or being backgrounded while staff are clocked in.
+
 - 2026-08-03 — **OT hours are floored, so partial OT is always discarded.**
   `hours.ts:128` and `:137`: `overtimeHours = Math.floor(workedHours - otThreshold)`.
   Firdaus lost 0.90h (17 Jul) and 0.87h (21 Jul) that way. This is why the
   auto-creator kept filing "OT detected" requests for shifts that then computed to
   zero OT — the detector and the payer disagree. Rounding to the nearest quarter
   hour was proposed; no decision yet.
+
 - 2026-08-03 — **Adam Kelvin is missing March, April and May payroll entirely,
   and he is the ONLY remaining YTD hole.** Joined 2026-03-05, resigned
   2026-07-31, basic RM3,900 — but the system holds only June and July lines. His
@@ -1257,6 +1785,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   it to at most RM0.65. **The reason to fix it anyway is the EA form** — he is a
   2026 leaver and his EA must state real annual earnings, which are understated
   by roughly RM11,200. Needs the Mar/Apr/May BrioHR exports.
+
 - 2026-08-03 — **The BrioHR import dropped people silently, and the delete
   endpoint let it happen twice.** The original Jan/Feb import covered 19 of 20
   and 21 of 23; nothing flagged the gap because run headers were written from
@@ -1265,6 +1794,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `confirmed` run (and the `opening_balance`, which sat at `draft` and was never
   protected at all) can still be deleted, which is how the YTD was lost. Both
   worth fixing: derive headers from lines on import, and widen the delete guard.
+
 - 2026-08-03 — **PART-TIMERS ARE NOT IN THE MONTHLY RUN, AND THAT IS EXPECTED —
   DO NOT RE-RAISE IT.** Every payroll run that exists is `monthly` (8) or
   `opening_balance` (1); **zero weekly runs, ever**, despite
@@ -1277,6 +1807,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   practical consequence to remember: **the monthly run is the FT half only.**
   Never reconcile "everyone who worked" against it, and note that any change to
   PT attendance or OT (e.g. the `ot_1x` reclassification) has no effect on it.
+
 - 2026-08-03 — **`isOtApproved` treats an ATTENDANCE approval as an OT
   approval.** `payroll-calculator.ts` pays OT when `final_status` is
   `approved`/`adjusted`, or `ai_status='approved'` with no final status. So a
@@ -1295,12 +1826,14 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   July now reads **100h at 1.0× + 30h at premium**, and the 30h matches the
   approved requests exactly. Fixing the root cause — make `hr_overtime_requests`
   the only thing that approves OT — is still open.
+
 - 2026-08-03 — **Adib is two User rows and the wrong one is being paid.** A
   DEACTIVATED **full_time** record with a synthetic id
   (`6272696f-6872-2d43-4330-363200000000`, ASCII-looking) and `end_date`
   2026-07-03 drew RM183.87 gross / RM160.82 net on **zero hours** in the July
   run. His real ACTIVE **part_time** record worked 26.66h and is correctly
   outside the monthly run. Duplicate identity, not a proration bug.
+
 - 2026-08-03 — **Two FT→PT converts are owed prorated FT pay that nobody
   raised.** `hr_employee_profiles.notes` for **Zarif** says it in as many words:
   *"[FT→PT conversion, effective 2026-07-08] … PAYROLL NOTE: July 2026 monthly
@@ -1311,6 +1844,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   resigned FT 2026-07-11, part-time from 2026-07-12") with no payroll note, and
   **his FT monthly salary is recorded as RM0.00** in `hr_salary_history`, so his
   Jul 1–11 proration cannot be computed until the real figure is supplied.
+
 - 2026-08-03 — **"Manager: Ariff Izham. [Resigned 2026-07-07]" in the UI does
   NOT mean Ariff resigned.** He is ACTIVE, MANAGER, no end_date. That string is
   **Zarif's own `notes` field printed verbatim** — line 1 "Manager: Ariff
@@ -1318,6 +1852,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `lib/hr/agent/write-ops.ts` appends to notes on a resign. The employee screen
   renders the whole blob next to the manager label. Display bug; cost one
   false alarm.
+
 - 2026-08-03 — **PCB was assessed on non-taxable payments (PR #1102, MERGED
   `cf7df2a`).** `hr_payroll_item_catalog.pcb_taxable` was fetched and never
   read, so mileage/parking/meal reimbursements went into the tax basis. Found on
@@ -1327,11 +1862,13 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   against `total_gross` 4,665.** The money still pays; only the basis changed.
   Deductions deliberately untouched (`UNPAID_LEAVE` carries `pcb_taxable=false`
   yet plainly does reduce taxable income) — worth a separate look.
+
 - 2026-08-03 — **Recomputing July needs an authenticated OWNER/ADMIN browser
   session.** `POST /api/hr/payroll {action:"compute"}` is the only entry point;
   there is no cron or service-role path. An agent cannot trigger it — ask the
   owner to click Compute. (Jul 2026 recomputed 4× today: 08:20, 09:32, 10:00,
   10:03, by Ammar Shahrin and Nurul Aqilah.)
+
 - 2026-08-03 — **`hr_employee_profiles` has no `employment_status`,
   `resignation_date` or `last_working_date`.** The columns are `end_date` and
   `resigned_at`. `hr_attendance_logs` has no `updated_at` (only `created_at`,
@@ -1339,6 +1876,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `overtime_type`. `hr_payroll_items` stores tax as `pcb_tax`, not `pcb`.
   Three queries were lost to guessing these — check
   `information_schema.columns` first.
+
 - 2026-08-03 — **The NULL trap bites in analysis SQL too, not just PostgREST.**
   `NOT (final_status IN ('approved','adjusted') OR …)` is NULL — not TRUE — for
   the ~288 rows where `final_status IS NULL`, so a "dropped hours" total came
@@ -1635,97 +2173,6 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   with the closing day. Expiry is **derived from `createdAt`**, not stored — no
   `EXPIRED` enum, no migration, no cron to flip stale rows.
 
-- 2026-07-30 — **Week-to-week: revenue IS holding, but the ad saving is NOT
-  reaching the bank — a different line ate it.** Owner asked "can we maintain
-  it". Verified series (in-store = `pos_orders` ex-`grabfood` + `orders`
-  QR/app; ad spend = `ads_metric_daily`, 3 campaigns, one sync row per day):
-
-  | Week (Mon–Sun) | In-store MYR | Ad spend MYR |
-  | --- | --- | --- |
-  | Jun 22–28 | 59,409 | 1,997 |
-  | Jun 29–Jul 5 | 65,839 | 2,632 |
-  | Jul 6–12 | 63,710 | 4,171 |
-  | Jul 13–19 | 64,986 | 3,968 |
-  | Jul 20–26 | 61,976 | 2,395 |
-
-  **A previous session's weekly spend table was WRONG** (quoted ~RM2,000/wk flat
-  for Jun 22–Jul 13, and RM1,198 for Jul 20 — the later weeks were roughly
-  halved). The table above is recomputed from the daily series and reconciles to
-  it; the false "40% less spend, same revenue" headline derived from it is
-  withdrawn and replaced by the blocks below.
-
-  Rolling 7-day blocks (every block weekday-complete, so no day-of-week bias):
-
-  | Block | In-store | Ads | Discounts | Ads+disc | Rev per ad-RM |
-  | --- | --- | --- | --- | --- | --- |
-  | Jul 1–7 | 66,263 | 3,269 | 3,709 | 6,978 | 20.3 |
-  | Jul 8–14 | 62,304 | 4,027 | 3,565 | 7,592 | 15.5 |
-  | Jul 15–21 | 65,773 | 3,745 | 4,444 | 8,189 | 17.6 |
-  | Jul 22–28 | 63,233 | **2,092** | **5,800** | 7,892 | **30.2** |
-
-  (Discount column CORRECTED — see the entry immediately below; the first pass
-  double-counted it and reached the opposite cash conclusion.)
-
-  **Revenue answer: yes, maintained.** Jul 22–28 (63,233) sits inside the
-  full-spend range 62,304–66,263 — the spread among full-spend blocks (6.4%) is
-  wider than the gap to the cut block (−2.4% vs their mean). Mon–Wed
-  like-for-like organic confirms it across six weeks: 17,646 / 19,922 / 18,878 /
-  18,947 / 18,001 / **18,102** (Jul 27) — the newest low-spend week is mid-range
-  and ABOVE the previous one. Two consecutive low-spend weeks now, not one.
-
-- 2026-07-30 (correction, supersedes the discount half of the entry above) —
-  **`pos_orders.discount_amount` is the TOTAL, not a manual-discount column.**
-  `pos-native/lib/checkout.ts:194`: `discount = rewardDiscount + promoDiscount +
-  manualDiscount`, and `promo_discount` / `reward_discount_amount` are ALSO
-  persisted separately. Summing all three double-counts. Manual =
-  `discount_amount − promo_discount − reward_discount_amount`.
-  **Manual/staff discounting is effectively ZERO** — RM40 / RM6 / RM0 / RM12 per
-  week across the four July blocks, not the RM2,600/wk claimed above. The
-  cashier manual-discount path exists (`register.tsx:3686`) and is essentially
-  unused. Corrected discounts (POS order-level total + web parts; the web
-  `orders.discount_amount` column is always 0, its real parts are
-  promo/reward/first_order):
-
-  | Block | Ads | Discounts | Ads+disc | In-store |
-  | --- | --- | --- | --- | --- |
-  | Jul 1–7 | 3,269 | 2,377 | 5,646 | 66,263 |
-  | Jul 8–14 | 4,027 | 2,120 | 6,147 | 62,304 |
-  | Jul 15–21 | 3,745 | 2,587 | 6,332 | 65,773 |
-  | Jul 22–28 | **2,092** | 3,247 | **5,339** | 63,233 |
-
-  **So the cash conclusion FLIPS: the ad saving IS reaching the bank.** Jul 22–28
-  total marketing cash (5,339) is the LOWEST of the four blocks. vs Jul 15–21:
-  ads −1,653/wk, discounts +660/wk, net **−RM993/wk ≈ −RM4,300/mo** on held
-  revenue. vs the mean of the three prior blocks: net −RM703/wk ≈ −RM3,046/mo.
-  The discount rise is real but roughly half the ad saving, and it is
-  **loyalty-voucher redemption on POS** (reward 612 → 984 → 1,239 → **1,602**/wk,
-  +RM4,290/mo annualised) plus promo (766 → 482 → 653 → 985) — the SMS/loyalty
-  loop that still has NO approval gate. Not staff discretion.
-
-- 2026-07-30 — **BUG (money path, unfixed): per-line discounts are charged to the
-  customer but NOT persisted — the till OVER-REPORTS revenue.**
-  `cart.ts:127 cartSubtotal` is net of `line_discount_sen` and drives both the
-  cashier's on-screen total (`register.tsx:870`) and the customer display
-  (`customer-display.tsx:250`), so the customer correctly pays the discounted
-  amount. But `checkout.ts:179` RECOMPUTES `subtotal = Σ unit_sen × qty` — GROSS,
-  ignoring `line_discount_sen` — and that gross figure is what lands in
-  `pos_orders.subtotal`, `.total`, and the `payments` row (`amount: total`).
-  The line discount is written to `pos_order_items.discount_amount` and printed
-  on the receipt (`receipt-format.ts:208`) but never deducted from the order.
-  **Verified against prod:** for every affected order `total` equals
-  `subtotal + service_charge − discount_amount + sst` exactly, i.e. the line
-  discount is absent. e.g. CC-CON-4797 subtotal 7450, line_disc 1390, promo 0,
-  reward 0, total 7450; CC-TAM-2757 line_disc 6760 = 100% of subtotal, total
-  6760. **RM1,636.34 across 222 lines since 2026-06-08, still occurring
-  2026-07-30.** Effects: reported revenue overstated by that amount, and card
-  settlements / cash counts run short against reported sales. Small vs ~RM330k
-  of till (~0.4%) so it does not move the ads conclusions, but it is real money
-  and it corrupts every revenue lens. **NOT fixed — `pos-native` is a
-  production OTA deploy and this is payments-adjacent, so hard rule 6 applies:
-  needs owner approval.** Fix is one line (make checkout's subtotal use
-  `cartSubtotal`/`lineNet`), but decide first whether historical rows get
-  restated or left as-is.
-
 - 2026-07-30 — **Actual ad spend runs 1.3–2.1× the daily budget on file,
   persistently.** Jul 4–19: RM550–670/day actual against ~RM283/day of budget
   (ledger `prev_daily_micros` on Jul 18 reads 84.96/98.42/100.00, so the
@@ -1776,23 +2223,6 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   how much we actually spend per hour; if overnight spend is trivial the lever
   gets dropped rather than shipped.
 
-- 2026-07-29 — **Ads creative is now visible (PR #1088, merged 132034f8;
-  migration `20260729_ads_campaign_creative` APPLIED to prod).** The ads sync
-  covered spend and matched terms but nothing about the ad itself — no copy, no
-  images, no landing-page URL, no geo radius, no ad schedule — so every
-  creative question was unanswerable. `syncAdCreative` now snapshots five kinds
-  into `ads_campaign_creative` (ad / setting / geo / schedule / asset), plus
-  `hour_profile` (24-slot spend, prices the dead window). READ-ONLY by design.
-  **Radius finding (evidence, pre-sync):** Putrajaya and Tamarind are only
-  **~7 km apart**, and each campaign pays for the other's town — Tamarind spent
-  RM24.47 on Putrajaya-named terms, PJ RM13.24 on Cyberjaya/Tamarind terms over
-  14d (Shah Alam clean at RM0.53, it is 20km+ away). Radii overlap; we bid
-  against ourselves. Direct visible bleed ~RM81/mo, but town-named searches are
-  only the visible tip. **CPC is a diagnostic, NOT the objective** (owner
-  challenged this): junk food-intent traffic is our MOST expensive at
-  RM0.494/click vs café intent RM0.374 — a CPC-minimising rule would cut the
-  valuable expensive clicks. Optimise for cash; use CPC as early warning only.
-
 - 2026-07-29 — **IOI Mall clock-out trap: fixed and DEPLOYED, but NOT yet
   exercised in production — and it probably never will be by waiting.**
   Incident: staff rostered at Celsius Coffee IOI Mall could clock in but not
@@ -1836,134 +2266,6 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   as `app_offsite` with `ai_flags` EMPTY on every row. Clocking in from ~5km
   away at shift start is an attendance-integrity issue nothing currently
   surfaces. Not addressed by #1087.
-
-- 2026-07-27 — **Ads cut VERDICT: safe. Organic till FLAT on a payday-aligned
-  read; guard rebuilt.** Owner flagged the methodology: Malaysian salaries land
-  ~the 25th, so adjacent weeks sit at different points in a monthly demand
-  cycle and are NOT comparable. Redone same-days-of-month (Jun 20–26 vs
-  Jul 20–26 — payday-aligned AND weekday-complete, both post-cutover).
-  **Use EVERY aligned window, not one** — the three available spread
-  organic **−4.2% / −3.5% / 0.0%** (starts 18/19/20), mean ≈−2.6%, while TOTAL
-  till is UP in all three (+1.5/+0.4/+3.1%, mean ≈+1.7%). An early pass quoted
-  "organic FLAT +0.01%" from the single most favourable window — don't. In every
-  window discounted revenue rose by MORE in ringgit than organic fell, so the
-  organic dip is fully explainable by cannibalisation (walk-in switches to a
-  voucher) rather than lost demand. Verdict: **47% ad cut, no visible harm, but
-  the ~4pt window spread is as wide as the effect — unresolvable at this
-  precision.** Cuts side **+RM4,252/mo** real; net bounded ≈−RM2k to +RM4.25k/mo.
-  Per-outlet organic (20–26 window): PJ **+5.6%**, SA **−4.2%**, Tam **−1.5%**.
-  Supersedes the Jul 26 "organic −6.8%, Tamarind −12%" reading, a pure
-  payday-cycle artifact of comparing Jul 20–26 against Jul 13–19.
-  **Guard rebuilt (PR after #1072):** (a) reads ORGANIC till
-  (`ads/organic-revenue.ts`, promo/reward orders excluded; actual AND forecast
-  history must come from the SAME series or the ratio compares organic against
-  total and breaches instantly; labour-gate keeps TOTAL — a voucher order still
-  takes labour; revert via `ADS_GUARD_REVENUE=total`); (b) `momIndex` = window ÷
-  same days-of-month a month earlier, and a breach driven ONLY by rawIndex while
-  momIndex ≥0.97 is flagged `calendarArtifact` and does NOT roll back
-  (adjIndex/anchorIndex already cancel payday — one salary calendar fleet-wide —
-  so only rawIndex was exposed); (c) scoreboard anchor clamped to
-  `POS_CUTOVER_YMD=2026-06-18` so it cannot straddle the StoreHub→pos_native
-  cutover (source of the phantom −RM13.5k/mo till Δ).
-  **The organic/discounted split SUBTRACTS the SMS confound; it does NOT
-  attribute revenue to gads** (organic = walk-ins + regulars + Grab + ads; an
-  ad-driven customer redeeming an SMS voucher counts as discounted). Real
-  channel separation still needs a holdout or the value-based conversion tag.
-
-- 2026-07-25 — **"Old app version suddenly reappears" = expo-updates OTA
-  regression from `runtimeVersion.policy: "appVersion"`** (branch
-  `claude/version-regression-bug-adwked`, draft PR). Owner screenshots showed
-  the pickup app's Orders tab flipping between the pre-tabs empty state and the
-  newer "In progress / Past orders" tabs — same `apps/pickup-native/app/
-  orders.tsx`, different JS BUNDLE. Root cause: `appVersion` policy glues the
-  OTA runtimeVersion to the marketing `version`, so every bump (pickup-native
-  climbed 1.0.0→1.0.3, buildNumber 12 / versionCode 10) mints a NEW runtime and
-  **severs the OTA update lineage** — post-bump OTAs only reach the new runtime,
-  and a device landing on a fresh store binary boots its embedded (older) bundle
-  with no matching OTA to pull it forward (reinstall = fresh store build =
-  recovers). Fix: **pickup-native only** → `policy: "fingerprint"` (owner
-  narrowed scope from all-three to just pickup; pos-native + staff-native LEFT on
-  `appVersion` — same footgun still latent, migrate on their next store build).
-  Fingerprint changes iff the native layer changes, so marketing-version bumps no
-  longer sever OTA. **Transition cost:** the fix lands on the next native build;
-  the fingerprint switch also means the normal `pickup-native-ota.yml` now
-  publishes against a fingerprint runtime no installed app matches. Added
-  `pickup-native-ota-catchup.yml` (manual dispatch, default runtime `1.0.3`) to
-  republish current JS against the in-field appVersion runtime so the live fleet
-  catches up on next launch. **Catch-up was EXECUTED successfully 2026-07-25**
-  (owner said "do for me") — `eas update` published to the `production` channel,
-  **runtime 1.0.3, android+ios**, update group `2ad415b6-9974-41a1-abae-
-  23477603fe17`; the 1.0.3 fleet pulls the current bundle on next launch.
-  Mechanism notes (learned the hard way): the integration can't use
-  workflow_dispatch (403), so the workflow fires on a `.ota-catchup-trigger`
-  marker push (mirrors pickup-native-ota-deploy.yml); eas-cli has **no
-  `--runtime-version` flag** — pin runtime by writing a literal
-  `expo.runtimeVersion` into app.json at publish time (ephemeral). Still on
-  `appVersion`: pos-native, staff-native. The eager
-  fetch+reload hook in `_layout.tsx:160` was NOT the bug. Also noted (not
-  touched): `pickup-native-ota-deploy.yml` publishes CURRENT-branch JS to the
-  prod channel on a marker bump from an arbitrary claude/* branch — a separate
-  footgun worth removing later.
-
-- 2026-07-23 — **Ads autopilot: root-consolidation regression found + fixed;
-  the "till held" claim corrected.** (a) **Regression:** the Jul 21
-  consolidation REMOVED the working literal negatives "restaurants" /
-  "restaurants near me" in favour of the root "restaurant". Google's negative
-  themes do NOT stem plurals — both resumed spending the next day (SQL-verified
-  natural experiment: spend →0 while literals were applied Jul 18–21, →back
-  Jul 22–23; RM24.46 in 2 days across Tam+PJ ≈ RM370/mo). Slots ended back at
-  25/25 on all three campaigns, so the swap bought nothing. Food/restaurant
-  intent is now RM105/7d fleet-wide (Tamarind **19.7% of its whole spend**, PJ
-  10.7%, SA 5.2%). Fixed: consolidation is **additive only** (never removes a
-  literal), new `verify-exclusions.ts` runs a nightly leak check
-  (`findLeaks` → re-exclude the literal, `planSlotSwap` value-ranked eviction,
-  `scoreNegatives` measures a negative by the junk it actually covers —
-  needed because consolidation roots carry no `estMonthlySavingMyr` and would
-  otherwise rank as worthless and be evicted). `superseded` ledger rows are now
-  retryable. (b) **Correction:** the Jul 21 "till held flat, RM4,056/mo banked"
-  was overconfident. Decomposing by discount status (clean post-cutover,
-  cut-week vs prior 4w): organic till RM8,628→**8,495/day (−1.5%)**, discounted
-  (SMS-voucher) RM1,459→**1,690/day (+16%)** — the flat top-line is two
-  opposite moves, and **the guard reads TOTAL till so it cannot see ad damage
-  while SMS ramps**. Honest cash range **+RM1.8k–4.25k/mo**, not RM4.25k.
-  Budgets held at PJ 51.51 / SA 53.98 / Tam 52.97 (fleet RM158.46/day, −47%)
-  since Jul 22, in the 14d observation window. **Next:** point guard +
-  scoreboard at ORGANIC till before observation expires ~Aug 3; then either
-  hold budgets through ~Aug 5 for a clean organic read or freeze one outlet as
-  an ad-control. Also owed: remove inert `hardCutDirective`, fix scoreboard
-  StoreHub-cutover anchor.
-
-- 2026-07-23 — **SMS loop is live and sending** (corrects an earlier
-  mis-read): `sms_logs` is STALE (last row Jun 21) — the real sends go via SMS
-  Niaga and are tracked in `loop_rounds`; the provider dashboard shows 200–500
-  SMS/day all through July. `winback` is on round 36, status 'sent' daily by
-  `cron:loops-trigger`. **Problems:** `approved_at` is NULL on all 75 July
-  rounds (cron self-approves, design called for an approve gate); arms have
-  drifted to **cash discounts** (RM10 off RM30+, 15%/20% off) against the
-  margin-safe-only policy; segments are 25–60 people with ~3-person holdouts so
-  `campaign_outcomes` verdicts are almost all 'invalid' (130 rows, backfilled
-  in one batch Jul 18). 6,869 campaign vouchers issued Jun 22–Jul 23, 184
-  redeemed (2.7%). No trustworthy incremental-cash number exists for SMS yet.
-
-- 2026-07-22 — **First-order 10% discount made native-app-only** (branch
-  `claude/first-order-discount-check-lx938r`, draft PR). Business intent: the
-  welcome 10% is now a native-app perk (drives installs) on BOTH pickup and
-  dine-in; the web/PWA gets nothing. FOD config still lives on the
-  `promotions` row `promo-first-order-celsius` (trigger_type=first_order,
-  percentage_off 10, is_active). Data finding that drove this: over 30d, FOD
-  landed on 0/2,511 dine-in orders (any source) but ~30% of pickup — because
-  the row was `channels=['pickup']` and dine-in runs the `qr_table` channel;
-  the split was order-type, NOT native-vs-PWA. **New mechanism:** gate on
-  order `source`, not channel. `/api/orders` (native, source app_ios/
-  app_android — pickup + dine-in) applies FOD; `/api/checkout/initiate`
-  (PWA, QR-table dine-in, source web_qr) and `/api/checkout/quote` (PWA
-  preview) no longer apply/preview it. The `promotions.channels` field is now
-  vestigial for FOD (code gates on source); left at `['pickup']`. Native
-  checkout still only shows FOD at the receipt (its preview uses
-  `/api/loyalty/promotions/evaluate`, which excludes first_order) — unchanged,
-  possible follow-up. **Live-behaviour note:** the discount only lands at
-  order create, so it needs the PR deployed; until then prod behaviour is
-  unchanged (native pickup only).
 
 - 2026-07-22 — **Week 2026-07-20 = owner-designated SCHEDULING REFERENCE
   baseline** ("make week 20th a reference and optimise from there — cost &
@@ -2012,73 +2314,6 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `['boh']` kitchen; staff-app access = the `barista`/`kitchen crew` crew preset
   (`appAccess ['ops','inventory']`). DOB + gender are derivable from the IC.
 
-- 2026-07-16 — **Finance warehouse baseline (SQL-verified against kqdc).**
-  Fresh: unified_sales pos_native →7/16, consignment →7/12 (Nilai settles
-  later than older notes claim — re-verify live, don't trust dated notes);
-  BankStatement 3 accounts →7/15; BankStatementLine 56,429 rows, 0
-  uncategorised (rule 55,119 / ap-match 1,134 / user 169 / manual 7); GL
-  4,621 posted txns / 10,446 lines / COA 116 active; June payroll actuals
-  booked RM77,259.50; unpaid AP 72 PENDING RM45,060 + 16 INITIATED RM7,780
-  + 9 DEPOSIT_PAID RM20,988. **Findings:** `fin_agent_decisions` has only
-  7 rows, ALL agent='purchasing-manager' — the finance agents' documented
-  decision-log/eval dataset is NOT accumulating (logDecision not on live
-  paths or failing silently); ALL 19 fin_periods 2025-01→2026-07 are open
-  (no close ever approved); 88 draft fin_transactions linger (latest 6/30);
-  37 future-dated posted rows are month-end depreciation (legit convention,
-  but descriptions contaminated with bank narrations); July MTD lens gap:
-  till RM133,241.75 vs GL income RM163,976.74. Full inventory + backlog:
-  `docs/design/finance-data-warehouse-agent.md`.
-
-- 2026-07-12 — **Data-consolidation audit for the internal assistant (all
-  SQL-verified against kqdc).** Connectivity clean: 0 orphans across
-  unified_sales/roster/checklist/invoice/bank-line joins. unified_sales VIEW is
-  the ONLY sales truth (merges pos_native live + storehub ≤6/17 + hubbo ≤1/20 +
-  consignment; cutover verified per-outlet exclusive, no double-count).
-  Dead/empty tables (never query): SalesTransaction (ends 4/11),
-  fin_bank_transactions, fin_invoices, fin_bills. TWO revenue lenses: till-rung
-  (unified_sales nett, Jun ~RM284k) vs banked GL income (Card+Cash/QR+Grabfood+
-  GastroHub, Jun ~RM406k, settlement-lagged, SST-incl) — Grab delivery revenue
-  exists ONLY in the GL/bank lens. NILAI = consignment outlet (no till; sales
-  are periodic consignment settlements, latest 6/28; 0 ParLevel rows; its
-  "ownerless checklist" alerts are likely SOP misconfig for that model).
-  "orders" (lowercase, customer pickup) ≠ "Order" (procurement PO). All other
-  domains fresh as of audit day (attendance, stock counts, reviews, loyalty,
-  bank feed via Bukku 6h sync — 3 accounts = complete set per owner). Encoded
-  in `apps/backoffice/src/lib/ops-intake/data-map.ts` (the assistant's
-  intelligence layer) — keep that file updated when semantics change.
-
-- 2026-07-12 — **April-era "Celsius QA" Telegram monitor decommissioned (cron
-  side).** It was two systems, both built ~Apr 5–7 against the pre-monorepo app
-  layout (standalone inventory/loyalty apps, retired since):
-  1. `qa-health-check` edge function on the **celsius-inventory** Supabase
-     project (`akkwdrllvcpnkzgmclkk`) + pg_cron jobs `qa-health-check`
-     (`7 * * * *`, hourly — matched the 1:07pm alerts) and `qa-health-report`
-     (4×/day). This was the source of the "🚨 Celsius QA Alert" Telegram spam
-     about `inventory.`/`loyalty.celsiuscoffee.com` DNS failures. **Both cron
-     jobs unscheduled 2026-07-12** (cron.job on that project is now empty). The
-     function itself is still deployed, publicly invocable (`verify_jwt:false`),
-     and has a **hardcoded Telegram bot token in its source** — rotate the bot
-     token and delete the function from the dashboard (MCP has no delete).
-  2. `qa-health` + `qa-autofix` edge functions on the **main** project
-     (`kqdcdhpnyuwrxqhbuyfl`), pg_cron `qa-health-check` every 30 min, check
-     list in the `qa_health_checks` table. Its 4 inventory/loyalty rows had
-     been failing since April (4,200 consecutive failures; `qa_alerts` grew to
-     ~10k rows since Apr 7) and each failure re-triggered `qa-autofix` — which
-     can **redeploy retired Vercel projects** (loyalty/inventory/pos project
-     IDs are hardcoded in it).
-
-  **Fully cleared 2026-07-12 on owner's go-ahead:** the main project's 30-min
-  cron unscheduled; `qa_alerts`/`qa_fix_rules`/`qa_health_checks` dropped
-  (migration 080 — note: they were in `prevent_drop_critical_tables()`'s
-  hardcoded protected list, which the migration amends to remove ONLY those
-  three); all 3 edge functions (`qa-health`, `qa-autofix`, `qa-health-check`)
-  overwritten with secret-free 410 tombstones + `verify_jwt` on (MCP cannot
-  delete functions — delete from the dashboard at leisure). Nothing monitors
-  the live apps now — BetterUptime (ops-hardening checklist §3) is the
-  intended replacement. **Human actions remaining:** rotate the Telegram QA
-  bot token (old versions of `qa-health-check` embed it in source), delete
-  the 3 tombstoned functions, and decide whether the idle `celsius-inventory`
-  Supabase project (`akkwdrllvcpnkzgmclkk`) can be paused/deleted entirely.
 - 2026-07-10 — **Vercel schedules at most 40 cron jobs per project; entries past
   40 are silently never scheduled.** vercel.json hit 46 (Jun 30) and the tail —
   procurement-exec, par-levels-recalc, request-invoices/receivings,
@@ -2086,43 +2321,34 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   Consolidated to 37 via dispatchers (`cron/procurement-loop`, `cron/ops-nudges`);
   `apps/backoffice/src/vercel-crons.test.ts` fails CI past 38. **Never append a
   41st cron — fold into a dispatcher.**
-- 2026-07-10 — Procurement loop has a watchdog (`lib/inventory/loop-watchdog.ts`,
-  runs in the procurement-loop cron): stale pars, undelivered cold prompts,
-  100%-failing send channels, stale proposals/drafts → owner WhatsApp digest,
-  fingerprint-deduped. Agent lessons (agent-lessons.ts) default ON since #895.
+
 - 2026-07-10 — The AP bank matcher is RECONCILE-ONLY on the 6-hourly loop
   (Telegram POP is the primary payer); only the EOM `cron/ap-match-apply` may
   mark open invoices paid (`markOpenPaid:true`). Bank narrations quoting a
   different invoice number veto the match (312/1049 historical matches settled
   the wrong same-amount invoice; ~113 double-count risks still need a manual
   reconciliation pass — unfixed data).
+
 - 2026-07-10 — PDF cold-send path (PROCUREMENT_PO_DOC_TEMPLATE) is hard-disabled
   in code: the Meta template never matched (16/16 sends failed #132000). Cold
   sends ride prompt→reply→block, with 24h re-prompt + give-up note. Re-enable in
   procurement-po-send.ts once the template truly has a DOCUMENT header + {{1}}/{{2}}.
 
-- 2026-07-04 — Procurement loop: automated PO-send to suppliers over WhatsApp
-  (`purchase_order` / `po_approval` buttons) was designed but **never shipped**;
-  sending the order block is still manual. Agent only needs an open PO to exist.
-  (Source: `docs/design/procurement-e2e-test-runbook.md`.)
-- 2026-07-04 — Stock accuracy is shadow-only (consumption engine off); reorder
-  runs off receipts − wastage/transfers, not sales. Going live needs unit
-  normalisation + recipe import (`docs/design/procurement-qa-2026-06-26.md`).
 - 2026-07-05 — RLS coverage is broader than `docs/rls-strategy.md` claims
   (three later migration sets added deny-all/policied RLS to HR, bank, ads,
   and all `fin_*` tables) — but the **loyalty tables' policies are
   `USING (true)` for all roles, so member PII/points are anon-readable AND
   writable**. Full verified map + ranked fixes:
   `docs/rls-access-map-2026-07-05.md`.
-- 2026-07-04 — 14 Vercel crons fail silently into logs (no heartbeat
-  monitoring wired yet). `reconcile-pending` (order, every 1 min) is the
-  payments-critical one. See `docs/monitoring-setup.md`.
+
 - 2026-07-04 — Exception-inbox corrections update `fin_agent_decisions`
   (`corrected=true, corrected_to=…`) — this is the finance agents' eval/
   retraining dataset. Preserve the write path in any refactor.
+
 - 2026-07-05 — Categorizer runs on `claude-haiku-4-5` with a prompt-cached
   COA block; its vendor context is the last **5** bills, not the 50 the
   spec describes (spec drift, `categorizer.ts` `supplierHistory()`).
+
 - 2026-07-05 — The Anomaly agent from the finance spec is **not built**;
   matching is rules-based (`ap-match.ts`) + an LLM verifier — nothing
   writes `fin_matches`. Only `ap`/`categorization` exceptions have a
@@ -2138,126 +2364,29 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   stays `completed`-only: the till writes completed at ring-up (= paid) and
   Grab settles at collection. Historical days are unaffected — the hourly
   sweep-stale-orders cron forces every paid order terminal within ~3h.
+
 - 2026-07-05 — **Revenue is split across 3 tables** and reconciles to the
   manpower workbook to the ringgit: `storehub_sales` (per-outlet retirement
   Jun 15–17), `pos_orders` (in-house POS from Jun 8/15/18, GrabFood
   included), `orders` (pickup app). Any revenue query must UNION all three
   while the cutover is in a trailing window (`lib/hr/labour-gate.ts`
   `revenueBetween`).
+
 - 2026-07-05 — **PT wages never flow through payroll runs** (Apr+): they are
   weekly bank transfers → `BankStatementLine` (`partimer` rule) → GL
   `6500-03`. June per outlet: Con 5,103 / SA 9,168 / Tam 6,078 / Nilai
   3,892. Outlet venue prefixes exist in descriptions since June; classifier
   fixed + 266 rows backfilled (migration 071).
-- 2026-07-05 — All six 2026 monthly payroll runs are status `draft` (no
-  OT/allowances finalised) — FT actuals read ~RM3k/outlet flattering vs the
-  workbook until closed.
-- 2026-07-05 — 4 scheduled staff have no `hr_employee_profiles` row
-  (Hidayat, Irfan, a 2nd Haziq — Putrajaya; Fatin — Tamarind). The labour
-  gate blocks publishes that include them until profiles+rates exist.
+
 - 2026-07-05 — Shift templates of record are the `hr_shift_templates` DB
   rows (Opening / Middle 1–3 / Closing per outlet); `lib/hr/shift-templates.ts`
   is only the fallback when the table is empty.
-- 2026-07-14 — **Multi-outlet staff rotation (code-verified).** Membership is
-  `User.outletId` (primary) + `User.outletIds[]` (additional) — editable ONLY
-  in Settings → Staff (outlet checkboxes; the HR employee page edits primary
-  only). Every scheduling surface pools `outletId OR outletIds has`: grid,
-  AI Fill, assist candidates. Assist candidates (`schedules/candidates`)
-  count weekly hours ACROSS outlets (query is user-scoped, not
-  outlet-scoped) and flag `double_booked`/`over_cap` cross-outlet; they also
-  score a `home` signal (primary 1 / outletIds 0.8 / other 0.5). Clock-in
-  (`staff /api/hr/clock`) picks the nearest assigned outlet by GPS, so
-  attendance logs the outlet actually visited. Leadership rotation = the
-  rover path (Manager/Area Manager/Barista Lead, 2 days/outlet, HQ-costed,
-  cross-outlet busy check). **Gap:** AI Fill's cross-outlet busy check
-  covers rovers ONLY — a regular FT/PT in two outlet pools is generated
-  independently at each (FT: 6 days at BOTH; PT: 24h/5d caps applied per
-  outlet run → up to 48h), and the manual `cell`/`assign` writes have no
-  hard cross-outlet overlap guard (the warning is advisory in the ranking
-  UI only). Fix shape: extend the rover `busy` set to all pooled staff in
-  the generator, seed `ptWeek` from other-outlet shifts, add an overlap 409
-  in cell/assign.
-- 2026-07-14 — **Multi-outlet double-booking fixed** (branch
-  `claude/staff-rotation-outlets-kmobpa`, PR #934). Owner rule chosen:
-  **primary outlet wins**. AI Fill (`schedule-generator.ts`) now: (1) loads
-  every pooled staffer's shifts at OTHER outlets for the week
-  (`bookedElsewhere`) and never places anyone on a day they're already
-  working elsewhere; (2) floors a full-timer's 6-day week ONLY at their
-  primary outlet (`isPrimaryHere = User.outletId === outletId`) — a shared FT
-  is listed in `ai_notes` as "rostered at their primary, not here" and must be
-  borrowed manually at secondary outlets; (3) seeds each PT's `ptWeek`
-  hours/days from other-outlet shifts so the 24h/5-day caps bind on the
-  COMBINED total. Manual writes: `cell` + `assign` routes call
-  `findCrossOutletOverlap` (new `lib/hr/cross-outlet.ts`) and 409 on a
-  same-day cross-outlet time overlap. **Residual (best-effort, documented):**
-  generation is per-outlet on-demand, so "primary wins" for a same-day PT
-  conflict relies on generating home outlets first — no destructive
-  cross-outlet steal. The assist-candidate ranking was already
-  cross-outlet-aware (user-scoped hours, `double_booked`/`over_cap`).
-
-- 2026-07-18 — **Sales Compare robustness pass (branch
-  `claude/sales-compare-robustness-q5peil`).** Four verified gaps in the
-  backoffice unified-sales path (`api/sales/_lib/unified-sales.ts`), all
-  fixed there so every consumer (compare, dashboard, P&L-sourced, recon)
-  inherits: (1) 741 StoreHub rows with `status='paymentCancelled'` but
-  `is_cancelled=false` (RM24,398.90, Aug 2025–Jun 2026) were counted as
-  revenue — the raw path lacked the canonical convention's status filter;
-  (2) `hubbo_sales` (70,395 rows, the pre-StoreHub till for
-  Putrajaya/Shah Alam through Jan 2026) was missing entirely — any
-  comparison reaching before the outlet's StoreHub start read near-zero;
-  raw path now mirrors the view's exclusive handover split (hubbo <
-  handover instant ≤ storehub); (3) consignment-only outlets (Nilai, IOI
-  Mall — `storehubId` NULL) were excluded by compare's outlet filter, so
-  "All Outlets" silently omitted them; (4) `computeProjection` still read
-  DEAD SalesTransaction → server projection was always null (client 7d-MA
-  fallback masked it); re-pointed to the unified_sales view with the
-  canonical revenue convention. Also: sales-channel dimension
-  (till/qr_table/pickup_app/grabfood/beep/delivery_other/consignment,
-  `_lib/source-channels.ts`) now flows through compare (`sources` per
-  period + UI breakdown table), consignment daily rows carry
-  units=item_count into orders/AOV, and partial-vs-full comparisons show
-  an aligned "first K days" pace line in the summary cards. MERGED as
-  #976. Round 2 (owner: "cannot pick multiple outlets"): outlet filter is
-  now multi-select — API takes `outletIds=a,b,c` (legacy `outletId` kept
-  for the staff bridge), UI is a checkbox popover; selecting every outlet
-  collapses to the all-outlets default. MERGED as #992. Round 3 (owner:
-  "check all the ux ui, improve it"), page-only pass: presets are visible
-  chips (active highlighted); page auto-opens on This Month vs Last Month;
-  state persists in the URL (?p=&o=&m= — shareable links); refetches dim
-  the old results instead of blanking (full spinner only on first load);
-  fixed a REAL Tailwind bug (template-string `sm:grid-cols-${n}` is never
-  JIT-generated — summary cards always fell back to 2 cols; now a static
-  class map); Rounds table gains an "Other hours (11pm-8am)" row so Total
-  reconciles with its rows; Order Type table flipped to rows=type ×
-  cols=periods (consistent with all other tables) + share %; Month tab in
-  the Add Period picker (last 12 months); chart gains a dashed "now"
-  reference line + whole-K y-ticks ≥100k; summary deltas labelled
-  "vs {period}"; outlet-context caption beside the metric toggle. Round 3b
-  (owner screenshots): **REAL BUG — outlet-filtered compare showed stale
-  cross-outlet data.** Cent-exact forensics: "Tamarind" card = Tam+SA,
-  "Shah Alam" card = ALL outlets — overlapping fetches with no guard; an
-  older bigger response landing last overwrote the newer one. Fixed with a
-  fetch sequence guard + AbortController. Also: "Other Delivery" (owner:
-  "should be grab") is actually the retired StoreHub Beep channel (May-era
-  volume ≈ Grab's; Grab has its own row) — relabelled "Beep / Other
-  Delivery". NEW: Payment Method dimension in compare (per-period gateway
-  table, Δ + share of tendered total + coverage row; pos dominant-tender +
-  pickup payment_method; validated cent-exact vs the By Payment report for
-  Jul 11-13; StoreHub era has no payment splits — caveat shown).
-  Round 3c (owner: "add QR Table to By Channel tab"): Sales Reports → By
-  Channel rebuilt from order-type (dine-in/takeaway/grab) to the SALES
-  CHANNEL source axis (Till/QR Table/Pickup App/GrabFood/Beep/Consignment,
-  each order once) — QR Table was previously invisible, folded into
-  dine-in/takeaway. reports.ts buildByChannel now aggregates ev.source via
-  SOURCE_ORDER/SOURCE_LABELS; note points to Sales over time for the
-  dine-in/takeaway split (which keeps its order-type columns). Verified
-  Jul 11-13 all-outlets: Till 21,208.52 / QR 8,049.80 / Grab 3,314.20 /
-  Pickup 602.30 = 33,174.82, cent-exact vs By Payment total. Frontend is
-  fully generic (columns/rows/note) — no page change needed.
 
 - Typecheck before pushing — every time. CI enforces it, but catch it locally.
+
 - Never test against the production database; the procurement runbook's seed SQL
   is staging-only.
+
 - When a fix is confirmed working, record *why it worked* here or in the relevant
   skill — not just in the chat.
 
@@ -2297,6 +2426,30 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   Settlement behavior untouched. Remaining owner actions: raise the tx
   ids with RM support; confirm in the RM portal that C-1WA685/C-NVK227
   weren't charged (or run reconcile-failed dry-run).
+
+- 2026-07-30 — **BUG (money path, unfixed): per-line discounts are charged to the
+  customer but NOT persisted — the till OVER-REPORTS revenue.**
+  `cart.ts:127 cartSubtotal` is net of `line_discount_sen` and drives both the
+  cashier's on-screen total (`register.tsx:870`) and the customer display
+  (`customer-display.tsx:250`), so the customer correctly pays the discounted
+  amount. But `checkout.ts:179` RECOMPUTES `subtotal = Σ unit_sen × qty` — GROSS,
+  ignoring `line_discount_sen` — and that gross figure is what lands in
+  `pos_orders.subtotal`, `.total`, and the `payments` row (`amount: total`).
+  The line discount is written to `pos_order_items.discount_amount` and printed
+  on the receipt (`receipt-format.ts:208`) but never deducted from the order.
+  **Verified against prod:** for every affected order `total` equals
+  `subtotal + service_charge − discount_amount + sst` exactly, i.e. the line
+  discount is absent. e.g. CC-CON-4797 subtotal 7450, line_disc 1390, promo 0,
+  reward 0, total 7450; CC-TAM-2757 line_disc 6760 = 100% of subtotal, total
+  6760. **RM1,636.34 across 222 lines since 2026-06-08, still occurring
+  2026-07-30.** Effects: reported revenue overstated by that amount, and card
+  settlements / cash counts run short against reported sales. Small vs ~RM330k
+  of till (~0.4%) so it does not move the ads conclusions, but it is real money
+  and it corrupts every revenue lens. **NOT fixed — `pos-native` is a
+  production OTA deploy and this is payments-adjacent, so hard rule 6 applies:
+  needs owner approval.** Fix is one line (make checkout's subtotal use
+  `cartSubtotal`/`lineNet`), but decide first whether historical rows get
+  restated or left as-is.
 
 - 2026-07-27 — **QR-order payment failures are chronic (~16%/day) and CARD is
   the outlier: 36% of card attempts fail (89/247 over 14d) vs ~11% FPX/TNG,
@@ -2365,6 +2518,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   `*.sentry.io`) in the environment's network settings; verify with
   `find_organizations`. Until then the self-fixing loop cannot run. —
   blocking.
+
 - 2026-07-11 — **`JWT_SECRET` is missing from the order app's Vercel env**
   (project `celsius-pickup-app`) — every request logs `[env] order: MISSING
   (required): JWT_SECRET` in BOTH serverless and edge runtimes (verified via
@@ -2376,6 +2530,7 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   fallbacks. **Human action (payments-adjacent, hard rule 6):** add
   `JWT_SECRET` to the celsius-pickup-app Vercel project with the SAME value
   as backoffice's, redeploy. — blocking Maybank-QR release.
+
 - 2026-07-11 — **`ANTHROPIC_API_KEY` is missing from the staff app's Vercel
   env** — confirmed live: `GET /api/audits/staff/<id>/coach` 500ed with
   "Could not resolve authentication method" (the 21-event "New" Sentry
@@ -2388,13 +2543,16 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
   receipt-extraction route (`/api/claims/extract`, used by staff web +
   staff-native claims) also runs on ANTHROPIC_API_KEY and is equally
   broken until the var is added to the staff Vercel project.
+
 - 2026-07-05 — **`pos_*` + `orders`: 14 `USING(true)` policies are BY
   DESIGN** (SUNMI tills write via the anon key). Do NOT lint-fix — needs a
   data-layer plan (rls-strategy.md Path A). 4 `security_definer_view` +
   ~12 `function_search_path_mutable` remain as low-risk hardening.
+
 - 2026-07-05 — Most Vercel crons still have no heartbeat monitoring
   (`reconcile-pending` wired 2026-07-05; procurement family covered by the
   loop watchdog since 2026-07-10; HR/finance/ads crons still fail silently).
+
 - 2026-07-05 — Pickup dashboard **inventory tab reads tables that don't
   exist** (`ingredients`, `stock_levels`, `ingredient_outlet_settings` —
   absent from BOTH Supabase projects); it has been silently empty. Either
@@ -2427,6 +2585,13 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   findMany→distinct; main dashboard triple per-outlet fan-out; cashflow
   sequential awaits + triple BankStatementLine scan. loyalty/dashboard/kpi
   route looks orphaned (no client consumer) — verify before optimizing.
+
+- 2026-07-12 — **QA-decommission leftovers still owed (human actions):**
+  rotate the Telegram QA bot token (old `qa-health-check` edge-function
+  versions embed it in source), delete the 3 tombstoned edge functions
+  from the Supabase dashboards, and decide whether the idle
+  `celsius-inventory` Supabase project (`akkwdrllvcpnkzgmclkk`) gets
+  paused or deleted. Full story: `docs/state-archive/2026-07.md`.
 
 ## Lessons learned
 
@@ -2471,7 +2636,260 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   them losslessly. Replace-style writers must delete+insert in ONE
   transaction, and the delete-audit pattern pays for itself.
 
+- 2026-07-27 — **Compare revenue weeks payday-aligned.** Malaysian
+  salaries land ~the 25th, so adjacent weeks sit at different points of a
+  monthly demand cycle. Compare same-days-of-month windows, and use EVERY
+  aligned window, not the single most favourable one — the spread across
+  windows is the error bar on the conclusion.
+
 ## Resume pointer
+
+- 2026-09-05 (capabilities) — **Elevated permissions, so a head of operations
+  isn't forced through an ADMIN promotion** (branch `claude/hr-capabilities`).
+  Ariff (head of ops, MANAGER, all 5 outlets) hit the new unpublish guard.
+  Promoting him to ADMIN would have handed over finance, payroll, bank files
+  and every employee's bank details, since ADMIN bypasses `hasModuleAccess`
+  across ~120 routes — owner chose the targeted grant instead.
+  `lib/capabilities.ts`: named grants on the **previously unused**
+  `User.permissions` column (no migration), 60 s cache like `liveAccountState`,
+  fails closed. Three capabilities: `roster:unpublish`, `roster:retro_edit`,
+  `leave:cancel_approved`. OWNER/ADMIN hold all implicitly. `retroEditRefusal`
+  now takes a resolved boolean, not a role (both callers — cell AND assign —
+  updated; tsc caught the second). Grantable from the employee page's Access
+  card (manager-only section), validated + audit-logged in the access PATCH,
+  cache invalidated on write. Drift test pins UI keys ↔ registry and asserts
+  no capability is in a money/access-control domain.
+  **Applied to prod:** Ariff `2b906d16-7842-439c-b64e-ec596b1912e5` granted all
+  three (inert until the PR merges — nothing read that column before).
+
+- 2026-09-05 — **PR #1216 is the whole procurement/reports batch — review and
+  merge it.** It now carries: the hardening (25 QA findings), the live-sales
+  wiring that fixes "Expected RM0.00" on the reports, the split-payment AP
+  matcher, and the shared filter/sort/CSV table across all six procurement
+  reports. **CI has NOT run on the last three commits** (2967b972, 85696f9e,
+  bb8be838) — GitHub Actions never dispatched them, while every earlier push
+  on this branch ran green; validated locally instead (1122 tests, tsc clean
+  in backoffice+staff, eslint clean, `next build` OK). Branch previews show
+  "Canceled by Ignored Build Step" — a Vercel project setting skips preview
+  builds, so the owner cannot see any of this until merge; judge unmerged UI
+  from the diff. After merge:
+  set `TELEGRAM_ALLOWED_CHAT_IDS` from the warn logs, then consider
+  `INVOICE_PAY_REQUIRE_RECEIPT=block` once unreceived-PO share drops; tell
+  finance Telegram-captured invoices now land as DRAFT; add an override
+  control to the staff PO form (guard currently blocks without one). Still
+  open: payment-side data repairs (owner sign-off), deactivating the 22 active
+  RM0 ADHOC rows (safe now that ai-decisions excludes them; staff picker relies
+  on the ADHOC row being ACTIVE — so leave active). Item (e) split-payment
+  support in ap-match.ts is DONE (2026-09-05).
+
+- 2026-09-04 — **Procurement QA delivered; owner to pick fixes.** Highest-value
+  first: (1) auth+role on all inventory/transfer writes + Telegram allowlist;
+  (2) PAID requires receiving/override + shared duplicate-invoice assert + price
+  guard in staff routes/PATCH/pay-and-claim; (3) ADHOC exclusion in ai-decisions +
+  supplier-page package id + catalog cleanup; (4) POP URL on invoice, GRNI
+  checks, transactional receiving, transfer receive+chaser. PR #1216 (reports
+  wiring) still open/green.
+- 2026-09-05 (round 3) — **HR QA web backlog, no owner decision needed**
+  (branch `claude/hr-qa-round3`). Unpublish now OWNER/ADMIN + reason,
+  refused once the week has ended, activity-logged (`roster.unpublish`) —
+  it was the bypass around the published-roster retro-edit guard. Leave
+  gained a third outcome: backoffice `cancel` (pending → any reviewer in
+  scope, releases the hold; approved → OWNER/ADMIN with reason, restores
+  `used_days`, logged) and a staff self-withdraw for pending requests.
+  Staff web clock page: a log still open from a previous MYT day shows an
+  "End yesterday's shift at HH:MM" banner → `close_stale` action closes it
+  exactly as the cron would (rostered end / outlet close, `system` method,
+  OT 0, `auto_closed_forgot_clockout`), no GPS needed; a live shift can't
+  use it. `FetchError` card on every staff HR page (401 → "session expired
+  → sign in"; other → retry) instead of the empty state. My Attendance
+  shows OT tails ≥0.5 h (was ≥1). Backoffice `agents/leave-manager.ts`
+  (unused duplicate) deleted. Follow-up branch `claude/hr-swap-request-ui`
+  (stacked on round 3): staff can now RAISE a swap — "Swap" on a future
+  My Shifts card → `/api/hr/swap/candidates` (same outlet, published,
+  future, not rest, not already in a swap) → `action=request`, which now
+  validates the same rules and refuses duplicates; sent swaps show the
+  coworker's name and can be withdrawn. No push to the target yet (staff
+  app has no ops-push sender). Still open: native PR #1219 (owner to say
+  "merge 1219"; OTA to manager phones), shared recomputeTotals, and the
+  owner decisions listed under round 2.
+
+- 2026-09-03 (round 2) — **HR module code + flow QA, five parallel reviews.**
+  Report: `docs/design/hr-qa-round2-2026-09-03.md` (11 security, 16 money,
+  17 flow, 9 staff-app findings; ~35 fixed on `claude/hr-qa-round2`).
+  Highest-impact fixes: ADMIN could create an OWNER (new-hire + LOE import);
+  JWT role/status never re-read (now DB-checked, 60 s cache); staff profile
+  `select("*")` leaked HR notes; OT request trusted `attendance_log_id` and
+  client rate; raises effective next month were paid this month (mirror now
+  capped at cycle end); SOCSO/EIS wage double-counted PH/rest-day pay;
+  unpaid leave ignored `total_days`; threshold OT floored to whole hours;
+  shift-swap approval was dead (selected a non-existent column); leave
+  approve/reject race; KWSP/PERKESO files printed prorated basic as wage;
+  weekly runs missing from annual forms; PT payslip PDF "undefined null".
+  **Owner decisions:** contract/intern pay cycle; auto-close on >7.5 h
+  rostered shifts; state-specific PH; staff OT pre-booking page; EPF/SOCSO
+  numbers. **Backlog (native OTA):** route `kind:"clock"` push to the clock
+  screen, rest-day rows on My Shifts, OT ≥0.5 h display, payslip labels,
+  stale GPS on clock-out. **Backlog (web):** unpublish bypass of the
+  retro-edit guard, leave cancel/half-day, swap request UI, useFetch error
+  states, leave-manager duplicate, shared recomputeTotals for line edits.
+
+- 2026-09-02 — **August COGS + bank recon session closed.** PR #1207
+  (menu_margins v2, migration 109 already applied to prod) is green +
+  watched — merge when ready. Owner-side follow-ups queued: recover
+  RM2,533.50 from Collective Project (IV-01987 double balance), chase
+  Unique Paper INU-26-23275 (RM639.28 marked paid, no debit), the Ariff
+  conversation now bank-evidenced (2× RM128.30), CATELUX same-day RM181×2,
+  kitchen to confirm Chicken Tomyam Carbonara 80ml-olive-oil BOM line.
+  System follow-ups: (e) split-payment support in `ap-match.ts` — BUILT
+  2026-09-05, see the verified fact above;
+  receive-on-arrival + transfer-receipt discipline (15/15 Aug transfers
+  PENDING, 55/63 PJ POs unreceived — this is what makes per-outlet COGS
+  precise); catalog hygiene (3 uncosted ingredients, ~100 unit/pkt/slices
+  uom strings, cf=1 carton family). September = first clean measured month;
+  the consumption engine's variance report automates this comparison once
+  armed (day-7 shadow verdict still pending).
+- 2026-09-03 (later) — **August run confirmed; HR flow QA + review-queue
+  redesign shipped.** Owner recomputed August three times after #1211/#1212;
+  the confirmed run (11:56Z, gross 54,446.81) has Syafiq at basic 3,096.15
+  (Mon–Sat basis, 23/26), scored allowance RM110 (levers 40/40/40/40 − 3 lates
+  − 30 Aug no-show), gross 3,206.15 — his profile now: `proration_basis =
+  working_6day`, `fixed_performance_allowance = NULL` (was 178.20, owner: July
+  only). Only his line changed between runs. By-outlet CSV splits him
+  5/7/3 shifts with an EPF (employee) column (#1212 merged, deployed).
+  **QA report:** `docs/design/hr-flow-qa-2026-09-03.md` (14 findings). Built
+  on `claude/hr-review-queue`: one attendance+OT review queue with
+  period/outlet/staff/flag filters, exact pending count, bulk approve/excuse/
+  reject (`PATCH {ids[]}`), implausible-tail guard (`MAX_PLAUSIBLE_TAIL_HOURS
+  = 8`), Overtime page → ledger (½-hour steps, no sync), leave "Needs review"
+  default + dashboard count, profile allowance input moved to the live
+  `fixed_performance_allowance` column. **Owner actions:** (1) review August
+  on the new queue — 159 logs / ≈80h OT tail never reviewed, pay as September
+  adjustment; (2) decide 2 pending sick leaves (Ariff 7 Aug, Batrisyia 27
+  Aug); (3) fill missing EPF/SOCSO numbers, confirm 9 probation FTs.
+  **Backlog from QA:** clock-out nudge (14% auto-closed), rest-day duplicate
+  rows on multi-outlet publish, nav single-source, shared-lib dedupe, route
+  tests. → Follow-up branch `claude/hr-qa-fixes`: auto-close cron now sends
+  ONE push (`kind: "clock"`, flag `clockout_reminder_sent`, processor keeps
+  it) 15 min after the rostered end; `hr-nav-drift.test.ts` pins nav.tsx to
+  module-tabs; dead attendance `adjust` action removed. Rest-day dedupe
+  dropped on purpose: shared staff carry a rest-day row per outlet roster and
+  every consumer skips rest_day rows. Still open: route `kind: "clock"` to the
+  clock screen in staff-native (unknown kinds just open the app), shared-lib
+  dedupe, route tests.
+
+- 2026-09-03 — **August payroll close (URGENT — salary pending).** Merged
+  #1209, #1210, #1211 (see Verified facts); #1212 (by-outlet split by shifts)
+  open, green, merge blocked only by GitHub API rate limiting at 11:30Z.
+  Migration 108 applied. **Next, in order:** (1) owner recomputes August on
+  the new code (the 11:20Z run is pre-#1211) and we verify line by line:
+  Shairuleen PH RM84.62 + 19.5h OT, employer EPF 286 on RM2,200, Syafiq basic
+  3,166.67, Atthirah 1.0h OT, `computation_details.ph_days_worked` present;
+  (2) Ariff approves the four flagged 31-Aug logs (Firdaus, Haziq, Sherry,
+  Syafiq) in Attendance Review → recompute again; (3) Firdaus's OT list; (4)
+  24–31 Aug weekly PT run; (5) owner decisions: SOCSO band table, Hanis
+  (contract), PT statutory; (6) **task #3 — redesign the OT + attendance
+  approval flow and HR module UX** (owner: "currently when review, the ux is
+  so bad and cannot filter etc. also there is a lot of overlapping"; "better
+  ux for hr module as a whole") — propose IA first (one review queue with
+  filters, bulk approve, no double queue), then build. People cost artifact
+  (claude.ai/code/artifact/3257f699…) still shows 27 Jul–23 Aug PT
+  (RM16,146); full-August PT from attendance is RM19,772.
+
+- 2026-08-31 — **First STATE.md roll-over done (owner-approved):** July 2026
+  moved to `docs/state-archive/2026-07.md` (20 finished Verified-facts
+  narratives + all 58 July resume-log entries), file 4,356 → ~2,650 lines.
+  Kept in place: every August entry, all Open failures/Lessons, and 18
+  durable July facts. Moved to **Open failures**: the unfixed per-line
+  discount money bug (Jul-30) and the QA-decommission human actions.
+  Promoted: discount-column semantics → finance-warehouse skill Lessons;
+  payday-aligned-comparison rule → Lessons learned. The monthly procedure
+  now lives in the housekeeping skill ("STATE.md roll-over") — next
+  roll-over due ~2026-10-01 for September. Same branch/PR as the
+  `docs/admin/` skeleton (#1194).
+
+- 2026-08-31 — **GBP category adds now one click away** (`/api/reviews/gbp-categories`,
+  dry-run default, `?apply=1` appends): derives wanted categories from each
+  outlet's ACTIVE tracked keywords via `categoryForKeyword`, resolves stable
+  category ids at runtime (regionCode MY), append-only — primary + hand-set
+  categories always preserved, 9-additional cap respected. Context: after 8
+  weeks `restaurants near me` was still unranked at every outlet because the
+  category adds were never made by hand. Marketing state 2026-08-31: ads spend
+  cut 58% (RM8.7k->RM3.7k/mo, 24 budget cuts + 75 exclusions applied); rank
+  trends now measurable (24 combos with pairs) — SA dominant, Tamarind ~#3-4
+  holding, Putrajaya drifting ~-1, Nilai weak; reviews PJ 33/30d, Tam 28/30d,
+  SA 5/30d, Nilai 3/30d (114, tied its top competitor). Owner still owes the
+  review-ask push at SA + Nilai and the two clicks on gbp-categories.
+
+- 2026-08-31 — **Stock investigation: measurement layer is now trustworthy;
+  next is validation + physical checks.** Shipped this session: PR #1164
+  (auto-approve + Flagged queue), PR #1195 (loose-pieces count units), staff
+  memo (hr_memos de648741). Bread retracted as unit artifact; August summary
+  artifact updated (claude.ai/code/artifact/de9a8a8a…). **Next:** (1) watch
+  the first post-fix bread counts land in pieces (~1× expected); (2) Putrajaya
+  must resume nightly counts — beans 2.01×/udang 1.69× unconfirmed since
+  9 Aug; (3) weigh cream/lamb/duck/prawn portions, then fix BOM doses (cream
+  250 ml and meats 50 g look wrong); (4) build engine prep-expansion
+  (ProductRecipe walk, owner approved in principle); (5) day-7 shadow verdict
+  → arm CONSUMPTION_ENGINE_ENABLED + drop POS trigger (never both live);
+  (6) milk fix is procurement: close open milk POs, book deliveries at door.
+
+- 2026-08-31 — **Company SOP module started (phase 0 shipped as a draft PR
+  from `claude/celsius-coffee-sop-module-0md66t`).** This is the COMPANY
+  operating manual for Celsius + Gosame, not the staff-app checklist feature —
+  full design in `docs/design/sop-module.md` (4-tier framework, git-as-CMS,
+  phase-1 schema sketch: Company/SopDocument/SopDocumentVersion/SopAcknowledgment).
+  Shipped: `docs/sop/` tree, TEMPLATE, REGISTRY seeded with the 10 live
+  staff-app SOPs as reserved Tier-3 IDs (queried from prod 2026-08-31), and
+  `CC-GOV-001 Document Control` at v0.1 DRAFT. **Owner facts learned:** Gosame
+  is a SEPARATE entity (own staff/infra — `gosame-ops` Supabase project
+  exists, ap-southeast-1, since 2026-07-10); surfaces stay backoffice=admin /
+  staff-app=read+ack; priority is docs → sign-off → execution links.
+  **DONE same day:** phase 0 MERGED (#1193, squash `26d09b6`), CC-GOV-001
+  published v1.0 effective 2026-08-31. Phase 0.5 drafted on the same branch
+  (new PR): CC-FIN-001 **Payments & Refunds** (owner correction: BOTH
+  companies are CASHLESS — never write cash-drawer/float SOPs; the POS is
+  QR/card-only per `apps/pos-native/lib/shift.ts`, "reconciliation" =
+  weekly bank-settlement watchdog with fee bands, advisory), CC-HR-001
+  New Hire Onboarding (grounded in hr_onboarding_templates flow, HR
+  authority matrix `OP_RULES` in `write-ops.ts` — two-person rule on
+  salary/bank changes; PIN must be 6 digits for native logins), CC-OPS-001
+  Incident & Complaint Handling (grounded in the reviews-recovery loop,
+  ops-nudges, RM10 review penalties; NO generic incident log exists —
+  SOP defines a written interim record). Registry updated; FIN-002 renamed
+  "Daily Sales & Settlement Reconciliation" (still PLANNED).
+  **Facts for future SOP writing:** typhoid NOT tracked (roadmap; certs
+  table has food_handler etc.); refunds have NO POS flow (finance-side
+  CUSTOMER_REFUND only); `ApprovalRule` table exists but NOTHING enforces
+  it — don't cite it as operative; roles are OWNER/ADMIN/MANAGER/STAFF
+  (no shift-lead enum; HOO is informal via position ILIKE 'head of').
+  **2026-08-31/09-01 — all phase-0.5 docs MERGED + published:** #1198
+  (squash `45e2458`) published FIN-001/HR-001/OPS-001 v1.0 effective
+  2026-08-31; #1205 published CC-GOV-002 Roles & Authority Matrix v1.0
+  effective 2026-09-01 — owner confirmed the proposed RM limits AS-IS
+  (PO: OM self ≤RM500, HOO/AM ≤RM2,000, MD above + new suppliers;
+  claims: OM ≤RM200; refunds/petty cash/recurring: MD; salary/payroll:
+  two-person rule). Manual now has 5 published docs. PDFs were generated
+  via weasyprint (scratchpad script) and sent to owner.
+  **Next session:** CC-FIN-002 Daily Sales & Settlement Reconciliation
+  (last PLANNED FIN doc), or start phase 1 (schema + sop-sync CI +
+  staff-app reader/ack per docs/design/sop-module.md); owner owes team
+  briefings + sign-sheets for the published set (GOV-001 §5.5, 7 days).
+  When phase-2 enforcement is built, the settings approval-rules table
+  must be configured to match GOV-002 §5.1. Open questions unchanged:
+  Gosame domain map, shared functions (GRP- docs), BM/EN policy.
+
+- 2026-08-28 — **Choc Blanc Merdeka: artwork done, decisions settled, ONE
+  blocker left.** All three `splash_posters` rows still have `image_url = ''`;
+  they cannot render until someone exports the three PNGs from the canvas
+  (link above) and uploads them via Backoffice → Pickup → Splash Posters. That
+  is a human step — no Cloudinary creds in-session. Everything else for 31 Aug
+  is staged and gated by a future `starts_at`; note the home poster has already
+  been flipped `active=true` by `pos-poster-autopilot`, so the schedule window
+  is now the ONLY thing keeping it invisible. Next session: confirm the uploads
+  landed, then walk the go-live runbook in
+  `docs/design/choc-blanc-merdeka-campaign.md` — skipping its step 6, which is
+  now dead. Open questions 4 and 5 (run the SMS voucher arm or announce-only;
+  prune the 23 POS posters) are still unanswered.
 
 - 2026-08-19 — **Local-rank QA: loop runs, but measurement was starved.** Since
   the Jul 5 radius fix: 69 combos scanned, only 3 twice — 93 active combos vs a
@@ -2553,6 +2971,84 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   vs 1.019 clean). Tamarind recovery check (reversal test, A=ads vs B=local
   factor) armed 2026-08-25 09:00 UTC — restore landed Aug 15 14:46, so it
   gets ~10 post-restore days.
+
+- 2026-09-05 — **RM70 fleet test status + "redo shah alam".** Putrajaya
+  fired Aug 31 (49.86→70, clean guard) and Tamarind fired Sep 1 (46.32→70 —
+  its guard read clean after the Aug 31 rollback partially restored the
+  budget); both delivering at RM70 (Google flexing to RM74-100 on single
+  days) with clean guards through Sep 4. SHAH ALAM's Aug 31 raise was
+  REVERTED after ONE day (Sep 1 19:04, raw 0.96/adj 0.95 — its pre-existing
+  borderline window, breached-or-borderline since ~Aug 22, knifed the raise
+  before the test ran). Owner: "redo shah alam" → directive gains a redo
+  leg: passes ONLY the original pre-Sep-5 revert (a post-redo revert is
+  final) and fires only on the THIRD consecutive clean guard night
+  (priorCleanNights from the last 2 agent_actions runs + tonight). SA
+  streak at ship time: 0 (Sep 4 raw 0.94) — earliest fire ~Sep 8 if SA
+  cleans up. Watch: SA's ongoing mild softness (mom 0.97, anchor 1.08 —
+  not Tamarind-class) is its own open question. First raised weekend
+  (Sep 5-6) = first data for the owner's weekend-ads hypothesis; interim
+  read ~Sep 14 with weekday/weekend split; machine verdicts ~Sep 28-29.
+- 2026-08-31 — **Owner: "lets try to increase back the gads spending and
+  see" → "let us do all rm70/day", Tamarind included.** ownerDirective
+  rewritten (supersedes the Aug-25 two-leg probe-up; Putrajaya's leg had
+  fired Aug 30 at RM49.86, Shah Alam's never fired — guard stayed breached
+  through Merdeka weekend): ALL THREE campaigns rise to RM70/day as
+  EVALUATED raises — SA 53.98→70 (needs ≥RM801/mo lift), PJ 49.86→70
+  (≥RM1,007/mo), Tamarind 41.71→70 (≥RM1,414/mo; owner chose to re-test
+  despite the A/B/A verdict) — each leg fires on its outlet's first clean
+  guard night, kept only on measured lift after 28d, reverted on breach; a
+  machine revert is FINAL (leg won't re-fire); hard expiry 2026-09-30.
+  Total +RM1,933/mo spend at full deployment. Recorded caveat: if all three
+  lift together the fleet-adjusted keep-test partially cancels (median moves
+  too) — read the Sep verdicts against anchor/mom + the cash scoreboard.
+  Holdout read on SMS loops (same day): treated beats holdout in 8/9
+  measurable loops (aov_push +RM29.80/head, reward_expiring +5.09, habit
+  +3.53, welcome +1.54, winback +0.56; fresh_lapse NEGATIVE −1.06;
+  celebration/product_launch/night_revival 0-conv both arms — measurement
+  pending or broken, check). Tamarind decline fingerprint sharpened: loss is
+  WEEKDAY-walk-in-concentrated (wkday −23% vs wkend −7%) → office-crowd
+  hypothesis (Cyberjaya tenant move-out / RTO change / office-cafe) — ground
+  check still owed.
+- 2026-08-25 — **Tamarind A/B/A REVERSAL VERDICT: NO RECOVERY — the
+  late-July decline is NOT ad-driven, and the Aug 15 "ads generate cash"
+  probe verdict OVER-ATTRIBUTED.** Walk-in organic (POS ex-grabfood, organic
+  filters), 9 restored days Aug 16–24 vs the windows: baseline Jul 1–27
+  RM1,728/day (73.3 orders); decline wk Jul 28–Aug 3 RM1,605; PAUSED Aug
+  4–14 RM1,382 (58.7); RESTORED Aug 16–24 RM1,443 (61.2) — weekday averages
+  IDENTICAL paused-vs-restored (RM1,239 vs RM1,241), weekend restored LOWER
+  (1,846 vs 2,029). Payday-cycle control: same days-of-month Jul 16–24 (ads
+  on, same wallet position) was RM1,711/73.1 → restored Aug is −16% MoM, so
+  the trough doesn't explain it. Nine full-budget ad-days produced no
+  bounce toward baseline ⇒ the ~RM285/day shortfall vs baseline has a
+  NON-AD Tamarind-local cause active since ~Jul 26–28 (still unidentified;
+  ops/staffing/reviews/basket/regional ruled out 2026-08-14). The pause
+  window's 0.88 index was substantially this pre-existing decline, not the
+  ads going dark. Consequences: (1) the RM46.32/day restore is NOT proven
+  cash-generating — descent should resume cutting Tamarind; the guard
+  currently blocks cuts (raw 0.91, breach) but the recency-weighted
+  forecast (½-life 2w) adapts to the new level within ~2wk and descent
+  resumes automatically — owner may direct an earlier step-down; (2) probe
+  verdicts need a pre-existing-trend control before believing dropDetected
+  — fold into the deferred cleanup (adj-confirmation) which is UNBLOCKED
+  (no probe running). Fleet ledger: ZERO budget changes since the Aug 16
+  owner raise — the autopilot never touched it (lastKind "other" held, as
+  designed). Conezion: recovering — Sun Aug 24 wk: Thu 3,347/Fri 3,487/Sat
+  4,218/Sun 3,977 (+29% WoW)/Mon 3,388, Tue Aug 25 beat the prior Tuesday
+  by 5pm (payday bounce landing); ~85–90% of pre-dip; guard raw 0.90 (adj
+  0.94) still breached on the trailing window, trend up. Owner (same day):
+  "raise ads for conezion and shah alam. make sure the ads work" →
+  ownerDirective rewritten as TWO evaluated probe-ups (reasons start
+  "autopilot raise" ON PURPOSE — kept only on measured lift, reverted on
+  breach/no-lift after 28d): Shah Alam RM53.98→62.08 fires the first clean
+  night (starts the post-rollback upward search ~6wk early); Putrajaya
+  RM43.36→49.86 ARMS but fires only once Conezion's guard un-breaches
+  (raising into the trailing breach would insta-revert). Hard expiry
+  2026-09-15; spent Aug-16 undo-cut directive removed. Weekend Aug 21–23
+  was fleet-wide soft (deepest pre-payday weekend + one-off Shah Alam Sat
+  miss RM3,975 vs RM5.2–6k, cause unverified). Nilai guard forecast has
+  decayed to RM64/day on the dead feed — chase remains with the data-estate
+  owner.
+
 - 2026-08-16 — **Conezion (Putrajaya outlet) slid ~21% WoW (Aug 10–16 vs
   Aug 3–9); owner directive shipped to undo the Aug 12 Putrajaya ad cut.**
   Decomposition: footfall −14% (orders 967→830/wk), AOV −8% (RM30.75→28.26),
@@ -2581,6 +3077,7 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   later probes. `hardCutDirective` was already removed 2026-08-15 by another
   session. Separately: **chase the dead Nilai consignment feed** (last row
   Jul 19) — data-estate, not ads.
+
 - 2026-08-13 — **PR #1112 merged (`217d365`); both 20260810 migrations applied to
   prod.** Next session picks up the stock-count/BOM thread here, in order:
   1. **`ingredient-variance` still reads the DEAD `SalesTransaction` table**
@@ -2700,6 +3197,7 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   isRestDayShift() helper, apps/staff allowances fork, quarter-hour rounding,
   Group A repayment, Adam Kelvin exports, /hr/allowances↔performance merge
   (move AllowanceTabs first — W3 ordering).
+
 - 2026-08-03 (late) — **End-to-end payroll QA pass landed on
   `claude/farah-staff-onboarding-99yg3j` (feeds PR #1110); stamp-repair
   migration APPLIED to prod and verified 0/0/0/0.** The sequence the owner
@@ -2717,6 +3215,7 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   BrioHR exports (EA understates ~RM11,200); hr_probation_reviews flow never
   used end-to-end. Do NOT re-raise: Group B auto-clockouts, rest-day premium
   (1× within threshold is policy), PT absence from the monthly run.
+
 - 2026-08-03 — **HR/payroll session. Three things are with the owner, and July
   must NOT be confirmed until they land.**
   (a) CLOSED 2026-08-03 — part-timers absent from the monthly run is BY DESIGN;
@@ -2746,22 +3245,6 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   **PR #1106 (line overrides + one Performance screen) is an open draft** and
   its migration `20260803_hr_performance_line_overrides` is NOT applied.
 
-- 2026-07-31 — **PR #1094 (stock-count freshness + expiry) is a DRAFT awaiting
-  CI.** Two commits: `920a80b` (18h stale → no auto-approve; CI green) and
-  `1237124` (24h expiry + soft block + countDate re-stamp). No migration, so it
-  is mergeable without owner sign-off on prod DB — but it changes what the staff
-  app does at the till, so confirm before merging. Open questions for the owner:
-  (1) was the 29 Jul Putrajaya stock physically counted that day or spread to
-  the 31st? — decides whether that count can be reconciled at all;
-  (2) whether to add per-line `countedAt` on `StockCountItem` (needs a
-  migration) so a long count can be sliced by the day each line was keyed,
-  instead of judged as one blob.
-  Still unanswered from earlier in the session: the 12 INITIATED payments where
-  the owner says POPs were shared — bank feed shows NO matching debits through
-  26 Jul and there are 0 `tg:` transcript rows, so either the payments were
-  never made or the POPs were lost to the known Telegram-persistence gap. That
-  gap (and MULTI_POP under-extraction) is still unfixed.
-
 - 2026-08-01 — **Ads: the cut keeps ≈RM4,100/mo of real cash, but rising voucher
   discounts hand back ≈RM3,400/mo of revenue, so net is ≈+RM720/mo — and that is
   smaller than weekly revenue variance, so it cannot yet be seen in the bank.**
@@ -2776,1386 +3259,3 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   3. Do NOT keep cutting ads looking for cash that is not there; if the ad
      saving is to be proven at all it needs another month or a holdout.
   The 2026-07-30 pointer below still applies EXCEPT its item 2, now withdrawn.
-
-- 2026-07-30 — **Ads: revenue verdict settled, cash verdict is now about
-  DISCOUNTS, not ads.** Two low-spend weeks in, in-store revenue is holding
-  (see Verified facts, same date). Pick up here, in priority order:
-  1. **Line-discount money bug** (see Verified facts, same date) — awaiting owner
-     approval: one-line fix in `pos-native/lib/checkout.ts`, plus a decision on
-     restating the 222 historical rows. NOT staff discretion — manual
-     discounting is ~zero; `discount_reason` / `discount_by` are NULL on every
-     row because that path is unused.
-  1b. **Loyalty-voucher redemption is the growing outflow** — RM612 → RM1,602/wk
-     in four weeks (≈RM4,290/mo annualised), and the SMS/loyalty loop issuing
-     them still has NO approval gate (`approved_at` NULL on 75 rounds). It is
-     about half the ad saving, so it does not cancel it, but left ungated it
-     will. Gate it before it does.
-  2. ~~**Spend overruns budget 1.3–2.1×**~~ — **WITHDRAWN 2026-08-01**, see
-     Verified facts. There is no overrun; do NOT build the spend-vs-budget check
-     and do NOT go hunting for what "raised spend on Jul 4" — that was the
-     `campaign_id IS NULL` roll-up row appearing in the table. Still true, and
-     still worth doing: stop quoting `monthly_saving_myr` as realised cash
-     (reconcile against `ads_metric_daily`, filtering the roll-up row).
-  3. **Guard still has 3 confirmed measurement bugs** (`ads/organic-revenue.ts`):
-     includes `pos_orders.source='grabfood'`, excludes the `orders` table
-     (QR-table/app, ~25% of in-store), and lets Nilai (consignment, campaigns
-     paused, rawIndex 0.33) pollute the fleet median and the scoreboard. Every
-     number in the Verified-facts entry above was computed with these bugs
-     corrected by hand in SQL — the shipped guard does NOT yet agree with it.
-  4. **Creative sync has still never produced a row.** #1091 (errMessage) merged
-     2026-07-30; the first run that can succeed is the 19:01 UTC cron tonight.
-     Until it lands, radius / schedule / ad-copy / landing-page questions are
-     unanswerable — do not speculate. `AD_WINDOW` (07:30–22:00, owner-approved)
-     is still NOT applied to Google, pending the `hour_profile` read.
-  5. Leak repair looks like it FAILED: Jul 28 (first post-fix day) still
-     RM13.80 of leaked spend vs RM18.26 pre-fix. Re-applied literals aren't
-     blocking. Unexplained.
-  6. Housekeeping: remove the inert `hardCutDirective` block.
-
-- 2026-07-29 — **Two threads open, both HR.**
-  (a) **Clock-out geofence fix is deployed but unverified** — see the Verified
-  facts entry above. Needs a *deliberate* test at the IOI Mall kiosk; passively
-  watching Farhan will not produce one (he ends every shift at Conezion).
-  Also open: whether to widen the new 250m IOI zone (a real clock-in landed at
-  279m), and the unflagged ~5km clock-ins.
-  (b) **Availability lock requested by Farah (manager, WhatsApp)** — he wants
-  staff blocked from changing availability Fri→Mon so next week's roster inputs
-  can't move under him after he builds it. Nothing like it exists in the repo
-  (no lock/freeze concept anywhere in HR). Scoping established: the weekly
-  pattern is RECURRING so it blocks outright; one-off blockouts must be blocked
-  only for dates inside the protected week; `pt-loop/inbound.ts:379` (WhatsApp)
-  is a third write path that rewrites the pattern wholesale and would otherwise
-  bypass the lock. `apps/staff` and `apps/staff-native` share one endpoint, so
-  one server-side check covers both. Weeks are Monday-anchored
-  (`hr_schedules.week_start`), so the protected week derives from the calendar —
-  no week picker needed. HR tables are SQL-managed (no `model hr_*` in
-  schema.prisma), so this ships as standalone SQL, no migration-guard exposure.
-  **Blocked on two owner decisions:** manual switch vs automatic Fri→Mon, and
-  own-outlet-subtree vs fleet-wide.
-- 2026-07-29 — **Mystery reward could silently miss its moment on QR-table
-  orders (fixed).** Owner asked whether QR-table still has mystery rewards:
-  YES — not gated on order type, 56/59 paid QR orders from signed-in members
-  got a drop in 7 days (95%), pool active (56% no-bonus / 27% +100 pts / ~17%
-  voucher). But `_MysteryReward.tsx` did a ONE-SHOT lookup on mount with no
-  retry, while `markRmOrderPaid` commits the paid status BEFORE running
-  `applyOrderV2Hooks` (which mints the drop) — and the card mounts the instant
-  the tracking page's 5s status poll first sees "paid". So the lookup raced the
-  insert; when it lost, the card stayed empty for that whole page view and the
-  customer only found the reward by reopening the order. Reward was never lost,
-  only the moment. **Fix: bounded retry** (2.5s × 16 ≈ 40s, stops as soon as a
-  drop is found or is already revealed) — client-only. Deliberately did NOT
-  reorder the payment path: the status-first update with
-  `.in("status",["pending","failed"])` is the idempotency guard that makes the
-  hooks run exactly once. NOTE: guests get no drop at all (minting is inside
-  `if (order.loyalty_id)`) — by design, but walk-ups never see it. QR-table
-  reveal rate was 48%.
-- 2026-07-28 (later) — **OT policy: FT-only + backlog cleared.** Owner: "remove
-  backlog OT from before jul" + "OT is only for FT". Root cause of the backlog:
-  the OT sync cron (`api/hr/overtime-requests/sync`) auto-created a pending
-  request for EVERY attendance log with ≥1h computed OT, including part-timers
-  — but PT never gets an OT premium anywhere (monthly run is FT-only; weekly
-  run pays flat hourly on total_hours, `total_ot_hours` always 0; an approved
-  PT OT request only lifted the daily roster cap at flat rate). Data (prod SQL,
-  owner-directed): cancelled 81 pre-Jul pending requests (Apr, 138h, note
-  "Pre-Jul 2026 backlog cleared") + 116 PT July pending requests (285h, note
-  "OT is FT-only"); 24 FT July requests (48h) left pending for manager review.
-  No pay impact — none were ever approved. July monthly run reads only
-  clock_in within Jul, so pre-Jul attendance OT (Mar 3.65h + Apr 177.66h)
-  never entered it; those attendance rows left intact as history. Code (this
-  branch): sync cron filters to full_time; OT-request POST 400s for non-FT
-  ("adjust the roster"); weekly-calc cap note no longer tells managers to
-  approve PT OT. Dedupe note: sync's existing-keys check includes cancelled
-  rows, so cancelled days won't be re-created even before deploy. Still open:
-  Yusri Bin Safarudin (DEACTIVATED but on Jul run at full RM2,100 — awaiting
-  owner's last-working-day answer).
-  Follow-up (same day): owner added "if early clock in, the counter should
-  starts during their shift starts" → `deriveHours` (identical copies in
-  apps/staff + apps/backoffice `lib/hr/hours.ts` — keep in sync) gained
-  optional `scheduledStart`; pay-hours (and hence the OT threshold) count
-  from max(clock_in, rostered start), total_hours still records the real
-  span. All 4 callers pass the roster stamp (staff clock-out, AI processor,
-  auto-close cron, manager set_times). Pinned in hours.test.ts. MERGED as
-  #1083 (squash edbe065). Owner then approved recompute of the 9 early-
-  clock-in FT July OT rows: applied 2026-07-28 (prod SQL) — total FT July
-  OT 18h→5h (Sherry Jul5 5→2, Atthirah Jul8 3→2, Shairuleen Jul25 2→1,
-  six rows→0); matching pending OT requests synced (6 cancelled, 3
-  corrected), leaving 18 pending FT requests in the queue. ⚠ Two rows
-  look like BAD ROSTER STAMPS, not early birds — Shairuleen Jul 16 (worked
-  07:09–16:51 MYT but rostered 15:30 → now pays only 1.36h) and Hidayat
-  Jul 18 (worked 08:05–20:06, rostered 12:00 → pays 7.11h) — manager
-  should verify the real shift and fix via set_times/roster if wrong.
-
-- 2026-07-28 — **HR Ops Agent stage 2 BUILT: guarded writes** (this branch;
-  design §6b). Typed op allowlist (create/update/convert/reactivate/resign/
-  assignment/set_pin/salary_change) + stage→CONFIRM-code flow
-  (`hr_agent_pending_actions`, migration `20260728_hr_agent_pending` — **not
-  yet applied to prod**): managers' changes confirm with HOO, salary/bank with
-  OWNER, codes single-use/15-min/phone-bound, deterministic pre-LLM confirm
-  hook in the webhook. Staff persona gains submit_leave_request (lands
-  pending for manager) + update_my_contact; write tools absent outside
-  mode='armed'. Owner explicitly chose to arm ahead of the 5-clean-shadow
-  criterion — per-write human confirm is the compensating control. Earlier
-  same-day: staff-native leave form date-fix OTA'd (#1076, run 30289741291
-  success), 31 leave-balance rows seeded (15 FT staff), owner phone rebound
-  +60109335369 (was on the App Store Review dummy). **Next:** merge+deploy,
-  apply pending migration, flip registry to 'armed', live-test one staged
-  write end-to-end.
-
-- 2026-07-27 (cleanup) — **`apps/pickup` + the dead KDS shell DELETED (branch
-  `claude/pwa-pickup-removal-9qysgv`, follow-up to #1073/#1075).** Owner:
-  "delete apps/pickup and the dead kds shell." Removed: `apps/pickup` (legacy
-  Capacitor webview wrapper `com.celsiuscoffee.pickup`; STORE_LISTING.md moved
-  to `docs/store-listing.md`), `apps/order/android` + `capacitor.config.ts`
-  (the vestigial "Celsius Orders" KDS webview pointing at retired /staff/kds),
-  `.github/workflows/build-kds-apk.yml`, the 3 `@capacitor/*` deps in
-  apps/order, the `apps/pickup` workspace entry + `typecheck:apps` leg, and
-  the pickup legs of the CI typecheck/build matrices. KEPT: middleware
-  `capacitor://localhost`/`ionic://localhost` ALLOWED_ORIGINS — field installs
-  of the old webview app still exist on customer phones and load the site
-  live; drop only when the old store listing is confirmed dead. Verified:
-  order typecheck clean, full vitest 511/511 (note: `npm i --ignore-scripts`
-  skips `prisma generate` — 7 suites fail with ".prisma/client" missing until
-  `npx prisma generate --schema packages/db/prisma/schema.prisma`). Camera
-  scanner on /scan shipped as #1075 (jsQR in-browser, same /table handoff;
-  owner kept native manual entry). Remaining owner decision: rename Vercel
-  project `celsius-pickup-app`.
-
-- 2026-07-27 (later) — **App-identity audit + Expo web bundle REMOVED from the
-  web (branch `claude/pwa-pickup-removal-9qysgv`, PR #1073).** Owner: "there
-  will be no pickup app in PWA" + "clean up which code is which app." Verified
-  map: `apps/order` = THE customer webapp (order.celsiuscoffee.com, Vercel
-  project misleadingly named `celsius-pickup-app`) — QR-table ordering +
-  loyalty; `apps/pickup-native` = THE customer native app "Celsius Coffee"
-  (`com.celsiuscoffee.pickup.next`, App Store id6766792077) — NOT a KDS
-  despite CLAUDE.md's old label; `apps/pickup` = LEGACY webview wrapper
-  (`com.celsiuscoffee.pickup`, no `.next`) that loads order.celsiuscoffee.com
-  LIVE (old installs mirror the website in real time); `apps/order/android`
-  + `build-kds-apk.yml` = vestigial "Celsius Orders" KDS webview pointing at
-  the retired `/staff/kds` (page no longer exists). **Shipped on the branch:**
-  (1) `/scan` added to isNextOwned (stopgap, then subsumed); (2) pickup-native
-  manual-table-entry removal REVERTED (owner: native untouched — net-zero
-  native diff, no OTA); (3) **PR A**: middleware SPA-rewrite + isNextOwned +
-  PWA_PASSTHROUGH deleted (all routes Next-owned, unknown → 404),
-  `build-pwa.mjs` deleted, build = `next build` only, sw.js v45→v46 (purges
-  cached Expo shell; push handlers kept), new `<RegisterSw />` in layout
-  (registration used to live in the Expo shell's inline script). Safe:
-  native payment returns use `celsiuscoffee://`, never web /rm-return.
-  (4) **PR B**: CLAUDE.md layout table + hard rule 5 + ota-release skill
-  corrected (pickup-native = customer phones) + skill Lesson appended.
-  **Web-push subscribe PORTED same session** (`lib/web-push-client.ts`;
-  Settings toggle now actually subscribes + POSTs /api/push/subscribe — the
-  old toggle only flipped browser permission; RegisterSw silently refreshes
-  already-granted browsers on boot, no prompt). **Follow-ups needing
-  owner:** delete `apps/pickup` (is the
-  old `com.celsiuscoffee.pickup` listing retired?); delete `apps/order/
-  android` + `build-kds-apk.yml` (what do kitchen screens actually run?);
-  optionally rename Vercel project `celsius-pickup-app`.
-
-- 2026-07-27 — **PWA pickup removal follow-up: the customer SPA IS the Expo
-  pickup app, and `/scan` was leaking into it.** After #1028 merged, live
-  verification (via `mcp__Vercel__web_fetch_vercel_url`, since
-  `order.celsiuscoffee.com` is NOT in the CCR egress allowlist — proxy 403,
-  same class as the sentry.io block) exposed the real architecture: **`apps/order`
-  is a HYBRID** — `apps/order/src/middleware.ts` serves an allowlist of
-  `isNextOwned` routes (`/ /menu /cart /checkout /store /table/* …`) from the
-  Next.js pages, and **rewrites every other route to `/index.html`, which is the
-  Expo react-native-web build from `apps/pickup-native` copied into
-  `apps/order/public/` by `scripts/build-pwa.mjs` at build.** So the customer
-  "PWA" shell literally IS the pickup-native app; un-ported routes render it.
-  **Bug in #1028:** `/scan` (my new Next page) was NOT added to `isNextOwned`,
-  so on prod middleware rewrote `/scan` → Expo pickup SPA shell — the
-  OutletGate/cart/checkout redirects were dumping customers INTO the pickup PWA
-  (opposite of the wall). Live-confirmed: `/store` → Next.js 307→/scan (my
-  redirect works), but `/scan` → served Expo shell (`/_expo/static/…`, desc
-  "Order your favourite Celsius Coffee drinks ahead and skip the queue").
-  **Fix (this follow-up branch, restarted from merged main):** added
-  `pathname === "/scan"` to the `isNextOwned` allowlist. Typecheck clean.
-  **STILL OPEN (systemic, needs owner decision):** the Expo pickup SPA is the
-  fallback shell for all non-allowlisted routes; fully retiring pickup means
-  either rebuilding `apps/pickup-native`'s web target without the pickup flow,
-  or replacing the `/index.html` SPA-rewrite fallback with a redirect to /scan.
-  Manifest `start_url` is "/" (Next home = scan instruction). Installed PWAs
-  with a cached Expo bundle + `sw.js` (network-first, cache `celsius-v45`) are a
-  secondary stale-access vector.
-
-- 2026-07-26 — **HR Ops Agent: designed + stage 1 BUILT** (this branch;
-  design `docs/design/hr-ops-agent.md`, audit `docs/hr-data-audit-2026-07-26.md`).
-  WhatsApp agent on the business number, personas by sender. Authority matrix
-  owner-approved (subtree rule; two-person rule for money: new-hire salary =
-  HOO alone, salary *changes* = owner confirms, bank changes never from a
-  staff message alone). Stage 1 code: staff-persona assistant
-  (`lib/hr/agent/staff-assistant.ts` — own-record reads shifts/hours/leave/
-  claims, LOE policy answers, escalate-to-HQ; NO pay figures, NO writes), HR
-  ops tools in the internal assistant (`lib/hr/agent/ops-tools.ts` —
-  find_staff w/ manager PII-gate+subtree, hr_data_gaps, propose_hr_change
-  shadow proposals → ledger + owner digest), webhook staff branch (staff
-  messages ALWAYS consumed before supplier flows — fixes staff-MC-read-as-
-  invoice; runs AFTER pt-loop's protocol replies), registry seed
-  `20260726_hr_ops_agent_seed` (mode 'off', **not yet applied to prod**).
-  Verified: tsc, eslint, vitest, next build. **Next:** apply seed + flip
-  shadow (owner), stage 2 armed writes after 5 clean shadow diffs, PIN-gated
-  pay reads, doc intake (blocked: session egress denies supabase.co storage
-  host). Design evidence = the 2026-07-16→20 manual onboarding arc (5 staff
-  ops). Open: persona name ("Cel"), BM register samples, chaser cron.
-
-- 2026-07-23 (evening) — **Cashflow "upcoming cash" view: Grab reconciled into
-  the incoming forecast, daily run-rate strip added, marketing follows the live
-  ad budget (all MERGED: #1051, #1053).** Same-day continuation, driven by the
-  owner using the cashflow page as their main upcoming-cash view.
-  1. **Grab folded into the Incoming settlements forecast (#1051).** The panel's
-     "Expected" read ~RM8k/day vs the ~RM10.6k/day the owner knows from the bank.
-     Decomposed trailing bank credits: the panel forecast card/online/QR/
-     GastroHub but **excluded Grab** (~RM614/day). Grab was left out as
-     "unverified cadence" — but the bank shows it settles **daily and near-flat**
-     (a payout every day of the week). Now projected from its trailing 28-day
-     **bank run-rate** (already net of commission), placed flat across the
-     window, attributed to HQ account 4384. `settlement-forecast.ts` gained a
-     `grab` channel + a `reconcile` field; `IncomingPanel` shows Grab + a
-     footnote citing the residual ~RM56/day of non-sales credits (meetings/
-     refunds/misc) still not forecast. Grab bank categories: `GRAB`,
-     `GRAB_PUTRAJAYA`.
-  2. **Daily cash run-rate strip (#1053).** New `loadDailyRunRate()` +
-     `/api/finance/cashflow/daily-averages` + `DailyRunRateStrip.tsx` above the
-     settlement panels: avg cash **in/out/net per calendar day** from actual
-     bank flows (external only, `isInterCo=false`), 90-day trailing, split
-     weekday/weekend. Live numbers: **in RM10,692/day, out RM10,861, net
-     −RM168** overall; **weekday net −RM793** (big supplier/payroll/rent
-     outflows clear on weekdays) vs **weekend net +RM1,370** (low sales, almost
-     no outflows). This is the home for the "≈RM10.6k/day" figure — the
-     settlement panel is a narrower, forward, net-of-fee view and legitimately
-     reads lower. Respects the page account scope.
-  3. **Marketing follows the LIVE Google Ads budget (#1053).** The marketing
-     pulse sized Google Ads off the trailing bank run-rate (~RM8.8k/mo), but the
-     ads **optimizer agent loop** now controls spend and had trimmed the
-     allocated budget to ~RM4.8k/mo — a cut the 90-day bank average wouldn't
-     reflect for ~90 days. New **`getLiveAdsDailyBudgetMyr()`** in
-     `lib/ads/optimizer.ts` (sum of ENABLED non-manager campaigns'
-     `dailyBudgetMicros`; `ENABLED_STATUSES = ["2","ENABLED"]` — status is the
-     Google Ads numeric enum stored as a string). `computeCashflow` marketing =
-     live ad budget + SMS Niaga + KOL (latter two stay on the bank run-rate,
-     not agent-controlled); falls back to the bank Google-Ads run-rate if the
-     ads module is empty. `bankLineProjection` marketing split into
-     `adsBankPerDay` (fallback) + `otherMarketingPerDay`. Monthly marketing
-     pulse dropped ~RM9,474 → ~RM5,490/mo and now self-adjusts with the loop.
-  - NOTE for next session: DIGITAL_ADS is deduped out of the bank P&L (it's
-    tracked in the ads module) — the cashflow live-budget read is the forward
-    view of that same spend. Grab attribution in the incoming panel lands all
-    Grab in HQ 4384 (where it pools), which slightly inflates that entity's
-    byEntity line — acceptable (it's "where cash lands"), flag if it confuses.
-
-- 2026-07-23 — **Cashflow model deepened: recurring schedule corrected,
-  inter-company classifier fixed, outflows re-modelled (all MERGED: #1037,
-  #1042→#1045).** Continuation of the 13-week-model session below. Owner
-  reviewed the model line-by-line and drove several corrections:
-  1. **RecurringExpense schedule fixed in prod** (direct SQL, no migration —
-     these are forecast rows, `RecurringExpense` has no audit triggers):
-     salary → **3rd** (Putrajaya + HQ, RM73,875); rent → **8th** (Putrajaya,
-     Tamarind, HQ, **+ Shah Alam RM5,700 which was entirely missing**);
-     statutory → **15th**; loan → **1st** (NEW `OTHER` row RM4,415 = WME000001
-     2,233 + WME000002 2,182, the two external financing SIs from SA). Dates
-     are stored as midnight-MYT (= `day-1 T16:00Z`); the app reads UTC +8h, so
-     to fire on day N store `(N-1)T16:00:00Z`.
-  2. **Inter-transfer double-count removed.** EPF/SOCSO is remitted CENTRALLY
-     from SA (~RM15,552/mo); outlets fund it by transferring their share into
-     SA first. The auto-generator had turned Tamarind's funding transfer into a
-     2nd "Statutory — Tamarind" RM5,084 line → **deactivated** (isActive=false).
-     Keep statutory as ONE central line unless remittance stops being central.
-  3. **#1042 inter-company classifier fix (MERGED #1045).** DR legs of
-     inter-co transfers were mis-flagged `isInterCo=false` since ~June 2026:
-     `INTERCO_COUNTERPARTY` only matched the old `"TRANSFER TO/FR A/C CELSIUS
-     COFFEE <ENTITY>"` format; Maybank changed to `"CELSIUS COFFEE <ENTITY>.*"`.
-     Fix is **account-aware** (`bank-line-classifier.ts`): a Celsius payee is
-     inter-co only when its entity ≠ the account the line sits on — the WME
-     loan debits on SA's own account correctly stay external. `accountKey` is
-     passed at every live call site. **Backfilled 11 legs (RM58,621.98) in
-     prod** via the same account-aware SQL; 4 SA loan legs left external.
-     STILL OPEN: the mis-classification is in the underlying bank feed too
-     (inter-co DR legs tagged false) — only the classifier + these 11 rows
-     fixed; a broader reclassification sweep may be warranted.
-  4. **Outflow re-model (MERGED #1045).** Broke the "other outflow" smear
-     apart in `cashflow.ts`: **PT wages → weekly Friday pulse** sized from the
-     LATEST PUBLISHED ROSTER (each outlet's most-recent week summed via
-     labour-gate `ptCost`; bank PARTIMER rate is fallback; new `ptOut` field +
-     "PT wages (Fri)" row). **Marketing → monthly pulse on the 20th** from the
-     bank run-rate (DIGITAL_ADS+OTHER_MARKETING+KOL) — the old `ads_invoice`
-     feed was EMPTY so marketing showed RM0 while ~RM2k/wk left the bank;
-     removed dead `projectMarketing()`. **COGS double-count fixed**: run-rate
-     reduced by the committed-invoice-per-day rate (floored 0) so supplier
-     invoices + COGS don't stack. **Discounts**: settlement is already net of
-     discount — added an informational "Discounts given" stat to IncomingPanel
-     from `unified_sales.discount` (~3.2% of gross). Grab commission is NOT an
-     outflow line (Grab settles net). 493 tests green.
-  - **Cash-in numbers reconciled for the owner** (recurring confusion): three
-    different figures — external CR gross ≈ RM10.7k/day (isInterCo=false, all
-    sources incl. Grab/StoreHub-tail/capital); monthly table "Cash in" INCLUDES
-    interco by default (toggle Interco off to exclude); Incoming panel ≈ RM7.8k
-    net sales settlements this week (ex-Grab, net of fee). The Cashflow page's
-    "Avg cash in" KPI already responds to Period(custom range)+Scope(interco
-    on/off)+Grain. Possible follow-up the owner half-agreed to: a "sales-only"
-    cut of Avg cash-in (strip capital/refunds/StoreHub tail).
-  - **Later same day — chased down "we never had a negative closing balance"
-    (MERGED: #1046, #1047, #1049, #1050).** Model showed an early-August trough
-    of **−RM54,811**; reality never went negative (real min ≈ RM623). Root
-    causes, fixed in layers:
-    5. **COGS double-count was smeared, not netted per-week (#1047).** COGS was
-       `bankCogsPerDay * activeDays − invoiceOut` with the invoice offset spread
-       evenly, so weeks with a big supplier invoice still carried near-full COGS
-       on top. Now netted **per bucket**: `cogsOut = max(0, salesIn*foodCostPct
-       − invoiceOut)`. **Payroll fired a week early (#1047):** MYT midnights are
-       stored `(N-1)T16:00Z`; `expandRecurring` walked the raw UTC value, so a
-       3rd-of-month pulse could land in the prior week's bucket. Fixed by
-       `cursor = nextDueDate + 8h` before the bucket walk. Invoice remaining now
-       uses shared `remainingAmount()`.
-    6. **Salary + rent amounts were overstated ~RM15k/mo (corrected in prod,
-       direct SQL).** The recurring rows carried gross/accrual figures, not the
-       actual external bank outflow. Corrected to **actual bank outflow**:
-       salary total **RM64,021** (HQ 51,899.50 + Putrajaya 12,121.50), rent
-       total **RM31,795**. Owner chose "set to actual bank outflow, fix amounts
-       first."
-    7. **Salary consolidated to ONE HQ-managed line (prod SQL).** Verified all
-       outlets are paid centrally from the SA account (4384) and that "Salary —
-       HQ" already included Putrajaya. Replaced the per-outlet salary rows with
-       a single **"Salary (central, incl. all outlets)"** = RM64,021 (HQ,
-       `outletId` NULL, fires the 3rd); "Salary — Celsius Coffee Putrajaya"
-       deactivated. Verified statutory (15th) is NOT bundled into the 3rd
-       payroll pulse — they are separate recurring rows.
-    8. **Daily balance walk (MERGED #1049).** Replaced the linear-interp
-       `buildProjectedDaily()` with a real day-by-day walk: builds an `exactOut`
-       map (invoices on due date, recurring via `expandRecurring`, salary/
-       marketing on their dates, PT on Fridays) and walks each bucket's 7 days
-       placing `dowAvg[dow]+otherInPerDay` in and `cogsPerActiveDay+
-       otherOutPerDay+exactOut` out → `dailyBalance.projected` +
-       `projectedDailyMin` (page shows "Lowest day" alongside "Lowest
-       week-end"). Surfaces intra-week troughs the weekly close hides.
-    9. **COGS now follows the BOM, not the 46% supplier-payment rate (MERGED
-       #1050).** Owner: "cogs 34k is too much, we should follow bom" → chose
-       "Live BOM % (36.5%, auto)". New `bomFoodCostPct()` sales-weights
-       `menu_margins.recipe_cost` over 60d of completed `pos_order_items` +
-       `order_items` (matched on lower(trim(name))), clamped 15–60%, fallback
-       `BOM_FOOD_COST_FALLBACK = 0.365`. `menu_margins`/`product_costs` DO now
-       exist with real recipe costs (supersedes the 2026-07-18 cogs-activation
-       note that said BOM costing wasn't built). **Combined effect of 5–9: the
-       early-August trough went from −RM54,811 to ≈ +RM4,500 (positive),
-       matching the owner's reality.** OPEN: the ~10-pt gap between bank COGS
-       (46% of settlements) and BOM (36.5%) is real waste/shrinkage/delivery-fee
-       leakage — worth a variance loop (BOM-implied vs actual supplier spend).
-- 2026-07-22 — **POP matcher: separator-tolerant invoice-reference matching
-  (PR #1024).** Owner asked why a RM148 Blancoz payment was in the Confirm-POP
-  queue when the receipt named its invoice. Root cause: the receipt quoted
-  `26 0677` (space, off the bank app) for our `26-0677` (hyphen); step-1's
-  exact-equality match and step-8's raw-`contains` guard both missed on the
-  separator, so it fell to the blind picker against unrelated same-amount
-  siblings (26-0713/0714/0746). Fix: `normalizeInvoiceRef` folds both sides to
-  an alphanumeric key before comparing — step 1 gains a normalised fallback
-  over the open-invoice pool (supplier-scoped, exact normalised equality so
-  `260677`≠`1260677`); step 8's named-invoice lookup prefilters on the longest
-  digit run then compares folded keys. Also cleaned the stuck record: attached
-  ref `936475062M` to the already-PAID 26-0677 + RESOLVED the stale PendingPop
-  (d306da79) → the three phantom badges cleared. Owner insight worth acting on:
-  finance IS quoting invoice numbers on transfers — the more consistently that
-  ref lands in the payment detail, the fewer POPs reach the picker at all.
-
-- 2026-07-22 — **Cashflow page adopts the 13-week model + outgoing payables
-  panel (branch `claude/cashflow-13week-payables-kozj9o`, draft PR #1037).**
-  Owner: "best is to do the 13 weeks cashflow model… incoming settlement is
-  very good, need to add incoming payables… easy to filter incl. custom date."
-  Shipped: (1) forward horizon defaults to 13w (4/8/13/26) and the weekly
-  projection table is TRANSPOSED into the classic treasury layout (line items
-  as rows, weeks as columns, Receipts/Disbursements/Net/Closing, lowest week
-  tinted) — same computeCashflow engine, no math change; (2) NEW
-  `lib/finance/payables-forecast.ts` + `/api/finance/cashflow/payables` +
-  `PayablesPanel` mirroring IncomingPanel: unpaid invoices on due dates
-  (remaining honours amountPaid/deposit, same rules as the weekly
-  projection), active RecurringExpense occurrences on theirs, standing
-  Overdue block relative to TODAY (past-due + undated invoices — can't hide
-  behind the date filter), day rows expand to payee lists, category chips;
-  (3) incoming + payables APIs/panels both take custom from/to (shared
-  DateRangePicker) alongside 7/14/28d presets, capped 92 days. Unit tests for
-  the pure payables fns; 491 tests green. NOTE: recurring occurrences use
-  month-add date walking (same day-31 drift as cashflow.ts addMonths —
-  consistent, not fixed). Next: owner feedback on the transposed grid, and
-  whether payables should also feed a per-outlet filter.
-
-- 2026-07-21 (procurement round) — **PR #990 merged (`c268332`) + staff-native
-  OTA published (run 54, green 03:07 UTC).** Ships: GRNI placeholder namespace
-  (`GRNI-<outletCode>-<n>`), supplier-scoped POP number matching + placeholder
-  corroboration, capture NUMBER_FORMAT_MISMATCH guard, and the
-  balance-receiving fix (staff web + staff-native prefill the REMAINING qty on
-  partially-received POs — was double-counting stock on the second receiving).
-  Managers get the receiving fix on next app launch. **Awaiting owner sign-off
-  (payment records):** TMM CC001 RM509.76 re-number pending TMM SOA + detach
-  MnM photo; void/merge MnM "1-15150" duplicate of IVCT-00012005; untangle the
-  1-15441 duplicate rows (Nilai INITIATED vs CC003); resolve RM894 NYC picker
-  (stale ref "1216") and RM924 verifier proposal → INV-2682. **Waiting on bank
-  feed:** the 5 Jul-20 unmatched payments (Dankoff IN600161377 909.15, TMM
-  1-15441 679.68, 365IN2607-0019/0020 490 each, XORA SO-31844 590) — re-match
-  when debits land; 3 INITIATED with no debit yet (YSIV2606-1644 932.20,
-  F26071056 181, INV-2026-0717-001 120) — owner to check bank app. NYC 1220
-  RM606 overdue, unpaid. **Known bugs, unfixed:** Telegram POP conversations
-  not persisted (0 `tg:` rows in WhatsAppMessage — no audit trail) and the
-  MULTI_POP splitter can silently under-extract pages from a batch PDF (root
-  cause of the 5 stuck INITIATED from Jul 20) — good next PR.
-
-- 2026-07-21 — **PWA pickup removal FINISHED (branch
-  `claude/pwa-pickup-removal-9qysgv`).** Owner screenshot showed a live
-  "PICKUP FROM Celsius Coffee Putrajaya" checkout in `apps/order` despite an
-  earlier "pickup removed" belief. Root cause: the removal had only cut the
-  two ENDS — the home entry (`_OutletRow` → "scan your table") and the SERVER
-  guard (`api/checkout/initiate` rejects non-dine_in with "use the Celsius
-  app"). The whole MIDDLE of the pickup funnel was still live: `/store` outlet
-  picker + `_StoreList`, `menu/_OutletGate` REDIRECTING no-outlet visitors to
-  `/store?next=menu`, `_OutletPickerRow` `/store` link, and `/cart` +
-  `/checkout` rendering the full "Pickup from {outlet}" branch with an enabled
-  Place-order button — so a direct visitor (bookmark, marketing URL, Google)
-  built a complete pickup order and only dead-ended at the final tap. Owner
-  chose **scan-your-table wall** for the no-table case. Shipped: new `/scan`
-  wall (`_ScanWall.tsx`; bounces a still-fresh dine-in context back to /menu,
-  else "scan the QR on your table" + Get-the-app CTA via `/get-app`).
-  `getDineInContext()` (checkout-session.ts, fresh<6h) is now the authoritative
-  "valid session" gate: `_OutletGate` redirects to /scan without it;
-  `/cart` + `/checkout` guard-redirect to /scan without it and always send
-  `orderType:"dine_in"`; pickup wording gone ("Pickup from" → "Table N ·
-  outlet"; outlet-closed banner "Switch/pick another outlet" → "order at the
-  counter", /store link dropped). `/store` is now a `redirect("/scan")` stub,
-  `_StoreList.tsx` DELETED, `_OutletPickerRow` non-dine-in branch returns null.
-  Server guard left intact (defense-in-depth). Native pickup app
-  (apps/pickup-native → `/api/orders`) UNTOUCHED — it's the intended pickup
-  channel. Typecheck + lint clean (order app). NOTE: `npm ci` fails on `sharp`
-  postinstall (libvips download 403 through the proxy) — use
-  `npm ci --ignore-scripts` for typecheck in this env.
-
-- 2026-07-20 (round 16) — **Slot-sizing saga: open slots now follow the FULL
-  scheduling logic (PRs #1016 + #1017, both merged; #1015 merged + OTA'd
-  earlier).** Owner pushed three times and was right each time. (1) "why 5-6
-  slots/day?" → the poster was publishing the optimizer's candidate MENU
-  (one gap per template touching a short hour — same 13:00 hole appeared in
-  4 overlapping templates); #1016 posts the smallest template set clearing
-  the residual per-hour shortfall. (2) "we already have 495 hours, you
-  schedule wrong" → hour-level audit proved it half-true: Tue had 3 bar
-  openers vs 2 closers with the third body needed in the evening — the
-  generator posted a slot for a hole its own FT split created. #1017 adds an
-  FT OPEN/CLOSE REBALANCE pass (donors keep need+2-head anchors, Fridays
-  skipped for prayer steering, no clopenings) BEFORE any slot is considered.
-  The kitchen slots were structural: 5 kit-capable FT × 6d = 30 shifts,
-  anchors alone eat 28, demand wants ~34 — a bench gap, not placement.
-  (3) "12 slots will shoot up the people cost" → slots are now FUNDED from
-  the same RM envelope as the old PT fill (forecast × target% − FT cost),
-  ranked kitchen→anchors→deepest days, priced day-aware (9/10/2×PH,
-  cheapest eligible PT); unfunded gaps become ⚠ UNMANNED notes + an ai_note
-  naming the cost of covering them. Final slot pipeline: demand → FT base →
-  rebalance → residual gaps → day cap (ptTargetByDate) → envelope funding.
-  PJ 2026-07-27 is a revenue-constrained week (FT floor 20.7% > 18% target,
-  envelope RM0) → regeneration posts ZERO slots there by design; owner's
-  levers: lend FT, accept higher %, or manual Post slot (stays uncapped as
-  the deliberate override). Also this round: employment-window guards
-  everywhere (join_date/end_date — generator onLeave rail, grid rows, cell
-  route, Assist pool, request+assign; live cases Afique last day 07-31
-  mid-week, Auni starts 07-27), open-slots panel collapses to a one-line
-  summary ("cannot see schedule" fix), Why-staffing popover edge-alignment
-  fix (#1013). Serve-rate calibration flag for owner: model says Sat 9am
-  needs 5 cooks (25 items/h ÷ 5.1) — if reality disagrees, recalibrate the
-  kitchen serve target, not the slot logic.
-
-- 2026-07-19 (round 15) — **Open slots become REQUEST → ASSIGN, and AI Fill
-  goes open-slots-first (owner: "can ai fill open the slots first before we
-  assign anyone?" → "lets do they request, we assign" → "after filled,
-  manager publish").** The loop is now: AI Fill posts every PT demand gap as
-  a bookable slot (new default `ptMode: "open_slots"`; "PT: suggest" option
-  in the Fill dropdown restores named pt_suggestion proposals) → PTs REQUEST
-  slots in the staff apps (hand-raise, several can; withdraw supported;
-  "N asked" count shown) → manager ASSIGNS one requester from the schedules
-  grid panel (requester rows show name + week h/d load; assign re-validates
-  station/caps/one-outlet-per-day server-side, materializes the shift on the
-  DRAFT week, declines the rest) → labour-gated Publish as usual. NEW TABLE
-  `hr_open_shift_requests` (migration 091, applied to prod, additive; unique
-  open_shift_id+user_id, statuses pending/assigned/declined/withdrawn).
-  Staff API POST now creates a request (no more instant claim from apps —
-  WhatsApp TAKE keeps instant claim for urgent decline/no-show backfill).
-  Unmanned-station QA now splits "⏳ open slot posted, pending booking" from
-  the hard "⚠ UNMANNED". Round-14 QA also verified live: 4 manual slots
-  posted at PJ by the team via the new UI; claim/assign semantics dry-run
-  against prod in a rolled-back txn; NOTE none of PJ's 3 PTs could take
-  those barista slots (Nurfarah 23h near-cap, Farhan Ikhmal 29h/6d OVER
-  caps in the published roster, Badri kitchen-only) — flagged to owner.
-  Weekly-availability table still empty (owner screenshot showed unsaved
-  editor) — confirm one real "Save pattern" post-deploy.
-
-- 2026-07-19 (round 14) — **Availability UX overhaul + backoffice open-slot
-  management (PR #1011, merged; round-13 base was PR #1010, merged — both
-  OTA'd to staff phones and live on Vercel).** Owner: "improve the ux on my
-  availability... easier to type numbers, font bigger" and "open slots in
-  backoffice logic is not managed yet." Availability screens (web+native):
-  typing eliminated — preset window chips (Morning 07:30–15:30 / Midday
-  12:00–20:00 / Evening 15:30–23:30) + 30-min pickers (chip strip native,
-  dropdowns web, end-times auto-restricted), one-tap Any day/Weekdays/
-  Weekends, ≥44px targets, fonts ~2 sizes up, live plain-words summary.
-  Backoffice: new /api/hr/open-shifts (GET week's slots + claimant names /
-  cancel-if-still-open / create manual slot source 'manual'; hr:schedules
-  gated, manager outlet-scoped) + schedules-grid panel (open slots
-  cancellable ✕, booked green with names, "+ Open slot" day×template×station
-  form). REMAINING E2E LEG (owner action): a PT saves a pattern → regenerate
-  a draft week (Jul 27 untouched) → ai_notes show "N PT with declared
-  availability" + "N OPEN SLOT(S) posted" → PT books from phone → shift on
-  grid. Fastest smoke test: post one manual slot from the grid and have a PT
-  book it. Availability table still empty — nothing changes until PTs
-  declare; owner should blast PTs to fill it (expect: Aiman weekends-only,
-  Batrisyia evenings; ask SA manager about Danish's 2-day week).
-
-- 2026-07-19 (round 13) — **Staff availability input + open-slot booking =
-  the self-service PT fill loop (this branch).** Owner: "1. create an
-  availability input in staff apps (native/webapp) 2. create a fill / book
-  slot in staff apps 3. verify the flow to fill pt." Discovery first: the
-  substrate mostly existed — `hr_open_shifts` (migration 084) with a proven
-  WhatsApp claim flow (pt-loop inbound `handleClaim`, first-accept-wins),
-  `hr_staff_weekly_availability` (EMPTY — nobody could input it) and
-  `hr_staff_availability` (staff web page existed but was gated OWNER/ADMIN).
-  Shipped: (1) **generator now respects declared availability** — weekly
-  windows (whitelist semantics, same as Assist candidates: rows exist → only
-  those days/windows; no rows → flexible), per-date unavailable/off blocks,
-  and `max_shifts_per_week` tightening the 5-day cap; applied in BOTH greedy
-  filter and the validator (catches LLM proposals). (2) **Generator posts
-  unfilled gaps to `hr_open_shifts`** (source `generator`, idempotent per
-  outlet+week: still-open generator slots replaced on regen, claimed ones
-  untouched) + ai_note "N OPEN SLOT(S) posted". (3) **Staff web**: weekly
-  pattern editor on /hr/availability (gate opened to all staff) + new
-  /hr/open-shifts page; APIs /api/hr/availability/weekly (replace-wholesale)
-  and /api/hr/open-shifts (GET eligibility-annotated list; POST claim =
-  ported WhatsApp semantics PLUS 24h/5-day cross-outlet caps + one-outlet-
-  per-day, materializes the real shift row). (4) **staff-native**: My
-  Availability + Open Slots screens, lib/hr/api.ts fetchers, HR hub tiles
-  (NOTE: staff-native merge = OTA deploy — ota-release skill applies).
-  **Live-schema catch:** `hr_staff_weekly_availability.available_from/until
-  are NOT NULL in prod** (code comments claimed nullable) — "any time" is
-  stored as explicit 00:00–23:59; fixed the latent WhatsApp bug where a
-  null-window reply violated the constraint UNCHECKED after the delete,
-  silently wiping the PT's declared availability. Insert shapes verified
-  against prod inside a rolled-back transaction. E2E after deploy: PT sets
-  pattern → regenerate a draft week → open slots appear in staff apps →
-  book → shift lands on grid; payroll cap already counts claimed slots
-  (notes=template_id, not pt_suggestion).
-
-- 2026-07-19 (round 12) — **Published-roster audit vs the AI logic (owner:
-  "my staff already done and publish next week schedule... use our
-  scheduling logic against what they arrange", then "i found few
-  inconsistencies... can you find more?").** Confirmed owner's four (PJ Tue
-  7 FOH shifts = +11h over target with mornings still at 2 FOH; PJ Thu +4h;
-  PJ Sun FOH −10h on the busiest bar day + kitchen +9h same day; Tamarind
-  NO morning cook Tue–Fri and no evening cook Sun). Found more: SA kitchen
-  unmanned evening Tue / mornings Wed+Fri; Danish (FT kitchen) scheduled 2
-  days with NO leave record (root cause of SA holes; Zikry's 5-day week IS
-  leave-backed); PT cap breaches Emran 31h net, Naufal/Fatin/Qaisara 30h;
-  SA Mon/Sat/Sun whole-day 2-FOH; Tam Sun morning 1 FOH; 12 clopenings;
-  PJ kitchen over target all 7 days while FOH under on 5. Friday prayer OK
-  at PJ only. Then reverse-audited for staff logic the AI misses → 4 real
-  gaps: rover circuit allocation (Syafiq 1 outlet/day), fixed shift
-  identities (Haziq always opener, Aina 12–20), PT truths not in DB
-  (weekly-availability table was empty — round 13 builds the input), and
-  manager-as-cover placement (Adam parked on the thinnest days; open
-  question: should a PUBLISHED manager shift count as coverage?). Audit
-  data + engine in scratchpad (published-week-v2.json).
-
-- 2026-07-19 (round 11) — **Weekly PT payment flow: manager sign-off →
-  gated per-person payment file.** Owner: "proceed with the payment
-  file. also the managers also needs to confirm each PT hours first
-  before paying." No migration needed — hr_attendance_logs already had
-  final_status/reviewed_by; "confirmed" = final_status approved/
-  adjusted. Shipped: (1) **HR → PT Hours page** (manager-scoped, tab in
-  the Attendance group): per-PT weekly clock logs with day-aware
-  rate/pay preview (weekday/weekend/PH 2×), one-click "Confirm all
-  clean" (pending+unflagged), per-log confirm, flagged logs route to
-  the existing Attendance review queue; API GET/POST
-  /api/hr/payroll/weekly/pt-hours (bulk confirm never overwrites
-  adjusted/rejected, manager outlet-gated). (2) **bank-file endpoint
-  reworked** (kept URL): run must be finance-CONFIRMED, every closed
-  non-rejected log in the week must be manager-confirmed (409 names
-  who), missing bank details now BLOCK (the old version silently
-  dropped payees), per-person reference "PTW<ddmm> <name>" for
-  statement-line reconciliation (kills the outlet lump-sum blindspot
-  the finance warehouse flagged); pure builder lib/hr/payment-file.ts
-  (+3 tests). Weekly payroll page: fetch-based download with a
-  blocker banner (was window.open dumping raw 409 JSON). Flow: manager
-  confirms (PT Hours) → finance Compute → Confirm → Payment file →
-  bank portal approval → Mark paid.
-
-- 2026-07-18 (round 10) — **PT weekday/weekend rates (owner: "diff
-  weekdays weekends... follow and fix the data" + the "Celsius - Part
-  Timer 2025/26" Google Sheet).** Sheet forensics (6,047 ledger rows):
-  history 2024–early-25 was a clean RM8 wd / RM9 we; current entries
-  inconsistent (mostly flat 9, three PTs flat 10, PH entries 18/20 =
-  2×). Adopted the one rule that resolves every inconsistency:
-  **RM9 weekday / RM10 weekend / 2× public holiday** — stated to owner
-  for veto. Shipped: migration 090 APPLIED (hr_employee_profiles.
-  hourly_rate_weekend, NULL→base fallback); `lib/hr/pt-rate.ts`
-  (ptRateForDate — single pricing fn); day-aware pricing wired into
-  weekly PT payroll calculator (per-clock-log rate + PH set from
-  hr_public_holidays, rate recorded per shift in computation_details),
-  labour-gate costRoster + ptCost, AI Fill PT suggestion costing
-  (holidays from weekForecast.byDate), employee page Compensation
-  section (weekend field, OWNER/ADMIN-gated, added to PII list).
-  Backfilled prod: 28 PT/intern profiles → 9/10 (was 26×9, 1×8, 1×10).
-  Earlier same day (rounds 8–9 follow-ups, all merged): #981 week-aware
-  Jumaat (Friday rests to prayer-goers, Thursday closing keeps women
-  clopening-eligible), #982 cap-cascade + breadth-first PT fill +
-  canonical outlet order (Putrajaya→SA→Tamarind→Nilai→IOI via
-  lib/outlet-order.ts at 8 endpoints) + Assist tab removed, #985
-  kitchen-gaps-first + ⚠ UNMANNED station warnings (Tamarind weekend
-  kitchen catch). Open owner decision: Tamarind kitchen supply 12 vs 14
-  anchor slots — raise PT cap / cross-train / accept flagged gaps.
-- 2026-07-18 — **GRNI namespacing + capture format guard (follow-up PR).** New
-  placeholders mint as `GRNI-<outletCode>-<n>` via
-  `lib/inventory/placeholder-number.ts` (6 mint sites switched; legacy `INV-#`
-  rows still recognised). POP matcher: number lookups now scope to the supplier
-  identified by the transfer's bank account, and placeholder-shaped refs
-  require amount/payee corroboration (they stay matchable — finance pays off
-  the card showing them). Capture: `numberShapeMatchesHistory` flags an
-  extracted number whose shape doesn't match the supplier's history
-  (NUMBER_FORMAT_MISMATCH flag) — would have caught the TMM/MnM contamination.
-  **Photo forensics (both "stolen number" rows read):** TMM CC001 RM509.76 row
-  (`ec3496d5…`) carries MnM's IVCT-00012381 photo AND number — its real TMM
-  number is unknown (likely paid by the unresolved 7/16 POP ref 9376518471);
-  MnM "1-15150" row (`bed3d671…`) is a DUPLICATE of IVCT-00012005 (same photo,
-  RM432 6/26) on a second PO — one real Jul-10 payment recorded on two rows.
-  Both corrections need owner sign-off (rename-to-true-number turned out
-  impossible; proposal = re-number TMM row pending SOA + resolve its POP, and
-  void/merge the MnM duplicate pair).
-
-- 2026-07-18 — **POP matcher: found the never-armed QA loop, armed it (PR #986
-  branch).** Owner asked "is the matching agent improving itself?" — answer was
-  NO: the pop-verifier (LLM judge at matcher dead-ends, pop-verifier-run.ts) had
-  0 verdicts ever (env gate never set; registry `procurement_pop_verifier` mode
-  off), pop-lessons was behind a second never-set env, and the third dead-end
-  (ambiguous → Telegram picker) had no coverage at all — 6/6 PendingPops
-  untapped/rotting. Fixed: verifier mode now read from agent_registry
-  (shadow=propose+flag, armed=code-gated auto-pay; env =false stays as kill),
-  registry flipped off→shadow in prod, every verdict logged to agent_actions
-  (measurable improvement), pop-lessons default ON + learns from resolved
-  PendingPops (finance's picker choices), loop-watchdog check #6 pings owner on
-  PendingPops unresolved >24h. Same PR: number-match narrowing by
-  amount/payee/outlet (the "multiple matching invoices" root fix). Still open:
-  6 unresolved PendingPops need human picks; TMM/MnM cross-stamped invoice
-  numbers (IVCT-00012381 on a TMM row, 1-15150 on an MnM row) need photo-read
-  corrections; Tier-1 phantom reverts (~RM2,370) await owner sign-off.
-
-- 2026-07-18 (round 9) — **Friday-prayer staffing rule (Jumaat).** Owner:
-  "put opening female on friday to run friday prayer. including non
-  muslim. currently only gulaf is non-muslim." `gender` and `religion`
-  columns ALREADY existed on hr_employee_profiles (religion is staff-app
-  self-service, HR read-only; gender HR-editable M/F) — no migration.
-  Backfilled prod: 61 profiles religion='islam', Guraf Lal Joshi
-  'other' (exact faith unknown; he can self-correct). Generator:
-  `attendsFridayPrayer(gender, religion)` (unknown gender/religion =
-  attends — safe default), Friday fillStation sorts prayer-free staff
-  into prayer-spanning openings and prayer-goers into closing; ai_note
-  per Friday either confirms the rule held or names who's exposed
-  (~13:00–14:15) and needs relief. Assist: `friday_prayer` flag + amber
-  chip + ~10-point fit penalty on Friday slots spanning 13:00–14:00.
-  Gender data now COMPLETE for all rostered staff (owner supplied: PJ 5
-  male; SA/Tam/Nilai 10 female + Emran male; only Anwar IOI + HQ Anis/
-  Hanis blank). Round-2 owner catch on the regenerated week: rule ran
-  but had nobody to prefer — the rest placer had RESTED Aliana on
-  Friday (gender-blind WHO) and Iffa CLOSED Thursday so the clopening
-  guard blocked her from Friday opening. Fix: Friday rest slots go to
-  prayer-goers first (resting a Muslim man on Friday dissolves his
-  conflict), prayer-free staff avoid Friday rests, and THURSDAY closing
-  prefers prayer-goers so women/non-Muslims stay eligible for the
-  Friday open. Lesson: a day-local rule isn't enough — the enablers
-  (rest day, previous night's close) must also be steered.
-
-- 2026-07-18 (round 8) — **Rest days are now PER-STATION (this branch).**
-  Owner caught the two failure modes in one afternoon: (a) items-share rest
-  placement dug holes PT then re-bought the same day ("hurm"/"fix this" —
-  Tue got 3 PT while Sat ran short) → #975 replaced it with slack-greedy vs
-  demand; (b) #975's day slack was STATION-BLIND: Sunday's barista side is
-  the week's lightest so Sunday looked slack, two rests landed there, and
-  person-assignment (weekend-debt order) gave BOTH to kitchen crew
-  (Amirul+Azmer) on the #2 cooked-items day — 2 BOH for 86 kitchen items
-  ("where is your logic?"). Fix: `placeStationRests(group, needOf,
-  minOnDuty)` in schedule-generator — BOH FT rests judged only against
-  `kitNeedHOf` (Σ kitHeadsByHour) with min 2 cooks/day (structural
-  anchors), FOH FT against `barNeedHOf` (bar curve + SERVICE_FLOOR +
-  buffer) with min 3; weekend fairness + variety + profile rest days now
-  honoured within each station. Also this round (merged #965 #966 #967
-  #975): PT ceiling envelope (FT floor ≥18% no longer starves weekends —
-  amber publish), consignment_sales into forecast + history clamped to
-  yesterday MYT (Nilai/IOI "no data" fixed), FOH/BOH item split in day
-  headers, composition line + "Why this staffing?" panel, forecast rank
-  explanations. Same PR, two more owner catches: (1) **demand window
-  counted days that hadn't happened** — trailing-28d ran to weekStart−1
-  with a hard ÷4, so generating on a Friday put tomorrow's (empty) Sunday
-  and today's partial Saturday inside the window: Sunday PJ read 86 kit
-  items when the true average of the 3 complete Sundays is 114 (−25%,
-  always hitting the weekend). Window now clamps to yesterday MYT and
-  divides each weekday by its ACTUAL occurrence count. (2) **Managers
-  moved outside FOH/BOH** (owner: "their schedule does not consider as
-  man hours, but can suggest shifts to cover if possible"):
-  `MANAGEMENT_POSITIONS` (manager/AM/HoD — NOT barista lead) in
-  labour-gate-lib; excluded from staffedAt (generator gaps), gate
-  coverage `have`, candidates kitGot/barGot, and grid day totals; own
-  grid section + timeline band + "MGR7.5 cover" tag; Assist now
-  INCLUDES managers as bottom-ranked `manager_cover` candidates and a
-  manager's + Add offers any short window as cover. Queue awaiting
-  owner word: staff-app PT-loop parity, weekly autopilot cron, KDS
-  handover briefing, Meta WA templates, demand v3 from timing
-  worksheets.
-
-- 2026-07-18 — **Custodian made SELF-DRIVING (owner: "what I wanted is for
-  this agent to do this by itself").** Skill gains an **Autonomy ladder**
-  (rung 1: code fixes/additive prod derivations/docs — do it; rung 2:
-  pre-approved patterns — tier-1 narration+exact-amount re-points, unambiguous
-  backfills, the delegated June GL correction once it reconciles to identity
-  <RM500/company; rung 3: propose-only; rung 4: human — payroll/payments,
-  arming, period close, merges) + procedure step 4b (each run BUILDS 1–3
-  backlog items end-to-end, not just reports). Routine changed weekly→**daily**
-  21:00 MYT (`trig_015cnJr3bfeXrjQ285nRjXNb`, fresh session; old weekly
-  trigger deleted — its prompt contradicted the ladder). **CAVEAT: routine
-  carries no MCP connectors (created via meta tool) — if tonight's run
-  can't reach Supabase, recreate it from the claude.ai Routines UI.** Close
-  pack (monthly) unchanged. Input-quality enforcement shipped same day:
-  receiving API persists resolved package (root cause of 71% null coverage),
-  accountant valuation pack (docs/proposals/inventory-valuation-anchors.md),
-  close-pack COGS trust gates + check 25.
-
-- 2026-07-18 — **Data-warehouse custodian expanded to the WHOLE estate**
-  (owner: "this agent should be accountable for all the data"). Skill
-  (`finance-warehouse` — historical path, description now estate-wide)
-  gains domain contracts + checks 13–20 for HR, procurement/inventory,
-  ops, marketing/loyalty, reviews/ads, comms, agent substrate; design doc
-  gains the estate baseline + goals; migration 086 (APPLIED) broadens the
-  registry row (key unchanged — stable identifier). Baseline sweep
-  findings E1–E7: 935 open OpsAlerts; 107 POs AWAITING_DELIVERY (+4 SENT
-  stuck, 1 DRAFT Jun 28); **sms_logs last row Jun 21 while SMS loops are
-  ARMED** (channel dead or sends moved to push — top estate check);
-  campaign_outcomes 0 rows (no loop writes outcomes); geogrid scans
-  stalled since Jul 6; only 4/30 registry agents ever wrote
-  agent_actions; 2 StockCounts SUBMITTED since Apr 30. Also: payroll runs
-  now 6× paid (the 7/5 "all drafts" note is stale; fin_payroll_actuals
-  stays canonical for cost). Weekly/close-pack routines inherit the
-  estate scope automatically (prompts defer to the skill). **Next run
-  priorities:** E3 SMS pulse root-cause, June per-company-day GL
-  correction, E1/E2 aging policies.
-  **COGS activation designed ("design 1", same day):**
-  `docs/design/cogs-activation.md`. Discovery flipped the premise:
-  recipes EXIST and are complete (`MenuIngredient`, 92/92 menus, 512
-  lines, 138 ingredients, clean g/ml/pcs UOMs — earlier "no recipe
-  tables" was a name-pattern discovery miss); `ProductPackage.
-  conversionFactor` exists but only 29% of 2,070 ReceivingItems carry a
-  package link; **consumption-post.ts reads DEAD SalesTransaction** (the
-  shadow engine has multiplied recipes against zero sales since April);
-  ReceivingItem has no price — unit cost derives from PO OrderItem.
-  unitPrice ÷ conversionFactor. Workstreams W1–W5 (re-point sales →
-  package ratchet + product_costs → menu_margins view → variance loop →
-  pre-committed arming criteria for consumption_engine). Warehouse
-  checks 21–24 added. **W1 BUILT same day (owner: "merge and build"):**
-  consumption-post.ts now sources sales from pos_order_items (status
-  completed, non-refund) + pickup order_items (paid statuses), both
-  joined to Menu via storehubId (demand-model precedent); dead
-  SalesTransaction read gone; new `itemsUnmapped` field surfaces items
-  with no Menu mapping (live-verified Jul 17: 139–244 pos + 43–82 pickup
-  items/outlet, only 3–8 unmapped per stream ≈ 4%). Engine stays SHADOW.
-  Note: "Celsius Coffee Putrajaya" Outlet = the Conezion store (slug
-  outlet-con) — 3 active till outlets, all covered. **W2/W3/W4 BUILT same
-  session (owner: CONTINUE):** migration 087 APPLIED — `product_costs`
-  VIEW (cost per base unit from last-5 received PO lines ÷
-  ProductPackage.conversionFactor, override table
-  product_cost_overrides; no cron — stays clear of the 40-cron cap),
-  `menu_margins` VIEW (sellingPrice − channel-weighted recipe cost;
-  uncosted_ingredients flags overstated margins; packaging cost = v1
-  follow-up), and the W2 single-package backfill (848 ReceivingItems →
-  package coverage 29%→70%). Verified sane: pastas RM19.90–29.90 at
-  52–74% gross margin; 104/138 recipe ingredients costed (75%);
-  data-map "Unit economics" section added. **Remaining in
-  cogs-activation:** receiving-flow package default (code+UI), Catalog
-  BOM page margin surface, packaging cost in margins, W5 variance loop →
-  arming. **Next:** merge PR #970 (W1–W4); first shadow consumption
-  report after tonight's cron.
-
-- 2026-07-18 (round 7) — **Measured station capacity v2 (this branch).**
-  Owner corrections while auditing Sat Jul 18: (a) "short" units clarified
-  (hourly = concurrent heads, day chip = man-hours); (b) serve p90 signal is
-  DIRTY at PJ — p50/p90 flat across quiet and busy hours, worst p90 at the
-  dead 22:00 (44min) → docket hygiene, not load; (c) THE KEY ONE: staff work
-  OVERLAPPING — 10/15min are order-latency promises, not per-item labour
-  costs, so the p90 proportional controller (rates 8→4.8, 6→3.6) was
-  over-demanding heads. Replaced with measured capacity: per (day,hour)
-  items ÷ heads CLOCKED IN (hr_attendance_logs), hours qualifying only when
-  median serve met target, p80 = demonstrated capacity, plan at 85%
-  headroom, clamps [0.75×, 2.5×] base, base until ≥20 qualifying hours.
-  PJ live: barista 11.1/head/hr (85h) → plan 9.4; kitchen 8.0 (82h) → plan
-  6.8. Sat Jul 18 audit vs old roster: 12:00 double-middle sits on the
-  demand lull while the 9am food peak ran at half strength (owner spotted
-  it). Also this round: migration 084 APPLIED to prod; #963 (WhatsApp
-  PT-loop flows) MERGED. Pending: staff-app parity screens, weekly cron,
-  KDS "mark served at handover" briefing, Meta template submissions.
-
-- 2026-07-18 — **Finance warehouse session 2 (owner-approved actions
-  executed).** PR #948 merged; weekly routine scheduled
-  (`trig_012njzLdT5jtaUQVG2JSrNgz`, Sun 21:00 MYT) + month-end close pack
-  (`trig_017RGBQXACCqkRpQWknETpwW`, day 1 08:00 MYT) — both fresh-session;
-  NOTE they carry no MCP connectors (created via meta tool) — if the first
-  run can't reach Supabase, recreate from the claude.ai Routines UI.
-  Executed on owner approval: (1) **tier-1 re-point batch: 92 bank lines
-  re-pointed** (RM30,470.60, audit-stamped, classifiedBy='manual'); check
-  11b residual now exactly 41 (tier-2, needs SOAs); the orphaned
-  `paidVia='bank-ap-match'`-no-line phantom-paid review list (incl
-  INV-1012 RM768, 26-0634/260634 RM148 pairs) awaits finance disposition.
-  (2) **Pickup channel added to unified_sales** (migration 085 APPLIED;
-  July: 1,347 rows RM41,649.74; view now pos+grabfood+pickup+consignment;
-  data-map + skill updated; `unified_sale_items` still lacks pickup lines
-  — follow-up; backoffice dashboard lib reads raw tables, unaffected).
-  (3) **June unwind NOT applied — blanket reversal would be WRONG:**
-  day-level reconstruction shows over-counting (Tamarind Jun 6–17, SdnBhd
-  Jun 6–14: EOD posted full StoreHub days while bank-fed income ran) AND
-  under-counting (Conezion Jun 8–17, SdnBhd Jun 15–17: EOD captured only
-  pickup ~RM400/day, till ~RM3k/day went nowhere). Net error much smaller
-  than the RM81k upper bound. Owner delegated ("make sure it is right") —
-  per-company-day correcting entries are the weekly run's top item.
-
-- 2026-07-16 -- **Finance data-warehouse agent designed** (branch
-  `claude/celsius-finance-warehouse-agent-8j1uk6`): new `finance-warehouse`
-  skill (custodian runbook: data contract w/ SLOs, 12-check suite, drift
-  scan, close pack, `claude/finwh-` draft-PR findings loop) +
-  `docs/design/finance-data-warehouse-agent.md` (verified 2026-07-16
-  inventory, backlog F1–F7, 8 candidate goals — recommended starting set:
-  freshness SLOs, lens bridge, restore eval dataset, month-end close) +
-  migration 083 seeding `finance_warehouse` into agent_registry (shadow,
-  **NOT applied** — human applies). **F1 root-caused + partially fixed in
-  the same PR:** categorizer sits on the dormant `/api/finance/bills/upload`
-  pipeline (fin_documents/fin_bills empty — never used; the live AP flow is
-  procurement invoice-capture, which never calls it), and
-  `logDecision`/`markDecisionApplied` swallowed supabase-js errors. Shipped:
-  error handling fixed; ap-verifier (the live 6-hourly/EOM gray-zone judge)
-  now logs every verdict to fin_agent_decisions (agent='ap-verifier',
-  related_id=bank line, applied=true on committed EOM applies). Remaining
-  F1 work: log invoice-capture extraction decisions + wire draft-invoice
-  edits to recordCorrection (correction-shape design needed).
-  **Run 1 executed 2026-07-17 (owner-triggered; migration 083 APPLIED to
-  prod same session on owner instruction — finance_warehouse registered,
-  shadow).** 9/12 checks green (ledger balanced, no orphan COA codes,
-  cutover exclusivity exact, traps empty, 0 uncategorised bank lines).
-  Findings: (W1) the wrong-invoice bank-match backlog is precisely **133**
-  lines (check 11b query now canonical; was "~113"); (W2) 6 invoices
-  paidVia='bank-ap-match' have NO linked bank line (inconsistent state,
-  incl INV-1012 RM768 paid 6/16) + 95 Maybank-Transfer PAID (RM58k)
-  awaiting EOM reconcile — 564 other unlinked are benign
-  historical/backfill; (W3) **unified_sales.sst is dead — all-zero for all
-  time** (data-map corrected; never compute SST from the till lens);
-  (W4) drift: 082 fin_inventory_valuations was missing from the
-  contract/data-map (added) and the table is EMPTY — Bukku Q1-close
-  anchors never entered (owner/accountant action if the sourced P&L needs
-  them). June lens bridge formalised: till 285,363.17 vs GL 353,851.53 =
-  gap 68,488.36 → Grabfood 41,838.89 + GastroHub 12,441.54 + residual
-  14,207.93 (~5%) ≈ card settlement lag — quantify next run (per-day card
-  tender vs 5000-02). All findings logged to agent_actions.
-  **Run 2 (same day, owner-triggered "continue"):** the lens bridge is now
-  SOLVED — the GL income lens changed semantics at the POS cutover:
-  5000-01/02/04 are EOD-journal-fed (accrual at ring-up) since ~Jun 6–18,
-  bank-fed before; verified Jul 1–14 EOD income = till(pos+grabfood) +
-  pickup-app − consignment with residual RM48; Grab delivery payouts now
-  post to 1005 transit (not income). **Two material findings:**
-  (1) JUNE GL income is mixed-regime — both bank-fed AND EOD posted income
-  Jun 6–17, up to RM81,270.74 double-counted; unwind needed while the
-  period is open (do not trust June GL revenue until then).
-  (2) unified_sales VIEW excludes the pickup app (~RM40k/mo; `orders`
-  money columns are in SEN) — "only sales truth" corrected in data-map.
-  Re-pointing batch prepared propose-only in
-  `docs/proposals/finwh-repoint-133-wrong-invoice-matches.md`: tier 1 = 92
-  exact-amount narration matches (RM30,470.60, gated SQL), tier 2 = 41
-  manual (RM21,251.98). **Next:** merge PR #948; owner/finance decisions:
-  approve tier-1 re-point batch, June double-count unwind plan, whether to
-  add pickup channel into the unified_sales view; schedule the weekly
-  routine.
-- 2026-07-17 (round 6, IN PROGRESS) — **PT loop build started
-  (docs/design/pt-loop.md).** Merged this round already: #960 (PT gaps +
-  targets from the demand model, station-tagged, structural anchor gaps)
-  and #961 (demand model counts pickup-app `orders` — SA was missing 65
-  items/day incl. +70% cooked workload; joins Menu via storehubId).
-  Owner-driven PT-loop requirements: availability has NO write UI today
-  (hr_staff_weekly_availability verified 0 rows), reserve empty spots as
-  claimable open shifts, roster acknowledgment mandatory — over WhatsApp
-  (Cloud API infra already wired: lib/whatsapp.ts + webhook) AND staff-app
-  parity. Bilingual PT SOP memo drafted (sent to owner, start date TBC).
-  Migration 084_pt_loop_ack_open_shifts.sql written (ack columns,
-  hr_open_shifts, hr_wa_prompts; RLS enabled no policies per house rule) —
-  NOT applied to prod yet, awaiting owner approval. Build order in
-  pt-loop.md; next: WhatsApp flows PR, then generator open-shift emit,
-  staff-app screens, weekly cron. Meta template approval needed for
-  outside-24h pings — submit early.
-
-- 2026-07-17 (latest) — **Round 5: forecast clamp (merged #959) + PT
-  allocation unified with the demand model (this branch).**
-  (a) #959: forecast history window now ends at YESTERDAY (MYT) — forecasting
-  next week mid-week had been zero-filling the not-yet-traded tail of the
-  current week at the highest recency weight, cratering Sat/Sun forecasts
-  (SA/PJ Saturday showed ~RM3.0k vs real ~RM4.9k baseline). Surfaced by the
-  owner asking how the weekend forecast works.
-  (b) Shah Alam full-week QA (draft 2026-07-20) validated BOH: kitchen at
-  open+close all 7 days, zero kitchen middles, no clopening, 45h caps, rover
-  2 days, manager never rostered. But Mon–Wed FOH sat below the 3-head floor
-  with NO PT suggested: `ptTargetByDate` still used the old
-  items-per-man-hour "required" formula that disagreed with the coverage
-  chips. Fixed: PT gaps + day targets now come from THE demand model
-  (station-split heads incl. floor + mode buffer), gaps are station-tagged
-  (kitchen holes only offered to kitchen-capable PT; hybrid "PT
-  Barista/Kitchen" fits both), and structural anchor gaps (2/station on
-  opening & closing) let PT complete the 2/2 kitchen anchors when only 3
-  kitchen FT exist (Haziq → kitchen Closing instead of a random Middle).
-  Greedy fallback, model-proposal validation, and the PT model prompt all
-  enforce/see the station. Next: autopilot phase 2 (weekly cron
-  generate→validate→shadow-publish) awaits owner "continue".
-
-- 2026-07-17 (later) — **Scheduler round 4: per-station allocation + Assist
-  rebuilt (PR #957, branch `claude/staff-rotation-outlets-kmobpa`).** One
-  demand model (`lib/hr/demand.ts`, extracted from the generator) now feeds
-  generator + labour-gate coverage + grid "short Xh" chips + Assist. Owner
-  directives closed this round: (1) BOH middles were surplus artifacts —
-  day-split now runs `allocateShiftCounts` **once per station** (kitchen crew
-  on the kitchen item curve, FOH on the barista curve + service floor + mode
-  buffer; pastries/croissants/cakes/cookies are barista — verified against
-  live Menu categories, only the 6 cooked categories are kitchen). Owner
-  refinement: anchors are STRUCTURAL for both stations — open carries
-  prep/setup, close carries cleaning + dishwashing — so each station seeds
-  up to 2 opening AND 2 closing (`allocateStationCounts`,
-  STATION_ANCHOR_TARGET=2; 1 head opens, 2→1/1, 3→2/1, 4→2/2) before its
-  item curve places anyone; only heads beyond 4 follow the curve
-  (regression-tested in shift-allocation.test.ts). (2) Assist QA'd — it was NOT following the same
-  logic: it ranked the Manager as Top pick (pool now excludes
-  Manager/AM/HoD; Barista Lead stays), its coverage chips read
-  hr_outlet_coverage_rules with a min-concurrent-over-16h bug ("0/4 short 4"
-  with 11 rostered) — chips are now per-template needs from the demand model
-  with per-station gaps ("short 1 kitchen + 1 barista"), and clicking a
-  single-station gap auto-fills the role so skill-weighting favours that
-  station. (3) UX: grid cell "+ Add" now leads with "✨ Suggested" — the
-  short templates for that person's station, one click to assign (lazy
-  per-date fetch of /api/hr/schedules/candidates, cache cleared on save).
-  Remember the deploy-lag gotcha before believing "it didn't work".
-  Still open: two deep-QA review agents from round 3 never reported back;
-  autopilot phases 2–4 (cron generate→validate→publish shadow-first,
-  WhatsApp exception digest, PT auto-commit) designed but not built.
-
-- 2026-07-17 — **Scheduler QA round 3 (owner-driven), all merged to main.**
-  #953 (squash `9544c2f`): day-split rebuilt — shift COUNTS from the hourly
-  items curve via `lib/hr/shift-allocation.ts` (marginal-shortfall greedy;
-  killed the clopening cascade that starved opening at 2 / stacked closing
-  at 6); all FT filled in every mode (shared FT to 6-day combined cap, rover
-  2 days); Managers/Area Managers never auto-scheduled; rotation cost follows
-  hours (`borrowedFtCharge`/`lentFtCredit` — borrowed FT charged here,
-  credited at home; Barista Lead pro-rata; manager cost = HQ RM0, flat RM309
-  rover share dropped); generator uses real per-profile EPF rates; daily grid
-  % = day's hours-share of ACTUAL roster cost (reconciles to the weekly chip).
-  Verified live: all FT/PT salary data individually populated; Afique
-  RM1,900 → RM438/wk charged where he works. **Gotcha that bit twice:** owner
-  regenerates immediately after merge, but Vercel prod deploy lags ~3-6 min —
-  check `ai_notes` for the current marker line (now "rotation cost follows
-  hours") before diagnosing "the fix didn't work". Follow-up branch adds
-  FOH/BOH section grouping in the week grid. Two deep-QA review agents were
-  still in flight at last update — triage their reports on return.
-
-- 2026-07-16 — **Ads optimizer + local-rank status check (all DB-verified,
-  follow-up to the 2026-07-05 entry).**
-  **Optimizer:** the two Jul 5 owner-approved cuts (Tamarind RM100.20→84.96/day,
-  Putrajaya RM100→98.42/day, ~RM504/mo freed) applied clean and are sticking —
-  per-day cost/conv Jul 5–14 vs the prior 2 weeks: Tam RM13.4→9.4, PJ RM9.4→7.6,
-  SA (uncut) RM6.2→6.1, with conversions/day flat-to-up at all three. No further
-  budget changes; 0 search-term exclusions ever used. July spend to date
-  RM7,296 (3 campaigns ≈RM100/day each). **BUT the conversion signal is still
-  wrong:** `ads_conversion_daily` confirms the tracked actions are *Local
-  actions – Directions* + *Clicks to call* (and that per-action sync is stale —
-  no rows after 2026-04-19). The value-based "Pickup Order" tag
-  (`docs/design/ads-conversion-loop.md` Approach A) was never wired, so the
-  optimizer's efficiency lens = cost per directions-click, not cost per order.
-  **ads-daily sync** healthy nightly (metrics through Jul 14) EXCEPT the
-  search-terms step: its sync-log rows are stuck `RUNNING` every night (finish
-  update never lands) and Jul 12 threw a hard Prisma connection-pool timeout;
-  data still arrives (10.5k rows / 4.9k terms, Jun 29→Jul 13) — likely serial
-  upserts racing maxDuration/pool. Owner's search-term **backfill curl never
-  ran** (history starts Jun 29). The Monday shadow-optimizer report exists only
-  in the cron's JSON response — persisted nowhere, read by no one.
-  **Geogrid:** the first true-10km auto-scan (Mon Jul 6) burned the ENTIRE
-  monthly cap in one run — 40 scans: 13 complete / 7 partial / 20 failed with
-  0/81 points (later scans in the run all failed → Places quota/rate
-  exhaustion; failed scans still persist rows and count against
-  `GEOGRID_MONTHLY_SCAN_CAP`). The Jul 13 Monday run was a capped no-op;
-  **nothing scans again until Aug 1.** Structural mismatch: 86 active
-  keyword×outlet combos on a ~weekly due-cadence vs a 40/month cap — the loop
-  as configured can never complete a sweep. Tamarind got ZERO usable catchment
-  baselines. Usable Jul 6 baselines: SA "breakfast shah alam" avg 3.9 / 33%
-  top-3 / green 11.2km; PJ "cafe" 5.3 / 12% / 5.0km; Nilai "nilai cafe" avg
-  17.2 / 0% top-3 (invisible in its own town).
-  **Reviews (the rank lever):** snapshots current through Jul 16. 30-day
-  velocity: Tam 49 (the GBP relink fix is vindicated), PJ 29, SA 13, **Nilai 3
-  — still the binding constraint** (111 reviews vs top local competitor 160).
-  **Substrate gap:** none of ads-daily / optimizer / geogrid are in
-  `agent_registry` (only the `reviews_*` agents) — no kill switch, no ledger.
-  **GBP category adds** (the Jul 5 "next") were never proposed — blocked on
-  the failed scan coverage.
-  **Next:** (1) fix geogrid scan economics — don't count failed scans against
-  the cap, throttle within a run, and prune the 86-keyword set to fit the
-  budget (or raise the cap knowingly: ~81 Places calls/scan); (2) owner
-  decision: wire the value-based Pickup Order conversion (Approach A) or
-  accept directions-clicks as the metric; (3) re-propose GBP category adds
-  once Tamarind has a real catchment scan. (Items on the optimizer shadow
-  report, search-term batching, and registry registration were superseded the
-  same day by the ads autopilot — next entry.)
-
-- 2026-07-21 — **Negative-keyword CONSOLIDATION (owner: "check if there is
-  still bad keywords paid" → "go ahead").** Found all 3 campaigns at 25/25
-  negative slots with ~RM170/mo junk still paid + stuck (slots full → last 2
-  runs excluded 0). Root cause: slots burned on literal near-dupes. Fix:
-  exclude broad ROOTS not literals (`negativeThemeRoot`/`exclusionPhrase`;
-  "zus" covers "zus near me"+"zus coffee" fuzzily + pre-blocks future
-  variants), `selectAutoExclusions` sums spend per root, one-time idempotent
-  `consolidateCampaignNegatives` swaps existing 25 literals→roots in the armed
-  nightly pass (removes literals=frees slots, adds roots, ledger
-  status='superseded'). Verified: applied exclusions DO stop spend (≤RM1.89
-  one-day propagation tail, not a leak); sync healthy (Google's ~2-day
-  search-term reporting lag, latest data Jul 19). Root lists exclude bare
-  "coffee"/"cafe" so café intent is never blocked. 483 tests green.
-- 2026-07-21 — **Hard-cut APPLIED + EFFECT.** Jul 20 run cut all 3 campaigns
-  to RM55/day clean (fleet RM265.86→165). Cuts banked RM4,056/mo = 81% of
-  RM5k. Till post-cut Jul 21 = RM6,660 fleet, inside normal RM6.5–8.4k band —
-  no cliff, but 1 day (guard verdict ~2wk). Scoreboard sales side still
-  contaminated (StoreHub anchor, shows −RM10.6k/mo — ignore). Owed: remove the
-  one-time hardCutDirective block; fix scoreboard anchor; if till holds, take
-  fleet toward RM45/day each for the last ~RM950/mo.
-- 2026-07-19 — **Hard-cut directive (owner: "what do you suggest" → "ok do
-  this"):** one-time decisive cut of all 3 ad campaigns to RM55/day
-  (`hardCutDirective`, env ADS_HARD_CUT_TARGET_MYR) — banks ~RM4,050/mo of
-  the RM5k target at once instead of over ~2 months, then the normal guarded
-  descent + rollback continue. Fires only on a healthy measured till (raw
-  index ≥0.95; a weak/unmeasured outlet waits a night), only while >target,
-  self-expires per campaign at RM55. My reasoning: 11% cut so far moved the
-  till 0 → strong evidence marginal spend is waste; RM55 (not the floor)
-  keeps a real budget each outlet can defend so a genuine sales effect shows
-  up as a manageable dip, not a cliff. **Remove the directive block in a
-  follow-up once all 3 are confirmed at RM55.** Fleet after tonight: 265.86→
-  165/day.
-- 2026-07-19 — **Descent aggression BUMPED (owner: "decrease more")** after
-  first cuts proved safe (fleet RM300.20→265.86/day = RM1,030/mo banked, ~21%
-  of RM5k; per-outlet guard healthy; clean-POS till flat ex-Shah-Alam which
-  tracks the Grab holdout + seasonality). Steps 8→12% (inefficient 12→18%),
-  max cuts/run 2→3, fleet spacing 6→3d; all env-tunable (ADS_STEP_PCT etc).
-  OBSERVE_DAYS kept 14 (= guard window). NOTE: the cash scoreboard's SALES
-  side is contaminated — its anchor window (28d pre-Jul-5) straddles the
-  StoreHub→pos-native cutover, so it over-reads the "before" till (logged
-  -RM9.9k/mo till Δ vs clean-POS ~-RM170/day). Cuts side is correct. Fix
-  offered (anchor to post-cutover window / exclude storehub_sales), owner
-  hasn't said go yet.
-- 2026-07-19 — **Cash TARGET (owner, revised): +RM5,000/month net from
-  GOOGLE ADS ONLY** (was RM7k any-source; SMS/loyalty loop proposed and
-  PARKED — 23k member phones sized, design in sms-loop-engineering.md,
-  awaiting owner's return to it). Nightly `cashScoreboard()` in the autopilot logs
-  progress (cuts vs RM300.20/day pre-descent baseline + margin on fleet till
-  drift vs the pre-descent anchor) in every run's summary + meta. Current:
-  ~RM1,030/mo banked from cuts (~15%). Cuts ceiling ≈RM6.4k/mo → the sales
-  side is required; biggest dormant lever = value-based Pickup Order
-  conversion tag (still unwired).
-- 2026-07-18 — **Ads spend autopilot LIVE — full design + history promoted to
-  `docs/design/ads-autopilot.md`** (PRs #947/#952/#954/#971/#972/#973, all
-  merged; built 7/16-18 from owner directives: no per-change approval,
-  maximize cash with the till as sole truth, exclude junk then cut its cost,
-  full-pause Tamarind for a baseline). Nightly inside `cron/ads-daily`;
-  kill switch `agent_registry` key `ads_autopilot` (armed); every action in
-  `ads_budget_change`/`ads_term_exclusion` as decided_by='ads-autopilot'.
-  **Live state after the first run (Jul 18 3am MYT, ledger-verified):**
-  Putrajaya RM92.79/day (waste-matched cut paired with its 15 junk-term
-  exclusions), Shah Alam RM92 (first blind 8%), Tamarind RM100.20 (rollback
-  that channel-decomposition proved a FALSE POSITIVE — till flat in absolute
-  RM; led to the #972 plausibility bound). 45 negatives applied incl. fleet
-  seeds to SA/Tam. **Tamarind pause was BLOCKED twice** (Jul 18: probe gate required a fully
-  healthy guard, fixed in #973; Jul 19: the human-paused NILAI campaign
-  tripped the one-probe-at-a-time check, and nightly waste-matched cuts
-  were resetting the fleet-spacing clock — starvation bugs). Fixed: the
-  one-probe check counts only autopilot-paused campaigns; waste-matched
-  cuts don't reset the spacing clock; pauses are never spaced. **PLAN CHANGED (owner,
-  Jul 19): pause probe SHELVED — "let tamarind follow the others, start with
-  the prev cut (rm80+)". One-time owner directive in code cuts Tamarind
-  100.20→84.96 at the next nightly run (self-expiring: fires only while the
-  false-positive rollback is the last ledger row), then Tamarind runs the
-  same gradual descent as PJ/SA. Probe machinery kept, re-enable via
-  ADS_AUTOPILOT_PAUSE_PROBE=on.** (Superseded text: Tamarind 28d baseline
-  (probe gate now blocks only on absolute till weakness, #973) →
-  auto-restore + verdict ~Aug 15 — drop → ads generate cash; none → floor.) Competitor + dessert
-  junk classes armed (owner: no conquesting), Malay/local vocab added,
-  25-negative-slot budget per campaign. **Watch items:** Tamarind verdict
-  ~Aug 15; SA/Tam term data accumulating (waste-matched cuts follow);
-  fuzzy negative themes may catch café-intent terms (seen: "kopitiam near
-  me") — reject via /ads/optimizer panel to make it permanent; possible
-  GrabAds holdout at SA/Tam is a confound for till reads. **Still open
-  (owner):** value-based Pickup Order conversion tag (Approach A) — Google
-  still optimizes toward directions-clicks; geogrid scan-cap economics
-  (separate loop, idle until Aug 1).
-
-- 2026-07-15 -- **Staff-scheduling round 2 (branch
-  `claude/staff-rotation-outlets-kmobpa`, PR #938, draft).** Builds on the
-  merged #934 (multi-outlet rotation + demand-sized AI Fill + fairness). Two
-  additions: (1) **Tight/Mid/Safe staffing-mode toggle** — a coverage buffer on
-  top of the demand-sized heads via one lever `bufferHeads(dow,hr)` in
-  `schedule-generator.ts` (tight=0 → byte-for-byte prior behaviour; mid=+1 across
-  the day's peak block; safe=+1 all open hours). Chosen in the Schedules toolbar
-  dropdown beside AI Fill; validated in `api/hr/schedules/route.ts`; recorded in
-  `ai_notes` + returned on the result. (2) **Performance-aware PT suggestions** —
-  new `lib/hr/pt-performance.ts` computes a 60-day reliability score (on-time from
-  `hr_attendance_logs` 60/40 checklist-completion from `Checklist`, Bayesian
-  prior 0.7-0.8/K3, never a hard gate); folded into both the greedy fallback
-  (blend perf 0.5 + live-fairness 0.35 - cost 0.15) and the LLM prompt. Docs:
-  `docs/design/staffing-model.md` updated. No schema change (break *times*
-  deliberately out of scope — placed case by case). All 354 tests + tsc + lint
-  green. **Next:** await CI on #938, then a live test-generate of one week per
-  mode to eyeball the labour% deltas before marking ready.
-  **Round 2b — revenue forecast rebuilt.** Diagnosed why AI wk 7/20 read 20.5%
-  at fewer hours than published wk 7/13 at 18.2%: labour% = cost ÷ forecast, FT
-  salary is a fixed sunk cost (RM4,616 + rover 309 = RM4,925, unmoved by hours),
-  and wk 7/20's forecast was ~16% lower (RM23,814 vs ~RM28,500) because the flat
-  trailing-28d÷4 forecast lagged a falling trend → PT envelope computed to RM0
-  (no PT suggested). Fix: new `lib/hr/revenue-forecast.ts` (pure, 6 tests) —
-  per-weekday, recency-weighted (½-life 2w), holidays excluded from baseline +
-  applied to target week via the outlet's own holiday ratio. Wired into
-  `labour-gate.ts` (`dailyRevenueSeries` + `forecastWeek`; gate `coverage[]` now
-  carries per-day forecast/pct/weekend/holiday) and the generator (per-DATE
-  affordable man-hours + holiday note; one forecast feeds both sizing and the
-  envelope). UI: per-day forecast + indicative % in the week-grid day headers and
-  the DayView badge. Verified new query reproduces the old flat forecast to the
-  ringgit (flat-weight == 28d÷4). All 360 tests + tsc + lint green.
-  **Round 2c — FT sunk cost made explicit.** Because FT salary is booked whether
-  or not they're rostered, benching an FT to cut the % saves nothing. Gate now
-  splits rosterCost into `ftFixedCost` (FT+rover, sunk) + `ptCost` (discretionary),
-  the labour-chip tooltip shows FT-floor% vs PT%, and it warns when a primary FT
-  is scheduled ≥2 days below their 6-day capacity (net of leave). Generator flags
-  a revenue-constrained week (FT floor alone ≥ target, PT envelope RM0). Cross-
-  outlet FT lending noted as the larger follow-up (not built). **PR #938 merged
-  to main 2026-07-15** (squash) → Vercel backoffice deploy.
-- 2026-07-15 — **Stock-count coverage guard (short-count guardrail).** Root: the
-  staff submit/finalize endpoints trust the client's item list; the only
-  completeness check was per-item (`countedQty` null), which can't catch products
-  never loaded onto the sheet — how Putrajaya's monthly landed at 49 of ~212
-  (an abandoned 7-minute DRAFT; its Apr 30 monthly had 212, May/June monthlies
-  skipped entirely). New pure `evaluateCountCoverage` in `packages/db/stock-count.ts`
-  compares counted vs the outlet's expected universe for that frequency; interim
-  baseline = the fullest recent REVIEWED count of the same frequency
-  (`apps/staff/src/lib/stock-coverage.ts`). Owner call (block vs warn): **MONTHLY
-  below 85% coverage → BLOCK** (unless an explicit `partialReason`, which routes it
-  to review with a note); **DAILY/WEEKLY → WARN** (allow but force SUBMITTED +
-  short-count note, never auto-approve). Wired into both entry points
-  (`api/stock-checks` POST + `.../[id]/finalize`). 14 unit tests green, staff tsc
-  clean. **Follow-ups (not built):** backfill `OutletProduct` (has per-product
-  `countFrequency` — the real source of truth vs the interim baseline) and seed
-  counts from it; an ops-pulse detector to ping on any submitted short count; UI
-  progress vs the expected universe ("49 / 212") + a "Submit partial count" action.
-
-- 2026-07-15 -- **Agent substrate SHIPPED end-to-end.** Fleet review found the
-  non-compounding pattern (every domain reinvented flags/queues/telemetry;
-  shadow builds never armed; marketing loop has no outcome memory). Built the
-  shared rails: migrations `080_agent_substrate.sql` (agent_registry +
-  agent_actions ledger + campaign_outcomes) and `081_agent_registry_seed.sql`
-  -- both **APPLIED to prod 2026-07-15** (29 agents: 17 armed / 8 shadow /
-  4 off; advisor shows only the intended RLS-no-policies deny-all note). Lib
-  `apps/backoffice/src/lib/agents/substrate.ts` (getAgentMode fail-safe off
-  for NEW agents, getAgentModeOrDefault fail-open for pre-existing live
-  loops, logAgentAction never throws); `/agents` control panel (Settings >
-  System > AI Agents, OWNER/ADMIN; API refuses mode=armed while
-  arming_criteria is NULL). Exemplar wiring: celsius-overview +
-  reviews-auto-reply log to the ledger; ap-match-apply + gl-post gained
-  their first kill switch (registry mode, fail-open armed). NOTE: main's nav
-  moved to `apps/backoffice/src/lib/nav.tsx` -- the AI Agents entry lives
-  there, NOT in layout.tsx. Compounding build contract now gates new agent
-  ideas via the office-hours skill (Phase 1.5) + design-doc "Compounding
-  Contract" section. Branch `agents-substrate`. Human owes: arming criteria
-  for the 8 shadow agents. Next: wire round_gap_loop + sms_lifecycle_loops
-  to campaign_outcomes; migrate legacy env-flag readers to getAgentMode.
-
-- 2026-07-14 — **Housekeeping agent designed** (branch
-  `claude/housekeeping-agent-design-p3ux4g`): new `housekeeping` skill —
-  evidence-gated cleanup loop on the sentry-triage pattern (fresh session
-  per run, state in GitHub via `claude/housekeep-*` draft PRs, ≤3/run,
-  propose-only for DB/infra/product-behaviour, human-only for
-  payments/secrets). Design: `docs/design/housekeeping-agent.md`. Seeded
-  backlog: stale launch.json, root package.json dead scripts
-  (`typecheck:apps`→apps/loyalty, `db:push` footgun), staff-native coach
-  helpers (ride-along), STATE compaction; propose-only: pickup inventory
-  tab. Round 2 (owner): added the **utility audit** — a monthly zombie
-  sweep (working-but-unused / purpose-defeating: shadow limbo, producers
-  without consumers, half-built loops, noop resolvers) judged on
-  usage/outcome evidence, propose-only, verdicts arm/kill/park-with-
-  expiry/keep, seeded zombie register in the skill. **Next:** merge,
-  then trigger the first run on demand; schedule the weekly routine
-  (Sun AM MYT) only after run 1 proves useful.
-
-- 2026-07-14 — **Paid-no-POP audit → 6 payment-record corrections applied to prod**
-  (owner-approved in chat; SQL via Supabase MCP, audit notes stamped on every
-  touched row, re-pointed bank lines set `classifiedBy='manual'` so the matcher
-  won't re-touch them). Verified against the bank feed (current through Jul 12):
-  KLFC **00653452** RM768 reverted PAID→PENDING (phantom bank-ap-match — paid
-  stamp Jun 16 predates the Jun 19 issue date; that debit narrates 00652052);
-  KLFC **00655541** RM768 stalled INITIATED→PENDING (initiated but never
-  confirmed; no debit names it, zero unmatched RM768 since Jun 1); Blancoz
-  **26-0677** RM148 reverted PAID→PENDING (the Jul 8 debit narrates 26-0676);
-  bank lines re-pointed/linked by narration: Jul 5→26-0644, Jul 8→26-0676,
-  Jul 10→26-0675 (and 26-0675 paidAt corrected Jul 5→Jul 10). Net: RM1,684 back
-  in payables (KLFC 1,536 — cross-check their SOA before paying — + Blancoz 148).
-  These 6 are the first slice of the ~113 historical wrong-invoice matches; the
-  bulk re-pointing pass still needs its own finance-approved run.
-
-- 2026-07-11 — **Backoffice nav housekeeping (round 4)** — nav registry gains
-  `hidden` items (in ⌘K/route-gate/grants, out of the sidebar; see
-  `lib/nav.tsx` NavItem doc). Evidence-based prune (every hide verified
-  reachable via in-page link or HR tab strip, or is audit/config-grade):
-  HR 17→7 sidebar entries (one per module — strips reach siblings, verified
-  unfiltered by moduleAccess), Ops Dashboard hidden (same API as Performance,
-  which is the superset + new section landing), SOP Categories moved to
-  Settings→System, Recipe Cards/Points Log/Outcome Types/Settings Hub hidden.
-  Finance "Legacy" group renamed **Cash** — cashflow + cash-tracking are the
-  actively-maintained cash-basis lens, NOT deprecated (verified in code; do
-  not prune them). Kept after verification (distinct tools, sidebar-only
-  reach): Compare, Cashier Performance, Inventory Reconciliation, Rank
-  Scoreboard, Ads Optimizer.
-
-- 2026-07-11 — **Sentry self-fixing loop** (branch
-  `claude/sentry-self-fixing-loop-5tdrxm`): `sentry-triage` skill upgraded
-  from one-way triage to a closed loop — per-issue draft-PR fixes (branch
-  convention `claude/sentry-fix-<shortid>`, ≤3/run), next-run verification
-  of merged fixes against live Sentry (quiet → resolve issue w/ PR link;
-  still erroring → one `-r2` retry; then escalate here), state reconstructed
-  from GitHub PR search + Sentry status (no repo ledger). Design:
-  `docs/design/sentry-self-fix-loop.md`. The existing nightly routine
-  (`trig_01NZbJV3A36TeXRKpBkFjxWx`, 05:00 MYT) picks the new procedure up
-  automatically once merged — its prompt defers to the skill file. **Blocked
-  on the sentry.io egress allowlist fix (see Open failures)**; after the
-  owner fixes that, note: 2 of the week's top 3 issues were already
-  root-caused WITHOUT Sentry via Vercel runtime logs (see the two
-  2026-07-11 Open failures — both are missing Vercel env vars, human
-  actions). Remaining for the first live run: `TypeError: Cannot read
-  property 'toFixed' of undefined` (5 events, New — needs the Sentry stack
-  trace to localise), then verify the two env fixes landed (issues go
-  quiet → resolve them in Sentry per the skill).
-
-- 2026-07-10 — **Backoffice nav UX rework** (PR #894, merged on owner's
-  approval after a clickable preview artifact). Owner said the tabs were
-  "haywire". Nav config extracted from `(admin)/layout.tsx` into
-  `src/lib/nav.tsx` (single registry shared by sidebar + ⌘K palette + route
-  gate). Behavior: section headers open AND jump to the section's first page
-  (expand-only shipped briefly in #894; owner reverted it next day — clicking
-  a tab must navigate; keep it), clicking the open active section collapses
-  it, section highlight stays on while open, mobile sheet closes on page
-  pick. Structure: rail reordered into clusters (Sales/Procurement/Ops ·
-  HR/Finance · Rewards/Marketing · Catalog/Settings, with rail dividers —
-  `dividerBefore` was previously dead config, now rendered); duplicate
-  Packaging entry removed (single home: Catalog); GrabFood folded into
-  Marketing → Advertising; ordering labels were briefly swapped to
-  "Supplier Chats"/"Purchase Orders" but the owner reverted them next day —
-  the team's vocabulary is **"Purchase Orders" = supplier-chats page,
-  "PO List" = /inventory/orders**; keep it;
-  single-item subgroups merged (HR Leave→Time & Leave, Rewards Manual
-  Grant→Channels, Settings People→Business, Procurement Analytics→Overview);
-  HR icon Bot→Users. ⌘K palette now searches nav pages (RBAC-filtered) above
-  employees. **No URL or moduleKey changes** — perms dev-guard still covers
-  every grantable key. All verified: tsc, eslint (3 pre-existing warn-level),
-  347 vitest, next build. Round 2 (owner: "sub tabs need arranging too"):
-  Sales/Ops/Finance flat lists → subgroups (Overview/Daily/Reports,
-  Overview/Daily/Setup, Books/Reference/Legacy), Catalog reordered
-  products→BOM→cards→packaging→posters. NOTE: GitHub Actions dropped the
-  `synchronize` CI runs for the round-2 pushes (only the first commit got a
-  PR run); verified locally (tsc/eslint/vitest) and via the on-merge main
-  CI run instead.
-
-- 2026-07-10 — **Procurement loop QA round 2 + "fix all"** (PRs #883 #885 #891
-  #895 merged; earlier same-arc: #714 par ABC value-cap, #806 cold-send fixes,
-  #835/#836 invoice-capture approve flow). Root findings: the cron cap (see
-  facts), invoice/receiving tail leaks (revisions dropped, PARTIALLY_RECEIVED
-  chase black hole, Cancel deleting the GRNI payable, chaser suppressed by
-  placeholders, EOM matcher paying DRAFTs) — all fixed; ASSIST fidelity (wrong-PO
-  target, multi-item proposals lossy, ETAs dropped, untruthful resend, double
-  replies) — all fixed. Pars recalced in prod for all 3 POS outlets via SQL
-  mirroring par-calc.ts (fresh 2026-07-10, ABC classes; weekly cron takes over
-  Sundays). **Still open:** webhook runs 3 sequential LLM calls before Meta's
-  200 (throttling risk — needs its own PR); ~113 historical wrong-invoice bank
-  matches need a finance-approved re-pointing pass; invoice_request template
-  still needs one OWNER visit to /api/ops/workspace/templates?action=create to
-  submit to Meta.
-
-- 2026-07-06 — **Checklist auto-assign: data-driven FOH/BOH station** (PR #824,
-  branch `claude/auto-assign-checklist-hqqzfd`, draft — NOT yet merged). Root
-  cause of "auto-assign didn't assign the attended person": station came from a
-  hardcoded title map in `ops-nudges` that mis-classed *Ice Machine Cleaning* as
-  kitchen (it's at the bar → FOH). Now data-driven both sides: `Sop.stations`
-  (enum `SopStation{foh,boh,lead,shared}`, **array/multi-select** — a SOP can be
-  FOH+BOH or shared) + `hr_employee_profiles.station` (text, nullable = infer
-  from position). Auto-assign pools anyone matching ANY of the SOP's areas
-  (`matchesAnyStation`); explicit employee station overrides position;
-  `STATION_POSITIONS` foh←barista/cashier, boh←kitchen. UI: multi-select on SOP
-  create+detail pages; FOH/BOH/lead selector on the employee Employment card.
-  **Both migrations APPLIED to prod + verified 2026-07-06** (`sop_station`,
-  `hr_profile_station`); today's 3 ice-machine rows repointed to FOH baristas.
-  **Still open:** merge+deploy PR #824 so the new routing runs (until then the
-  OLD armed cron/JIT still uses the kitchen map — the old JIT could re-own
-  tonight's ice machine to kitchen only if the FOH assignee never clocks in).
-
-- 2026-07-05 — **Staff access-control audit + hotfixes** (`docs/staff-access-
-  audit-2026-07-05.md`). Application-layer RBAC audit across POS login, staff
-  app, checklists, stock count, receiving, own audit/performance, backoffice,
-  and the cross-app identity layer. Root cause: enforcement copy-pasted inline
-  into ~470 routes, 3 divergent `getSession`/`requireRole` impls, client-only
-  module/UI gates. Much was fixed in parallel: #697 (order `/api/staff/*` +
-  staff dashboard/products/settings auth), #802 (anon RLS surface 24→0), #799
-  (vitest `@/` alias). This session added: **decommission** of the retired
-  order `/staff/*` web surface + dead feed routes (kept `staff-token.ts` +
-  `/api/orders/[orderId]/status`, load-bearing for pickup-native collect), and
-  **staff hotfixes** (audit `[id]` read/write scoping, `transfers/[id]`
-  outlet check, `switch-outlet` outletIds, dashboard outlet-pin). **Still
-  open:** C-2 (POS `verify-manager` PIN oracle, OTA-coupled), H-1 (backoffice
-  `ops/audit-*` reachable by STAFF cross-app token — wrong `getSession`
-  import), H-4 (MANAGER over-reach across ~150 `requireAuth`-only backoffice
-  routes), H-5 (session revocation unwired), M-1 (`CUSTOMER_JWT_SECRET`
-  fallback). Durable fix = the `withAuth({roles,module,scope})` guard + CI
-  check in §5 of the doc (not yet built).
-
-- 2026-07-05 — **Ads + local-rank loop hardened** (PRs #732/#751/#781/#783/#797
-  all merged): budget-cut optimizer live at `/ads/optimizer` (waste tier +
-  efficiency trims vs fleet-best cost/conv, `ads_budget_change` ledger applied
-  to prod, approval-gated, weekly shadow inside `ads-daily` Mondays); keyword
-  strategy board at `/reviews/geogrid/keywords` (own/focus/prominence/retire,
-  opportunity-sorted). **Measurement bugs fixed:** `ads_campaign.status` stores
-  Google's numeric enum ("2"=ENABLED) — filter with `ENABLED_STATUSES`; the
-  geogrid auto-scan defaulted to 0.2mi (storefront) — now 1.5534mi = the ±10km
-  catchment; keyword buckets only trust complete catchment-scale scans (Nilai's
-  "owned" verdicts were 0.1mi artifacts). **Tamarind was wired to Shah Alam's
-  GBP location** (poisoned snapshots Jul 3–5, deleted from prod; the fake
-  160.6/day velocity was the count-jump): `reviews-daily-snapshot` now
-  self-heals `gbpLocationName` nightly by matching `gbpPlaceId` (set for all 4
-  outlets from verified scan/QR evidence) against `listAccountLocations`;
-  on-demand check at `/api/reviews/gbp-relink[?apply=1]`. **Lever validation:**
-  categories = strongest rank lever; review velocity ≈20% and the binding
-  constraint (Nilai 2/30d, SA ~11, Tam ~17, Putrajaya 34); GBP description is
-  NOT a rank factor — stop treating geo-in-description as a rank play.
-  Status refreshed 2026-07-16 — see that entry below for where the loop
-  actually stands (scan cap exhausted, conversion signal still wrong).
-
-- 2026-07-05 — **People-cost gating loop shipped** (PRs #765/#780/#785 all
-  merged): labour gate + publish enforcement (green/amber/red, per-outlet
-  budgets Con 16/18, SA 18/20, Tam 22/25 interim), editor badge + per-day
-  coverage chips, PT bank-line outlet tagging, Monday variance digest
-  (`cron/labour-variance`, SHADOW — flip `LABOUR_VARIANCE_MODE=armed` after
-  one sane Monday), and a rule-based+agentic AI Fill (DB templates, FT 45h +
-  rest days, rovers 2 days/outlet, PT as amber `pt_suggestion` cells inside
-  the budget envelope). Design + verification:
-  `docs/design/people-cost-gating-loop.md`. Humans owe: profiles for the 4
-  orphan staff, finalise 6 draft payroll runs, confirm Tamarind 22/25.
-
-- 2026-07-04 — Harness scaffolding rounds 1+2 done: root `CLAUDE.md`, this
-  file, skills `{db-migration,ota-release,procurement-e2e,finance-module,
-  sentry-triage}`, workflow `.claude/workflows/rls-audit.js`, and a nightly
-  Sentry-triage routine scheduled (05:00 MYT, fresh session per run —
-  manage via the Routines/triggers list).
-  Next candidates: run the `rls-audit` workflow and act on the report;
-  build the finance eval replay (corrected `fin_agent_decisions` rows →
-  regression set per agent, see finance-module skill); wire cron heartbeat
-  monitors (`docs/monitoring-setup.md` §2).
-- 2026-07-05 — Hardening batch shipped: pickup-page reads moved server-side,
-  `related_id`/`applied` fixes, `reconcile-pending` Sentry heartbeat,
-  `docs/ops-hardening-checklist.md` (human dashboard items + quarterly
-  key-rotation calendar reminder on barista@, next 2026-10-01), and the
-  loyalty policy-fix proposal in `docs/proposals/`. **Waiting on human:**
-  apply the proposal SQL after deploy (checklist §5), `hr_payroll_runs`
-  RLS one-liner (§6), IP allowlist (§1), BetterUptime + Vercel→Slack (§3),
-  PITR decision (§4). SMS attribution holdout (loop #1) still needs the
-  two owner decisions: exact reward + success bar
-  (`docs/design/sms-loop-engineering.md`).

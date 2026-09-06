@@ -256,6 +256,30 @@ merges; add dated entries as sweeps find more._
   QA bot token rotation + idle `celsius-inventory` Supabase project.
   **Human-only; re-surface in every summary until done.**
 
+## STATE.md roll-over (monthly)
+
+`docs/STATE.md` is the read-every-session working memory; unpruned it grows
+~2,000 lines a month. On the first run of each month (or whenever STATE.md
+exceeds ~2,500 lines), roll the previous month out:
+
+1. **Verified facts** — move entries whose story is finished (shipped,
+   superseded, measured-and-concluded) to `docs/state-archive/YYYY-MM.md`,
+   verbatim. An old entry stays only if it is (a) a durable reference fact
+   not yet written into a skill or doc — prefer promoting it there and
+   deleting it here — or (b) still open / owner-owed, which belongs under
+   **Open failures** instead (move it there).
+2. **Resume pointer** — archive every entry older than the current month
+   into the same archive file, under "Resume log (archived)".
+3. **Open failures / Lessons learned** — never archived by age; prune only
+   when genuinely resolved or promoted.
+4. **Verify nothing is lost:** every archived entry must appear verbatim in
+   the archive (compare the entry sets programmatically, don't eyeball), and
+   the archive header must date the roll-over and warn that its contents are
+   history, not current state.
+
+First roll-over: 2026-08-31 (July 2026 → `docs/state-archive/2026-07.md`),
+which set the keep-rules above.
+
 ## Lessons
 
 _Append dated entries when this skill misses something, and every

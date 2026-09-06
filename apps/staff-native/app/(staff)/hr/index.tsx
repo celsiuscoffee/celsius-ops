@@ -32,6 +32,7 @@ import {
   type AllowanceLever,
 } from "../../../lib/hr/api";
 import { getClockStatus, type ClockStatus } from "../../../lib/hr/clock";
+import { fetchProfile } from "../../../lib/hr/profile";
 
 const MONTHS = [
   "January",
@@ -121,10 +122,13 @@ export default function HrIndex() {
   const [reviewsCount, setReviewsCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Availability is a part-timer tool (interns too) — full-timers have
+  // manager-set schedules, so hide it for them.
+  const [isPartTimer, setIsPartTimer] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [c, a, r] = await Promise.all([
+      const [c, a, r, p] = await Promise.all([
         getClockStatus().catch(() => null),
         fetchAllowances()
           .then((x) => x.breakdown)
@@ -132,10 +136,14 @@ export default function HrIndex() {
         fetchMyReviews()
           .then((x) => x.count)
           .catch(() => 0),
+        fetchProfile()
+          .then((x) => x.profile?.employment_type ?? null)
+          .catch(() => null),
       ]);
       setClock(c);
       setAllowance(a);
       setReviewsCount(r);
+      setIsPartTimer(["part_time", "intern"].includes(p ?? ""));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -362,7 +370,9 @@ export default function HrIndex() {
 
         {/* Quick links */}
         <View className="mt-6 gap-2">
-          {items.map((it) => {
+          {items
+            .filter((it) => it.href !== "/(staff)/hr/availability" || isPartTimer)
+            .map((it) => {
             const Icon = it.icon;
             const subtitle =
               it.href === "/(staff)/hr/reviews" && reviewsCount > 0

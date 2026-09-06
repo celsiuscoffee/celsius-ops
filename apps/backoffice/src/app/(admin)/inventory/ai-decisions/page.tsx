@@ -22,7 +22,7 @@ type ReorderItem = {
   totalPrice: number;
   productPackageId: string | null;
   packageName: string | null;
-  daysUntilStockout: number;
+  daysUntilStockout: number | null; // null = no usage history, cover unknown
 };
 
 type PORecommendation = {
@@ -378,8 +378,8 @@ export default function AIDecisionsPage() {
                               {item.onOrderQty && item.onOrderQty > 0 ? <span className="text-sky-400">+{item.onOrderQty}</span> : <span className="text-zinc-600">—</span>}
                             </td>
                             <td className="py-1.5 px-3 text-right text-zinc-400">{item.parLevel}</td>
-                            <td className={`py-1.5 px-3 text-right ${item.daysUntilStockout <= 1 ? "text-red-400 font-medium" : item.daysUntilStockout <= 3 ? "text-orange-400" : "text-zinc-400"}`}>
-                              {item.daysUntilStockout}d
+                            <td className={`py-1.5 px-3 text-right ${item.daysUntilStockout == null ? "text-zinc-500" : item.daysUntilStockout <= 1 ? "text-red-400 font-medium" : item.daysUntilStockout <= 3 ? "text-orange-400" : "text-zinc-400"}`}>
+                              {item.daysUntilStockout == null ? "n/a" : `${item.daysUntilStockout}d`}
                             </td>
                             <td className="py-1.5 px-3 text-right text-white font-medium">{item.orderQty}</td>
                             <td className="py-1.5 px-3 text-right text-zinc-400">

@@ -5,6 +5,7 @@ import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { findCrossOutletOverlap } from "@/lib/hr/cross-outlet";
 import { sendOpsPush } from "@/lib/ops-push";
 import { classifyRosterEdit, retroEditRefusal } from "@/lib/hr/roster-guard";
+import { can } from "@/lib/capabilities";
 import { logActivity } from "@/lib/activity-log";
 
 export const dynamic = "force-dynamic";
@@ -119,11 +120,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Published-roster guard (mirrors the cell route): the roster is the pay
-  // basis, so past dates on a published week need an OWNER/ADMIN with an
-  // explicit retro_reason, and every published-week edit is activity-logged.
+  // basis, so past dates on a published week need the `roster:retro_edit`
+  // capability plus an explicit retro_reason, and every published-week edit is
+  // activity-logged.
   const editClass = classifyRosterEdit(schedule.status, shift_date);
   if (editClass === "published_past") {
-    const verdict = retroEditRefusal(session.role, retro_reason);
+    const verdict = retroEditRefusal(await can(session, "roster:retro_edit"), retro_reason);
     if (!verdict.allowed) {
       return NextResponse.json({ error: verdict.error }, { status: verdict.status });
     }

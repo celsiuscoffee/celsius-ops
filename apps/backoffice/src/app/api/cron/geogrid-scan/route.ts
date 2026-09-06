@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkCronAuth } from "@celsius/shared";
 import { prisma } from "@/lib/prisma";
 import { runScan, isDue, needScore, producedData, interleaveByOutlet, SCAN_STATUS_FAILED } from "@/lib/geogrid/scan-runner";
+import { buildAndSendLocalRankDigest } from "@/lib/geogrid/weekly-digest";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -68,8 +69,13 @@ export async function GET(req: NextRequest) {
   ];
   const scannable = keywords.filter((k) => k.outlet.reviewSettings?.gbpLocationName);
 
-  // Which combos are due, and how badly they need it (warmest-first).
-  const due: { outletId: string; outletName: string; keyword: string; score: number; hasPrior: boolean }[] = [];
+  // Which combos are due, and how badly they need it (warmest-first). The
+  // previous scan's numbers ride along so the weekly digest can report each
+  // re-scan as a movement (#5.2 → #4.1) rather than a bare reading.
+  const due: {
+    outletId: string; outletName: string; keyword: string; score: number;
+    hasPrior: boolean; prevRank: number | null; prevTop3: number | null;
+  }[] = [];
   for (const k of scannable) {
     const last = await prisma.geoGridScan.findFirst({
       where: { outletId: k.outletId, keyword: k.keyword },
@@ -83,6 +89,8 @@ export async function GET(req: NextRequest) {
         keyword: k.keyword,
         score: needScore(last),
         hasPrior: last != null,
+        prevRank: last?.avgRank ?? null,
+        prevTop3: last?.pctTop3 ?? null,
       });
     }
   }
@@ -101,7 +109,10 @@ export async function GET(req: NextRequest) {
     if (i < virgins.length) queue.push(virgins[i]);
   }
 
-  const results: { outlet: string; keyword: string; avgRank?: number | null; pctTop3?: number | null; status?: string; error?: string; why?: string }[] = [];
+  const results: {
+    outlet: string; keyword: string; avgRank?: number | null; pctTop3?: number | null;
+    prevRank?: number | null; prevTop3?: number | null; status?: string; error?: string; why?: string;
+  }[] = [];
   let attempts = 0;
   let retries = 0;
   let deadlineHit = false;
@@ -123,7 +134,8 @@ export async function GET(req: NextRequest) {
       });
       retries += scanRetries;
       results.push({
-        outlet: c.outletName, keyword: c.keyword, avgRank: scan.avgRank, pctTop3: scan.pctTop3, status: scan.status,
+        outlet: c.outletName, keyword: c.keyword, avgRank: scan.avgRank, pctTop3: scan.pctTop3,
+        prevRank: c.prevRank, prevTop3: c.prevTop3, status: scan.status,
         // Why a scan came back empty — without this a rate-limit is
         // indistinguishable from a broken outlet, which is exactly how this
         // went undiagnosed for two months.
@@ -141,7 +153,31 @@ export async function GET(req: NextRequest) {
   // so a run that "scanned 40" can't hide that half of them came back empty.
   const failed = results.filter((r) => r.status === SCAN_STATUS_FAILED).length;
   const errored = results.filter((r) => r.error).length;
+
+  // Weekly digest to the owner's Telegram — the loop reports its own progress
+  // (rank movements, review velocity vs target, ads guardrail). Best-effort:
+  // a digest failure never fails the scan run that feeds it.
+  let digestSent = false;
+  try {
+    const sent = await buildAndSendLocalRankDigest(
+      results
+        .filter((r) => !r.error && producedData(r.status ?? ""))
+        .map((r) => ({
+          outlet: r.outlet,
+          keyword: r.keyword,
+          avgRank: r.avgRank ?? null,
+          pctTop3: r.pctTop3 ?? null,
+          prevRank: r.prevRank ?? null,
+          prevTop3: r.prevTop3 ?? null,
+        })),
+    );
+    digestSent = sent != null;
+  } catch (err) {
+    console.error("[geogrid-scan] weekly digest failed", err);
+  }
+
   return NextResponse.json({
+    digestSent,
     ran_at: now.toISOString(),
     monthlyCap: MONTHLY_CAP,
     dueCombos: due.length,

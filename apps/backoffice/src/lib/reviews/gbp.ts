@@ -299,6 +299,89 @@ export async function listAccountLocations(
   return out;
 }
 
+export type GbpCategoryRef = { name: string; displayName: string };
+
+/**
+ * Resolve a category DISPLAY name ("Breakfast restaurant") to its stable GBP
+ * category resource ("categories/gcid:breakfast_restaurant") via the public
+ * categories index. Resolving at runtime instead of hardcoding gcids means a
+ * typo'd or region-unavailable category comes back null and is reported,
+ * rather than a PATCH failing opaquely. Malaysian region + English names —
+ * the same language the rest of the profile tooling uses.
+ */
+export async function searchCategoryByName(displayName: string): Promise<GbpCategoryRef | null> {
+  const token = await getAccessToken();
+  const params = new URLSearchParams({
+    regionCode: "MY",
+    languageCode: "en",
+    view: "BASIC",
+    filter: `displayName="${displayName}"`,
+    pageSize: "20",
+  });
+  const res = await fetch(`${GBP_INFO_BASE}/categories?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GBP categories search error ${res.status}: ${body}`);
+  }
+  const data = await res.json();
+  const cats: GbpCategoryRef[] = (data.categories ?? []).map((c: { name: string; displayName: string }) => ({
+    name: c.name,
+    displayName: c.displayName,
+  }));
+  return cats.find((c) => c.displayName.toLowerCase() === displayName.toLowerCase()) ?? cats[0] ?? null;
+}
+
+/** The location's current categories, with resource names (needed to PATCH). */
+export async function getLocationCategories(
+  locationName: string,
+): Promise<{ primary: GbpCategoryRef | null; additional: GbpCategoryRef[] }> {
+  const token = await getAccessToken();
+  const res = await fetch(`${GBP_INFO_BASE}/${locationName}?readMask=categories`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GBP location categories error ${res.status}: ${body}`);
+  }
+  const data = await res.json();
+  const ref = (c: { name?: string; displayName?: string } | undefined): GbpCategoryRef | null =>
+    c?.name ? { name: c.name, displayName: c.displayName ?? c.name } : null;
+  return {
+    primary: ref(data.categories?.primaryCategory),
+    additional: (data.categories?.additionalCategories ?? []).map(ref).filter(Boolean) as GbpCategoryRef[],
+  };
+}
+
+/**
+ * Replace the location's category set. updateMask=categories swaps the WHOLE
+ * object, so callers must pass the existing primary and the full merged
+ * additional list — this function never decides what to keep, only writes.
+ * GBP allows 1 primary + at most 9 additional.
+ */
+export async function updateLocationCategories(
+  locationName: string,
+  primary: GbpCategoryRef,
+  additional: GbpCategoryRef[],
+): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${GBP_INFO_BASE}/${locationName}?updateMask=categories`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      categories: {
+        primaryCategory: { name: primary.name },
+        additionalCategories: additional.map((c) => ({ name: c.name })),
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GBP category update error ${res.status}: ${body}`);
+  }
+}
+
 // The relevance-bearing profile fields — what Google reads to decide which
 // keywords this location is a match for. Input to the keyword relevance audit.
 export type GbpLocationProfile = {

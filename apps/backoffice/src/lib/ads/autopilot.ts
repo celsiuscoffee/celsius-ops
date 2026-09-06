@@ -338,6 +338,11 @@ export type CampaignState = {
   // Till index over the pause window so far (forecast built from PRE-pause
   // history) — only set while a probe is running; drives the restore verdict.
   pauseProbe?: { index: number | null; adjIndex: number | null };
+  // Consecutive CLEAN guard nights before tonight (0-2, read from the last
+  // two logged runs). The Shah Alam redo fires only on the third consecutive
+  // clean night — the Sep 1 lesson: a raise fired off a single clean night
+  // was reverted by the next night's wobble before the test could run.
+  priorCleanNights?: number;
 };
 
 export type AutopilotDecision = {
@@ -539,55 +544,98 @@ function probeUp(c: CampaignState, guard: GuardSignal, why: string): AutopilotDe
 // the cut cap and the fleet stagger, and they don't reset the spacing clock.
 // Blind steps ("autopilot step-down 8% …") carry no parenthesis.
 const isWasteMatched = (d: AutopilotDecision) => d.reason.startsWith("autopilot step-down (");
-// Owner-directive raises are explicit human calls, not experiments — exempt
-// from fleet spacing the same way owner-directive step-downs are.
-const isOwnerDirective = (d: AutopilotDecision) => d.reason.startsWith("owner directive");
+// Owner-directive actions are explicit human calls — exempt from fleet
+// spacing the same way waste-matched step-downs are. Covers both bare
+// "owner directive …" rows (never auto-reverted) and evaluated
+// "autopilot raise: owner directive …" rows.
+const isOwnerDirective = (d: AutopilotDecision) =>
+  d.reason.startsWith("owner directive") || d.reason.startsWith("autopilot raise: owner directive");
 
 /**
  * One-time owner directives. Each must be genuinely self-expiring — spent
  * state, not just a threshold that can re-arm (see the hardCutDirective
  * post-mortem below) — and is deleted once confirmed applied.
  *
- * 2026-08-16: "undo the cut" — Putrajaya's Aug 12 step-down (RM43.36→38.16)
- * landed in the same week Conezion's till slid ~21% WoW. The timing evidence
- * points at the mall, not the cut (the slide began Aug 10, two days BEFORE
- * the cut, and the index read 1.02/1.08 through six weeks of descent) — but
- * this campaign is the fleet's best cost/conv and Tamarind's pause probe
- * proved cuts on a cash-generating campaign bite on a lag, so the owner is
- * buying the cut back (+RM5.20/day) as bounded insurance while the dip is
- * diagnosed.
+ * 2026-08-31: "lets try to increase back the gads spending and see" → "let
+ * us do all rm70/day", Tamarind included ("same evaluated raise"). Supersedes
+ * the 2026-08-25 two-leg probe-up (Putrajaya's leg fired 2026-08-30 at
+ * RM49.86; Shah Alam's never fired — its guard stayed breached).
  *
- * The reason string deliberately does NOT start with "autopilot raise":
- * lastKind must read "other" (a human call — observed like a step, never
- * auto-reverted). The raise-evaluation branch reverts a raise on guard
- * breach, and Conezion's till is soft for reasons that predate the cut — an
- * "autopilot raise" row would be undone by the very dip that motivated it.
+ * All three campaigns rise to RM70/day as EVALUATED raises (reason starts
+ * "autopilot raise" on purpose): kept only on measured lift (adj ≥
+ * RAISE_KEEP_ADJ_MIN, raw ≥ RAISE_KEEP_RAW_MIN after PROBE_OBSERVE_DAYS),
+ * reverted on any guard breach. Each leg fires on its outlet's first CLEAN
+ * guard night — raising into a breached trailing window would be
+ * auto-reverted the next night by the very breach it is meant to outgrow —
+ * so the legs stagger naturally.
  *
- * Self-expiring on BOTH axes: fires only while the campaign's last applied
- * change is still the Aug 12 step-down to RM38.16 (the raise itself replaces
- * that, so it can never re-fire), and never after 2026-08-23 regardless of
- * state.
+ * Spent-state rules (the hardCutDirective post-mortem class):
+ * - budget already ≥ RM70 → leg done;
+ * - lastKind "revert" → the machine ALREADY judged a raise unearned at this
+ *   outlet; the directive must never arm-wrestle that verdict, so the leg is
+ *   dead (owner can issue a new directive if they disagree);
+ * - hard expiry 2026-09-30 regardless of state.
+ *
+ * Measurement caveat, recorded here on purpose: if all three lift TOGETHER,
+ * the fleet-adjusted keep-test partially cancels (everyone is treated, the
+ * median moves too) and genuine common lift can read as ~1.0 adj. The
+ * anchor/mom indexes and the monthly cash scoreboard are the backstop; the
+ * Sep verdicts should be read with that in mind.
+ *
+ * 2026-09-05 "redo shah alam": SA's Aug 31 raise was reverted after ONE day
+ * by a borderline-window wobble that predated the raise — the test never
+ * ran. The redo (a) passes only the ORIGINAL pre-Sep-5 revert, never a later
+ * one, and (b) fires only on the third consecutive clean guard night
+ * (priorCleanNights ≥ 2 + tonight clean), so a single good night can no
+ * longer bait a raise into the next wobble.
  */
-export function ownerDirective(c: CampaignState, now: Date = new Date()): AutopilotDecision | null {
-  if (
-    c.campaignName === "Celsius Putrajaya" &&
-    !c.isPaused &&
-    now.getTime() < Date.parse("2026-08-23T00:00:00Z") &&
-    lastKind(c.lastApplied) === "step-down" &&
-    round2(c.lastApplied?.newDailyMyr ?? 0) === 38.16 &&
-    round2(c.dailyBudgetMyr) === 38.16
-  ) {
-    return {
-      campaignId: c.campaignId,
-      campaignName: c.campaignName,
-      action: "raise",
-      newDailyMyr: 43.36,
-      reason:
-        "owner directive 2026-08-16 (undo the Aug 12 cut): Conezion till −21% WoW while the descent read healthy — RM38.16→RM43.36/day (+RM156/mo) as bounded insurance while the dip is diagnosed; a human call, not a probe — do not auto-revert",
-    };
+export const OWNER_TARGET_DAILY_MYR = 70;
+export function ownerDirective(
+  c: CampaignState,
+  guard: GuardSignal,
+  now: Date = new Date(),
+): AutopilotDecision | null {
+  if (now.getTime() >= Date.parse("2026-09-30T00:00:00Z")) return null;
+  const targeted =
+    c.campaignName === "Celsius Coffee Shah Alam" ||
+    c.campaignName === "Celsius Putrajaya" ||
+    c.campaignName === "Celsius Coffee Tamarind Square";
+  if (!targeted || c.isPaused) return null;
+  if (round2(c.dailyBudgetMyr) >= OWNER_TARGET_DAILY_MYR) return null;
+  const isShahAlamRedo = c.campaignName === "Celsius Coffee Shah Alam";
+  if (lastKind(c.lastApplied) === "revert") {
+    // 2026-09-05 "redo shah alam": the Sep 1 revert fired one day after the
+    // raise, triggered by SA's pre-existing borderline window — the test
+    // never ran. The redo may pass exactly THAT historical revert; any
+    // change decided after the redo shipped (including the redo's own
+    // revert) is the evaluation's verdict and stays final.
+    const originalRevert =
+      isShahAlamRedo &&
+      c.lastApplied != null &&
+      c.lastApplied.decidedAt.getTime() < Date.parse("2026-09-05T00:00:00Z");
+    if (!originalRevert) return null;
   }
-  return null;
+  if (guard.rawIndex == null || guard.breach) return null;
+  // Redo lesson: one clean night was knife-bait. Shah Alam fires only on the
+  // THIRD consecutive clean night (tonight + the two logged before it).
+  if (isShahAlamRedo && (c.priorCleanNights ?? 0) < 2) return null;
+  const extraMonthly = monthly(OWNER_TARGET_DAILY_MYR - c.dailyBudgetMyr);
+  const breakEven = round2(extraMonthly / GROSS_MARGIN);
+  const tag = isShahAlamRedo
+    ? "owner directive 2026-09-05 (Shah Alam redo, fired on the 3rd clean night)"
+    : "owner directive 2026-08-31 (RM70/day fleet test)";
+  return {
+    campaignId: c.campaignId,
+    campaignName: c.campaignName,
+    action: "raise",
+    newDailyMyr: OWNER_TARGET_DAILY_MYR,
+    reason: `autopilot raise: ${tag} — RM${round2(c.dailyBudgetMyr)}→RM${OWNER_TARGET_DAILY_MYR}/day (+RM${extraMonthly}/mo spend; needs ≥RM${breakEven}/mo till lift to pay at ${Math.round(GROSS_MARGIN * 100)}% margin; reverts after ${PROBE_OBSERVE_DAYS}d without evidence)`,
+  };
 }
+
+// REMOVED 2026-08-25: the 2026-08-16 Putrajaya undo-cut directive — fired
+// 2026-08-16 19:01 and spent (its lastApplied guard can never match again;
+// hard expiry passed 2026-08-23).
 
 // REMOVED 2026-08-16: the 2026-07-19 Tamarind resume-descent directive. It did
 // its job on 2026-07-20, but its guard (lastKind "rollback" && budget > RM85)
@@ -1207,9 +1255,36 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     s.pauseProbe = { index: sig.rawIndex, adjIndex: sig.adjIndex };
   }
 
+  // Prior nights' guard cleanliness from the run log (newest first, stop at
+  // the first non-clean night) — feeds the Shah Alam redo's 3-clean-nights
+  // gate. Failure to read the log just means 0 prior clean nights: the gate
+  // fails safe by waiting another night.
+  type PriorRun = { meta: { guards?: Record<string, { rawIndex?: number | null; breach?: boolean }> } | null };
+  let priorRuns: PriorRun[] = [];
+  try {
+    const r = await hrSupabaseAdmin
+      .from("agent_actions")
+      .select("meta")
+      .eq("agent_key", AGENT_KEY)
+      .order("at", { ascending: false })
+      .limit(2);
+    priorRuns = (r.data ?? []) as PriorRun[];
+  } catch {
+    // fail safe: 0 prior clean nights just waits another night
+  }
+  for (const s of states) {
+    let n = 0;
+    for (const row of priorRuns) {
+      const g = s.outletId ? row.meta?.guards?.[s.outletId] : undefined;
+      if (g && g.rawIndex != null && !g.breach) n++;
+      else break;
+    }
+    s.priorCleanNights = n;
+  }
+
   const baseDecisions = states.map((s) => {
     const guard = s.outletId ? guards[s.outletId] ?? noGuard : noGuard;
-    const directive = ownerDirective(s, now);
+    const directive = ownerDirective(s, guard, now);
     return directive ?? decideCampaign(s, guard, now);
   });
   const withProbe = PAUSE_PROBE_ENABLED ? selectPauseProbe(capCuts(baseDecisions, states), states, guards) : capCuts(baseDecisions, states);
