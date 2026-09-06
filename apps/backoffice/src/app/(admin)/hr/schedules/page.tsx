@@ -2,6 +2,7 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { minConcurrentInSlot } from "@/lib/hr/coverage";
+import { minutesOfDay, normalizeShiftTime } from "@/lib/hr/shift-time";
 import { Fragment, useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -139,6 +140,13 @@ export default function SchedulesPage() {
   const [pickerOpen, setPickerOpen] = useState<{ userId: string; date: string; top: number; left: number } | null>(null);
   // Custom hours form state — opened from inside picker
   const [customForm, setCustomForm] = useState<{ start: string; end: string; breakMinutes: number } | null>(null);
+  // Same parser the API uses, so the button and the server never disagree
+  // about what a valid time is. A cleared <input type="time"> gives "", which
+  // the old `start >= end` compare let through to fail server-side.
+  const customStart = customForm ? normalizeShiftTime(customForm.start) : null;
+  const customEnd = customForm ? normalizeShiftTime(customForm.end) : null;
+  const customTimesValid =
+    !!customStart && !!customEnd && minutesOfDay(customStart) < minutesOfDay(customEnd);
 
   const openPicker = (userId: string, date: string, e: React.MouseEvent<HTMLButtonElement>) => {
     if (isPublished) return;
@@ -671,8 +679,8 @@ export default function SchedulesPage() {
             shift_date: date,
             template_id: "custom",
             custom: {
-              start_time: startTime + ":00",
-              end_time: endTime + ":00",
+              start_time: startTime,
+              end_time: endTime,
               break_minutes: breakMinutes,
               label,
             },
@@ -1706,6 +1714,13 @@ export default function SchedulesPage() {
                                         className="w-full rounded border px-1.5 py-1 text-xs"
                                       />
                                     </label>
+                                    {!customTimesValid && (
+                                      <p className="text-[10px] text-amber-700">
+                                        {!customForm.start || !customForm.end
+                                          ? "Set both a start and an end time."
+                                          : "The end time must be after the start time."}
+                                      </p>
+                                    )}
                                     <div className="flex gap-1 pt-1">
                                       <button
                                         onClick={() => setCustomForm(null)}
@@ -1716,11 +1731,11 @@ export default function SchedulesPage() {
                                       </button>
                                       <button
                                         onClick={() => {
-                                          if (customForm.start >= customForm.end) return;
+                                          if (!customTimesValid) return;
                                           setCellCustom(u.id, d, customForm.start, customForm.end, customForm.breakMinutes);
                                           setCustomForm(null);
                                         }}
-                                        disabled={saving || customForm.start >= customForm.end}
+                                        disabled={saving || !customTimesValid}
                                         className="flex-1 rounded bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                                       >
                                         Save
