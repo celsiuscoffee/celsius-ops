@@ -2591,6 +2591,24 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-09-05 (capabilities) — **Elevated permissions, so a head of operations
+  isn't forced through an ADMIN promotion** (branch `claude/hr-capabilities`).
+  Ariff (head of ops, MANAGER, all 5 outlets) hit the new unpublish guard.
+  Promoting him to ADMIN would have handed over finance, payroll, bank files
+  and every employee's bank details, since ADMIN bypasses `hasModuleAccess`
+  across ~120 routes — owner chose the targeted grant instead.
+  `lib/capabilities.ts`: named grants on the **previously unused**
+  `User.permissions` column (no migration), 60 s cache like `liveAccountState`,
+  fails closed. Three capabilities: `roster:unpublish`, `roster:retro_edit`,
+  `leave:cancel_approved`. OWNER/ADMIN hold all implicitly. `retroEditRefusal`
+  now takes a resolved boolean, not a role (both callers — cell AND assign —
+  updated; tsc caught the second). Grantable from the employee page's Access
+  card (manager-only section), validated + audit-logged in the access PATCH,
+  cache invalidated on write. Drift test pins UI keys ↔ registry and asserts
+  no capability is in a money/access-control domain.
+  **Applied to prod:** Ariff `2b906d16-7842-439c-b64e-ec596b1912e5` granted all
+  three (inert until the PR merges — nothing read that column before).
+
 - 2026-09-05 — **PR #1216 is the whole procurement/reports batch — review and
   merge it.** It now carries: the hardening (25 QA findings), the live-sales
   wiring that fixes "Expected RM0.00" on the reports, the split-payment AP
