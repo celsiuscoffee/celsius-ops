@@ -6,6 +6,59 @@ delete entries that have been promoted into `CLAUDE.md`, a skill, or a doc.
 
 ## Verified facts
 
+- 2026-09-06 — **Audit cadence compliance measured: Chef Bo (Ibrahim Bin Zakir)
+  runs at ~44% of the agreed 1×/week/outlet, and the whole audit programme has
+  been dark since 24 Aug.** Owner asked whether Chef Bo meets the agreed weekly
+  outlet visit. Method: `AuditReport` rows joined to `AuditTemplate`
+  (`auditTarget = 'OUTLET'`, `status = 'COMPLETED'`) — the standard is the one
+  already encoded for ops-pulse (`docs/design/ops-kpi-pulse-loop.md`: "Outlet
+  audits = 1×/week per outlet"; `AUDIT.cadenceDays = 7`). Chef Bo is the
+  `chef_head` lane (Kitchen Quality + Food Quality outlet templates, Kitchen
+  Crew Skills staff template); `User` id `b9b91ab6-cc95-492a-8e03-f49ab50e5dc2`,
+  name "Chef Bo", fullName "Ibrahim Bin Zakir".
+  **Scope: 3 outlets, not 5.** `CF IOI Mall` and `CF Nilai` are ACTIVE in
+  `Outlet` but are **consignment points**, not staffed outlets —
+  `unified_sales.source = 'consignment'`, 28 and 76 txns in 3 months, both dead
+  since 19 Jul, and **zero audits ever** at either. Counting them as outlets
+  would have produced 26 phantom missed visits. Any cadence detector reading
+  `status = 'ACTIVE'` will over-report against them — filter on consignment.
+  **Results (21 complete weeks, 13 Apr – 6 Sep; the audit table starts
+  2026-04-15, so nothing earlier is measurable for anyone):** weeks covered —
+  Putrajaya 13/21 (62%), Shah Alam 8/21 (38%), Tamarind 7/21 (33%);
+  **28/63 = 44%** overall. Trailing 3 months (13 wks) is 18/39 = 46%, i.e. no
+  real difference — he averages one visit per outlet **every ~2 weeks**.
+  Longest gaps: Tamarind **57 days** (5 May → 1 Jul), Shah Alam 34 days
+  (18 May → 21 Jun), Putrajaya 18 days (11 Jul → 29 Jul). Three weeks blank at
+  every outlet (20 Apr, 25 May, 8 Jun). The Putrajaya bias is structural, not
+  recent — it is his best-covered outlet across the entire history.
+  **Audit quality is not the problem:** 79 reports, all COMPLETED, no abandoned
+  drafts, outlet scores avg 81–86 with genuine spread (Shah Alam Food Quality
+  scored 54 on 21 Jun), 14 distinct staff trained on skills audits. He does the
+  work properly when he shows up; he shows up half as often as agreed.
+  **THE WHOLE PROGRAMME IS DARK — bigger than one manager.** Last audit by
+  anyone anywhere is **24 Aug** (13 days). Syafiq Kaberi (`barista_head`) last
+  ran an *outlet* audit at CC001 on 17 Jul (51d), CC002 on 9 Jul (59d), CC003 on
+  **1 Jun (97d)**; his last report of any kind was 5 Aug. So barista-lane outlet
+  coverage has been absent for ~2–3 months and nothing surfaced it.
+  **Open question (not yet checked): are the ops-pulse audit alerts actually
+  armed?** `detectOutletAudit` exists and is supposed to fire LOW alerts per
+  outlet/role/week for exactly this, and the audit signal was moved into the
+  escalation set on 2026-06-24 ("tagged with the responsible lead's name so the
+  owner sees who isn't getting it done"). A 97-day gap that nobody was told
+  about suggests `OPS_PULSE_MODE` / `OPS_PULSE_DAILY_MODE` is still `shadow` or
+  `off` in prod, or the recipients aren't resolving. Verify before treating this
+  as purely a people problem.
+  **Two data-integrity flags on Chef Bo's reports:** (1) **11 Aug** has audits at
+  Shah Alam (05:42–05:54Z) and Tamarind (05:38–05:56Z) with *overlapping*
+  timestamps — two outlets ~40 km apart, so one was written up away from site or
+  is misattributed; (2) reports dated 29 Jul completed 1 Aug, and 6 Aug completed
+  9 Aug — audits finished days after the visit date, so `date` and `completedAt`
+  disagree and `completedAt` must not be used as the visit date.
+  **Lesson: anchor the window on the real current date.** The first two passes of
+  this analysis were anchored on 26 Aug rather than today, which hid the 13-day
+  silence and overstated the recent trend (reported 40%→56% improvement; it is
+  40%→48% once the last two weeks are counted).
+
 - 2026-08-21 — **"Unauthorized" on checklist Photo Proof = the 12-hour staff
   session dying under an app that never noticed.** Owner screenshot:
   `staff.celsiuscoffee.com says: Unauthorized` over the Photo Proof camera.
