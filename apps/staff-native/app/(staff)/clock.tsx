@@ -66,27 +66,29 @@ export default function ClockScreen() {
     [],
   );
 
-  const refreshGps = useCallback(async () => {
+  // Returns the fresh fix (or null) as well as storing it, so a caller that
+  // needs coordinates NOW (the clock-out below) does not read a stale state
+  // captured when the screen mounted, possibly hours earlier.
+  const refreshGps = useCallback(async (): Promise<{ latitude: number; longitude: number } | null> => {
     const p = await getLocationStatus();
     if (p.foreground !== "granted") {
       setGps({ kind: "denied" });
-      return;
+      return null;
     }
     setGps({ kind: "loading" });
     try {
       const loc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      setGps({
-        kind: "ok",
-        coords: { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
-        accuracy: loc.coords.accuracy ?? null,
-      });
+      const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      setGps({ kind: "ok", coords, accuracy: loc.coords.accuracy ?? null });
+      return coords;
     } catch (e) {
       setGps({
         kind: "error",
         message: e instanceof Error ? e.message : "GPS failed",
       });
+      return null;
     }
   }, []);
 
@@ -170,7 +172,11 @@ export default function ClockScreen() {
     setPendingAction(null);
     setBusy(true);
     try {
-      const coords = gps.kind === "ok" ? gps.coords : null;
+      // Fresh fix at the moment of the tap. The mount-time fix could be hours
+      // old (or absent), and the server's verified-clock-in gate rejected a
+      // clock-out from someone standing at the counter.
+      const fresh = await refreshGps();
+      const coords = fresh ?? (gps.kind === "ok" ? gps.coords : null);
       await postClockAction(action, coords, photoBase64);
       Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
