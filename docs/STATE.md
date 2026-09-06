@@ -64,6 +64,34 @@ current month.
   silence and overstated the recent trend (reported 40%→56% improvement; it is
   40%→48% once the last two weeks are counted).
 
+- 2026-09-06 — **Both audit leads compared: Syafiq Kaberi is the worse of the
+  two and has stopped completing audits entirely.** Same method and 21-week
+  window as the entry above (13 Apr – 6 Sep, outlet-weeks covered against
+  1×/week/outlet). Auditor lane: Chef Bo (`chef_head`) **28/63 = 44%**
+  (Putrajaya 13/21, Shah Alam 8/21, Tamarind 7/21); Syafiq (`barista_head`,
+  Barista Station Audit) **23/63 = 37%** (Putrajaya 9/21, Shah Alam 8/21,
+  Tamarind 6/21). The trends run opposite: outlet-weeks per month Chef Bo
+  4→5→4→7→8 (Apr→Aug, rising), Syafiq 8→11→3→2→**0** (collapsed after May).
+  **Syafiq's last COMPLETED audit is 17 Jul — 51 days.** The `max(date)` of
+  5 Aug that a naive query returns is an *abandoned draft*: after 17 Jul he
+  opened four audits (18 Jul, 21 Jul ×2, 5 Aug) and left every one
+  `IN_PROGRESS`. Chef Bo has 0 non-COMPLETED rows in 79 reports; Syafiq has 4
+  in 62. **Always filter `status = 'COMPLETED'` — an abandoned draft otherwise
+  reads as recent activity and hides a 7-week gap.**
+  Training lane (STAFF templates): Chef Bo 26 Kitchen Crew Skills reports,
+  16 distinct staff, 6 in the last 30d, avg 75.1 with 4 scores <70 (low 57);
+  Syafiq 25 Barista Skills reports, 13 distinct staff of ~23 active Baristas
+  (~57%), **0 in the last 30d**, avg 88.7 with **zero** below 70. Chef Bo's
+  scoring discriminates; Syafiq's does not — either the baristas really are
+  uniformly strong or the skill audit is being rubber-stamped. Unresolved;
+  worth a spot-check before trusting Barista Skills scores as a signal.
+  The design note's "skill = 1/week/staff" target (38 eligible staff) is
+  unmet by both by an order of magnitude and looks unrealistic as written —
+  revisit the target rather than treating it as two people failing.
+  **Neither lead was ever alerted.** Reinforces the open question above: verify
+  `OPS_PULSE_MODE` / `OPS_PULSE_DAILY_MODE` in prod before treating cadence as
+  a people problem.
+
 - 2026-09-05 — **The live Usage Variance / COGS "Expected = RM0.00" is a
   PRODUCTION bug, already fixed on PR #1216 (unmerged).** `main`'s
   `reports/ingredient-variance` still reads `prisma.salesTransaction` — the
