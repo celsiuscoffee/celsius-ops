@@ -13,6 +13,7 @@ import {
   type CompanySettings,
 } from "@/lib/hr/statutory/files";
 import { logActivity } from "@/lib/activity-log";
+import { accountNameVerdict } from "@/lib/hr/bank-account";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -128,6 +129,9 @@ export async function GET(req: NextRequest) {
       // An acknowledged-omissions download is a deliberate decision — keep it
       // visible in the audit trail (see the skipped-staff 409 below).
       ...(searchParams.get("ack_skips") === "1" ? { ack_skips: true } : {}),
+      // Likewise for waving through an account whose holder name doesn't match
+      // the employee — that is the decision that pays the wrong person.
+      ...(searchParams.get("ack_identity") === "1" ? { ack_identity: true } : {}),
     },
     request: req,
   });
@@ -248,6 +252,34 @@ export async function GET(req: NextRequest) {
         { status: 409 },
       );
     }
+  }
+
+  // Identity gate. The MONTHLY file pays `bankAccountName` too, so it needs the
+  // same check as the weekly one — the staffer whose account holder name didn't
+  // match his legal name is on the monthly cycle, and a guard only on the weekly
+  // route would have missed him entirely. Separate from ack_skips above: that
+  // acknowledges people LEFT OUT, this one people who may be paid to the WRONG
+  // ACCOUNT — a different question, so it takes its own acknowledgement.
+  const ackIdentity = searchParams.get("ack_identity") === "1";
+  const identityMismatch =
+    type === "maybank"
+      ? employees
+          .filter((e) => e.bankAccountNumber && e.netPay > 0)
+          .map((e) => ({ e, verdict: accountNameVerdict(e.fullName || e.name, e.bankAccountName) }))
+          .filter((x) => x.verdict.status === "mismatch")
+          .map((x) => `${x.e.fullName || x.e.name}: ${x.verdict.status === "mismatch" ? x.verdict.message : ""}`)
+      : [];
+  if (identityMismatch.length > 0 && !ackIdentity) {
+    return NextResponse.json(
+      {
+        error:
+          "Some accounts look like they belong to someone else. Confirm each on the employee page, " +
+          "then re-request with ack_identity=1.",
+        reason: "identity_mismatch",
+        identity_mismatch: identityMismatch,
+      },
+      { status: 409 },
+    );
   }
 
   let result;
