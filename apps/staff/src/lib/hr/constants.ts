@@ -74,6 +74,17 @@ export type LeaveType = keyof typeof LEAVE_TYPES;
 // `opening_balance` import.
 export const PAYROLL_UI_ENABLED = true;
 
+// Staff-raised shift swaps are OFF (owner, 2026-09-07: "exclude it, don't
+// allow for now"). Turning this on restores the Swap button and picker on My
+// Shifts, the "Swap Requests for You" and "My Swap Requests" sections, and the
+// request/consent/decline/cancel actions.
+//
+// Swaps stay a MANAGER action in the meantime: the roster grid moves the
+// shift directly, which is what the team has always done. Any request already
+// in flight is still visible and decidable in backoffice → HR → Shift Swaps,
+// so nothing is stranded — this only stops NEW ones being raised.
+export const SHIFT_SWAP_ENABLED = false;
+
 // The roster records a rest day as a shift row with this role_type and a
 // 00:00-00:00 window. It is the ONLY source of truth for whether a given day is
 // a rest day for a given person — rest days rotate, so there is no fixed
