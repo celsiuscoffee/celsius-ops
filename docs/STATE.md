@@ -2591,6 +2591,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-09-05 (local-rank) — **System fully closed-loop; watching Mon Sep 7.**
+  GBP category adds APPLIED by owner via /api/reviews/gbp-categories (08-31);
+  weekly Telegram digest live (PR #1201, cffde3b) — sent by cron/geogrid-scan
+  after each Monday run: rank movements vs previous scan, review velocity vs
+  targets (Nilai 12, SA 30, default 25 /30d), ads guardrail (conv −30%/14d on
+  ≥20 base ⇒ flag; the optimizer only cuts). **Sep 7 1pm MYT = first
+  post-category scan + first digest** — the direct test of whether
+  `restaurants near me` (unranked everywhere for 8 weeks) starts ranking.
+  Reviews 09-05: Tamarind 26/30d + Putrajaya 29/30d on target; Shah Alam
+  4/30d (0 this week) and Nilai 2/30d (gap to top competitor: 2) — ask ritual
+  NOT started there. Ads steady ~RM146/day (−58% vs June). Open October
+  decision: redeploy of the freed ~RM5k/mo (Nilai push / SMS loop).
+
 - 2026-09-05 (capabilities) — **Elevated permissions, so a head of operations
   isn't forced through an ADMIN promotion** (branch `claude/hr-capabilities`).
   Ariff (head of ops, MANAGER, all 5 outlets) hit the new unpublish guard.
