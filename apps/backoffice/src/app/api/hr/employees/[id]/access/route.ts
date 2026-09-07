@@ -5,6 +5,7 @@ import { hashPin, hashPassword } from "@celsius/auth";
 import { pinInUse, PIN_PATTERN } from "@/lib/hr/pin-policy";
 import { logActivity } from "@/lib/activity-log";
 import { ALL_CAPABILITIES, isCapability, invalidateCapabilities } from "@/lib/capabilities";
+import { accountNumberIssue, normalizeAccountNumber } from "@/lib/hr/bank-account";
 
 export const dynamic = "force-dynamic";
 
@@ -87,8 +88,49 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (body.fullName !== undefined) updateData.fullName = body.fullName || null;
   if (body.bankName !== undefined) updateData.bankName = body.bankName || null;
-  if (body.bankAccountNumber !== undefined) updateData.bankAccountNumber = body.bankAccountNumber || null;
   if (body.bankAccountName !== undefined) updateData.bankAccountName = body.bankAccountName || null;
+
+  // Bank account number. These three fields decide where money lands, yet they
+  // were the only unvalidated fields on a route that checks a PIN is 6 digits
+  // and unique — so a dropped digit (three Bank Islam accounts stored 13 of
+  // their 14) or a number pasted onto the wrong employee saved silently.
+  // Normalised to digits, length-checked against the chosen bank, and refused
+  // when it already belongs to a different active employee.
+  if (body.bankAccountNumber !== undefined) {
+    const raw = body.bankAccountNumber;
+    if (raw === null || raw === "") {
+      updateData.bankAccountNumber = null;
+    } else {
+      const digits = normalizeAccountNumber(raw);
+      if (!digits) {
+        return NextResponse.json({ error: "Account number must be digits only" }, { status: 400 });
+      }
+      // Check against the bank being SAVED, falling back to the stored one when
+      // this PATCH only touches the number.
+      const bankForCheck =
+        body.bankName !== undefined
+          ? body.bankName || null
+          : (await prisma.user.findUnique({ where: { id }, select: { bankName: true } }))?.bankName ?? null;
+      const issue = accountNumberIssue(bankForCheck, digits);
+      if (issue) return NextResponse.json({ error: issue }, { status: 400 });
+
+      const clash = await prisma.user.findFirst({
+        where: { bankAccountNumber: digits, id: { not: id }, status: "ACTIVE" },
+        select: { name: true, fullName: true },
+      });
+      if (clash) {
+        return NextResponse.json(
+          {
+            error:
+              `That account number is already on ${clash.fullName || clash.name}'s profile. ` +
+              `Two people cannot share an account — check you have the right number for this employee.`,
+          },
+          { status: 409 },
+        );
+      }
+      updateData.bankAccountNumber = digits;
+    }
+  }
 
   // Hash PIN if provided. Exactly 6 digits (the staff app rejects anything
   // else at login) and unique across active accounts — see lib/hr/pin-policy.

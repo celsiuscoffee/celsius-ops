@@ -11,6 +11,27 @@ current month.
 
 ## Verified facts
 
+- 2026-09-07 — **Staff bank details had no identity check anywhere — a staffer
+  was paid into another person's account.** `User.bankAccountNumber` +
+  `bankAccountName` are what the weekly PT bank file pays
+  (`payroll/weekly/bank-file` → `name: u.bankAccountName || display`,
+  `accountNumber: u.bankAccountNumber`). The employee PATCH
+  (`employees/[id]/access`) stored **whatever string arrived** — no digit check,
+  no length check, no uniqueness — on the same route that enforces a 6-digit
+  unique PIN and an 8-char password. Preflight only asked whether the fields
+  were non-empty. **Audit of all 70 accounts (2026-09-07):** 2 genuine identity
+  mismatches — Haziq (legal "Mohd Haziq Bin Mohd Zaini", account holder "Haziq
+  Ashraff", ACTIVE) and Adam Arman (`(Bigpay)` smuggled into the beneficiary
+  name, DEACTIVATED); 3 Bank Islam accounts stored **13 digits where BIMB is
+  14** (Sara, Amirul Luqman Harith, Alrash Faqirin — all DEACTIVATED); 2
+  account numbers shared by two `User` rows each, both **duplicate person
+  records** (Adib `4c5cd2ff`+`…6200`, Fatin `b3392c43`+`93a0e7aa`) not crossed
+  accounts. Aiman `72590004` was the reported case and was **fixed in prod at
+  05:55 MYT on 2026-09-07** (name AND number, `…0163` → `…2686`) by
+  `6f8ef072`. `hr_employee_profiles` has **no** bank columns — `User` is the
+  single source of truth. Only ONE bank-change audit row exists in all history
+  (that fix), so migration-era values have no trail.
+
 - 2026-09-07 — **A roster left in `draft` makes the week invisible to staff AND
   unpriced for pay — Tamarind, 31 Aug–6 Sep, live incident.** The week was
   unpublished 2026-09-06 17:18 MYT to change Sunday (`ai_notes`:
@@ -2558,6 +2579,18 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   paused or deleted. Full story: `docs/state-archive/2026-07.md`.
 
 ## Lessons learned
+
+- 2026-09-07 — **A format check cannot catch a valid-but-wrong bank account.**
+  The wrong-person account was a perfectly well-formed 12-digit Maybank number;
+  every structural check passes it. The only thing that catches it is comparing
+  the account holder against the employee's legal name — and the comparison has
+  to be ONE-DIRECTIONAL: banks truncate ("Aimi Nadhira" for "Aimi Nadhira Binti
+  Dzollani" is the same person), so a shorter holder name is fine, while any
+  EXTRA identity token in the holder name means somebody else's account. Strip
+  common given names (Muhammad, Nur, Siti…) and particles first or half the
+  workforce matches everyone else. On the live 70 rows that rule flags exactly
+  2, both real — see `lib/hr/bank-account.ts`.
+
 
 - 2026-09-07 — **A daily nudge cannot catch a state that expires overnight.**
   `ops-nudge-roster` already detected "current week not published" but ran once

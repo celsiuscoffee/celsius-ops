@@ -4,6 +4,7 @@ import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
 import { allocateByOutlet, buildPaymentCsv, paymentReference, type PaymentLine, type ShiftDetail } from "@/lib/hr/payment-file";
+import { accountNameVerdict } from "@/lib/hr/bank-account";
 
 export const dynamic = "force-dynamic";
 
@@ -121,6 +122,13 @@ export async function GET(req: NextRequest) {
   // only worked one outlet still gets a single line, unchanged bar the new
   // Outlet column.
   const missingBank: string[] = [];
+  // Accounts whose holder name carries an identity the employee's legal name
+  // does not — i.e. the account looks like somebody else's. This is the ONLY
+  // check that catches a valid-but-wrong account (right bank, right length,
+  // wrong human), which is how a staffer was paid into another person's
+  // Maybank account for months. Blocks the file unless explicitly acknowledged.
+  const identityMismatch: string[] = [];
+  const acknowledgeIdentity = req.nextUrl.searchParams.get("acknowledge_identity") === "1";
   const lines: PaymentLine[] = [];
   for (const item of items as Array<{ user_id: string; net_pay: number; computation_details: { shifts?: ShiftDetail[] } | null }>) {
     const u = userMap.get(item.user_id);
@@ -130,6 +138,12 @@ export async function GET(req: NextRequest) {
     if (!u?.bankName || !u?.bankAccountNumber) {
       missingBank.push(display);
       continue;
+    }
+
+    const verdict = accountNameVerdict(u.fullName || u.name, u.bankAccountName);
+    if (verdict.status === "mismatch") {
+      identityMismatch.push(`${display}: ${verdict.message}`);
+      if (!acknowledgeIdentity) continue;
     }
 
     const homeOutlet = u.outletId ? outletById.get(u.outletId) : undefined;
@@ -185,6 +199,21 @@ export async function GET(req: NextRequest) {
       { status: 409 },
     );
   }
+  // Refuse the file rather than pay a stranger. Re-request with
+  // acknowledge_identity=1 once each account has been confirmed as genuinely
+  // belonging to that employee (a married name, a joint account); the
+  // acknowledgement is recorded on the activity log below.
+  if (identityMismatch.length > 0 && !acknowledgeIdentity) {
+    return NextResponse.json(
+      {
+        error:
+          "Some accounts look like they belong to someone else. Check each one on the employee page, " +
+          "then re-download to confirm.",
+        identity_mismatch: identityMismatch,
+      },
+      { status: 409 },
+    );
+  }
 
   const total = lines.reduce((s, l) => s + l.amount, 0);
   const payees = new Set(lines.map((l) => l.accountNumber)).size;
@@ -195,7 +224,15 @@ export async function GET(req: NextRequest) {
     targetId: runId,
     targetName: `weekly ${run.period_start}`,
     // lines ≥ payees now that a multi-outlet PT is paid on one line per outlet.
-    details: { run_id: runId, payees, lines: lines.length, total_rm: Math.round(total * 100) / 100 },
+    details: {
+      run_id: runId,
+      payees,
+      lines: lines.length,
+      total_rm: Math.round(total * 100) / 100,
+      // Who waved through a name mismatch, and on whom — the audit trail that
+      // would have surfaced the wrong-account payments months earlier.
+      ...(identityMismatch.length > 0 ? { identity_mismatch_acknowledged: identityMismatch } : {}),
+    },
     request: req,
   });
 
