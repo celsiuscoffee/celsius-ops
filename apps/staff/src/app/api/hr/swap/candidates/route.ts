@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 // scoped by the session gate + the "my shift" ownership check below.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
-import { getMYTToday } from "@/lib/hr/constants";
+import { getMYTToday, SHIFT_SWAP_ENABLED } from "@/lib/hr/constants";
 import { isRestRow, SWAPPABLE_SELECT, type SwappableShiftRow, flattenSwappable } from "@/lib/hr/swap-shared";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,13 @@ function shiftDate(base: string, days: number): string {
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  if (!SHIFT_SWAP_ENABLED) {
+    return NextResponse.json(
+      { error: "Shift swaps are handled by your manager for now.", reason: "disabled" },
+      { status: 403 },
+    );
+  }
 
   const shiftId = req.nextUrl.searchParams.get("shift_id");
   if (!shiftId) return NextResponse.json({ error: "shift_id required" }, { status: 400 });

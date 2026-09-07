@@ -5,6 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { CalendarDays, Clock, ArrowLeftRight, Loader2, CheckCircle2, XCircle, ArrowLeft, Sunrise, Sun, Moon, Coffee, MapPin } from "lucide-react";
 import { FetchError } from "@/components/fetch-error";
+import { SHIFT_SWAP_ENABLED } from "@/lib/hr/constants";
 
 type Shift = {
   id: string;
@@ -135,7 +136,10 @@ function classifyShift(startTime: string, endTime: string, roleType: string | nu
 
 export default function MyShiftsPage() {
   const { data, error: shiftsError, mutate: mutateShifts } = useFetch<{ shifts: Shift[] }>("/api/hr/shifts");
-  const { data: swapData, mutate: mutateSwaps } = useFetch<{ sent: SwapRequest[]; pendingConsent: SwapRequest[] }>("/api/hr/swap");
+  // SWR skips a null key, so with swaps off the app never calls /api/hr/swap.
+  const { data: swapData, mutate: mutateSwaps } = useFetch<{ sent: SwapRequest[]; pendingConsent: SwapRequest[] }>(
+    SHIFT_SWAP_ENABLED ? "/api/hr/swap" : null,
+  );
   const [swapAction, setSwapAction] = useState<string | null>(null);
   // Swap picker: which of MY shifts I'm offering. The request action has
   // existed in /api/hr/swap since launch, but nothing in the app called it —
@@ -214,7 +218,7 @@ export default function MyShiftsPage() {
       )}
 
       {/* Pending swap consent requests FROM coworkers */}
-      {pendingConsent.length > 0 && (
+      {SHIFT_SWAP_ENABLED && pendingConsent.length > 0 && (
         <div className="mb-6">
           <h2 className="mb-2 text-sm font-semibold text-amber-600">Swap Requests for You</h2>
           {pendingConsent.map((swap) => (
@@ -384,7 +388,7 @@ export default function MyShiftsPage() {
                           <span className="rounded-full bg-terracotta px-2 py-0.5 text-[10px] font-bold text-white">
                             TODAY
                           </span>
-                        ) : shiftsInOpenSwap.has(shift.id) ? (
+                        ) : !SHIFT_SWAP_ENABLED ? null : shiftsInOpenSwap.has(shift.id) ? (
                           <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold text-gray-500">
                             Swap pending
                           </span>
@@ -408,7 +412,7 @@ export default function MyShiftsPage() {
         );
       })()}
 
-      {swapFor && (
+      {SHIFT_SWAP_ENABLED && swapFor && (
         <SwapPicker
           shift={swapFor}
           onClose={() => setSwapFor(null)}
@@ -421,7 +425,7 @@ export default function MyShiftsPage() {
       )}
 
       {/* My Sent Swap Requests */}
-      {sentSwaps.length > 0 && (
+      {SHIFT_SWAP_ENABLED && sentSwaps.length > 0 && (
         <div className="mt-6">
           <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-500">
             <ArrowLeftRight className="h-4 w-4" /> My Swap Requests
