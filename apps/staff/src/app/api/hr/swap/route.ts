@@ -5,7 +5,7 @@ import { getSession } from "@/lib/auth";
 // getSession gate + the per-user filters below.
 import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
-import { getMYTToday } from "@/lib/hr/constants";
+import { getMYTToday, SHIFT_SWAP_ENABLED } from "@/lib/hr/constants";
 import { isRestRow, SWAPPABLE_SELECT, type SwappableShiftRow, flattenSwappable } from "@/lib/hr/swap-shared";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +64,16 @@ export async function POST(req: NextRequest) {
 
   // ─── Create new swap request ───
   if (action === "request") {
+    // Feature off (owner, 2026-09-07). Enforced here, not just in the UI: a
+    // cached bundle or a direct POST would otherwise still raise requests.
+    // consent / decline / cancel stay open so anything already in flight can
+    // be resolved rather than stranded.
+    if (!SHIFT_SWAP_ENABLED) {
+      return NextResponse.json(
+        { error: "Shift swaps are handled by your manager for now — message them to arrange a change.", reason: "disabled" },
+        { status: 403 },
+      );
+    }
     const { my_shift_id, target_shift_id, target_id, reason } = body as {
       my_shift_id?: string; target_shift_id?: string; target_id?: string; reason?: string;
     };
