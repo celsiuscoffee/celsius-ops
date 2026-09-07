@@ -37,6 +37,22 @@ current month.
   directions are window-checked in JS, and the page names how many products
   used that proxy so the reader knows. Small volume, so this corrects a bias
   rather than a distortion — the real fix is approving the transfers.
+- 2026-09-07 — **A roster left in `draft` makes the week invisible to staff AND
+  unpriced for pay — Tamarind, 31 Aug–6 Sep, live incident.** The week was
+  unpublished 2026-09-06 17:18 MYT to change Sunday (`ai_notes`:
+  `[unpublished 2026-09-06 09:18] by manager: sunday change`, UTC stamp) and
+  never re-published. Both readers filter `hr_schedules.status = 'published'`:
+  `apps/staff` My Shifts fell back to "Rest day — enjoy your day off" for
+  everyone rostered (Adib and Fatin messaged Ariff on WhatsApp asking why they
+  were on shift when the app said rest day), and `payroll-calculator-weekly.ts`
+  saw no roster, so **7 part-timers × 23 shifts were unpriced**. The UI wording
+  is the tell: a real rest-day row reads "Rostered rest day", the no-roster
+  fallback reads "Enjoy your day off". **Not caused by the round-3 changes** —
+  unpublish behaved identically before #1220; #1220 only added the guard.
+  **Repaired by SQL** (schedule `6b3e0266-85c1-494e-a14b-2e864b1469ab` →
+  `published`, `published_by` = Ammar, `ai_notes` repair line), deliberately not
+  through the app: the week had ended and Publish pushes to all 13 rostered
+  staff. Swept every outlet after — 7–13 Sep all published, no other gap.
 
 - 2026-09-05 — **The live Usage Variance / COGS "Expected = RM0.00" is a
   PRODUCTION bug, already fixed on PR #1216 (unmerged).** `main`'s
@@ -2569,6 +2585,17 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Lessons learned
 
+- 2026-09-07 — **A daily nudge cannot catch a state that expires overnight.**
+  `ops-nudge-roster` already detected "current week not published" but ran once
+  at 09:30 MYT, so an unpublish at 17:18 was invisible until morning — by which
+  point the week had ended and no longer "covered today", so the nudge never
+  fired at all. When a detector's condition is bounded by the same clock as its
+  schedule, the schedule must be finer than the condition's lifetime (now
+  hourly, dedupe key scoped to the day). Second half of the same lesson: put the
+  warning on the screen the person is already looking at — the draft-week banner
+  on the schedules grid is what actually closes this loop; the nudge is backup.
+
+
 - 2026-07-14 — **Every upload control must accept drag & drop** (owner
   directive: "this should be the standard"). Backoffice audit found the
   standard mostly hand-rolled per page and four click-only gaps (invoice Edit
@@ -2620,21 +2647,52 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 - 2026-09-07 — **PR #1216 MERGED (648b12cc, squashed).** Follow-up PR #1223 is
   open: prep time per batch on ProductRecipe + the Prep Manhours report, plus
-  the transfer-in fix above. 16/16 green at head 38391ec1; the next push
-  (3cb1f65e) again did NOT dispatch a CI run while other branches ran fine that
-  minute, so main was merged in to re-trigger it — the same workaround as
-  2026-09-05, now seen twice. **It cannot merge
-  until the owner approves the migration** `ALTER TABLE "ProductRecipe" ADD
-  COLUMN IF NOT EXISTS "prepMinutes" DECIMAL(10,2)` — the prep-recipes page and
-  the new report both select that column and will error without it. Note for
-  future sessions: Vercel previews on this repo are switched off ("Canceled by
-  Ignored Build Step"), so branch work is never previewable before merge, and
-  GitHub Actions silently did not dispatch for three consecutive pushes on
-  2026-09-05 — merging main into the branch was what re-triggered it. Always
-  confirm a CI run exists for the head sha rather than assuming a push queued
-  one. Still held for the owner: the payment-side data repairs, setting
+  the transfer-in fix above. **It cannot merge until the owner approves the
+  migration** `ALTER TABLE "ProductRecipe" ADD COLUMN IF NOT EXISTS
+  "prepMinutes" DECIMAL(10,2)` — the prep-recipes page and the new report both
+  select that column and will error without it.
+  **Two repo quirks, each now seen twice — do not re-investigate:** (1) a push
+  can silently dispatch NO GitHub Actions run while other branches run fine in
+  the same minute; always confirm a run exists for the head sha, and merge
+  origin/main into the branch to re-trigger it. (2) Vercel previews are off
+  repo-wide ("Canceled by Ignored Build Step"), so no branch is ever
+  previewable before merge — judge unmerged UI from the diff and CI.
+  This branch also conflicts with main on docs/STATE.md on almost every sync
+  (parallel sessions append to the same two sections); the resolution is always
+  a union keep-both, never a pick. Still held for the owner: the payment-side data repairs, setting
   TELEGRAM_ALLOWED_CHAT_IDS from the warn logs, and telling finance that
   Telegram-captured invoices now land as DRAFT.
+- 2026-09-07 — **Two PRs green and awaiting the owner's explicit merge word.**
+  #1226 `claude/disable-shift-swap` — `SHIFT_SWAP_ENABLED = false` in
+  `apps/staff/src/lib/hr/constants.ts` gates the whole staff swap surface
+  (fetch, pending-consent banner, Swap button, picker sheet); owner said
+  "exclude it, don't allow for now". The API routes still work, so the one
+  in-flight request (Adib → Farhan Ikhmal, 8 Sep ↔ 7 Sep, `pending_consent`)
+  is still resolvable in backoffice HR → Shift Swaps. #1227
+  `claude/roster-draft-guardrail` — the three-layer guard from the incident
+  above (grid banner, unpublish prompt warning, hourly nudge + day-scoped
+  dedupe). Both 16/16. **Do not merge either without the owner saying so.**
+  Still open for the owner from round-2 QA: contract/intern pay cycle;
+  auto-close on shifts rostered past 7.5 h; state-specific public holidays;
+  whether to build a staff OT pre-booking page; missing EPF/SOCSO numbers.
+  Two sick-leave requests unreviewed: Ariff (7 Aug), Batrisyia (27 Aug).
+  Already on `main`, ignore the older pointers below that still call them open:
+  #1219 (native), #1220 (round-3 HR QA), #1221 (swap request UI), #1222
+  (capabilities), #1225 (custom shift hours).
+
+- 2026-09-05 (local-rank) — **System fully closed-loop; watching Mon Sep 7.**
+  GBP category adds APPLIED by owner via /api/reviews/gbp-categories (08-31);
+  weekly Telegram digest live (PR #1201, cffde3b) — sent by cron/geogrid-scan
+  after each Monday run: rank movements vs previous scan, review velocity vs
+  targets (Nilai 12, SA 30, default 25 /30d), ads guardrail (conv −30%/14d on
+  ≥20 base ⇒ flag; the optimizer only cuts). **Sep 7 1pm MYT = first
+  post-category scan + first digest** — the direct test of whether
+  `restaurants near me` (unranked everywhere for 8 weeks) starts ranking.
+  Reviews 09-05: Tamarind 26/30d + Putrajaya 29/30d on target; Shah Alam
+  4/30d (0 this week) and Nilai 2/30d (gap to top competitor: 2) — ask ritual
+  NOT started there. Ads steady ~RM146/day (−58% vs June). Open October
+  decision: redeploy of the freed ~RM5k/mo (Nilai push / SMS loop).
+
 - 2026-09-05 (capabilities) — **Elevated permissions, so a head of operations
   isn't forced through an ADMIN promotion** (branch `claude/hr-capabilities`).
   Ariff (head of ops, MANAGER, all 5 outlets) hit the new unpublish guard.
