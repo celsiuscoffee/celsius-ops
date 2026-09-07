@@ -109,13 +109,20 @@ export async function GET(req: NextRequest) {
           status: { in: ACTIVE_TRANSFER_STATUS as unknown as ("RECEIVED" | "COMPLETED")[] },
           OR: [
             { toOutletId: outletId, receivedAt: windowFilter },
+            // Goods that moved but were never marked received. Every transfer in
+            // production is PENDING with a null receivedAt (102 of 102 on
+            // 2026-09-06), so keying arrivals only off receivedAt counted stock
+            // as LEAVING the sender while never ARRIVING anywhere — the
+            // receiver's usage read low by exactly the transferred quantity.
+            // Dispatch date is the honest proxy until receiving is recorded.
+            { toOutletId: outletId, receivedAt: null, createdAt: windowFilter },
             { fromOutletId: outletId, createdAt: windowFilter },
           ],
         },
       },
       select: {
         productId: true, productPackageId: true, quantity: true,
-        transfer: { select: { fromOutletId: true, toOutletId: true } },
+        transfer: { select: { fromOutletId: true, toOutletId: true, receivedAt: true, createdAt: true } },
       },
     }),
     prisma.stockAdjustment.findMany({
@@ -132,10 +139,23 @@ export async function GET(req: NextRequest) {
 
   const transfersInQty = new Map<string, number>();
   const transfersOutQty = new Map<string, number>();
+  // Transfers counted as arrived on their dispatch date because no one recorded
+  // the receipt — surfaced so the reader knows the movement side used a proxy.
+  const unreceivedTransferIn = new Set<string>();
+  const inWindow = (d: Date) => d.getTime() > start.getTime() && d.getTime() <= end.getTime();
   for (const ti of transfers) {
     const base = toBaseQty(Number(ti.quantity), ti.productPackageId, convByPackage);
-    if (ti.transfer.toOutletId === outletId) addBase(transfersInQty, ti.productId, base);
-    if (ti.transfer.fromOutletId === outletId) addBase(transfersOutQty, ti.productId, base);
+    const t = ti.transfer;
+    if (t.toOutletId === outletId) {
+      const arrived = t.receivedAt ?? t.createdAt;
+      if (inWindow(arrived)) {
+        addBase(transfersInQty, ti.productId, base);
+        if (!t.receivedAt) unreceivedTransferIn.add(ti.productId);
+      }
+    }
+    if (t.fromOutletId === outletId && inWindow(t.createdAt)) {
+      addBase(transfersOutQty, ti.productId, base);
+    }
   }
 
   const wastageQty = new Map<string, number>();
@@ -247,11 +267,16 @@ export async function GET(req: NextRequest) {
       productsWithoutCost,
       uomMismatches,
       noSales: sales.length === 0,
+      // Arrivals dated by dispatch because the receipt was never recorded.
+      unreceivedTransfersIn: unreceivedTransferIn.size,
     },
     items,
   });
 }
 
 function emptyWarnings() {
-  return { menuItemsWithoutBom: [] as string[], productsWithoutCost: [] as string[], uomMismatches: [] as unknown[], noSales: false };
+  return {
+    menuItemsWithoutBom: [] as string[], productsWithoutCost: [] as string[],
+    uomMismatches: [] as unknown[], noSales: false, unreceivedTransfersIn: 0,
+  };
 }
