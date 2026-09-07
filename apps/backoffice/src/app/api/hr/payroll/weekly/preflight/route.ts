@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { breakHoursFor } from "@/lib/hr/hours";
+import { accountNameVerdict, accountNumberIssue } from "@/lib/hr/bank-account";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
         where: { id: { in: userIds } },
         select: {
           id: true, name: true, fullName: true, status: true,
-          bankName: true, bankAccountNumber: true,
+          bankName: true, bankAccountNumber: true, bankAccountName: true,
         },
       })
     : [];
@@ -158,6 +159,22 @@ export async function GET(req: NextRequest) {
         severity: "warn",
         message: "No bank account on file — the payment file will BLOCK until it's added on the employee page.",
       });
+    } else if (loggedShifts > 0 && u) {
+      // Does this account actually belong to this person? Nothing asked that
+      // before, and at least one staffer was paid into a stranger's account for
+      // months because the two names were never compared.
+      const verdict = accountNameVerdict(u.fullName || u.name, u.bankAccountName);
+      if (verdict.status === "mismatch") {
+        issues.push({ code: "bank_name_mismatch", severity: "block", message: verdict.message });
+      } else if (verdict.status === "unverifiable") {
+        issues.push({
+          code: "bank_name_unverifiable",
+          severity: "warn",
+          message: `${verdict.reason} — can't confirm the account belongs to them.`,
+        });
+      }
+      const fmt = u.bankAccountNumber ? accountNumberIssue(u.bankName, u.bankAccountNumber) : null;
+      if (fmt) issues.push({ code: "bank_account_format", severity: "block", message: fmt });
     }
 
     const blocked = issues.some((i) => i.severity === "block");
