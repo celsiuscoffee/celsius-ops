@@ -30,11 +30,18 @@ import {
   type LeaveBalance,
   type LeaveRequest,
 } from "../../../lib/hr/api";
+import { calendarDayParts } from "../../../lib/hr/myt";
 
+// The system's leave types (apps/staff/src/lib/hr/constants.ts LEAVE_TYPES).
+// "emergency" was offered here but is not a type the balances or the web app
+// know — it rendered as a raw key with no balance card.
 const LEAVE_TYPES = [
   { key: "annual", label: "Annual" },
   { key: "sick", label: "Sick" },
-  { key: "emergency", label: "Emergency" },
+  { key: "hospitalization", label: "Hospitalisation" },
+  { key: "maternity", label: "Maternity" },
+  { key: "paternity", label: "Paternity" },
+  { key: "replacement", label: "Replacement" },
   { key: "unpaid", label: "Unpaid" },
 ];
 
@@ -462,8 +469,11 @@ function RequestCard({ request }: { request: LeaveRequest }) {
   );
 }
 
+// Leave dates are plain calendar days — parsing them as `new Date(s)` gave
+// UTC midnight, a day early on phones west of Greenwich.
 function fmt(s: string): string {
-  return new Date(s).toLocaleDateString([], { day: "numeric", month: "short" });
+  const p = calendarDayParts(s.slice(0, 10));
+  return `${p.dayNum} ${p.monthName}`;
 }
 
 // Route-level boundary: a throw in this screen degrades to an inline retry

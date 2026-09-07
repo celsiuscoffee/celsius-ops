@@ -2618,9 +2618,12 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
-- 2026-09-06 — **PR #1216 MERGED (648b12cc, squashed).** Follow-up PR #1223 is
-  open and green (head 38391ec1, 16/16): prep time per batch on ProductRecipe +
-  the Prep Manhours report, plus the transfer-in fix above. **It cannot merge
+- 2026-09-07 — **PR #1216 MERGED (648b12cc, squashed).** Follow-up PR #1223 is
+  open: prep time per batch on ProductRecipe + the Prep Manhours report, plus
+  the transfer-in fix above. 16/16 green at head 38391ec1; the next push
+  (3cb1f65e) again did NOT dispatch a CI run while other branches ran fine that
+  minute, so main was merged in to re-trigger it — the same workaround as
+  2026-09-05, now seen twice. **It cannot merge
   until the owner approves the migration** `ALTER TABLE "ProductRecipe" ADD
   COLUMN IF NOT EXISTS "prepMinutes" DECIMAL(10,2)` — the prep-recipes page and
   the new report both select that column and will error without it. Note for
@@ -2632,6 +2635,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   one. Still held for the owner: the payment-side data repairs, setting
   TELEGRAM_ALLOWED_CHAT_IDS from the warn logs, and telling finance that
   Telegram-captured invoices now land as DRAFT.
+- 2026-09-05 (capabilities) — **Elevated permissions, so a head of operations
+  isn't forced through an ADMIN promotion** (branch `claude/hr-capabilities`).
+  Ariff (head of ops, MANAGER, all 5 outlets) hit the new unpublish guard.
+  Promoting him to ADMIN would have handed over finance, payroll, bank files
+  and every employee's bank details, since ADMIN bypasses `hasModuleAccess`
+  across ~120 routes — owner chose the targeted grant instead.
+  `lib/capabilities.ts`: named grants on the **previously unused**
+  `User.permissions` column (no migration), 60 s cache like `liveAccountState`,
+  fails closed. Three capabilities: `roster:unpublish`, `roster:retro_edit`,
+  `leave:cancel_approved`. OWNER/ADMIN hold all implicitly. `retroEditRefusal`
+  now takes a resolved boolean, not a role (both callers — cell AND assign —
+  updated; tsc caught the second). Grantable from the employee page's Access
+  card (manager-only section), validated + audit-logged in the access PATCH,
+  cache invalidated on write. Drift test pins UI keys ↔ registry and asserts
+  no capability is in a money/access-control domain.
+  **Applied to prod:** Ariff `2b906d16-7842-439c-b64e-ec596b1912e5` granted all
+  three (inert until the PR merges — nothing read that column before).
 
 - 2026-09-05 — **PR #1216 is the whole procurement/reports batch — review and
   merge it.** It now carries: the hardening (25 QA findings), the live-sales
@@ -2674,9 +2694,15 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   use it. `FetchError` card on every staff HR page (401 → "session expired
   → sign in"; other → retry) instead of the empty state. My Attendance
   shows OT tails ≥0.5 h (was ≥1). Backoffice `agents/leave-manager.ts`
-  (unused duplicate) deleted. Still open: native PR #1219 (owner to say
-  "merge 1219"; OTA to manager phones), swap request UI, shared
-  recomputeTotals, and the owner decisions listed under round 2.
+  (unused duplicate) deleted. Follow-up branch `claude/hr-swap-request-ui`
+  (stacked on round 3): staff can now RAISE a swap — "Swap" on a future
+  My Shifts card → `/api/hr/swap/candidates` (same outlet, published,
+  future, not rest, not already in a swap) → `action=request`, which now
+  validates the same rules and refuses duplicates; sent swaps show the
+  coworker's name and can be withdrawn. No push to the target yet (staff
+  app has no ops-push sender). Still open: native PR #1219 (owner to say
+  "merge 1219"; OTA to manager phones), shared recomputeTotals, and the
+  owner decisions listed under round 2.
 
 - 2026-09-03 (round 2) — **HR module code + flow QA, five parallel reviews.**
   Report: `docs/design/hr-qa-round2-2026-09-03.md` (11 security, 16 money,

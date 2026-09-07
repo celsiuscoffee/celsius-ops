@@ -5,7 +5,9 @@ import { getTemplate, REST_DAY_ID } from "@/lib/hr/shift-templates";
 import { canAccessOutlet, hasModuleAccess } from "@/lib/hr/scope";
 import { findCrossOutletOverlap } from "@/lib/hr/cross-outlet";
 import { classifyRosterEdit, retroEditRefusal } from "@/lib/hr/roster-guard";
+import { normalizeShiftTime } from "@/lib/hr/shift-time";
 import { logActivity } from "@/lib/activity-log";
+import { can } from "@/lib/capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -64,17 +66,30 @@ export async function POST(req: NextRequest) {
   if (!ISO_DATE.test(String(shift_date)) || shift_date < week_start || shift_date > week_end) {
     return NextResponse.json({ error: `shift_date must fall inside the week ${week_start} → ${week_end}` }, { status: 400 });
   }
+  // Normalise before validating: the grid posts `start + ":00"`, and a
+  // Postgres `time` reads back as HH:MM:SS, so a strict HH:MM test refused
+  // every custom-hours save (#1218 → 2026-09-06). normalizeShiftTime accepts
+  // both shapes and rejects the empty string a cleared time input produces.
   if (template_id === "custom" && custom) {
-    const HHMM = /^\d{2}:\d{2}$/;
-    if (!HHMM.test(String(custom.start_time)) || !HHMM.test(String(custom.end_time))) {
-      return NextResponse.json({ error: "Custom shift times must be HH:MM" }, { status: 400 });
+    const start = normalizeShiftTime(custom.start_time);
+    const end = normalizeShiftTime(custom.end_time);
+    if (!start || !end) {
+      const bad = [!start && "start", !end && "end"].filter(Boolean).join(" and ");
+      return NextResponse.json(
+        { error: `Custom shift ${bad} time must be a real time of day (e.g. 09:00)` },
+        { status: 400 },
+      );
     }
-    if (custom.start_time === "00:00" && custom.end_time === "00:00") {
+    if (start === "00:00" && end === "00:00") {
       return NextResponse.json({ error: "00:00–00:00 is the rest-day marker — pick Rest Day instead" }, { status: 400 });
     }
-    if (custom.start_time === custom.end_time) {
+    if (start === end) {
       return NextResponse.json({ error: "A shift must end after it starts" }, { status: 400 });
     }
+    // Store the canonical shape, so a custom shift is byte-identical to a
+    // template shift downstream (the template path already slices to HH:MM).
+    custom.start_time = start;
+    custom.end_time = end;
   }
 
   // Employment window: no shifts before join_date or after last day — the
@@ -146,11 +161,13 @@ export async function POST(req: NextRequest) {
   // monthly rest days), and this route previously checked neither schedule
   // status nor date — a retroactive cell edit (or clear) on a published week
   // silently rewrote pay for hours already worked, the 2026-08-03 incident
-  // class. Past dates on published weeks now require an OWNER/ADMIN with an
-  // explicit retro_reason, and every published-week edit is activity-logged.
+  // class. Past dates on published weeks now require the `roster:retro_edit`
+  // capability (OWNER/ADMIN, or a manager explicitly granted it — the head of
+  // operations) plus an explicit retro_reason, and every published-week edit
+  // is activity-logged.
   const editClass = classifyRosterEdit(schedule.status, shift_date);
   if (editClass === "published_past") {
-    const verdict = retroEditRefusal(session.role, retro_reason);
+    const verdict = retroEditRefusal(await can(session, "roster:retro_edit"), retro_reason);
     if (!verdict.allowed) {
       return NextResponse.json({ error: verdict.error }, { status: verdict.status });
     }

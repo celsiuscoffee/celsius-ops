@@ -7,6 +7,7 @@ import { gateSchedule } from "@/lib/hr/labour-gate";
 import { sendOpsPush } from "@/lib/ops-push";
 import { logActivity } from "@/lib/activity-log";
 import { getMYTToday } from "@/lib/hr/constants";
+import { can } from "@/lib/capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -181,9 +182,9 @@ export async function POST(req: NextRequest) {
     if (schedule.status !== "published") {
       return NextResponse.json({ error: "This week is not published" }, { status: 409 });
     }
-    if (!["OWNER", "ADMIN"].includes(session.role)) {
+    if (!(await can(session, "roster:unpublish"))) {
       return NextResponse.json(
-        { error: "Only an owner/admin can unpublish a roster — staff have already been notified of these shifts. Edit the cells directly (today and future days are always editable)." },
+        { error: "You don't have permission to unpublish a roster — staff have already been notified of these shifts. Edit the cells directly (today and future days are always editable), or ask an owner to grant you roster unpublish access." },
         { status: 403 },
       );
     }
