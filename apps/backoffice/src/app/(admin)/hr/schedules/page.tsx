@@ -8,7 +8,7 @@ import Link from "next/link";
 import {
   Bot, CalendarDays, Send, Loader2, ArrowLeftRight,
   ChevronLeft, ChevronRight, RotateCcw, Trash2, Sparkles, X,
-  ChefHat, Coffee, RefreshCw, Plus,
+  ChefHat, Coffee, RefreshCw, Plus, AlertTriangle,
 } from "lucide-react";
 import { HrPageHeader } from "@/components/hr/page-header";
 import { AssistPanel } from "@/components/hr/assist-panel";
@@ -726,7 +726,10 @@ export default function SchedulesPage() {
       if (action === "unpublish") {
         // Staff have already been notified of these shifts; the server refuses
         // without a reason (owner/admin only) and logs it.
-        const reason = prompt("Unpublish this week? Staff were already notified of these shifts.\n\nReason for unpublishing:");
+        const liveWarning = weekStart <= todayMyt
+          ? "\n\nWARNING: this week has already started. The moment you unpublish, everyone rostered — including anyone on shift right now — sees \"Rest day\" instead of their hours, and part-timer pay stops counting them. Re-publish as soon as you have finished editing."
+          : "";
+        const reason = prompt(`Unpublish this week? Staff were already notified of these shifts.${liveWarning}\n\nReason for unpublishing:`);
         if (!reason) return;
         res = await publishOnce({ reason });
         if (!res.ok) {
@@ -813,6 +816,20 @@ export default function SchedulesPage() {
   };
 
   const isPublished = grid?.schedule?.status === "published";
+  // A draft week that has already STARTED is the dangerous state: the staff app
+  // only renders published rosters, so every day of it shows as "Rest day —
+  // enjoy your day off" to the people working it, and weekly PT payroll prices
+  // only published rosters, so their hours read as unrostered. Tamarind was
+  // left like this on 2026-09-06 after an unpublish-to-edit and two staff
+  // turned up to a roster that told them they were off.
+  const weekEndStr = (() => {
+    const d = new Date(weekStart + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 6);
+    return d.toISOString().slice(0, 10);
+  })();
+  const todayMyt = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
+  const draftWeekIsLive = !isPublished && !!grid?.schedule && weekStart <= todayMyt;
+  const draftWeekEnded = draftWeekIsLive && weekEndStr < todayMyt;
 
   // Compute totals
   const totalHours = (grid?.shifts || []).reduce((sum, s) => {
@@ -874,6 +891,25 @@ export default function SchedulesPage() {
           </>
         }
       />
+
+      {draftWeekIsLive && (
+        <div className="flex items-start gap-3 rounded-xl border-2 border-red-300 bg-red-50 p-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+          <div className="text-sm">
+            <p className="font-semibold text-red-800">
+              {draftWeekEnded
+                ? "This week has ended and was never published."
+                : "This week is NOT published — staff cannot see these shifts."}
+            </p>
+            <p className="mt-0.5 text-red-700">
+              My Shifts only shows published rosters, so everyone rostered here sees
+              &ldquo;Rest day&rdquo; instead{draftWeekEnded ? "" : ", including whoever is working today"}.
+              Part-timer pay is also calculated from published rosters only, so these hours
+              will not be priced. Press <span className="font-semibold">Publish</span> to restore it.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">

@@ -894,8 +894,14 @@ export async function runRosterPublishNudges(now = new Date()): Promise<NudgeRun
     const scheds = byOutlet.get(o.id) ?? [];
     if (scheds.some((s) => s.status === "published")) continue; // covered
     const draft = scheds.find((s) => s.status !== "published");
+    // A built-but-unpublished roster mid-week is the worse case and reads
+    // differently: those staff are working TODAY to a roster their app shows
+    // as "Rest day", and weekly PT pay skips unpublished rosters entirely.
+    const started = !!draft && draft.week_start <= ymd;
     const line = draft
-      ? `${o.name}: this week's roster is built (${draft.shifts} shifts) but NOT published. One click in HR, Schedules.`
+      ? started
+        ? `${o.name}: this week's roster (${draft.shifts} shifts) is UNPUBLISHED and the week has already started — staff on shift today see "Rest day" and their hours are not being priced. Publish it in HR, Schedules.`
+        : `${o.name}: this week's roster is built (${draft.shifts} shifts) but NOT published. One click in HR, Schedules.`
       : `${o.name}: no roster created for this week. Staff get no checklists or lateness tracking until one is published.`;
     const b: Breach = {
       signal: "ROSTER_MISSING",
@@ -903,8 +909,12 @@ export async function runRosterPublishNudges(now = new Date()): Promise<NudgeRun
       outletName: o.name,
       severity: "HIGH",
       routeKey: "operations",
-      // Key on the outlet + the week so one gap pings once, not every morning.
-      dedupeKey: `ROSTER_MISSING:${o.id}:${draft?.week_start ?? monday}`,
+      // Key on the outlet + the week + the DAY. Keyed on the week alone, a
+      // roster unpublished part-way through a week that had already pinged
+      // stayed silent — and this check now runs hourly, so the day is what
+      // keeps it to one ping per outlet per day while still catching a gap
+      // that opens later in the same week.
+      dedupeKey: `ROSTER_MISSING:${o.id}:${draft?.week_start ?? monday}:${ymd}`,
       summary: line,
       detail: { weekOf: ymd, built: !!draft, shifts: draft?.shifts ?? 0 },
     };
