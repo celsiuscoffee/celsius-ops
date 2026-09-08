@@ -1,7 +1,7 @@
 -- Prep labour time on the central-kitchen sub-BOM.
 --
--- NOT YET APPLIED to prod — awaiting owner approval (hard rule 6).
--- Once applied, the applied-history copy belongs in supabase/migrations/;
+-- APPLIED to prod 2026-09-08, owner-approved (hard rule 6).
+-- The applied-history copy is supabase/migrations/110_prep_recipe_prep_minutes.sql;
 -- this file is the never-executed audit trail CI's migration-guard checks.
 --
 -- CONTEXT. ProductRecipe already describes what a prep batch CONSUMES (raw
