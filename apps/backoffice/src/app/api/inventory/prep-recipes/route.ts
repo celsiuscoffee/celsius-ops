@@ -121,6 +121,12 @@ export async function GET(req: NextRequest) {
       yieldQuantity: yieldQty,
       yieldUom: r.yieldUom,
       prepNote: r.prepNote,
+      // Labour: minutes for ONE person per batch, and the per-unit rate the
+      // prep-labour report multiplies by consumption. null = never timed, which
+      // must not read as zero work.
+      prepMinutes: r.prepMinutes != null ? round2(Number(r.prepMinutes)) : null,
+      minutesPerUnit:
+        r.prepMinutes != null && yieldQty > 0 ? round4(Number(r.prepMinutes) / yieldQty) : null,
       isActive: r.isActive,
       items,
       batchCost: round2(batchCost),
@@ -136,6 +142,23 @@ export async function GET(req: NextRequest) {
 }
 
 type IncomingItem = { productId?: unknown; quantityUsed?: unknown; uom?: unknown };
+
+/**
+ * Prep minutes for one person, one batch. Optional everywhere: an empty box
+ * means "not timed yet" (null), never zero — a zero would silently tell the
+ * labour report the batch is free.
+ */
+export function parsePrepMinutes(
+  raw: unknown,
+): { ok: true; value: number | null } | { ok: false; error: string } {
+  if (raw === undefined || raw === null || raw === "") return { ok: true, value: null };
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return { ok: false, error: "Prep minutes must be zero or more" };
+  // A full shift on one batch is almost certainly a typo (e.g. hours entered as
+  // minutes); refuse it rather than let it swamp the manhours total.
+  if (n > 1440) return { ok: false, error: "Prep minutes must be under 1440 (24 hours) for one batch" };
+  return { ok: true, value: n };
+}
 
 /** Shared validation for create/replace. Returns clean lines or an error string. */
 export function normaliseItems(
@@ -177,6 +200,9 @@ export async function POST(req: NextRequest) {
   const parsed = normaliseItems(body.items);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
+  const minutes = parsePrepMinutes(body.prepMinutes);
+  if (!minutes.ok) return NextResponse.json({ error: minutes.error }, { status: 400 });
+
   // A prepped product cannot be an input to its own recipe.
   if (parsed.items.some((i) => i.productId === outputProductId)) {
     return NextResponse.json({ error: "A recipe cannot consume its own output product" }, { status: 400 });
@@ -196,6 +222,7 @@ export async function POST(req: NextRequest) {
       yieldQuantity,
       yieldUom: typeof body.yieldUom === "string" && body.yieldUom ? body.yieldUom : output.baseUom,
       prepNote: typeof body.prepNote === "string" && body.prepNote ? body.prepNote : null,
+      prepMinutes: minutes.value,
       isActive: body.isActive ?? true,
       items: { create: parsed.items },
     },

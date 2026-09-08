@@ -51,6 +51,7 @@ type Data = {
     productsWithoutCost: string[];
     uomMismatches: { productId: string; menuUom: string; baseUom: string }[];
     noSales: boolean;
+    unreceivedTransfersIn: number;
   };
 };
 
@@ -140,13 +141,14 @@ export default function IngredientVariancePage() {
       )}
 
       {/* Data-quality warnings */}
-      {data && !insufficient && data.warnings && (data.warnings.menuItemsWithoutBom.length > 0 || data.warnings.productsWithoutCost.length > 0 || data.warnings.uomMismatches.length > 0 || data.warnings.noSales) && (
+      {data && !insufficient && data.warnings && (data.warnings.menuItemsWithoutBom.length > 0 || data.warnings.productsWithoutCost.length > 0 || data.warnings.uomMismatches.length > 0 || data.warnings.noSales || data.warnings.unreceivedTransfersIn > 0) && (
         <div className="mt-4 space-y-1.5 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600">
           <p className="font-medium text-gray-700">Data quality — variance may be incomplete:</p>
           {data.warnings.noSales && <p>• No sales in this window — actual usage shown without an expected baseline.</p>}
           {data.warnings.menuItemsWithoutBom.length > 0 && <p>• {data.warnings.menuItemsWithoutBom.length} sold menu item(s) have no recipe (BOM): {data.warnings.menuItemsWithoutBom.slice(0, 5).join(", ")}{data.warnings.menuItemsWithoutBom.length > 5 ? "…" : ""}</p>}
           {data.warnings.productsWithoutCost.length > 0 && <p>• {data.warnings.productsWithoutCost.length} product(s) have no supplier cost — variance qty only, no RM.</p>}
           {data.warnings.uomMismatches.length > 0 && <p>• {data.warnings.uomMismatches.length} recipe line(s) use a unit different from the product base UOM — check the recipe.</p>}
+          {data.warnings.unreceivedTransfersIn > 0 && <p>• {data.warnings.unreceivedTransfersIn} transferred-in product(s) were counted from the dispatch date because the receipt was never recorded — approve the transfers to date them properly.</p>}
         </div>
       )}
 

@@ -973,6 +973,12 @@ model ProductRecipe {
   yieldUom        String
   // Free-text method / batch note for the kitchen (not costed).
   prepNote        String?
+  // Hands-on minutes for ONE person to produce one batch (the yieldQuantity
+  // above), start to finish. Drives the prep-labour report: minutes per prepped
+  // unit = prepMinutes / yieldQuantity, so required manhours can be compared
+  // against rostered hours. NULL = not timed yet; the report counts those
+  // recipes separately rather than treating them as zero work.
+  prepMinutes     Decimal?
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

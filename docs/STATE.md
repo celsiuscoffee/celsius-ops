@@ -11,6 +11,33 @@ current month.
 
 ## Verified facts
 
+- 2026-09-06 — **Procurement report reliability, measured (not assumed) after
+  PR #1216 merged (648b12cc).** SALES SIDE IS CLEAN: last 30 days, 86 sold
+  menus all map, ZERO unmapped lines, ZERO sold menus without a BOM, and
+  134/138 ingredients used carry a real cost (4 uncosted) — so **COGS and Usage
+  Variance are trustworthy now**. COUNTS are frequent at the three trading
+  outlets (PJ 31 Aug, Tam 1 Sep, SA 4 Sep; 256 lines each, ~weekly; IOI Mall
+  and Nilai never counted — Nilai is consignment, expected).
+  **RECEIVING IS THE HOLE:** over 60 days RM177,301 of RM252,743 in POs has NO
+  receiving — 70%. By outlet: PJ 17.9% received, Tam 41.6%, SA 52.4%, Nilai 0%.
+  So **Purchase Summary's "Received" column and the whole Supplier Scorecard
+  measure our paperwork, not our suppliers** — do not make supplier decisions
+  on that page. Stock Valuation is sound for PJ/SA/Tam but its system qty is
+  fed by those missing receivings, so count variance reads worse than reality.
+  Wastage: 137 rows/60d across 3 outlets — only as complete as staff logging.
+  Receiving discipline is the single highest-leverage fix; the stuck transfers
+  are second.
+
+- 2026-09-06 — **Usage Variance counted transfers OUT but never IN — fixed.**
+  All 102 StockTransfers are PENDING with `receivedAt` NULL (76 in the last 60
+  days, 111 item lines all-time). The report keyed arrivals off `receivedAt`
+  only, so stock left the sender in the maths and arrived nowhere: the
+  RECEIVER's actual usage read low by the transferred quantity. Arrivals now
+  fall back to the dispatch date when the receipt was never recorded, both
+  directions are window-checked in JS, and the page names how many products
+  used that proxy so the reader knows. Small volume, so this corrects a bias
+  rather than a distortion — the real fix is approving the transfers.
+
 - 2026-09-07 — **Staff bank details had no identity check anywhere — a staffer
   was paid into another person's account.** `User.bankAccountNumber` +
   `bankAccountName` are what the weekly PT bank file pays
@@ -2652,6 +2679,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-09-07 — **PR #1216 MERGED (648b12cc, squashed).** Follow-up PR #1223 is
+  open: prep time per batch on ProductRecipe + the Prep Manhours report, plus
+  the transfer-in fix above. **It cannot merge until the owner approves the
+  migration** `ALTER TABLE "ProductRecipe" ADD COLUMN IF NOT EXISTS
+  "prepMinutes" DECIMAL(10,2)` — the prep-recipes page and the new report both
+  select that column and will error without it.
+  **Two repo quirks, each now seen twice — do not re-investigate:** (1) a push
+  can silently dispatch NO GitHub Actions run while other branches run fine in
+  the same minute; always confirm a run exists for the head sha, and merge
+  origin/main into the branch to re-trigger it. (2) Vercel previews are off
+  repo-wide ("Canceled by Ignored Build Step"), so no branch is ever
+  previewable before merge — judge unmerged UI from the diff and CI.
+  This branch also conflicts with main on docs/STATE.md on almost every sync
+  (parallel sessions append to the same two sections); the resolution is always
+  a union keep-both, never a pick. Still held for the owner: the payment-side data repairs, setting
+  TELEGRAM_ALLOWED_CHAT_IDS from the warn logs, and telling finance that
+  Telegram-captured invoices now land as DRAFT.
 - 2026-09-07 — **Two PRs green and awaiting the owner's explicit merge word.**
   #1226 `claude/disable-shift-swap` — `SHIFT_SWAP_ENABLED = false` in
   `apps/staff/src/lib/hr/constants.ts` gates the whole staff swap surface
