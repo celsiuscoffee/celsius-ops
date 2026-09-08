@@ -41,6 +41,8 @@ type Recipe = {
   yieldQuantity: number;
   yieldUom: string;
   prepNote: string | null;
+  prepMinutes: number | null;
+  minutesPerUnit: number | null;
   isActive: boolean;
   items: RecipeItem[];
   batchCost: number;
@@ -85,13 +87,14 @@ type Form = {
   yieldQuantity: string;
   yieldUom: string;
   prepNote: string;
+  prepMinutes: string;
   isActive: boolean;
   lines: FormLine[];
 };
 
 const emptyForm: Form = {
   outputProductId: "", outputName: "", yieldQuantity: "", yieldUom: "",
-  prepNote: "", isActive: true, lines: [],
+  prepNote: "", prepMinutes: "", isActive: true, lines: [],
 };
 
 // Beyond this the transfer price and the real raw cost have drifted enough to
@@ -135,6 +138,7 @@ export default function PrepRecipesPage() {
       yieldQuantity: String(r.yieldQuantity),
       yieldUom: r.yieldUom,
       prepNote: r.prepNote ?? "",
+      prepMinutes: r.prepMinutes != null ? String(r.prepMinutes) : "",
       isActive: r.isActive,
       lines: r.items.map((i) => ({
         productId: i.productId, name: i.productName,
@@ -185,6 +189,8 @@ export default function PrepRecipesPage() {
         yieldQuantity: parseFloat(form.yieldQuantity),
         yieldUom: form.yieldUom || productById.get(form.outputProductId)?.baseUom || "",
         prepNote: form.prepNote,
+        // "" means not timed — the API stores null, never zero.
+        prepMinutes: form.prepMinutes.trim() === "" ? null : Number(form.prepMinutes),
         isActive: form.isActive,
         items: form.lines.map((l) => ({
           productId: l.productId,
@@ -288,6 +294,16 @@ export default function PrepRecipesPage() {
                       </Badge>
                       {!r.isActive && (
                         <Badge className="border-gray-200 bg-gray-100 text-gray-500">Inactive</Badge>
+                      )}
+                      {r.prepMinutes != null ? (
+                        <Badge className="border-gray-200 bg-gray-50 text-gray-600">
+                          {r.prepMinutes} min/batch
+                          {r.minutesPerUnit != null && (
+                            <span className="text-gray-400"> · {r.minutesPerUnit.toFixed(2)}/{r.yieldUom}</span>
+                          )}
+                        </Badge>
+                      ) : (
+                        <Badge className="border-gray-200 bg-gray-100 text-gray-500">Not timed</Badge>
                       )}
                       {r.anyCostMissing && (
                         <Badge className="border-amber-200 bg-amber-50 text-amber-700">
@@ -442,6 +458,31 @@ export default function PrepRecipesPage() {
                   placeholder="pcs"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-700">
+                Prep time — one person, one batch (minutes)
+              </label>
+              <Input
+                type="number"
+                value={form.prepMinutes}
+                onChange={(e) => set("prepMinutes", e.target.value)}
+                placeholder="e.g. 45"
+              />
+              <p className="mt-1 text-[11px] text-gray-400">
+                Hands-on minutes for ONE person to finish the whole batch. Leave blank if not timed
+                yet — the Prep Manhours report counts untimed recipes separately instead of assuming
+                they are free.
+                {form.prepMinutes.trim() !== "" && parseFloat(form.yieldQuantity) > 0 && (
+                  <> That is{" "}
+                    <span className="font-medium text-gray-600">
+                      {(Number(form.prepMinutes) / parseFloat(form.yieldQuantity)).toFixed(2)} min
+                    </span>{" "}
+                    per {form.yieldUom || "unit"}.
+                  </>
+                )}
+              </p>
             </div>
 
             <div>

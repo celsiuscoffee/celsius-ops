@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
-import { normaliseItems } from "../route";
+import { normaliseItems, parsePrepMinutes } from "../route";
 
 // PATCH /api/inventory/prep-recipes/[id]
 // Header fields are patched individually; `items`, when present, REPLACES the
@@ -20,6 +20,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     yieldQuantity?: number;
     yieldUom?: string;
     prepNote?: string | null;
+    prepMinutes?: number | null;
     isActive?: boolean;
   } = {};
 
@@ -33,6 +34,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (typeof body.yieldUom === "string" && body.yieldUom) data.yieldUom = body.yieldUom;
   if (body.prepNote !== undefined) data.prepNote = body.prepNote || null;
+  if (body.prepMinutes !== undefined) {
+    const minutes = parsePrepMinutes(body.prepMinutes);
+    if (!minutes.ok) return NextResponse.json({ error: minutes.error }, { status: 400 });
+    data.prepMinutes = minutes.value;
+  }
   if (body.isActive !== undefined) data.isActive = !!body.isActive;
 
   if (body.items === undefined) {
