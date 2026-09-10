@@ -204,7 +204,12 @@ export async function GET(req: NextRequest) {
     const lateMin = shift && log ? Math.max(0, computeLateMinutes(log.clock_in, shift.start_time, d)) : 0;
     // Has the scheduled shift already ended (MYT)? No end_time → end of day.
     const endClock = shift?.end_time && shift.end_time.slice(0, 5) !== "00:00" ? shift.end_time : "23:59:59";
-    const shiftEnded = shift ? nowMs > Date.parse(`${d}T${endClock}+08:00`) : false;
+    // A shift that ends at or before it starts (22:00–02:00) ends the NEXT day;
+    // reading it on the same date marked the cell "absent" all afternoon
+    // before the shift had even begun.
+    const crossesMidnight = !!shift?.end_time && shift.end_time.slice(0, 5) !== "00:00" && shift.end_time <= shift.start_time;
+    const endMs = Date.parse(`${d}T${endClock}+08:00`) + (crossesMidnight ? 86400000 : 0);
+    const shiftEnded = shift ? nowMs > endMs : false;
     return {
       scheduled_start: shift ? shift.start_time.slice(0, 5) : null,
       scheduled_end: shift?.end_time ? shift.end_time.slice(0, 5) : null,

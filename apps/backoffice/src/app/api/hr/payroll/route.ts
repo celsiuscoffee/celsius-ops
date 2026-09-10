@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
     if (cycle?.cycle_type !== "opening_balance") {
       const { data: gateItems } = await hrSupabaseAdmin
         .from("hr_payroll_items")
-        .select("user_id, net_pay, prorate_reason")
+        .select("user_id, net_pay, prorate_reason, computation_details")
         .eq("payroll_run_id", run_id);
 
       if (!gateItems || gateItems.length === 0) {
@@ -186,6 +186,25 @@ export async function POST(req: NextRequest) {
           {
             error: "This run has no payroll items — confirming would settle the period at RM0 and the settled-guard would then defend it. Recompute first.",
             reason: "empty_run",
+          },
+          { status: 409 },
+        );
+      }
+
+      // A manual adjustment that changed gross marks the line statutory_stale:
+      // its EPF/SOCSO/PCB were computed on the old gross. Confirming it files
+      // the wrong contributions. Recompute (or re-apply the adjustment on the
+      // fresh run) first.
+      const stale = gateItems.filter((it: { computation_details?: { statutory_stale?: boolean } | null }) => it.computation_details?.statutory_stale === true);
+      if (stale.length > 0) {
+        const staleUsers = await prisma.user.findMany({
+          where: { id: { in: stale.map((l: { user_id: string }) => l.user_id) } },
+          select: { name: true, fullName: true },
+        });
+        return NextResponse.json(
+          {
+            error: `${stale.length} line${stale.length === 1 ? "" : "s"} carry a gross change whose statutory deductions were not recomputed: ${staleUsers.map((u) => u.fullName || u.name).join(", ")}. Recompute before confirming.`,
+            reason: "statutory_stale",
           },
           { status: 409 },
         );

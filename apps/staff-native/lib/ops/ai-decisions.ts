@@ -9,7 +9,7 @@ export type ReorderItem = {
   currentQty: number;
   parLevel: number;
   reorderQty: number;
-  daysUntilStockout: number;
+  daysUntilStockout: number | null; // null = no usage history
   quantity: number;
   unitPrice: number;
   totalPrice: number;

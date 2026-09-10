@@ -41,6 +41,21 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Part-timers (and interns) only — full-timers have manager-set schedules, so
+  // declaring a weekly availability pattern is closed to them.
+  {
+    const { data: prof } = await supabase
+      .from("hr_employee_profiles")
+      .select("employment_type")
+      .eq("user_id", session.id)
+      .maybeSingle();
+    if (!["part_time", "intern"].includes((prof?.employment_type as string) ?? "")) {
+      return NextResponse.json(
+        { error: "Availability is set by part-timers — your shifts are scheduled by your manager." },
+        { status: 403 },
+      );
+    }
+  }
 
   const body = (await req.json()) as { days?: DayInput[]; max_shifts_per_week?: number | null };
   const days = Array.isArray(body.days) ? body.days : null;

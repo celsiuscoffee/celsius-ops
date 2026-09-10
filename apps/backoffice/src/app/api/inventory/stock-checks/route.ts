@@ -1,9 +1,14 @@
 import { NextResponse, NextRequest } from "next/server";
-import { isCleanCount } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
-import { setStockBalance } from "@/lib/stock";
 import { getUserFromHeaders } from "@/lib/auth";
 
+// GET only. This route used to also expose a POST that created a count AND wrote
+// StockBalance from `countedQty` WITHOUT converting package units to base UOM
+// (the staff finalize route converts). Nothing called it — the backoffice
+// stock-count page only lists here and PATCHes /stock-checks/[id]; staff-native
+// and the staff web app go through apps/staff's /api/stock-checks — so the
+// handler was removed (2026-09-05) rather than fixed. Counts are created by
+// staff; this console reviews them.
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -62,70 +67,4 @@ export async function GET(req: NextRequest) {
   }));
 
   return NextResponse.json(mapped);
-}
-
-export async function POST(req: NextRequest) {
-  const caller = await getUserFromHeaders(req.headers);
-  if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const body = await req.json();
-  const { outletId, countedById, frequency, notes, items } = body;
-
-  // Snapshot current stock balances BEFORE updating (for variance calculation)
-  const productIds = items.map((i: { productId: string }) => i.productId);
-  const currentBalances = await prisma.stockBalance.findMany({
-    where: { outletId, productId: { in: productIds } },
-    select: { productId: true, quantity: true },
-  });
-  const balanceMap: Record<string, number> = {};
-  for (const b of currentBalances) {
-    balanceMap[b.productId] = Number(b.quantity);
-  }
-
-  // Zero-variance counts auto-approve straight to REVIEWED; only counts with a
-  // real discrepancy against the snapshotted balance need a manager's review.
-  const now = new Date();
-  const autoApprove = isCleanCount(
-    (items as Array<{ productId: string; countedQty?: number | null }>).map((i) => ({
-      expectedQty: balanceMap[i.productId] ?? null,
-      countedQty: i.countedQty ?? null,
-    })),
-  );
-
-  const stockCount = await prisma.stockCount.create({
-    data: {
-      outletId,
-      countedById,
-      frequency,
-      status: autoApprove ? "REVIEWED" : "SUBMITTED",
-      submittedAt: now,
-      ...(autoApprove ? { reviewedAt: now } : {}),
-      notes: notes || null,
-      items: {
-        create: items.map((i: { productId: string; productPackageId?: string; countedQty?: number; isConfirmed?: boolean }) => ({
-          productId: i.productId,
-          productPackageId: i.productPackageId || null,
-          expectedQty: balanceMap[i.productId] ?? null,
-          countedQty: i.countedQty ?? null,
-          isConfirmed: i.isConfirmed ?? false,
-        })),
-      },
-    },
-    include: {
-      outlet: true,
-      countedBy: true,
-      items: { include: { product: true, productPackage: true } },
-    },
-  });
-
-  // Update stock balances from counted quantities (in base UOM)
-  await Promise.all(
-    items
-      .filter((item: { countedQty?: number }) => item.countedQty !== null && item.countedQty !== undefined)
-      .map((item: { productId: string; countedQty: number }) =>
-        setStockBalance(outletId, item.productId, item.countedQty),
-      ),
-  );
-
-  return NextResponse.json(stockCount, { status: 201 });
 }

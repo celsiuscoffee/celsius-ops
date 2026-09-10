@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { isOnTimeDelivery } from "@/lib/inventory/myt-date";
 
 /**
  * GET /api/inventory/reports/supplier-scorecard?supplierId=xxx&from=ISO&to=ISO
@@ -57,14 +58,16 @@ export async function GET(req: NextRequest) {
         (o) => o.status === "COMPLETED" || o.status === "PARTIALLY_RECEIVED"
       );
 
-      // On-time: receiving receivedAt <= order deliveryDate
+      // On-time: first receipt's MYT calendar day <= promised MYT calendar day.
+      // deliveryDate is stored as a date (00:00 UTC), so the old timestamp
+      // compare marked every same-day afternoon delivery late.
       const ordersWithDeliveryDate = completedOrders.filter(
         (o) => o.deliveryDate !== null
       );
       const onTimeDeliveries = ordersWithDeliveryDate.filter((o) => {
         const firstReceiving = o.receivings[0];
         if (!firstReceiving) return false;
-        return firstReceiving.receivedAt <= o.deliveryDate!;
+        return isOnTimeDelivery(firstReceiving.receivedAt, o.deliveryDate!);
       }).length;
 
       const onTimeRate =

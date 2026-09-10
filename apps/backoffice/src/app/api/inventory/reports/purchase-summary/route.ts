@@ -1,11 +1,16 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
+import { parseMytRangeParam } from "@/lib/inventory/myt-date";
 
 /**
  * GET /api/inventory/reports/purchase-summary
  * Query params: outletId, supplierId, from, to (ISO date strings)
  * Returns purchase summary aggregated by supplier within the date range.
+ *
+ * A bare YYYY-MM-DD `to` covers the WHOLE MYT day (23:59:59.999 +08:00); a bare
+ * `from` starts at MYT midnight. Previously `to=2026-09-01` meant 00:00 UTC and
+ * silently dropped everything ordered that day.
  */
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -16,8 +21,8 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
   const defaultFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const from = params.get("from") ? new Date(params.get("from")!) : defaultFrom;
-  const to = params.get("to") ? new Date(params.get("to")!) : now;
+  const from = parseMytRangeParam(params.get("from"), "start") ?? defaultFrom;
+  const to = parseMytRangeParam(params.get("to"), "end") ?? now;
 
   // Fetch orders (not DRAFT or CANCELLED) within date range
   const orders = await prisma.order.findMany({
@@ -96,10 +101,16 @@ export async function GET(req: NextRequest) {
     agg.totalOrders += 1;
     agg.totalOrderedAmount += Number(order.totalAmount);
 
-    // Build a lookup from productId to unitPrice from order items
-    const unitPriceMap = new Map<string, number>();
+    // Price lookup keyed by the ORDER LINE (product + package). A product bought
+    // in two pack sizes on one PO has two unit prices; a per-product map let the
+    // last line win and mispriced the other pack's receipts. Fall back to the
+    // product-level price only when the PO has exactly one line for it.
+    const linePriceMap = new Map<string, number>();
+    const productLinePrices = new Map<string, number[]>();
     for (const item of order.items) {
-      unitPriceMap.set(item.productId, Number(item.unitPrice));
+      const unitPrice = Number(item.unitPrice);
+      linePriceMap.set(`${item.productId}_${item.productPackageId ?? ""}`, unitPrice);
+      productLinePrices.set(item.productId, [...(productLinePrices.get(item.productId) ?? []), unitPrice]);
 
       // Accumulate ordered product breakdown
       const pkey = item.productId;
@@ -117,11 +128,17 @@ export async function GET(req: NextRequest) {
       prod.amount += Number(item.totalPrice);
     }
 
-    // Receiving items: receivedQty * unitPrice from corresponding orderItem
+    // Receiving items: receivedQty * unitPrice from the MATCHING order line
+    const priceForReceipt = (productId: string, productPackageId: string | null): number => {
+      const exact = linePriceMap.get(`${productId}_${productPackageId ?? ""}`);
+      if (exact !== undefined) return exact;
+      const candidates = productLinePrices.get(productId) ?? [];
+      return candidates.length === 1 ? candidates[0] : 0;
+    };
     for (const receiving of order.receivings) {
       for (const ri of receiving.items) {
         const receivedQty = Number(ri.receivedQty);
-        const unitPrice = unitPriceMap.get(ri.productId) ?? 0;
+        const unitPrice = priceForReceipt(ri.productId, ri.productPackageId);
         agg.totalReceivedAmount += receivedQty * unitPrice;
 
         // Accumulate received qty into product breakdown

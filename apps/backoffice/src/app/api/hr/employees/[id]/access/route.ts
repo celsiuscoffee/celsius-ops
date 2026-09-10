@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hashPin, hashPassword } from "@celsius/auth";
+import { pinInUse, PIN_PATTERN } from "@/lib/hr/pin-policy";
+import { logActivity } from "@/lib/activity-log";
+import { ALL_CAPABILITIES, isCapability, invalidateCapabilities } from "@/lib/capabilities";
+import { accountNumberIssue, normalizeAccountNumber } from "@/lib/hr/bank-account";
 
 export const dynamic = "force-dynamic";
 
@@ -63,19 +67,83 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.outletIds !== undefined) updateData.outletIds = body.outletIds;
   if (body.appAccess !== undefined) updateData.appAccess = body.appAccess;
   if (body.moduleAccess !== undefined) updateData.moduleAccess = body.moduleAccess;
+  // Elevated capabilities (lib/capabilities.ts): named grants that let a
+  // MANAGER past an owner/admin gate on a specific action — the head of
+  // operations unpublishing a roster, say — without handing over payroll,
+  // finance or bank details the way an ADMIN promotion would. Validated
+  // against the known set so a typo can't silently grant nothing, or a
+  // crafted body store an unknown string that a future check might honour.
+  if (body.permissions !== undefined) {
+    if (!Array.isArray(body.permissions)) {
+      return NextResponse.json({ error: "permissions must be an array" }, { status: 400 });
+    }
+    const unknown = body.permissions.filter((p: unknown) => typeof p !== "string" || !isCapability(p));
+    if (unknown.length > 0) {
+      return NextResponse.json(
+        { error: `Unknown capability: ${unknown.join(", ")}. Valid: ${ALL_CAPABILITIES.join(", ")}` },
+        { status: 400 },
+      );
+    }
+    updateData.permissions = Array.from(new Set(body.permissions as string[]));
+  }
   if (body.fullName !== undefined) updateData.fullName = body.fullName || null;
   if (body.bankName !== undefined) updateData.bankName = body.bankName || null;
-  if (body.bankAccountNumber !== undefined) updateData.bankAccountNumber = body.bankAccountNumber || null;
   if (body.bankAccountName !== undefined) updateData.bankAccountName = body.bankAccountName || null;
 
-  // Hash PIN if provided
+  // Bank account number. These three fields decide where money lands, yet they
+  // were the only unvalidated fields on a route that checks a PIN is 6 digits
+  // and unique — so a dropped digit (three Bank Islam accounts stored 13 of
+  // their 14) or a number pasted onto the wrong employee saved silently.
+  // Normalised to digits, length-checked against the chosen bank, and refused
+  // when it already belongs to a different active employee.
+  if (body.bankAccountNumber !== undefined) {
+    const raw = body.bankAccountNumber;
+    if (raw === null || raw === "") {
+      updateData.bankAccountNumber = null;
+    } else {
+      const digits = normalizeAccountNumber(raw);
+      if (!digits) {
+        return NextResponse.json({ error: "Account number must be digits only" }, { status: 400 });
+      }
+      // Check against the bank being SAVED, falling back to the stored one when
+      // this PATCH only touches the number.
+      const bankForCheck =
+        body.bankName !== undefined
+          ? body.bankName || null
+          : (await prisma.user.findUnique({ where: { id }, select: { bankName: true } }))?.bankName ?? null;
+      const issue = accountNumberIssue(bankForCheck, digits);
+      if (issue) return NextResponse.json({ error: issue }, { status: 400 });
+
+      const clash = await prisma.user.findFirst({
+        where: { bankAccountNumber: digits, id: { not: id }, status: "ACTIVE" },
+        select: { name: true, fullName: true },
+      });
+      if (clash) {
+        return NextResponse.json(
+          {
+            error:
+              `That account number is already on ${clash.fullName || clash.name}'s profile. ` +
+              `Two people cannot share an account — check you have the right number for this employee.`,
+          },
+          { status: 409 },
+        );
+      }
+      updateData.bankAccountNumber = digits;
+    }
+  }
+
+  // Hash PIN if provided. Exactly 6 digits (the staff app rejects anything
+  // else at login) and unique across active accounts — see lib/hr/pin-policy.
   if (body.pin !== undefined) {
     if (body.pin === null || body.pin === "") {
       updateData.pin = null;
-    } else if (body.pin.length >= 4 && body.pin.length <= 6 && /^\d+$/.test(body.pin)) {
-      updateData.pin = await hashPin(body.pin);
+    } else if (PIN_PATTERN.test(String(body.pin))) {
+      if (await pinInUse(String(body.pin), id)) {
+        return NextResponse.json({ error: "That PIN is already used by another account — choose a different one" }, { status: 409 });
+      }
+      updateData.pin = await hashPin(String(body.pin));
     } else {
-      return NextResponse.json({ error: "PIN must be 4-6 digits" }, { status: 400 });
+      return NextResponse.json({ error: "PIN must be exactly 6 digits" }, { status: 400 });
     }
   }
 
@@ -96,9 +164,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       data: updateData,
       select: {
         id: true, name: true, role: true, username: true, status: true,
-        appAccess: true, moduleAccess: true, outletId: true,
+        appAccess: true, moduleAccess: true, outletId: true, permissions: true,
       },
     });
+    // The capability check caches grants for 60s per instance; drop this
+    // user's entry so a grant or revoke is live on their next request.
+    if (updateData.permissions !== undefined) invalidateCapabilities(id);
+    // Audit: role, status, access grants, credentials and bank details are the
+    // fields a bank file and every permission check trust. Nothing recorded
+    // who changed them until 2026-09-03. Secrets are never logged; the bank
+    // account is masked to its last four digits.
+    const changed = Object.keys(updateData);
+    if (changed.length > 0) {
+      const details: Record<string, unknown> = { fields: changed };
+      if (updateData.role !== undefined) details.role = updateData.role;
+      if (updateData.status !== undefined) details.status = updateData.status;
+      if (updateData.bankAccountNumber !== undefined) {
+        const acct = String(updateData.bankAccountNumber ?? "");
+        details.bankAccountNumber = acct ? `••••${acct.slice(-4)}` : null;
+      }
+      if (updateData.bankName !== undefined) details.bankName = updateData.bankName;
+      if (updateData.permissions !== undefined) details.permissions = updateData.permissions;
+      await logActivity({
+        actorId: session.id,
+        action: "hr.access.update",
+        module: "hr",
+        targetId: id,
+        targetName: user.name,
+        details,
+        request: req,
+      });
+    }
     return NextResponse.json({ user });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to update user";

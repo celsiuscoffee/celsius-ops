@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { nextOrderNumberBase } from "@/lib/inventory/order-number";
+import { guardOrderLinePrices } from "@/lib/inventory/po-price-guard";
 
 export async function GET(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
@@ -219,6 +220,16 @@ export async function POST(req: NextRequest) {
     }
 
     const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
+
+    // Price↔package guard — refuses a line whose price matches a SIBLING
+    // package of the same product (e.g. the 1L-carton price on the 2L-carton
+    // line that doubled four months of milk litres). Out-of-band prices with
+    // no better-fitting pack only warn; overridePriceGuard: true demotes
+    // refusals to warnings for legitimate collisions.
+    const priceGuard = await guardOrderLinePrices(items, {
+      override: body.overridePriceGuard === true,
+    });
+    if (!priceGuard.ok) return priceGuard.response;
 
     const totalAmount = items.reduce(
       (sum: number, i: { quantity: number; unitPrice: number }) => sum + i.quantity * i.unitPrice,

@@ -5,6 +5,7 @@ import {
   LATE_THRESHOLD_MINUTES,
   AUTO_CLOCKOUT_AFTER_HOURS,
   REST_DAY_ROLE_PATTERN,
+  CLOCKOUT_REMINDER_FLAG,
 } from "../constants";
 import { deriveHours, mytDateString, mytInstant, computeLateMinutes } from "../hours";
 import type { AttendanceLog, GeofenceZone } from "../types";
@@ -96,7 +97,14 @@ export async function processAttendance(): Promise<ProcessResult> {
   const now = new Date();
 
   for (const log of pendingLogs as AttendanceLog[]) {
-    const flags: string[] = [];
+    // Fresh verdict each pass — except two markers the auto-close cron stamps:
+    // the clock-out reminder (dropping it re-sends the push every 15 minutes)
+    // and `auto_closed_<reason>` (the cron closes the log and calls this
+    // processor in the same run, so the marker was lost seconds after it was
+    // written and the review queue's "Auto-closed" filter missed most of them).
+    const flags: string[] = (Array.isArray(log.ai_flags) ? log.ai_flags : []).filter(
+      (f: string) => f === CLOCKOUT_REMINDER_FLAG || f.startsWith("auto_closed_"),
+    );
     const employmentType = profileMap.get(log.user_id) || "full_time";
 
     // --- Geofence Check ---

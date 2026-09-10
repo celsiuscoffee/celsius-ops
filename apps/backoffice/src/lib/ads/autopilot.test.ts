@@ -524,11 +524,12 @@ describe("ownerDirective (2026-08-31: RM70/day fleet test, evaluated raises)", (
       ["Celsius Putrajaya", 49.86],
       ["Celsius Coffee Tamarind Square", 41.71],
     ] as const) {
-      const d = ownerDirective(leg(name, budget), healthy, AUG31);
+      // Shah Alam additionally requires the 3-clean-nights streak (see redo test)
+      const d = ownerDirective(leg(name, budget, { priorCleanNights: 2 }), healthy, AUG31);
       expect(d?.action).toBe("raise");
       expect(d?.newDailyMyr).toBe(70);
       // "autopilot raise" on purpose — kept only on measured lift.
-      expect(d?.reason).toMatch(/^autopilot raise: owner directive 2026-08-31/);
+      expect(d?.reason).toMatch(/^autopilot raise: owner directive 2026-0(8-31|9-05)/);
     }
   });
 
@@ -544,6 +545,46 @@ describe("ownerDirective (2026-08-31: RM70/day fleet test, evaluated raises)", (
       lastApplied: { decidedAt: daysAgo(1), prevDailyMyr: 70, newDailyMyr: 49.86, reason: "autopilot revert: raise to RM70/day showed no till lift" },
     });
     expect(ownerDirective(reverted, healthy, AUG31)).toBeNull();
+  });
+
+  it("Shah Alam redo: passes the original Sep-1 revert, but only on the 3rd consecutive clean night", () => {
+    const saReverted = (over: Partial<CampaignState> = {}) =>
+      campaign({
+        campaignId: "sa",
+        campaignName: "Celsius Coffee Shah Alam",
+        dailyBudgetMyr: 53.98,
+        baselineDailyMyr: 100.2,
+        lastApplied: { decidedAt: new Date("2026-09-01T19:04:03Z"), prevDailyMyr: 70, newDailyMyr: 53.98, reason: "autopilot revert: raise to RM70/day showed no till lift" },
+        ...over,
+      });
+    const SEP6 = new Date("2026-09-06T19:01:00Z");
+    // 0 or 1 prior clean nights → wait, even with tonight clean
+    expect(ownerDirective(saReverted({ priorCleanNights: 0 }), healthy, SEP6)).toBeNull();
+    expect(ownerDirective(saReverted({ priorCleanNights: 1 }), healthy, SEP6)).toBeNull();
+    // 2 prior clean nights + tonight clean → fires at RM70
+    const d = ownerDirective(saReverted({ priorCleanNights: 2 }), healthy, SEP6);
+    expect(d?.action).toBe("raise");
+    expect(d?.newDailyMyr).toBe(70);
+    expect(d?.reason).toMatch(/Shah Alam redo/);
+    // tonight breached → never, whatever the streak
+    expect(ownerDirective(saReverted({ priorCleanNights: 2 }), breached, SEP6)).toBeNull();
+    // a revert decided AFTER the redo shipped (the redo's own revert) is final
+    expect(
+      ownerDirective(
+        saReverted({
+          priorCleanNights: 2,
+          lastApplied: { decidedAt: new Date("2026-09-08T19:04:00Z"), prevDailyMyr: 70, newDailyMyr: 53.98, reason: "autopilot revert: raise to RM70/day showed no till lift" },
+        }),
+        healthy, SEP6,
+      ),
+    ).toBeNull();
+    // other campaigns never pass a revert (Putrajaya reverted → leg dead)
+    expect(
+      ownerDirective(
+        campaign({ campaignName: "Celsius Putrajaya", dailyBudgetMyr: 49.86, lastApplied: { decidedAt: new Date("2026-09-01T00:00:00Z"), prevDailyMyr: 70, newDailyMyr: 49.86, reason: "autopilot revert: raise to RM70/day showed no till lift" } }),
+        healthy, SEP6,
+      ),
+    ).toBeNull();
   });
 
   it("hard-expires 2026-09-30 regardless of state", () => {

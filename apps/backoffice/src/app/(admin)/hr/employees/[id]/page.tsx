@@ -39,6 +39,8 @@ type Employee = {
   username?: string | null;
   appAccess?: string[];
   moduleAccess?: Record<string, unknown>;
+  /** Elevated capability grants — see lib/capabilities.ts. */
+  permissions?: string[];
   status?: string;
   hasPin?: boolean;
   hasPassword?: boolean;
@@ -51,6 +53,27 @@ type Employee = {
 const ROLES = ["OWNER", "ADMIN", "MANAGER", "STAFF"];
 const APP_OPTIONS = ["backoffice", "inventory", "sales", "loyalty", "pickup", "ops"];
 const HR_MODULES = ["dashboard", "attendance", "schedules", "leave", "payroll", "employees", "settings"];
+
+// Elevated capabilities a MANAGER can be granted individually — the keys must
+// match lib/capabilities.ts (the API validates against that list and rejects
+// anything else).
+const CAPABILITY_OPTIONS = [
+  {
+    key: "roster:unpublish",
+    label: "Unpublish a roster",
+    hint: "Take a published week back to draft. Staff were already notified, so a reason is required and logged.",
+  },
+  {
+    key: "roster:retro_edit",
+    label: "Edit a past day on a published roster",
+    hint: "The roster is the pay basis — a retro edit rewrites pay for hours already worked. Reason required and logged.",
+  },
+  {
+    key: "leave:cancel_approved",
+    label: "Cancel approved leave",
+    hint: "Undo an approved leave and return the days to the balance. Reason required and logged.",
+  },
+];
 
 const EMPLOYMENT_TYPES = [
   { value: "full_time", label: "Full Time" },
@@ -286,8 +309,8 @@ export default function EmployeeDetailPage() {
     socso_number: "",
     eis_number: "",
     tax_number: "",
-    epf_employee_rate: "11",
-    epf_employer_rate: "12",
+    epf_employee_rate: "",
+    epf_employer_rate: "",
     emergency_contact_name: "",
     emergency_contact_phone: "",
     notes: "",
@@ -306,8 +329,10 @@ export default function EmployeeDetailPage() {
     overtime_flat_rate: "",
     ssfw_number: "",
     ea_commencement_date: "",
-    // Per-staff allowance override (blank = use global default)
-    performance_allowance_amount: "",
+    // Flat performance allowance (blank = scored RM200 pool). This is the
+    // column payroll reads (lib/hr/allowances.ts parseFixedAllowance); the old
+    // input wrote performance_allowance_amount, which nothing reads.
+    fixed_performance_allowance: "",
   });
 
   // Access / login state
@@ -320,6 +345,7 @@ export default function EmployeeDetailPage() {
     outletIds: [] as string[],
     hrAccess: false,
     appAccessSet: new Set<string>(),
+    capabilitySet: new Set<string>(),
     pin: "",
     password: "",
   });
@@ -346,6 +372,7 @@ export default function EmployeeDetailPage() {
         outletIds: employee.outletIds || [],
         hrAccess: hrList.length > 0 || employee.role === "OWNER" || employee.role === "ADMIN",
         appAccessSet: new Set(employee.appAccess || []),
+        capabilitySet: new Set(employee.permissions || []),
         pin: "",
         password: "",
       });
@@ -419,6 +446,11 @@ export default function EmployeeDetailPage() {
         outletIds: access.outletIds.filter((oid) => oid !== access.outletId),
         appAccess: Array.from(access.appAccessSet),
         moduleAccess: nextModuleAccess,
+        // OWNER/ADMIN hold every capability implicitly, so don't persist rows
+        // for them — the stored list is only meaningful for a MANAGER.
+        permissions: access.role === "OWNER" || access.role === "ADMIN"
+          ? []
+          : Array.from(access.capabilitySet),
       };
       if (access.pin) payload.pin = access.pin;
       if (access.password) payload.password = access.password;
@@ -450,6 +482,14 @@ export default function EmployeeDetailPage() {
     });
   };
 
+  const toggleCapability = (cap: string) => {
+    setAccess((a) => {
+      const next = new Set(a.capabilitySet);
+      if (next.has(cap)) next.delete(cap); else next.add(cap);
+      return { ...a, capabilitySet: next };
+    });
+  };
+
   useEffect(() => {
     if (profile) {
       const p = profile as unknown as Record<string, unknown>;
@@ -469,8 +509,8 @@ export default function EmployeeDetailPage() {
         socso_number: profile.socso_number || "",
         eis_number: profile.eis_number || "",
         tax_number: profile.tax_number || "",
-        epf_employee_rate: profile.epf_employee_rate?.toString() || "11",
-        epf_employer_rate: profile.epf_employer_rate?.toString() || "12",
+        epf_employee_rate: profile.epf_employee_rate?.toString() ?? "",
+        epf_employer_rate: profile.epf_employer_rate?.toString() ?? "",
         emergency_contact_name: profile.emergency_contact_name || "",
         emergency_contact_phone: profile.emergency_contact_phone || "",
         notes: profile.notes || "",
@@ -488,7 +528,7 @@ export default function EmployeeDetailPage() {
         overtime_flat_rate: p.overtime_flat_rate != null ? String(p.overtime_flat_rate) : "",
         ssfw_number: (p.ssfw_number as string) || "",
         ea_commencement_date: p.ea_commencement_date ? String(p.ea_commencement_date).slice(0, 10) : "",
-        performance_allowance_amount: p.performance_allowance_amount != null ? String(p.performance_allowance_amount) : "",
+        fixed_performance_allowance: p.fixed_performance_allowance != null ? String(p.fixed_performance_allowance) : "",
       });
     }
   }, [profile]);
@@ -504,8 +544,11 @@ export default function EmployeeDetailPage() {
         user_id: id,
         ...form,
         manager_user_id: form.manager_user_id || null,
-        epf_employee_rate: parseFloat(form.epf_employee_rate) || 11,
-        epf_employer_rate: parseFloat(form.epf_employer_rate) || 12,
+        // Blank = statutory schedule (NULL). The old fallback wrote 11/12 on
+        // every save, which the calculator honoured as an override — 12%
+        // employer EPF on wages the schedule prices at 13%.
+        epf_employee_rate: form.epf_employee_rate.trim() === "" ? null : parseFloat(form.epf_employee_rate),
+        epf_employer_rate: form.epf_employer_rate.trim() === "" ? null : parseFloat(form.epf_employer_rate),
         join_date: form.join_date || new Date().toISOString().slice(0, 10),
         date_of_birth: form.date_of_birth || null,
         // New statutory overrides
@@ -520,16 +563,17 @@ export default function EmployeeDetailPage() {
         payload.basic_salary = form.basic_salary ? parseFloat(form.basic_salary) : 0;
         payload.hourly_rate = form.hourly_rate ? parseFloat(form.hourly_rate) : null;
         payload.hourly_rate_weekend = form.hourly_rate_weekend ? parseFloat(form.hourly_rate_weekend) : null;
-        // Allowance override: blank input → NULL (use global default)
-        payload.performance_allowance_amount = form.performance_allowance_amount
-          ? parseFloat(form.performance_allowance_amount)
+        // Flat allowance: blank → NULL puts the person back on the scored pool.
+        // "0" is a real value (paid nothing, not scored) — keep it.
+        payload.fixed_performance_allowance = form.fixed_performance_allowance !== ""
+          ? parseFloat(form.fixed_performance_allowance)
           : null;
       } else {
         // Remove stale empties from the spread above so they don't land on the server
         delete payload.basic_salary;
         delete payload.hourly_rate;
         delete payload.hourly_rate_weekend;
-        delete payload.performance_allowance_amount;
+        delete payload.fixed_performance_allowance;
       }
 
       const res = await fetch("/api/hr/employees", {
@@ -822,11 +866,12 @@ export default function EmployeeDetailPage() {
               </Field>
               <div className="mt-2 border-t pt-3">
                 <p className="mb-2 text-xs font-medium text-muted-foreground">
-                  Allowance — leave blank to use the global default from HR Settings → Allowances.
-                  The value is a max; lateness/absence and review penalties reduce the actual payout.
+                  Performance allowance — leave blank for the scored pool (RM200 max across checklist, phone capture,
+                  serving time and audit, less lateness, absence and review penalties). Enter an amount to pay it FLAT
+                  every month with no scoring and no deductions; 0 pays nothing.
                 </p>
-                <Field label="Performance Allowance Max (RM/month)">
-                  <input type="number" min={0} step="0.01" value={form.performance_allowance_amount} onChange={(e) => update("performance_allowance_amount", e.target.value)} className="input" placeholder="Use default" />
+                <Field label="Flat allowance (RM/month)">
+                  <input type="number" min={0} step="0.01" value={form.fixed_performance_allowance} onChange={(e) => update("fixed_performance_allowance", e.target.value)} className="input" placeholder="Scored pool" />
                 </Field>
               </div>
             </div>
@@ -1069,10 +1114,10 @@ export default function EmployeeDetailPage() {
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="EPF Employee %">
-                <input type="number" value={form.epf_employee_rate} onChange={(e) => update("epf_employee_rate", e.target.value)} className="input" />
+                <input type="number" value={form.epf_employee_rate} onChange={(e) => update("epf_employee_rate", e.target.value)} className="input" placeholder="Statutory (11%)" />
               </Field>
               <Field label="EPF Employer %">
-                <input type="number" value={form.epf_employer_rate} onChange={(e) => update("epf_employer_rate", e.target.value)} className="input" />
+                <input type="number" value={form.epf_employer_rate} onChange={(e) => update("epf_employer_rate", e.target.value)} className="input" placeholder="Statutory (13% ≤ RM5k, 12% above)" />
               </Field>
             </div>
             <Field label="EPF Contribution Type">
@@ -1352,6 +1397,47 @@ export default function EmployeeDetailPage() {
                     </label>
                   ))}
                 </div>
+              </div>
+              {/* Elevated capabilities: one action each, past an owner/admin
+                  gate, without an ADMIN promotion (which would also hand over
+                  payroll, finance and staff bank details). For a head of
+                  operations who owns the roster company-wide. */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Elevated Permissions
+                </label>
+                {access.role === "OWNER" || access.role === "ADMIN" ? (
+                  <p className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-[11px] text-muted-foreground">
+                    {access.role} already holds every elevated permission.
+                  </p>
+                ) : access.role === "STAFF" ? (
+                  <p className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-[11px] text-muted-foreground">
+                    Set the role to Manager to grant elevated permissions.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {CAPABILITY_OPTIONS.map((cap) => (
+                      <label
+                        key={cap.key}
+                        className="flex items-start gap-2 rounded-lg border border-gray-200 bg-white p-2 text-xs"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={access.capabilitySet.has(cap.key)}
+                          onChange={() => toggleCapability(cap.key)}
+                        />
+                        <span>
+                          <span className="font-medium">{cap.label}</span>
+                          <span className="block text-[10px] text-muted-foreground">{cap.hint}</span>
+                        </span>
+                      </label>
+                    ))}
+                    <p className="text-[10px] text-muted-foreground">
+                      Each grant is audit-logged. They never include payroll, finance or bank details.
+                    </p>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">HR Module Access</label>

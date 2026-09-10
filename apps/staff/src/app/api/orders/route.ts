@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { checkModuleAccess } from "@/lib/check-module-access";
 import { logActivity } from "@/lib/activity-log";
+import { guardOrderLinePrices } from "@/lib/po-price-guard";
 
 export async function GET(req: NextRequest) {
   // Staff with `inventory:receivings` need to read the pending PO list to
@@ -168,6 +169,21 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { outletId, supplierId, items, notes, deliveryDate } = body;
 
+  if (!Array.isArray(items) || items.length === 0) {
+    return NextResponse.json({ error: "items are required" }, { status: 400 });
+  }
+
+  // Price↔package guard — same rule as the backoffice PO route. A price that
+  // belongs to a sibling package of the same product (the 1L-carton price on
+  // the 2L-carton line — the 3 Sep 2026 milk PO came in through this route) is
+  // refused with 400 PRICE_PACKAGE_MISMATCH; the response names the pack the
+  // price fits. body.overridePriceGuard: true demotes refusals to warnings for
+  // a legitimate collision.
+  const priceGuard = await guardOrderLinePrices(items, {
+    override: body.overridePriceGuard === true,
+  });
+  if (!priceGuard.ok) return priceGuard.response;
+
   const outlet = await prisma.outlet.findUniqueOrThrow({ where: { id: outletId } });
   const count = await prisma.order.count({ where: { outletId } });
   const orderNumber = `CC-${outlet.code}-${String(count + 1).padStart(4, "0")}`;
@@ -226,5 +242,10 @@ export async function POST(req: NextRequest) {
     details: `Created order for ${order.supplier?.name ?? "Unknown"} (${order.items.length} items, RM${Number(order.totalAmount).toFixed(2)})`,
   });
 
-  return NextResponse.json(order, { status: 201 });
+  // Out-of-band prices with no better-fitting pack (and overridden mismatches)
+  // ride along as warnings so the client can show them without blocking.
+  return NextResponse.json(
+    priceGuard.warnings.length > 0 ? { ...order, warnings: priceGuard.warnings } : order,
+    { status: 201 },
+  );
 }

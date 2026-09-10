@@ -5,9 +5,9 @@
 // on the last usable full stock count and rolling it forward:
 //
 //   on-hand value = last count (at cost)
-//                 + purchases since         (procurement invoices)
+//                 + purchases since         (procurement invoices, DRAFT excluded)
 //                 − consumption since       (sales × recipes at cost)
-//                 − wastage since           (recorded WASTAGE at cost)
+//                 − wastage since           (all loss-type adjustments at cost)
 //                 + transfers in − transfers out   (at cost)
 //
 // It reuses the exact valuation primitives the COGS roll-forward uses
@@ -25,6 +25,12 @@ import { buildByCategory, type OutletPick } from "@/app/api/sales/_lib/reports";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
+
+// Every adjustment type that is a physical LOSS of stock. Rolling off only
+// WASTAGE left breakage/expiry/spillage/theft on the books as if still on the
+// shelf. CORRECTION (count true-up, either sign) and USED_NOT_RECORDED (the
+// consumption engine's own postings, already inside `consumption`) stay out.
+export const LOSS_ADJUSTMENT_TYPES = ["WASTAGE", "BREAKAGE", "EXPIRED", "SPILLAGE", "THEFT"] as const;
 
 // Suggested total inventory ceiling, in days of COGS. A café's mix of
 // perishables (days) and dry goods (weeks) sits comfortably around two weeks
@@ -116,9 +122,17 @@ export async function outletOnHandValue(outlet: OutletPick, cost: CostMaps): Pro
   }
 
   const [invAgg, sinceCat, wasteAgg, xfer] = await Promise.all([
-    prisma.invoice.aggregate({ _sum: { amount: true }, where: { outletId: outlet.id, issueDate: { gte: anchor.date, lte: now } } }),
+    // DRAFT invoices are captures still being verified (amount may be wrong or
+    // duplicated) — not goods on the shelf yet.
+    prisma.invoice.aggregate({
+      _sum: { amount: true },
+      where: { outletId: outlet.id, status: { not: "DRAFT" }, issueDate: { gte: anchor.date, lte: now } },
+    }),
     buildByCategory([outlet], ymd(anchor.date), ymd(now)),
-    prisma.stockAdjustment.aggregate({ _sum: { costAmount: true }, where: { outletId: outlet.id, adjustmentType: "WASTAGE", createdAt: { gte: anchor.date, lte: now } } }),
+    prisma.stockAdjustment.aggregate({
+      _sum: { costAmount: true },
+      where: { outletId: outlet.id, adjustmentType: { in: [...LOSS_ADJUSTMENT_TYPES] }, createdAt: { gte: anchor.date, lte: now } },
+    }),
     transferValue(outlet.id, anchor.date, now, cost),
   ]);
   const purchases = round2(Number(invAgg._sum?.amount ?? 0));

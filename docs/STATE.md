@@ -11,6 +11,337 @@ current month.
 
 ## Verified facts
 
+- 2026-09-06 — **Procurement report reliability, measured (not assumed) after
+  PR #1216 merged (648b12cc).** SALES SIDE IS CLEAN: last 30 days, 86 sold
+  menus all map, ZERO unmapped lines, ZERO sold menus without a BOM, and
+  134/138 ingredients used carry a real cost (4 uncosted) — so **COGS and Usage
+  Variance are trustworthy now**. COUNTS are frequent at the three trading
+  outlets (PJ 31 Aug, Tam 1 Sep, SA 4 Sep; 256 lines each, ~weekly; IOI Mall
+  and Nilai never counted — Nilai is consignment, expected).
+  **RECEIVING IS THE HOLE:** over 60 days RM177,301 of RM252,743 in POs has NO
+  receiving — 70%. By outlet: PJ 17.9% received, Tam 41.6%, SA 52.4%, Nilai 0%.
+  So **Purchase Summary's "Received" column and the whole Supplier Scorecard
+  measure our paperwork, not our suppliers** — do not make supplier decisions
+  on that page. Stock Valuation is sound for PJ/SA/Tam but its system qty is
+  fed by those missing receivings, so count variance reads worse than reality.
+  Wastage: 137 rows/60d across 3 outlets — only as complete as staff logging.
+  Receiving discipline is the single highest-leverage fix; the stuck transfers
+  are second.
+
+- 2026-09-06 — **Usage Variance counted transfers OUT but never IN — fixed.**
+  All 102 StockTransfers are PENDING with `receivedAt` NULL (76 in the last 60
+  days, 111 item lines all-time). The report keyed arrivals off `receivedAt`
+  only, so stock left the sender in the maths and arrived nowhere: the
+  RECEIVER's actual usage read low by the transferred quantity. Arrivals now
+  fall back to the dispatch date when the receipt was never recorded, both
+  directions are window-checked in JS, and the page names how many products
+  used that proxy so the reader knows. Small volume, so this corrects a bias
+  rather than a distortion — the real fix is approving the transfers.
+
+- 2026-09-07 — **Staff bank details had no identity check anywhere — a staffer
+  was paid into another person's account.** `User.bankAccountNumber` +
+  `bankAccountName` are what the weekly PT bank file pays
+  (`payroll/weekly/bank-file` → `name: u.bankAccountName || display`,
+  `accountNumber: u.bankAccountNumber`). The employee PATCH
+  (`employees/[id]/access`) stored **whatever string arrived** — no digit check,
+  no length check, no uniqueness — on the same route that enforces a 6-digit
+  unique PIN and an 8-char password. Preflight only asked whether the fields
+  were non-empty. **Audit of all 70 accounts (2026-09-07):** 2 genuine identity
+  mismatches — Haziq (legal "Mohd Haziq Bin Mohd Zaini", account holder "Haziq
+  Ashraff", ACTIVE) and Adam Arman (`(Bigpay)` smuggled into the beneficiary
+  name, DEACTIVATED); 3 Bank Islam accounts stored **13 digits where BIMB is
+  14** (Sara, Amirul Luqman Harith, Alrash Faqirin — all DEACTIVATED); 2
+  account numbers shared by two `User` rows each, both **duplicate person
+  records** (Adib `4c5cd2ff`+`…6200`, Fatin `b3392c43`+`93a0e7aa`) not crossed
+  accounts. Aiman `72590004` was the reported case and was **fixed in prod at
+  05:55 MYT on 2026-09-07** (name AND number, `…0163` → `…2686`) by
+  `6f8ef072`. `hr_employee_profiles` has **no** bank columns — `User` is the
+  single source of truth. Only ONE bank-change audit row exists in all history
+  (that fix), so migration-era values have no trail.
+
+- 2026-09-07 — **A roster left in `draft` makes the week invisible to staff AND
+  unpriced for pay — Tamarind, 31 Aug–6 Sep, live incident.** The week was
+  unpublished 2026-09-06 17:18 MYT to change Sunday (`ai_notes`:
+  `[unpublished 2026-09-06 09:18] by manager: sunday change`, UTC stamp) and
+  never re-published. Both readers filter `hr_schedules.status = 'published'`:
+  `apps/staff` My Shifts fell back to "Rest day — enjoy your day off" for
+  everyone rostered (Adib and Fatin messaged Ariff on WhatsApp asking why they
+  were on shift when the app said rest day), and `payroll-calculator-weekly.ts`
+  saw no roster, so **7 part-timers × 23 shifts were unpriced**. The UI wording
+  is the tell: a real rest-day row reads "Rostered rest day", the no-roster
+  fallback reads "Enjoy your day off". **Not caused by the round-3 changes** —
+  unpublish behaved identically before #1220; #1220 only added the guard.
+  **Repaired by SQL** (schedule `6b3e0266-85c1-494e-a14b-2e864b1469ab` →
+  `published`, `published_by` = Ammar, `ai_notes` repair line), deliberately not
+  through the app: the week had ended and Publish pushes to all 13 rostered
+  staff. Swept every outlet after — 7–13 Sep all published, no other gap.
+
+- 2026-09-05 — **The live Usage Variance / COGS "Expected = RM0.00" is a
+  PRODUCTION bug, already fixed on PR #1216 (unmerged).** `main`'s
+  `reports/ingredient-variance` still reads `prisma.salesTransaction` — the
+  StoreHub feed that has had no rows since 2026-04-11 — so expected usage is
+  zero for every ingredient and the "No sales in this window" data-quality
+  line fires. The window and outlet mapping are fine: Putrajaya has 1,986
+  completed `pos_orders` (5,687 sold lines incl. the pickup app) between the
+  2026-07-31 and 2026-08-20 counts. Commit adbae563 repoints both reports at
+  `lib/inventory/report-sales.ts`. **Every branch preview deployment on Vercel
+  is CANCELED** (only `main` production builds reach READY), so branch work
+  cannot be previewed before merge — judge unmerged UI from the diff/CI, and
+  tell the owner a fix is invisible to them until it lands on main.
+
+- 2026-09-05 — **Split payments (deposit + balance) now matched — ap-match
+  item (e) done.** Third pass in `lib/finance/ap-match.ts`, after the single
+  and multi-invoice passes, over leftovers only: gathers unused DR lines that
+  carry the invoice's payee identity, then `pickSplitLegs` takes the legs that
+  settle the REMAINING balance (amount − already linked/paid), else the
+  ref-confirmed legs forming a partial. `writeSplitMatch` links every leg and
+  moves the invoice by the legs' total (PAID / DEPOSIT_PAID / PARTIALLY_PAID;
+  link-only when already PAID elsewhere); unmatch RECOMPUTES from the
+  remaining linked legs instead of zeroing. Manual path
+  `POST /api/finance/bank-lines/match-split`; recon page has a Split payments
+  card. **Two guards came from replaying 120 days of prod:** every leg must
+  carry the payee name/alias, and `isDateLikeNumber` disqualifies date-shaped
+  "invoice numbers" — ad-hoc claims are numbered by week ("LALA CCT WEEK
+  24082026") and bank narration quotes dates ("DR/CARD SALES M/N 2612988 DATED
+  24082026"), which pointed 8 card-fee lines at a RM61.30 cleaning claim.
+  Replay after the guards: 59 already-PAID invoices reconcile RM74,184 of legs
+  out of OTHER_OUTFLOW (link-only), 4 open invoices settle (held for EOM),
+  deposit-only stragglers surface for review.
+
+- 2026-09-05 — **All six procurement reports share one analysis table.**
+  `components/reports/report-table.tsx` + pure `lib/reports/table-utils.ts`
+  (tested): multi-term search, click-to-sort every column with blanks pinned
+  last, per-report value filters built from the rows present, quick toggles
+  (high variance, over-used, variance only, never counted, short deliveries,
+  margin <50%, losing money, under-received, not fully invoiced), CSV export
+  of the filtered+sorted set with a UTF-8 BOM, page size + show-more. Supplier
+  Scorecard gained a table view beside its cards (cards could not be sorted or
+  compared at all).
+
+- 2026-09-05 — **Procurement hardening shipped on PR #1216 (all 25 QA findings
+  addressed in code; warn-first rollout).** Three parallel streams merged
+  (63 files, +3.8k/−1.2k): (A) auth+roles — orders/[id] GET needs session,
+  PATCH/DELETE OWNER/ADMIN/MANAGER with a PO status-transition table
+  (`lib/inventory/po-status.ts`, 409 INVALID_STATUS_TRANSITION), item writes
+  scoped {id,orderId}, price guard on PATCH price edits, totalAmount override
+  OWNER/ADMIN only; transfers/[id] session + manager for approve/complete;
+  apply-proposal/send requireRole; Telegram webhook timing-safe secret, chat
+  allowlist `TELEGRAM_ALLOWED_CHAT_IDS` (unset = log-only "[telegram] unlisted
+  chat" warns, set = enforce), invoice capture DRAFT+aiPrefilled + dedupe,
+  number/photos only rewritten when unpaid; supplier-chat-agent escalates
+  mass removals (≥50% lines), fences supplier text, delivery_date only
+  today..+60d and never on escalated turns. (B) payments/receiving —
+  `lib/inventory/invoice-dedupe.ts` shared guard (number/suffix matches block
+  409 DUPLICATE_INVOICE; same-amount-in-14d is FLAG-only after a 60-day replay:
+  4 true dups vs 204 standing-order collisions) wired into all 4 create paths;
+  PAID needs manager+ (403 FORBIDDEN_PAYMENT_ROLE); receipt-before-pay is
+  `INVOICE_PAY_REQUIRE_RECEIPT=warn` (default, flag NO_RECEIVING_AT_PAYMENT) |
+  `block`; amount+status in one call → 400; PAID rows locked (LOCKED_AFTER_
+  PAYMENT unless OWNER/ADMIN+reason); overpay → 400 unless allowOverpay;
+  AMOUNT_VS_ORDER_MISMATCH flag; pay-and-claim approve manager-only, once,
+  no self-approval, single tx; receivings POST derives outlet/supplier/
+  orderedQty from the PO, one $transaction + FOR UPDATE, transfer transition
+  check, ad-hoc receivings manager-only; `lib/stock.ts` helpers take a tx;
+  GRNI placeholder checks use isPlaceholderNumber; POP receipts upload to
+  folder "pop" (upload route whitelists folders) so auto-send can fire; staff
+  app orders+claims POST now run the price guard (`apps/staff/src/lib/
+  po-price-guard.ts` copy) — closes the 3 Sep milk slip path; claim batches
+  refuse DRAFT/unverified. (C) catalog/reports/engine — ai-decisions requires
+  price>0, ACTIVE non-ADHOC supplier, package; PENDING_APPROVAL counted open;
+  daysUntilStockout null for zero-usage (UI renders n/a); supplier page sends
+  productPackageId and the route refuses package-less rows for packaged
+  products; products/[id] package-index fix + pre-flight delete blockers;
+  price-history surfaces `priceHistoryWritten`; stock-valuation latest
+  SUBMITTED/REVIEWED count per outlet, null counts skipped; scorecard MYT
+  calendar-day on-time; purchase-summary inclusive MYT day + per-line prices;
+  wastage excludes engine rows; on-hand-value nets all loss types, excludes
+  DRAFT invoices; consumption-post atomic + rejects today; par-calc isDefault
+  pick + lead-time 0 honoured; stock-checks POST removed (no caller);
+  receiving-requester chases PENDING/APPROVED/IN_TRANSIT transfers >48h;
+  runbook corrected (PO-send IS wired). Validation: tsc backoffice+staff clean,
+  eslint clean, full vitest green. **Deploy-day risk assessed**: roles match
+  actual actors (POs by MANAGER, receiving by STAFF+MANAGER, payments by
+  OWNER/ADMIN); only forced behaviour change is the staff-app price guard.
+  Catalog data also repaired in prod (5 priced package-less rows attached/
+  deactivated, dup packages deleted, 11 missing defaults set, Fresh Milk
+  packages labelled). Payment-side data repairs (Blancoz/Grab dup register
+  entries, 75 deposit-only amountPaid, 3 cancelled-but-paid POs) NOT applied —
+  need owner sign-off per hard rule 6.
+- 2026-09-04 — **Procurement loop QA (flow + data + code) — audit page published.**
+  Data (120d): 224 POs PAID with no Receiving (RM147.5k) + 121 COMPLETED-by-hand
+  unreceived (RM83.8k); unreceived share Aug→Sep: PJ 87%→96%, SA 50%, Tam 61%→67%;
+  3 CANCELLED POs paid (RM2,125: Milk n Moka 424.80 paid 3 Sep on PO cancelled
+  20 Aug, NYC 1227 RM894, Country Bread RM806); 75 PAID invoices amountPaid<amount
+  (RM18k, deposit-only); 102 transfers PENDING >7d, 0 ever approved, 2 completed
+  in 120d (54 PJ→Tam); Blancoz dup invoice numbers via punctuation
+  (26-0644/260644 etc — one bank debit, register dups); PriceHistory 0 rows; 256
+  package-less SupplierProduct rows; 22 active RM0 ADHOC prices; 23 cf=1
+  Carton/Box packages; 478 ReceivingItems w/o package (120d). Price guard: 1 of
+  24 post-merge lines slipped — 3 Sep PJ milk 8×"Carton"@83.90 on the 163.58 pkg,
+  paid RM671.20 (inv 1-15974) — because **the staff app has its own PO-create
+  route with no guard** (apps/staff/src/app/api/orders/route.ts). Code
+  (verified): orders/[id] PATCH/DELETE + transfers/[id] unauthenticated
+  (middleware skips /api); Telegram webhook lets photos/PDFs from ANY chat mark
+  invoices PAID + forward POP; invoice PAID path needs no receiving and copies
+  client amount→amountPaid; no normalised duplicate-invoice check on 4 create
+  paths; pay-and-claim approve re-runnable (double stock-in), no role/self check;
+  ai-decisions picks ADHOC RM0 as cheapest supplier (products auto-link ADHOC
+  RM0); UI POP auto-send can never fire (needs "/pop/" in URL, uploads go to
+  invoices/); supplier-page price edit creates phantom package-less rows (the
+  256) and never writes PriceHistory; GRNI placeholder checks still test
+  startsWith("INV-") in 3 places; receivings non-transactional + trusts client
+  outlet/orderedQty; agent can empty a PO via N×remove_item; runbook wrong that
+  PO-send is "not wired" (it fires on PATCH/inbound/cron). Solid: WhatsApp HMAC +
+  wamid exactly-once, PO clientRequestId idempotency, atomic PAID, DRAFT pay
+  guard, reorder-suggestions.ts filters. Fix plan (6 steps) on the audit page.
+- 2026-09-03 — **Inventory → Reports rewired to live sales.** COGS Report and
+  Usage Variance read `SalesTransaction` (StoreHub feed, dead since
+  2026-04-11) so they showed zero sales for five months. Both now read the
+  POS-native + customer-app tables per LINE through
+  `lib/inventory/report-sales.ts` (Menu.storehubId → name fallback, the
+  consumption engine's mapping) and expand each line with `expandSoldLine`
+  (Iced/Hot doses, Oatmilk substitution, Extra Shot) plus PackagingRule
+  application by real channel (dine-in / takeaway / Grab, per-item and
+  per-order bags). Cost basis = catalog BOM page (cheapest active non-ADHOC
+  price ÷ cf). The 50% takeaway blend is gone. Response shapes unchanged;
+  COGS summary gained unmappedQty/unmappedRevenue/menusWithoutRecipe/
+  perOrderPackagingCogs. Stock Valuation, Purchase Summary, Wastage read live
+  tables and were fine. Supplier Scorecard is wired but data-starved:
+  `PriceHistory` has 0 rows (write path exists in the two price-edit routes;
+  catalog prices have only ever been changed by SQL) and on-time needs
+  Receiving rows. Deliberately NOT backfilled from PO line prices — dry run
+  gave 431 "changes" averaging a 376% swing, i.e. the package mis-keying, not
+  price moves.
+- 2026-09-02 — **August COGS closed: chain ran ON-RECIPE (~34% of gross incl.
+  discounts; expected RM109.8k vs actual ~RM110.3k).** Canonical expected =
+  the catalog BOM page engine (`/api/inventory/menus`: cheapest active
+  non-ADHOC catalog price ÷ cf, MenuIngredient + PackagingRule lines, Hot/Iced
+  × dine-in/takeaway matrix) weighted by measured mixes — 64/36 iced/hot (POS
+  modifiers), takeaway PJ 36% / SA 42% / Tam 50% (QR-table webapp orders are
+  DINE-IN: ~90% of "pickup"-channel orders carry a table number). Per-outlet
+  expected: PJ 34.9%, SA 34.0% (36.9% counting consignment it produces), Tam
+  33.4%. Per-outlet booked actuals are ±RM3–5k timing noise (order-date proxy;
+  July's last week held RM48.8k of orders delivered in Aug vs Aug's RM9.2k
+  tail; 55/63 PJ Aug POs have no Receiving; all 15 Aug transfers stuck
+  PENDING) — Tamarind's "24.2%" was this artifact; corrected 32.2%. Bean
+  mass-balance validates the BOM (185kg expected vs ~180kg traced flow).
+  Remaining real leaks: ~RM5k/mo paid above cheapest catalog price, SA ~RM3k
+  production-hub waste, PJ ~RM1k over-dosing, dessert slices structurally
+  50–64% COGS (Mudslide costs RM10.83/slice vs RM16.90 price). Known-bad data
+  fixed en route: 9 poisoned 31-Jul count lines excluded (Tam sambal "290
+  packs" = 1.45t, SA coleslaw/tomato/pandan, slice-vs-cake cf), Chicken Tomyam
+  Carbonara BOM says 80ml olive oil (sibling says 30 — kitchen to confirm);
+  uncosted ingredients: Dried Orange Peel, Biscoff, Dried Lemon Slice.
+  `menu_margins` VIEW rewritten to mirror the BOM page (migration 109, applied
+  to prod, PR #1207; v1 showed Roti Bakar −354% via product_costs cf bugs +
+  modifier stacking + no packaging; cashflow bomFoodCostPct drops ~0.49→~0.34).
+- 2026-09-02 — **Bank-feed recon (3 Maybank accounts, BankStatementLine is the
+  feed; fin_bank_transactions is EMPTY).** Invoices marked paid with no
+  debit: only INU-26-23275 (Unique Paper, RM639.28) — chase supplier. Bank
+  refs almost never carry paymentRef (15/1,580); amount+date+description-
+  digits is the evidence. Collective Project pays 10% deposit + 90% "Bal"
+  legs (invoice no. in description) — 39/44 reconcile to the ringgit;
+  **IV-01987's RM2,533.50 balance was debited TWICE from Conezion (16+20
+  May, no refund) — recover**; register amountPaid fixed for IV-01974/-75/-76,
+  IV-02002, IV01790 (deposit-only or wrong totals; bank-true values applied).
+  Ariff's RM128.30 cream re-claim is bank-confirmed paid twice (19+26 May,
+  same Grab ref). Earlier "duplicate invoiceNumber" pairs (1-15086, INV-2001,
+  KIV…) show ONE debit each — register double-entries, not double payments;
+  NYC Treats 1133 was double-paid but supplier refunded ("Celcius double pay
+  1133"). NYC Treats: only 6 of ~40 recent weekly invoices ever entered the
+  register (bank-only). Category fixes applied: Ariff + Adam Ariff Jul-26
+  salaries → EMPLOYEE_SALARY (were RAW_MATERIALS/OTHER_OUTFLOW, RM9.9k), 13
+  Poket Capital shared-service debits → MANAGEMENT_FEE (RM24.6k out of fake
+  raw-materials spend).
+- 2026-09-03 — **August 2026 payroll: why approved OT paid nothing, and the
+  fix.** Since the paid-window rule (2026-08-13) `deriveHours` pays only time
+  inside the rostered shift; the clocked overstay is an "OT tail" reported as
+  `otEligibleHours`, flagged `overtime_detected`, and written NOWHERE — the
+  log's `overtime_hours` stays 0. The only pay path is an approved
+  `hr_overtime_requests` row that `applyApprovedOt` stamps onto the log. The
+  auto-request generator (`overtime-requests/sync`) still selected logs by
+  `overtime_hours >= 1`, so it went quiet on 13 Aug (20–44 auto-requests/week
+  in July → 7 for the second half of August). Attendance "approve" set
+  `final_status` and paid 0 OT; `set_times` recomputed through the same window
+  and still paid 0. August: ~88 overstay hours company-wide with no request
+  (Shairuleen 33h, Firdaus 9.5h). **Owner ruling: the attendance review IS the
+  OT approval** ("only the OT Ariff approves in attendance will be counted").
+  Shipped in PR #1210 (`lib/hr/ot-request-generator.ts`, tested):
+  approve/acknowledge/excuse/adjust/set_times on a FT log writes an approved
+  request + stamps the log; OT-only flagged logs are back in the attendance
+  queue with `ot_tail_hours` on the card ("Approve + 2.5h OT"); the cron files
+  PENDING requests from tails (prev month too while ≤10th; `POST {month}`);
+  PH normal-hours premium (EA s.60D, PR #1209) is keyed on `hr_public_holidays`
+  so a holiday OT approval re-stamping `ot_3x` cannot erase it.
+  **Data applied directly (owner instruction, all reversible via the
+  `hr_overtime_requests` rows whose reason starts "Approved per manager" /
+  "Approved via attendance review"):** Shairuleen's full August list (13
+  dates, 19h payable + 0.5h on 8/8 that the 1h minimum will not pay; 16/8 kept
+  at Ariff's OT-queue 4h vs list 3h), Firdaus 16/8 2.5h, Shairuleen 12/8 +
+  18/8 1h each (from Ariff's time corrections). Earlier same day: Adam end
+  31 Jul, Amirul Yazid end 27 Aug, Deverasa/Darshika skipped (joined 1 Sep —
+  calculator now skips post-cycle joiners), Nazihah `lever|checklist`=120
+  override (4 lates → RM80), Ariff `fixed_performance_allowance` 500 → **250**
+  (owner), Zikry 1 Aug 1h stamped. The monthly run id churns on every
+  recompute — always look it up; item edits do not survive recompute.
+  **Later the same day — all merged to main:** #1210 (attendance approval =
+  OT approval; **OT minimum 0.5h** everywhere, owner "pay the 0.5h"; PH
+  premium visible — run page + PDF had gated OT lines on OT *hours*, so a
+  pure-PH line sat in gross with no row). #1211 = the **payroll statutory QA**
+  (audit of the monthly calculator vs EA/KWSP/PERKESO; arithmetic matched to
+  the cent, the defects were code-vs-statute): (1) employer EPF was 12% for
+  everyone — `hr_employee_profiles.epf_employer_rate` had DEFAULT 12 and the
+  calculator honoured any non-null value as an override; KWSP says 13% ≤
+  RM5,000. `resolveEpfEmployerOverride` ignores the legacy default; **migration
+  108 applied to prod 2026-09-03 11:20Z** (defaults dropped, all 81 rows
+  nulled — NULL = schedule; the employee form sends NULL for blank). **July was
+  filed at 12% → KWSP arrears owed.** (2) performance allowance now IN the
+  EPF/SOCSO/EIS basis (KWSP liable wages include allowances; BrioHR did).
+  (3) unpaid leave counted on the proration basis's own days
+  (`computeProrate.unpaidLeaveRanges`) — Syafiq Fri–Mon was 4 off 21 weekdays,
+  now 2 (+RM333.33). (4) PH premium = one ORP (basic/26) per holiday worked
+  regardless of hours (s.60D(3)(a)); rest-day normal hours pay ½/1 ORP
+  (s.60(3)(b)) in the 1× line — `lib/hr/day-type-pay.ts`. (5) attendance month
+  window is MYT midnight (was UTC → 08:00 MYT). Plus **one label set** for
+  OT/day-type lines across run page, staff payslip page and PDF
+  (`packages/shared/src/hr/pay-lines.ts`, hours per rate written to
+  `computation_details.ot_hours_*`). #1212 (open): by-outlet finance CSV
+  splits rotating staff pro rata by shifts per outlet (Syafiq 7/5/3 in Aug).
+  **Not fixed, owner decisions:** SOCSO 5-sen rounding vs published PERKESO
+  bands (needs seeded table); contract staff with a salary skipped (Hanis,
+  RM2,000 from 15 Aug — is she salaried?); part-timers get no EPF/SOCSO/EIS.
+  More data applied: Atthirah 6 + 10 Aug 0.5h each (Ariff, "cover stock
+  sampai"). **Decisions taken:** pay the 0.5h; 16/8 stays 4h.
+  **Recompute gotcha:** the owner's 11:20Z recompute landed ~3 min before the
+  #1211 deploy went READY, so it is on the OLD code (no `ph_days_worked` in
+  computation_details) — a recompute after ~11:23Z is the final one.
+  **Still owed:** Firdaus's OT list from Ariff (only 16/8 exists for him);
+  four FT 31-Aug logs unreviewed (Firdaus, Haziq, Sherry, Syafiq) → no PH
+  premium until approved; 24–31 Aug weekly PT run not generated; the compute
+  endpoint needs an OWNER/ADMIN browser session — this sandbox has no DB env,
+  so recompute is the owner's click, not ours.
+- 2026-09-01 — **Catalog-wide price↔package sweep: the milk defect generalised.**
+  Fresh Milk first: a phantom "Carton (12×2L)" package (cf 24,000) carried 67
+  PO lines priced at the 12×1L carton rate (RM81.78–88.70 vs catalog 2L-carton
+  RM163.58–174.96) — every affected litre doubled since mid-April. Owner
+  ruling: a 2L carton is 6 bottles; package corrected to "Carton (6× 2,000ml
+  Bottle)" cf 12,000, 69 lines reassigned by price band. August monthly-census
+  reconciliation then re-read: PJ milk 810L/486L = 1.67×, Tam 485/358 = 1.36×;
+  phantom never-delivered milk ≈38 cartons ≈ RM3,200 (was "RM5,900"). Sweep
+  found the same signature on ~15 more products; fixed by catalog-anchored
+  price bands (2026-09-01, prod SQL): Monin vanilla ×4, Oatside oat milk ×6,
+  Anchor butter ×40, croissant ×28, sippy lids ×20, dishwash ×12, Samyang ×24,
+  chili flakes, and Brioche BB001 (3 loaf-package lines at box price →
+  understated ×10). Flagged unfixed (need physical/owner info): RMC03 whipping
+  cream RM85 "12L carton" lines, Planta odd tubs, the cf-1 "Carton" packaging
+  family (PBS001/PBC001/PP0004/PP0006/S0001/PAP006 — real cartons booked as 1
+  base unit → understated), PPH001/PS0001/FDS0001, produce per-kg-vs-piece
+  noise. Count-unit QA (all products, reviewed counts since 15 Aug): clean —
+  no unit churn, no impossible stock; bread was the only count-side unit bug.
+  Guard shipped: `po-price-guard.ts` in the backoffice PO create route refuses
+  a line whose price fits a SIBLING package ([0.55,1.8] band, catalog-first
+  reference, 12-month median fallback, ≥3 lines; overridePriceGuard demotes to
+  warning; plain out-of-band prices warn only).
 - 2026-09-01 — **The cashflow salary projection was a frozen bank average, not a
   payroll.** `RecurringExpense` "Salary (central, incl. all outlets)" held
   **RM64,021.00** — exactly the May/Jun/Jul EMPLOYEE_SALARY bank mean
@@ -2500,6 +2831,29 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Lessons learned
 
+- 2026-09-07 — **A format check cannot catch a valid-but-wrong bank account.**
+  The wrong-person account was a perfectly well-formed 12-digit Maybank number;
+  every structural check passes it. The only thing that catches it is comparing
+  the account holder against the employee's legal name — and the comparison has
+  to be ONE-DIRECTIONAL: banks truncate ("Aimi Nadhira" for "Aimi Nadhira Binti
+  Dzollani" is the same person), so a shorter holder name is fine, while any
+  EXTRA identity token in the holder name means somebody else's account. Strip
+  common given names (Muhammad, Nur, Siti…) and particles first or half the
+  workforce matches everyone else. On the live 70 rows that rule flags exactly
+  2, both real — see `lib/hr/bank-account.ts`.
+
+
+- 2026-09-07 — **A daily nudge cannot catch a state that expires overnight.**
+  `ops-nudge-roster` already detected "current week not published" but ran once
+  at 09:30 MYT, so an unpublish at 17:18 was invisible until morning — by which
+  point the week had ended and no longer "covered today", so the nudge never
+  fired at all. When a detector's condition is bounded by the same clock as its
+  schedule, the schedule must be finer than the condition's lifetime (now
+  hourly, dedupe key scoped to the day). Second half of the same lesson: put the
+  warning on the screen the person is already looking at — the draft-week banner
+  on the schedules grid is what actually closes this loop; the nudge is backup.
+
+
 - 2026-07-14 — **Every upload control must accept drag & drop** (owner
   directive: "this should be the standard"). Backoffice audit found the
   standard mostly hand-rolled per page and four click-only gaps (invoice Edit
@@ -2548,6 +2902,205 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-07 — **PR #1216 MERGED (648b12cc, squashed).** Follow-up PR #1223 is
+  open: prep time per batch on ProductRecipe + the Prep Manhours report, plus
+  the transfer-in fix above. **It cannot merge until the owner approves the
+  migration** `ALTER TABLE "ProductRecipe" ADD COLUMN IF NOT EXISTS
+  "prepMinutes" DECIMAL(10,2)` — the prep-recipes page and the new report both
+  select that column and will error without it.
+  **Two repo quirks, each now seen twice — do not re-investigate:** (1) a push
+  can silently dispatch NO GitHub Actions run while other branches run fine in
+  the same minute; always confirm a run exists for the head sha, and merge
+  origin/main into the branch to re-trigger it. (2) Vercel previews are off
+  repo-wide ("Canceled by Ignored Build Step"), so no branch is ever
+  previewable before merge — judge unmerged UI from the diff and CI.
+  This branch also conflicts with main on docs/STATE.md on almost every sync
+  (parallel sessions append to the same two sections); the resolution is always
+  a union keep-both, never a pick. Still held for the owner: the payment-side data repairs, setting
+  TELEGRAM_ALLOWED_CHAT_IDS from the warn logs, and telling finance that
+  Telegram-captured invoices now land as DRAFT.
+- 2026-09-07 — **Two PRs green and awaiting the owner's explicit merge word.**
+  #1226 `claude/disable-shift-swap` — `SHIFT_SWAP_ENABLED = false` in
+  `apps/staff/src/lib/hr/constants.ts` gates the whole staff swap surface
+  (fetch, pending-consent banner, Swap button, picker sheet); owner said
+  "exclude it, don't allow for now". The API routes still work, so the one
+  in-flight request (Adib → Farhan Ikhmal, 8 Sep ↔ 7 Sep, `pending_consent`)
+  is still resolvable in backoffice HR → Shift Swaps. #1227
+  `claude/roster-draft-guardrail` — the three-layer guard from the incident
+  above (grid banner, unpublish prompt warning, hourly nudge + day-scoped
+  dedupe). Both 16/16. **Do not merge either without the owner saying so.**
+  Still open for the owner from round-2 QA: contract/intern pay cycle;
+  auto-close on shifts rostered past 7.5 h; state-specific public holidays;
+  whether to build a staff OT pre-booking page; missing EPF/SOCSO numbers.
+  Two sick-leave requests unreviewed: Ariff (7 Aug), Batrisyia (27 Aug).
+  Already on `main`, ignore the older pointers below that still call them open:
+  #1219 (native), #1220 (round-3 HR QA), #1221 (swap request UI), #1222
+  (capabilities), #1225 (custom shift hours).
+
+- 2026-09-05 (local-rank) — **System fully closed-loop; watching Mon Sep 7.**
+  GBP category adds APPLIED by owner via /api/reviews/gbp-categories (08-31);
+  weekly Telegram digest live (PR #1201, cffde3b) — sent by cron/geogrid-scan
+  after each Monday run: rank movements vs previous scan, review velocity vs
+  targets (Nilai 12, SA 30, default 25 /30d), ads guardrail (conv −30%/14d on
+  ≥20 base ⇒ flag; the optimizer only cuts). **Sep 7 1pm MYT = first
+  post-category scan + first digest** — the direct test of whether
+  `restaurants near me` (unranked everywhere for 8 weeks) starts ranking.
+  Reviews 09-05: Tamarind 26/30d + Putrajaya 29/30d on target; Shah Alam
+  4/30d (0 this week) and Nilai 2/30d (gap to top competitor: 2) — ask ritual
+  NOT started there. Ads steady ~RM146/day (−58% vs June). Open October
+  decision: redeploy of the freed ~RM5k/mo (Nilai push / SMS loop).
+
+- 2026-09-05 (capabilities) — **Elevated permissions, so a head of operations
+  isn't forced through an ADMIN promotion** (branch `claude/hr-capabilities`).
+  Ariff (head of ops, MANAGER, all 5 outlets) hit the new unpublish guard.
+  Promoting him to ADMIN would have handed over finance, payroll, bank files
+  and every employee's bank details, since ADMIN bypasses `hasModuleAccess`
+  across ~120 routes — owner chose the targeted grant instead.
+  `lib/capabilities.ts`: named grants on the **previously unused**
+  `User.permissions` column (no migration), 60 s cache like `liveAccountState`,
+  fails closed. Three capabilities: `roster:unpublish`, `roster:retro_edit`,
+  `leave:cancel_approved`. OWNER/ADMIN hold all implicitly. `retroEditRefusal`
+  now takes a resolved boolean, not a role (both callers — cell AND assign —
+  updated; tsc caught the second). Grantable from the employee page's Access
+  card (manager-only section), validated + audit-logged in the access PATCH,
+  cache invalidated on write. Drift test pins UI keys ↔ registry and asserts
+  no capability is in a money/access-control domain.
+  **Applied to prod:** Ariff `2b906d16-7842-439c-b64e-ec596b1912e5` granted all
+  three (inert until the PR merges — nothing read that column before).
+
+- 2026-09-05 — **PR #1216 is the whole procurement/reports batch — review and
+  merge it.** It now carries: the hardening (25 QA findings), the live-sales
+  wiring that fixes "Expected RM0.00" on the reports, the split-payment AP
+  matcher, and the shared filter/sort/CSV table across all six procurement
+  reports. **CI has NOT run on the last three commits** (2967b972, 85696f9e,
+  bb8be838) — GitHub Actions never dispatched them, while every earlier push
+  on this branch ran green; validated locally instead (1122 tests, tsc clean
+  in backoffice+staff, eslint clean, `next build` OK). Branch previews show
+  "Canceled by Ignored Build Step" — a Vercel project setting skips preview
+  builds, so the owner cannot see any of this until merge; judge unmerged UI
+  from the diff. After merge:
+  set `TELEGRAM_ALLOWED_CHAT_IDS` from the warn logs, then consider
+  `INVOICE_PAY_REQUIRE_RECEIPT=block` once unreceived-PO share drops; tell
+  finance Telegram-captured invoices now land as DRAFT; add an override
+  control to the staff PO form (guard currently blocks without one). Still
+  open: payment-side data repairs (owner sign-off), deactivating the 22 active
+  RM0 ADHOC rows (safe now that ai-decisions excludes them; staff picker relies
+  on the ADHOC row being ACTIVE — so leave active). Item (e) split-payment
+  support in ap-match.ts is DONE (2026-09-05).
+
+- 2026-09-04 — **Procurement QA delivered; owner to pick fixes.** Highest-value
+  first: (1) auth+role on all inventory/transfer writes + Telegram allowlist;
+  (2) PAID requires receiving/override + shared duplicate-invoice assert + price
+  guard in staff routes/PATCH/pay-and-claim; (3) ADHOC exclusion in ai-decisions +
+  supplier-page package id + catalog cleanup; (4) POP URL on invoice, GRNI
+  checks, transactional receiving, transfer receive+chaser. PR #1216 (reports
+  wiring) still open/green.
+- 2026-09-05 (round 3) — **HR QA web backlog, no owner decision needed**
+  (branch `claude/hr-qa-round3`). Unpublish now OWNER/ADMIN + reason,
+  refused once the week has ended, activity-logged (`roster.unpublish`) —
+  it was the bypass around the published-roster retro-edit guard. Leave
+  gained a third outcome: backoffice `cancel` (pending → any reviewer in
+  scope, releases the hold; approved → OWNER/ADMIN with reason, restores
+  `used_days`, logged) and a staff self-withdraw for pending requests.
+  Staff web clock page: a log still open from a previous MYT day shows an
+  "End yesterday's shift at HH:MM" banner → `close_stale` action closes it
+  exactly as the cron would (rostered end / outlet close, `system` method,
+  OT 0, `auto_closed_forgot_clockout`), no GPS needed; a live shift can't
+  use it. `FetchError` card on every staff HR page (401 → "session expired
+  → sign in"; other → retry) instead of the empty state. My Attendance
+  shows OT tails ≥0.5 h (was ≥1). Backoffice `agents/leave-manager.ts`
+  (unused duplicate) deleted. Follow-up branch `claude/hr-swap-request-ui`
+  (stacked on round 3): staff can now RAISE a swap — "Swap" on a future
+  My Shifts card → `/api/hr/swap/candidates` (same outlet, published,
+  future, not rest, not already in a swap) → `action=request`, which now
+  validates the same rules and refuses duplicates; sent swaps show the
+  coworker's name and can be withdrawn. No push to the target yet (staff
+  app has no ops-push sender). Still open: native PR #1219 (owner to say
+  "merge 1219"; OTA to manager phones), shared recomputeTotals, and the
+  owner decisions listed under round 2.
+
+- 2026-09-03 (round 2) — **HR module code + flow QA, five parallel reviews.**
+  Report: `docs/design/hr-qa-round2-2026-09-03.md` (11 security, 16 money,
+  17 flow, 9 staff-app findings; ~35 fixed on `claude/hr-qa-round2`).
+  Highest-impact fixes: ADMIN could create an OWNER (new-hire + LOE import);
+  JWT role/status never re-read (now DB-checked, 60 s cache); staff profile
+  `select("*")` leaked HR notes; OT request trusted `attendance_log_id` and
+  client rate; raises effective next month were paid this month (mirror now
+  capped at cycle end); SOCSO/EIS wage double-counted PH/rest-day pay;
+  unpaid leave ignored `total_days`; threshold OT floored to whole hours;
+  shift-swap approval was dead (selected a non-existent column); leave
+  approve/reject race; KWSP/PERKESO files printed prorated basic as wage;
+  weekly runs missing from annual forms; PT payslip PDF "undefined null".
+  **Owner decisions:** contract/intern pay cycle; auto-close on >7.5 h
+  rostered shifts; state-specific PH; staff OT pre-booking page; EPF/SOCSO
+  numbers. **Backlog (native OTA):** route `kind:"clock"` push to the clock
+  screen, rest-day rows on My Shifts, OT ≥0.5 h display, payslip labels,
+  stale GPS on clock-out. **Backlog (web):** unpublish bypass of the
+  retro-edit guard, leave cancel/half-day, swap request UI, useFetch error
+  states, leave-manager duplicate, shared recomputeTotals for line edits.
+
+- 2026-09-02 — **August COGS + bank recon session closed.** PR #1207
+  (menu_margins v2, migration 109 already applied to prod) is green +
+  watched — merge when ready. Owner-side follow-ups queued: recover
+  RM2,533.50 from Collective Project (IV-01987 double balance), chase
+  Unique Paper INU-26-23275 (RM639.28 marked paid, no debit), the Ariff
+  conversation now bank-evidenced (2× RM128.30), CATELUX same-day RM181×2,
+  kitchen to confirm Chicken Tomyam Carbonara 80ml-olive-oil BOM line.
+  System follow-ups: (e) split-payment support in `ap-match.ts` — BUILT
+  2026-09-05, see the verified fact above;
+  receive-on-arrival + transfer-receipt discipline (15/15 Aug transfers
+  PENDING, 55/63 PJ POs unreceived — this is what makes per-outlet COGS
+  precise); catalog hygiene (3 uncosted ingredients, ~100 unit/pkt/slices
+  uom strings, cf=1 carton family). September = first clean measured month;
+  the consumption engine's variance report automates this comparison once
+  armed (day-7 shadow verdict still pending).
+- 2026-09-03 (later) — **August run confirmed; HR flow QA + review-queue
+  redesign shipped.** Owner recomputed August three times after #1211/#1212;
+  the confirmed run (11:56Z, gross 54,446.81) has Syafiq at basic 3,096.15
+  (Mon–Sat basis, 23/26), scored allowance RM110 (levers 40/40/40/40 − 3 lates
+  − 30 Aug no-show), gross 3,206.15 — his profile now: `proration_basis =
+  working_6day`, `fixed_performance_allowance = NULL` (was 178.20, owner: July
+  only). Only his line changed between runs. By-outlet CSV splits him
+  5/7/3 shifts with an EPF (employee) column (#1212 merged, deployed).
+  **QA report:** `docs/design/hr-flow-qa-2026-09-03.md` (14 findings). Built
+  on `claude/hr-review-queue`: one attendance+OT review queue with
+  period/outlet/staff/flag filters, exact pending count, bulk approve/excuse/
+  reject (`PATCH {ids[]}`), implausible-tail guard (`MAX_PLAUSIBLE_TAIL_HOURS
+  = 8`), Overtime page → ledger (½-hour steps, no sync), leave "Needs review"
+  default + dashboard count, profile allowance input moved to the live
+  `fixed_performance_allowance` column. **Owner actions:** (1) review August
+  on the new queue — 159 logs / ≈80h OT tail never reviewed, pay as September
+  adjustment; (2) decide 2 pending sick leaves (Ariff 7 Aug, Batrisyia 27
+  Aug); (3) fill missing EPF/SOCSO numbers, confirm 9 probation FTs.
+  **Backlog from QA:** clock-out nudge (14% auto-closed), rest-day duplicate
+  rows on multi-outlet publish, nav single-source, shared-lib dedupe, route
+  tests. → Follow-up branch `claude/hr-qa-fixes`: auto-close cron now sends
+  ONE push (`kind: "clock"`, flag `clockout_reminder_sent`, processor keeps
+  it) 15 min after the rostered end; `hr-nav-drift.test.ts` pins nav.tsx to
+  module-tabs; dead attendance `adjust` action removed. Rest-day dedupe
+  dropped on purpose: shared staff carry a rest-day row per outlet roster and
+  every consumer skips rest_day rows. Still open: route `kind: "clock"` to the
+  clock screen in staff-native (unknown kinds just open the app), shared-lib
+  dedupe, route tests.
+
+- 2026-09-03 — **August payroll close (URGENT — salary pending).** Merged
+  #1209, #1210, #1211 (see Verified facts); #1212 (by-outlet split by shifts)
+  open, green, merge blocked only by GitHub API rate limiting at 11:30Z.
+  Migration 108 applied. **Next, in order:** (1) owner recomputes August on
+  the new code (the 11:20Z run is pre-#1211) and we verify line by line:
+  Shairuleen PH RM84.62 + 19.5h OT, employer EPF 286 on RM2,200, Syafiq basic
+  3,166.67, Atthirah 1.0h OT, `computation_details.ph_days_worked` present;
+  (2) Ariff approves the four flagged 31-Aug logs (Firdaus, Haziq, Sherry,
+  Syafiq) in Attendance Review → recompute again; (3) Firdaus's OT list; (4)
+  24–31 Aug weekly PT run; (5) owner decisions: SOCSO band table, Hanis
+  (contract), PT statutory; (6) **task #3 — redesign the OT + attendance
+  approval flow and HR module UX** (owner: "currently when review, the ux is
+  so bad and cannot filter etc. also there is a lot of overlapping"; "better
+  ux for hr module as a whole") — propose IA first (one review queue with
+  filters, bulk approve, no double queue), then build. People cost artifact
+  (claude.ai/code/artifact/3257f699…) still shows 27 Jul–23 Aug PT
+  (RM16,146); full-August PT from attendance is RM19,772.
 
 - 2026-08-31 — **First STATE.md roll-over done (owner-approved):** July 2026
   moved to `docs/state-archive/2026-07.md` (20 finished Verified-facts
@@ -2616,11 +3169,21 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   CUSTOMER_REFUND only); `ApprovalRule` table exists but NOTHING enforces
   it — don't cite it as operative; roles are OWNER/ADMIN/MANAGER/STAFF
   (no shift-lead enum; HOO is informal via position ILIKE 'head of').
-  **Next session:** owner reviews/merges the phase-0.5 PR (bump the 3 docs
-  to 1.0 + effective_date on approval, like GOV-001); then next docs
-  (CC-GOV-002 authority matrix, CC-FIN-002) or start phase 1 (schema +
-  sop-sync CI). Open questions unchanged: Gosame domain map, shared
-  functions (GRP- docs), BM/EN policy.
+  **2026-08-31/09-01 — all phase-0.5 docs MERGED + published:** #1198
+  (squash `45e2458`) published FIN-001/HR-001/OPS-001 v1.0 effective
+  2026-08-31; #1205 published CC-GOV-002 Roles & Authority Matrix v1.0
+  effective 2026-09-01 — owner confirmed the proposed RM limits AS-IS
+  (PO: OM self ≤RM500, HOO/AM ≤RM2,000, MD above + new suppliers;
+  claims: OM ≤RM200; refunds/petty cash/recurring: MD; salary/payroll:
+  two-person rule). Manual now has 5 published docs. PDFs were generated
+  via weasyprint (scratchpad script) and sent to owner.
+  **Next session:** CC-FIN-002 Daily Sales & Settlement Reconciliation
+  (last PLANNED FIN doc), or start phase 1 (schema + sop-sync CI +
+  staff-app reader/ack per docs/design/sop-module.md); owner owes team
+  briefings + sign-sheets for the published set (GOV-001 §5.5, 7 days).
+  When phase-2 enforcement is built, the settings approval-rules table
+  must be configured to match GOV-002 §5.1. Open questions unchanged:
+  Gosame domain map, shared functions (GRP- docs), BM/EN policy.
 
 - 2026-08-28 — **Choc Blanc Merdeka: artwork done, decisions settled, ONE
   blocker left.** All three `splash_posters` rows still have `image_url = ''`;
@@ -2716,6 +3279,22 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   factor) armed 2026-08-25 09:00 UTC — restore landed Aug 15 14:46, so it
   gets ~10 post-restore days.
 
+- 2026-09-05 — **RM70 fleet test status + "redo shah alam".** Putrajaya
+  fired Aug 31 (49.86→70, clean guard) and Tamarind fired Sep 1 (46.32→70 —
+  its guard read clean after the Aug 31 rollback partially restored the
+  budget); both delivering at RM70 (Google flexing to RM74-100 on single
+  days) with clean guards through Sep 4. SHAH ALAM's Aug 31 raise was
+  REVERTED after ONE day (Sep 1 19:04, raw 0.96/adj 0.95 — its pre-existing
+  borderline window, breached-or-borderline since ~Aug 22, knifed the raise
+  before the test ran). Owner: "redo shah alam" → directive gains a redo
+  leg: passes ONLY the original pre-Sep-5 revert (a post-redo revert is
+  final) and fires only on the THIRD consecutive clean guard night
+  (priorCleanNights from the last 2 agent_actions runs + tonight). SA
+  streak at ship time: 0 (Sep 4 raw 0.94) — earliest fire ~Sep 8 if SA
+  cleans up. Watch: SA's ongoing mild softness (mom 0.97, anchor 1.08 —
+  not Tamarind-class) is its own open question. First raised weekend
+  (Sep 5-6) = first data for the owner's weekend-ads hypothesis; interim
+  read ~Sep 14 with weekday/weekend split; machine verdicts ~Sep 28-29.
 - 2026-08-31 — **Owner: "lets try to increase back the gads spending and
   see" → "let us do all rm70/day", Tamarind included.** ownerDirective
   rewritten (supersedes the Aug-25 two-leg probe-up; Putrajaya's leg had

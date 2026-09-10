@@ -24,11 +24,13 @@ export async function GET() {
       .eq("ai_status", "flagged")
       .match(outletFilter),
 
-    // Escalated leave requests
+    // Leave requests waiting on a human: escalated by the AI, or never
+    // processed at all. Two sick-leave requests sat at "pending" for a month
+    // (Aug 2026) because only ai_escalated was counted here.
     hrSupabaseAdmin
       .from("hr_leave_requests")
       .select("id", { count: "exact", head: true })
-      .eq("status", "ai_escalated"),
+      .in("status", ["ai_escalated", "pending"]),
 
     // Current week schedule status
     (() => {

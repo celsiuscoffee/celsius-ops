@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import type { Prisma } from "@celsius/db";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 
@@ -11,6 +12,23 @@ export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
   if (auth.error) return auth.error;
   const outletId = new URL(req.url).searchParams.get("outletId");
+
+  // Latest FINISHED count per outlet. DRAFT counts are in-progress (half the
+  // items still null) and must not pose as "last counted"; and a global take:20
+  // could miss an outlet entirely when one outlet counts daily.
+  const countWhere: Prisma.StockCountWhereInput = {
+    status: { in: ["SUBMITTED", "REVIEWED"] },
+    ...(outletId ? { outletId } : {}),
+  };
+  const latestPerOutlet = await prisma.stockCount.groupBy({
+    by: ["outletId"],
+    where: countWhere,
+    _max: { countDate: true },
+  });
+  // (outletId, latest countDate) pairs; an empty OR list matches nothing.
+  const latestPairs = latestPerOutlet.flatMap((g) =>
+    g._max?.countDate ? [{ outletId: g.outletId, countDate: g._max.countDate }] : [],
+  );
 
   const [balances, supplierProducts, lastCounts, outlets] = await Promise.all([
     // Stock balances (system expected qty)
@@ -44,11 +62,10 @@ export async function GET(req: NextRequest) {
       },
     }),
 
-    // Latest stock count items per outlet — get most recent count per outlet
+    // The one latest finished count per outlet (ties on countDate → newest created)
     prisma.stockCount.findMany({
-      where: outletId ? { outletId } : undefined,
-      orderBy: { countDate: "desc" },
-      take: outletId ? 1 : 20,
+      where: { ...countWhere, OR: latestPairs },
+      orderBy: [{ countDate: "desc" }, { createdAt: "desc" }],
       select: {
         outletId: true,
         countDate: true,
@@ -96,8 +113,11 @@ export async function GET(req: NextRequest) {
     if (seenOutlets.has(count.outletId)) continue; // only take most recent per outlet
     seenOutlets.add(count.outletId);
     for (const item of count.items) {
+      // null = the line was never counted; skipping it keeps lastCountedQty null
+      // for that product instead of inventing a 0 count (and a 100% variance).
+      if (item.countedQty === null) continue;
       const key = `${count.outletId}:${item.productId}`;
-      countedMap.set(key, item.countedQty ? Number(item.countedQty) : 0);
+      countedMap.set(key, Number(item.countedQty));
     }
   }
 

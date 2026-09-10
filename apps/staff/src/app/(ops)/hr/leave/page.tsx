@@ -3,15 +3,42 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
 import Link from "next/link";
-import { CalendarOff, CheckCircle2, XCircle, Clock, Loader2, Bot, Plus, ArrowLeft } from "lucide-react";
+import { CalendarOff, CheckCircle2, XCircle, Clock, Loader2, Bot, Plus, ArrowLeft, Ban } from "lucide-react";
 import type { LeaveBalance, LeaveRequest } from "@/lib/hr/types";
 import { LEAVE_TYPES, leaveDays } from "@/lib/hr/constants";
+import { FetchError } from "@/components/fetch-error";
 
 export default function LeavePage() {
-  const { data, mutate } = useFetch<{ balances: LeaveBalance[]; requests: LeaveRequest[] }>("/api/hr/leave");
+  const { data, error, mutate } = useFetch<{ balances: LeaveBalance[]; requests: LeaveRequest[] }>("/api/hr/leave");
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState<string | null>(null);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Withdraw a request that hasn't been decided yet (releases the held days).
+  const cancelRequest = async (req: LeaveRequest) => {
+    if (!window.confirm(`Withdraw your ${req.start_date} → ${req.end_date} leave request?`)) return;
+    setCancelling(req.id);
+    setResult(null);
+    try {
+      const res = await fetch("/api/hr/leave", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: req.id, action: "cancel" }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        setResult({ success: false, message: j?.error ?? `Couldn't withdraw (${res.status}).` });
+        return;
+      }
+      setResult({ success: true, message: "Request withdrawn." });
+      mutate();
+    } catch {
+      setResult({ success: false, message: "Network error — the request was not withdrawn." });
+    } finally {
+      setCancelling(null);
+    }
+  };
 
   const [form, setForm] = useState({
     leave_type: "annual",
@@ -136,6 +163,7 @@ export default function LeavePage() {
   const statusIcon = (status: string) => {
     if (status === "ai_approved" || status === "approved") return <CheckCircle2 className="h-4 w-4 text-green-500" />;
     if (status === "rejected") return <XCircle className="h-4 w-4 text-red-500" />;
+    if (status === "cancelled") return <Ban className="h-4 w-4 text-gray-400" />;
     if (status === "ai_escalated") return <Bot className="h-4 w-4 text-amber-500" />;
     return <Clock className="h-4 w-4 text-gray-400" />;
   };
@@ -286,7 +314,9 @@ export default function LeavePage() {
       {/* Request History */}
       <div>
         <h2 className="mb-3 text-sm font-semibold text-gray-500">History</h2>
-        {requests.length === 0 ? (
+        {!data && error ? (
+          <FetchError error={error} onRetry={() => mutate()} what="your leave" />
+        ) : requests.length === 0 ? (
           <div className="rounded-2xl border border-gray-100 bg-gray-50 py-10 text-center">
             <CalendarOff className="mx-auto mb-2 h-8 w-8 text-gray-300" />
             <p className="text-sm text-gray-400">No leave requests yet</p>
@@ -310,8 +340,19 @@ export default function LeavePage() {
                   req.status === "ai_escalated" ? "bg-amber-50 text-amber-600" :
                   "bg-gray-50 text-gray-500"
                 }`}>
-                  {req.status.replace("ai_", "").replace("_", " ")}
+                  {req.status === "ai_escalated" ? "pending" : req.status.replace("ai_", "").replace("_", " ")}
                 </span>
+                {(req.status === "pending" || req.status === "ai_escalated") && (
+                  <button
+                    onClick={() => cancelRequest(req)}
+                    disabled={cancelling === req.id}
+                    aria-label="Withdraw request"
+                    title="Withdraw this request"
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 disabled:opacity-50"
+                  >
+                    {cancelling === req.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
+                  </button>
+                )}
               </div>
             ))}
           </div>

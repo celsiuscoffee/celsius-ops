@@ -23,8 +23,9 @@ export type EmployeeProfile = {
   socso_number: string | null;
   eis_number: string | null;
   tax_number: string | null;
-  epf_employee_rate: number;
-  epf_employer_rate: number;
+  /** Per-employee EPF % overrides. null = statutory schedule. */
+  epf_employee_rate: number | null;
+  epf_employer_rate: number | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   notes: string | null;

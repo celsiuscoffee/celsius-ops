@@ -189,7 +189,9 @@ function RootLayout() {
         | undefined;
       const kind = data?.kind;
       if (!kind) return;
-      if (kind === "geofence_enter" || kind === "geofence_exit") {
+      // "clock" is the backoffice's clock-out nudge ("Still clocked in? Tap
+      // to clock out") — it must land on the clock screen, not the app root.
+      if (kind === "geofence_enter" || kind === "geofence_exit" || kind === "clock") {
         router.push("/(staff)/clock");
         return;
       }
@@ -216,6 +218,7 @@ function RootLayout() {
         case "escalation":
         case "nudge":
         case "ops":
+        case "roster_conflict": // a part-timer's availability now clashes with a rostered shift (to managers)
           router.push("/(staff)/home");
           return;
       }

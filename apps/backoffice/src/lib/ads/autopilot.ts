@@ -338,6 +338,11 @@ export type CampaignState = {
   // Till index over the pause window so far (forecast built from PRE-pause
   // history) — only set while a probe is running; drives the restore verdict.
   pauseProbe?: { index: number | null; adjIndex: number | null };
+  // Consecutive CLEAN guard nights before tonight (0-2, read from the last
+  // two logged runs). The Shah Alam redo fires only on the third consecutive
+  // clean night — the Sep 1 lesson: a raise fired off a single clean night
+  // was reverted by the next night's wobble before the test could run.
+  priorCleanNights?: number;
 };
 
 export type AutopilotDecision = {
@@ -576,6 +581,13 @@ const isOwnerDirective = (d: AutopilotDecision) =>
  * median moves too) and genuine common lift can read as ~1.0 adj. The
  * anchor/mom indexes and the monthly cash scoreboard are the backstop; the
  * Sep verdicts should be read with that in mind.
+ *
+ * 2026-09-05 "redo shah alam": SA's Aug 31 raise was reverted after ONE day
+ * by a borderline-window wobble that predated the raise — the test never
+ * ran. The redo (a) passes only the ORIGINAL pre-Sep-5 revert, never a later
+ * one, and (b) fires only on the third consecutive clean guard night
+ * (priorCleanNights ≥ 2 + tonight clean), so a single good night can no
+ * longer bait a raise into the next wobble.
  */
 export const OWNER_TARGET_DAILY_MYR = 70;
 export function ownerDirective(
@@ -590,16 +602,34 @@ export function ownerDirective(
     c.campaignName === "Celsius Coffee Tamarind Square";
   if (!targeted || c.isPaused) return null;
   if (round2(c.dailyBudgetMyr) >= OWNER_TARGET_DAILY_MYR) return null;
-  if (lastKind(c.lastApplied) === "revert") return null;
+  const isShahAlamRedo = c.campaignName === "Celsius Coffee Shah Alam";
+  if (lastKind(c.lastApplied) === "revert") {
+    // 2026-09-05 "redo shah alam": the Sep 1 revert fired one day after the
+    // raise, triggered by SA's pre-existing borderline window — the test
+    // never ran. The redo may pass exactly THAT historical revert; any
+    // change decided after the redo shipped (including the redo's own
+    // revert) is the evaluation's verdict and stays final.
+    const originalRevert =
+      isShahAlamRedo &&
+      c.lastApplied != null &&
+      c.lastApplied.decidedAt.getTime() < Date.parse("2026-09-05T00:00:00Z");
+    if (!originalRevert) return null;
+  }
   if (guard.rawIndex == null || guard.breach) return null;
+  // Redo lesson: one clean night was knife-bait. Shah Alam fires only on the
+  // THIRD consecutive clean night (tonight + the two logged before it).
+  if (isShahAlamRedo && (c.priorCleanNights ?? 0) < 2) return null;
   const extraMonthly = monthly(OWNER_TARGET_DAILY_MYR - c.dailyBudgetMyr);
   const breakEven = round2(extraMonthly / GROSS_MARGIN);
+  const tag = isShahAlamRedo
+    ? "owner directive 2026-09-05 (Shah Alam redo, fired on the 3rd clean night)"
+    : "owner directive 2026-08-31 (RM70/day fleet test)";
   return {
     campaignId: c.campaignId,
     campaignName: c.campaignName,
     action: "raise",
     newDailyMyr: OWNER_TARGET_DAILY_MYR,
-    reason: `autopilot raise: owner directive 2026-08-31 (RM70/day fleet test) — RM${round2(c.dailyBudgetMyr)}→RM${OWNER_TARGET_DAILY_MYR}/day (+RM${extraMonthly}/mo spend; needs ≥RM${breakEven}/mo till lift to pay at ${Math.round(GROSS_MARGIN * 100)}% margin; reverts after ${PROBE_OBSERVE_DAYS}d without evidence)`,
+    reason: `autopilot raise: ${tag} — RM${round2(c.dailyBudgetMyr)}→RM${OWNER_TARGET_DAILY_MYR}/day (+RM${extraMonthly}/mo spend; needs ≥RM${breakEven}/mo till lift to pay at ${Math.round(GROSS_MARGIN * 100)}% margin; reverts after ${PROBE_OBSERVE_DAYS}d without evidence)`,
   };
 }
 
@@ -1223,6 +1253,33 @@ export async function runAdsAutopilot(now = new Date()): Promise<AutopilotRunRes
     }
     const sig = guardFromIndexes(index, others);
     s.pauseProbe = { index: sig.rawIndex, adjIndex: sig.adjIndex };
+  }
+
+  // Prior nights' guard cleanliness from the run log (newest first, stop at
+  // the first non-clean night) — feeds the Shah Alam redo's 3-clean-nights
+  // gate. Failure to read the log just means 0 prior clean nights: the gate
+  // fails safe by waiting another night.
+  type PriorRun = { meta: { guards?: Record<string, { rawIndex?: number | null; breach?: boolean }> } | null };
+  let priorRuns: PriorRun[] = [];
+  try {
+    const r = await hrSupabaseAdmin
+      .from("agent_actions")
+      .select("meta")
+      .eq("agent_key", AGENT_KEY)
+      .order("at", { ascending: false })
+      .limit(2);
+    priorRuns = (r.data ?? []) as PriorRun[];
+  } catch {
+    // fail safe: 0 prior clean nights just waits another night
+  }
+  for (const s of states) {
+    let n = 0;
+    for (const row of priorRuns) {
+      const g = s.outletId ? row.meta?.guards?.[s.outletId] : undefined;
+      if (g && g.rawIndex != null && !g.breach) n++;
+      else break;
+    }
+    s.priorCleanNights = n;
   }
 
   const baseDecisions = states.map((s) => {

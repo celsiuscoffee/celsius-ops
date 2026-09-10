@@ -111,8 +111,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 /**
  * POST /api/suppliers/[id]/products
- * Add a product to a supplier's price list.
+ * Add a product to a supplier's price list, or update the price of an existing row.
  * Body: { productId, productPackageId?, price }
+ *
+ * SupplierProduct.price is per PACKAGE, so a row for a product that HAS
+ * packages must name one. A body without `productPackageId` used to miss the
+ * packaged row and CREATE a package-less duplicate (256 phantom rows in prod,
+ * all from the price-list edit dialog). Now: if the product has packages and no
+ * package was given, we update the single existing packaged row when there is
+ * exactly one, and otherwise refuse (400) rather than create a row with no unit
+ * basis. Package-less rows are only created for products with no packages.
  */
 export async function POST(
   req: NextRequest,
@@ -122,61 +130,83 @@ export async function POST(
   if (auth.error) return auth.error;
   const { id: supplierId } = await params;
   const body = await req.json();
-  const { productId, productPackageId, price } = body;
+  const { productId, price } = body as { productId?: string; productPackageId?: string | null; price?: number };
+  let productPackageId: string | null = body.productPackageId || null;
 
-  if (!productId || price === undefined) {
+  if (!productId || price === undefined || price === null) {
     return NextResponse.json({ error: "productId and price are required" }, { status: 400 });
+  }
+  const newPrice = Number(price);
+  if (!Number.isFinite(newPrice) || newPrice < 0) {
+    return NextResponse.json({ error: "price must be a non-negative number" }, { status: 400 });
+  }
+
+  const [productPackages, existingRows] = await Promise.all([
+    prisma.productPackage.findMany({ where: { productId }, select: { id: true } }),
+    prisma.supplierProduct.findMany({
+      where: { supplierId, productId },
+      select: { id: true, productPackageId: true, price: true },
+    }),
+  ]);
+
+  if (productPackageId && !productPackages.some((p) => p.id === productPackageId)) {
+    return NextResponse.json({ error: "productPackageId does not belong to this product" }, { status: 400 });
+  }
+
+  if (!productPackageId && productPackages.length > 0) {
+    const packagedRows = existingRows.filter((r) => r.productPackageId !== null);
+    if (packagedRows.length === 1) {
+      // Legacy caller (no package in the body): treat as a price edit of the
+      // one packaged row this supplier has for the product.
+      productPackageId = packagedRows[0].productPackageId;
+    } else {
+      return NextResponse.json(
+        {
+          error:
+            packagedRows.length === 0
+              ? `productPackageId is required: this product has ${productPackages.length} package(s) and the price is per package`
+              : `productPackageId is required: this supplier lists ${packagedRows.length} packages for this product`,
+        },
+        { status: 400 },
+      );
+    }
   }
 
   // Find existing or create — can't use upsert with nullable composite key
-  const existing = await prisma.supplierProduct.findFirst({
-    where: {
-      supplierId,
-      productId,
-      productPackageId: productPackageId || null,
-    },
-  });
+  const existing = existingRows.find((r) => r.productPackageId === productPackageId) ?? null;
 
+  let priceHistoryWritten = true;
   if (existing) {
-    await recordPriceChange({
+    priceHistoryWritten = await recordPriceChange({
       supplierId,
       productId,
-      productPackageId: productPackageId || null,
+      productPackageId,
       oldPrice: Number(existing.price),
-      newPrice: Number(price),
+      newPrice,
     });
   }
 
+  const include = {
+    product: { select: { name: true, sku: true, baseUom: true } },
+    productPackage: { select: { packageLabel: true, packageName: true } },
+  } as const;
   const sp = existing
-    ? await prisma.supplierProduct.update({
-        where: { id: existing.id },
-        data: { price },
-        include: {
-          product: { select: { name: true, sku: true, baseUom: true } },
-          productPackage: { select: { packageLabel: true, packageName: true } },
-        },
-      })
+    ? await prisma.supplierProduct.update({ where: { id: existing.id }, data: { price: newPrice }, include })
     : await prisma.supplierProduct.create({
-        data: {
-          supplierId,
-          productId,
-          productPackageId: productPackageId || null,
-          price,
-        },
-        include: {
-          product: { select: { name: true, sku: true, baseUom: true } },
-          productPackage: { select: { packageLabel: true, packageName: true } },
-        },
+        data: { supplierId, productId, productPackageId, price: newPrice },
+        include,
       });
 
   return NextResponse.json({
     id: sp.id,
     productId: sp.productId,
+    productPackageId: sp.productPackageId,
     name: sp.product.name,
     sku: sp.product.sku,
     price: Number(sp.price),
     uom: sp.productPackage?.packageLabel ?? sp.productPackage?.packageName ?? sp.product.baseUom,
-  }, { status: 201 });
+    priceHistoryWritten,
+  }, { status: existing ? 200 : 201 });
 }
 
 /**

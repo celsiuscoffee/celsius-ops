@@ -17,9 +17,15 @@ no local simulator.
 - Automated: reorder recommendation (`ai-decisions`), inbound supplier-message
   handling (`handleSupplierMessage` — auto-edits PO for clear OOS/qty/date,
   vision-captures invoices, escalates the rest), POP auto-send on invoice PAID.
-- **Not wired:** automated PO-send to the supplier (`purchase_order` /
-  `po_approval` buttons — designed, never shipped). Creating the PO in
-  BackOffice is enough; the agent only needs an open PO (DRAFT counts).
+- **Wired — automated PO-send** (`lib/inventory/procurement-po-send.ts`). The
+  order block goes to the supplier over WhatsApp when: a PO is PATCHed to
+  `SENT` / `AWAITING_DELIVERY` (`api/inventory/orders/[id]`), on
+  `orders/[id]/resend-po`, on a supplier's inbound message referencing an
+  unsent PO (`api/whatsapp/webhook`), and on the `procurement-loop` cron sweep.
+  Creating the PO in BackOffice is still the trigger — the agent only needs an
+  open PO (DRAFT counts) — but do NOT hand-send the order block during the
+  test or the supplier gets it twice. The old `po_approval` interactive
+  buttons were never shipped; the send is a plain order block.
 
 ## Phases (details in the runbook)
 
@@ -53,7 +59,9 @@ no local simulator.
 
 ## Known gaps (don't chase these as bugs)
 
-- PO-send + `po_approval` buttons: not wired.
+- `po_approval` interactive buttons: not wired (the PO-send itself IS — see
+  Scope). A supplier "confirm" comes back as free text and is handled by
+  `handleSupplierMessage`, not a button payload.
 - Stock accuracy is shadow-only (consumption engine off); reorder runs off
   receipts − wastage/transfers, not sales.
 
@@ -61,3 +69,16 @@ no local simulator.
 
 _Append dated entries when this skill misses something. Promote stable ones into
 the sections above._
+
+- **2026-09-05** — This skill (and the runbook) said automated PO-send was "not
+  wired" long after it shipped: `procurement-po-send.ts` fires on the PATCH to
+  SENT/AWAITING_DELIVERY, on resend-po, on supplier inbound in the WhatsApp
+  webhook, and on the `procurement-loop` cron. Anyone following the old text
+  hand-sent the order block and double-messaged the supplier. When a "not
+  wired" note is written, name the file that WOULD wire it so the next reader
+  can grep for it instead of trusting the note.
+- **2026-09-05** — Reorder price sources: `ai-decisions` now applies the same
+  candidate filter as `reorder-suggestions` (price > 0, supplier ACTIVE, not
+  ADHOC, row has a package). Seeding a test needs a PRICED, PACKAGED
+  SupplierProduct row on an ACTIVE supplier — a RM0 row or the auto-created
+  ADHOC link will not produce a recommendation.

@@ -2,12 +2,13 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { minConcurrentInSlot } from "@/lib/hr/coverage";
+import { minutesOfDay, normalizeShiftTime } from "@/lib/hr/shift-time";
 import { Fragment, useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
   Bot, CalendarDays, Send, Loader2, ArrowLeftRight,
   ChevronLeft, ChevronRight, RotateCcw, Trash2, Sparkles, X,
-  ChefHat, Coffee, RefreshCw, Plus,
+  ChefHat, Coffee, RefreshCw, Plus, AlertTriangle,
 } from "lucide-react";
 import { HrPageHeader } from "@/components/hr/page-header";
 import { AssistPanel } from "@/components/hr/assist-panel";
@@ -139,6 +140,13 @@ export default function SchedulesPage() {
   const [pickerOpen, setPickerOpen] = useState<{ userId: string; date: string; top: number; left: number } | null>(null);
   // Custom hours form state — opened from inside picker
   const [customForm, setCustomForm] = useState<{ start: string; end: string; breakMinutes: number } | null>(null);
+  // Same parser the API uses, so the button and the server never disagree
+  // about what a valid time is. A cleared <input type="time"> gives "", which
+  // the old `start >= end` compare let through to fail server-side.
+  const customStart = customForm ? normalizeShiftTime(customForm.start) : null;
+  const customEnd = customForm ? normalizeShiftTime(customForm.end) : null;
+  const customTimesValid =
+    !!customStart && !!customEnd && minutesOfDay(customStart) < minutesOfDay(customEnd);
 
   const openPicker = (userId: string, date: string, e: React.MouseEvent<HTMLButtonElement>) => {
     if (isPublished) return;
@@ -671,8 +679,8 @@ export default function SchedulesPage() {
             shift_date: date,
             template_id: "custom",
             custom: {
-              start_time: startTime + ":00",
-              end_time: endTime + ":00",
+              start_time: startTime,
+              end_time: endTime,
               break_minutes: breakMinutes,
               label,
             },
@@ -714,7 +722,24 @@ export default function SchedulesPage() {
           body: JSON.stringify({ outlet_id: selectedOutlet, week_start: weekStart, action, ...extra }),
         });
 
-      let res = await publishOnce({});
+      let res: Response;
+      if (action === "unpublish") {
+        // Staff have already been notified of these shifts; the server refuses
+        // without a reason (owner/admin only) and logs it.
+        const liveWarning = weekStart <= todayMyt
+          ? "\n\nWARNING: this week has already started. The moment you unpublish, everyone rostered — including anyone on shift right now — sees \"Rest day\" instead of their hours, and part-timer pay stops counting them. Re-publish as soon as you have finished editing."
+          : "";
+        const reason = prompt(`Unpublish this week? Staff were already notified of these shifts.${liveWarning}\n\nReason for unpublishing:`);
+        if (!reason) return;
+        res = await publishOnce({ reason });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}) as { error?: string });
+          alert(err.error || `Unpublish failed (${res.status})`);
+          return;
+        }
+      } else {
+        res = await publishOnce({});
+      }
       if (action === "publish" && !res.ok) {
         // The labour gate pushed back — amber needs a reason, red needs an
         // owner override; blockers just get reported.
@@ -791,6 +816,20 @@ export default function SchedulesPage() {
   };
 
   const isPublished = grid?.schedule?.status === "published";
+  // A draft week that has already STARTED is the dangerous state: the staff app
+  // only renders published rosters, so every day of it shows as "Rest day —
+  // enjoy your day off" to the people working it, and weekly PT payroll prices
+  // only published rosters, so their hours read as unrostered. Tamarind was
+  // left like this on 2026-09-06 after an unpublish-to-edit and two staff
+  // turned up to a roster that told them they were off.
+  const weekEndStr = (() => {
+    const d = new Date(weekStart + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 6);
+    return d.toISOString().slice(0, 10);
+  })();
+  const todayMyt = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });
+  const draftWeekIsLive = !isPublished && !!grid?.schedule && weekStart <= todayMyt;
+  const draftWeekEnded = draftWeekIsLive && weekEndStr < todayMyt;
 
   // Compute totals
   const totalHours = (grid?.shifts || []).reduce((sum, s) => {
@@ -852,6 +891,25 @@ export default function SchedulesPage() {
           </>
         }
       />
+
+      {draftWeekIsLive && (
+        <div className="flex items-start gap-3 rounded-xl border-2 border-red-300 bg-red-50 p-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+          <div className="text-sm">
+            <p className="font-semibold text-red-800">
+              {draftWeekEnded
+                ? "This week has ended and was never published."
+                : "This week is NOT published — staff cannot see these shifts."}
+            </p>
+            <p className="mt-0.5 text-red-700">
+              My Shifts only shows published rosters, so everyone rostered here sees
+              &ldquo;Rest day&rdquo; instead{draftWeekEnded ? "" : ", including whoever is working today"}.
+              Part-timer pay is also calculated from published rosters only, so these hours
+              will not be priced. Press <span className="font-semibold">Publish</span> to restore it.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
@@ -1692,6 +1750,13 @@ export default function SchedulesPage() {
                                         className="w-full rounded border px-1.5 py-1 text-xs"
                                       />
                                     </label>
+                                    {!customTimesValid && (
+                                      <p className="text-[10px] text-amber-700">
+                                        {!customForm.start || !customForm.end
+                                          ? "Set both a start and an end time."
+                                          : "The end time must be after the start time."}
+                                      </p>
+                                    )}
                                     <div className="flex gap-1 pt-1">
                                       <button
                                         onClick={() => setCustomForm(null)}
@@ -1702,11 +1767,11 @@ export default function SchedulesPage() {
                                       </button>
                                       <button
                                         onClick={() => {
-                                          if (customForm.start >= customForm.end) return;
+                                          if (!customTimesValid) return;
                                           setCellCustom(u.id, d, customForm.start, customForm.end, customForm.breakMinutes);
                                           setCustomForm(null);
                                         }}
-                                        disabled={saving || customForm.start >= customForm.end}
+                                        disabled={saving || !customTimesValid}
                                         className="flex-1 rounded bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                                       >
                                         Save

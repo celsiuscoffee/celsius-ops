@@ -26,6 +26,12 @@ export const GRACE_PERIOD_MINUTES = 5;
 export const CLOCK_GRACE_MINUTES = 10;
 export const MAX_SHIFT_HOURS = 12;
 export const AUTO_CLOCKOUT_AFTER_HOURS = 12;
+// Clock-out nudge: an open log this long past its rostered end gets ONE push
+// ("your shift ended, tap to clock out"). 14% of August 2026 logs were
+// auto-closed at the rostered end with OT = 0 because nobody tapped out.
+export const CLOCKOUT_REMINDER_AFTER_MINUTES = 15;
+// Stamped into ai_flags once the nudge is sent; the processor preserves it.
+export const CLOCKOUT_REMINDER_FLAG = "clockout_reminder_sent";
 export const NORMAL_WORK_HOURS = 7.5; // 45h/week ÷ 6 days = 7.5h/day
 
 // Celsius policy: 45h/week standard, anything above = OT

@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { mytTodayRange } from "@/lib/inventory/myt-today";
+import { isPlaceholderNumber } from "@/lib/inventory/placeholder-number";
 import { syncInvoiceOverdue } from "@/lib/inventory/sync-invoice-overdue";
 
 export const runtime = "nodejs"; // xlsx needs Node
@@ -48,8 +49,14 @@ export async function GET(req: NextRequest) {
     { status: "PARTIALLY_PAID", dueDate: { lt: todayStart } },
   ];
 
+  // Placeholder prefixes — keep in step with isPlaceholderNumber() and the
+  // list route's pendingInvoiceWhere.
   const pendingInvoiceWhere: Prisma.InvoiceWhereInput = {
-    invoiceNumber: { startsWith: "INV-" },
+    OR: [
+      { invoiceNumber: { startsWith: "GRNI-" } },
+      { invoiceNumber: { startsWith: "INV-" } },
+      { invoiceNumber: { startsWith: "TRF-" } },
+    ],
     dueDate: null,
     status: "PENDING",
     orderId: { not: null },
@@ -207,7 +214,7 @@ export async function GET(req: NextRequest) {
     const activeFlags = ((inv.flags ?? []) as unknown as Flag[]).filter((f) => !f.dismissed);
     const isPendingInvoice =
       inv.paymentType === "SUPPLIER"
-      && (inv.invoiceNumber?.startsWith("INV-") ?? false)
+      && isPlaceholderNumber(inv.invoiceNumber)
       && inv.dueDate === null
       && inv.status === "PENDING";
     return {

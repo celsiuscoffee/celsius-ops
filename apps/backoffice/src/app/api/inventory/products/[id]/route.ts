@@ -3,6 +3,56 @@ import { prisma } from "@/lib/prisma";
 import { getUserFromHeaders } from "@/lib/auth";
 import { recordPriceChange } from "@/lib/inventory/price-history";
 
+type PackageInput = {
+  id?: string;
+  sku?: string;
+  packageName: string;
+  packageLabel: string;
+  conversionFactor: number;
+  isDefault?: boolean;
+  containsPackageId?: string | null;
+  containsPackageIndex?: number;
+};
+
+type SupplierInput = {
+  supplierId?: string;
+  supplierName?: string;
+  phone?: string;
+  price: number;
+  productPackageId?: string;
+  packageIndex?: number;
+};
+
+/**
+ * A package the form dropped can only go if nothing still points at it. Checked
+ * BEFORE any write so a blocked delete fails the whole PATCH cleanly (409) instead
+ * of a late P2003 after the product, other packages and supplier links were
+ * already committed. OrderItem refs are tolerated only when another surviving
+ * package has the same conversionFactor to take them over (historical lines
+ * keep a meaningful unit); everything else has no reassignment path.
+ */
+async function packageDeleteBlockers(
+  pkgId: string,
+  hasSameFactorReplacement: boolean,
+): Promise<string[]> {
+  const [receiving, countItems, balances, transferItems, orderItems] = await Promise.all([
+    prisma.receivingItem.count({ where: { productPackageId: pkgId } }),
+    prisma.stockCountItem.count({ where: { productPackageId: pkgId } }),
+    prisma.stockBalance.count({ where: { productPackageId: pkgId } }),
+    prisma.stockTransferItem.count({ where: { productPackageId: pkgId } }),
+    prisma.orderItem.count({ where: { productPackageId: pkgId } }),
+  ]);
+  const blockers: string[] = [];
+  if (receiving > 0) blockers.push(`${receiving} receiving line(s)`);
+  if (countItems > 0) blockers.push(`${countItems} stock-count line(s)`);
+  if (balances > 0) blockers.push(`${balances} stock balance row(s)`);
+  if (transferItems > 0) blockers.push(`${transferItems} transfer line(s)`);
+  if (orderItems > 0 && !hasSameFactorReplacement) {
+    blockers.push(`${orderItems} order line(s) with no same-size package to move them to`);
+  }
+  return blockers;
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -14,8 +64,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       name?: string; sku?: string; groupId?: string; baseUom?: string;
       storageArea?: string; shelfLifeDays?: string; description?: string;
       checkFrequency?: string; itemType?: string;
-      packages?: { id?: string; sku?: string; packageName: string; packageLabel: string; conversionFactor: number; isDefault?: boolean; containsPackageId?: string | null; containsPackageIndex?: number }[];
-      suppliers?: { supplierId?: string; supplierName?: string; phone?: string; price: number; productPackageId?: string; packageIndex?: number }[];
+      packages?: PackageInput[];
+      suppliers?: SupplierInput[];
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,19 +80,44 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (description !== undefined) updateData.description = description || null;
     if (checkFrequency) updateData.checkFrequency = checkFrequency;
 
+    // ── Pre-flight: can every dropped package actually be deleted? ──
+    const hasPackages = Array.isArray(packages);
+    const existingPackages = hasPackages ? await prisma.productPackage.findMany({ where: { productId: id } }) : [];
+    const toDelete = hasPackages
+      ? existingPackages.filter((ep) => !packages!.some((p) => p.id === ep.id))
+      : [];
+    for (const dying of toDelete) {
+      const replacement = packages!.some((p) => Number(p.conversionFactor) === Number(dying.conversionFactor));
+      const blockers = await packageDeleteBlockers(dying.id, replacement);
+      if (blockers.length) {
+        return NextResponse.json(
+          {
+            error:
+              `Cannot remove package "${dying.packageLabel || dying.packageName}": it is referenced by ` +
+              `${blockers.join(", ")}. Keep the package (you can rename or un-default it) or clear those records first.`,
+            packageId: dying.id,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     const product = await prisma.product.update({
       where: { id },
       data: updateData,
     });
 
-    // Handle packages: sync (upsert new/updated, delete removed)
-    if (packages && Array.isArray(packages)) {
-      const existingPackages = await prisma.productPackage.findMany({ where: { productId: id } });
-      const incomingIds = packages.filter((p) => p.id).map((p) => p.id!);
+    // Index-aligned with the `packages` array from the form: createdPkgIds[i] is
+    // the DB id of packages[i]. Hoisted so the suppliers step can resolve a
+    // `packageIndex` against the SAME order the form used — the old code re-read
+    // the packages with an unordered findMany, so a new price could bind to the
+    // wrong package.
+    const createdPkgIds: string[] = [];
 
+    // Handle packages: sync (upsert new/updated, delete removed)
+    if (hasPackages) {
       // First upsert packages so we have surviving IDs to reassign to
-      const createdPkgIds: string[] = [];
-      for (const pkg of packages) {
+      for (const pkg of packages!) {
         const pkgData = {
           sku: pkg.sku || null,
           packageName: pkg.packageName,
@@ -68,8 +143,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       }
       // Resolve containsPackageIndex for new packages referencing other new packages
-      for (let i = 0; i < packages.length; i++) {
-        const pkg = packages[i];
+      for (let i = 0; i < packages!.length; i++) {
+        const pkg = packages![i];
         if (pkg.containsPackageIndex !== undefined && createdPkgIds[pkg.containsPackageIndex]) {
           await prisma.productPackage.update({
             where: { id: createdPkgIds[i] },
@@ -78,42 +153,41 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       }
 
-      // Delete packages that are no longer in the incoming list
-      // Reassign references (supplier products, order items, containsPackageId) to a surviving package
+      // Delete packages that are no longer in the incoming list (pre-flight above
+      // already proved nothing un-reassignable points at them).
       const survivingPkgs = await prisma.productPackage.findMany({
         where: { id: { in: createdPkgIds } },
       });
 
-      for (const existing of existingPackages) {
-        if (!createdPkgIds.includes(existing.id)) {
-          // Find a surviving package with the same conversionFactor to reassign refs to
-          const replacement = survivingPkgs.find(
-            (s) => Number(s.conversionFactor) === Number(existing.conversionFactor)
-          );
-          const replacementId = replacement?.id || null;
+      for (const existing of toDelete) {
+        // A surviving package with the same conversionFactor takes over order refs
+        const replacement = survivingPkgs.find(
+          (s) => Number(s.conversionFactor) === Number(existing.conversionFactor)
+        );
+        const replacementId = replacement?.id || null;
 
-          // Clean up supplier product refs pointing to the deleted package
-          // Delete them — they'll be recreated with the new packages from the form
-          await prisma.supplierProduct.deleteMany({
-            where: { productPackageId: existing.id },
-          });
-          // Null out order item refs (historical data — keep the items)
-          await prisma.orderItem.updateMany({
-            where: { productPackageId: existing.id },
-            data: { productPackageId: replacementId },
-          });
-          // Reassign containsPackageId refs from other packages
-          await prisma.productPackage.updateMany({
-            where: { containsPackageId: existing.id },
-            data: { containsPackageId: replacementId },
-          });
+        // Clean up supplier product refs pointing to the deleted package
+        // Delete them — they'll be recreated with the new packages from the form
+        await prisma.supplierProduct.deleteMany({
+          where: { productPackageId: existing.id },
+        });
+        // Move order item refs (historical data — keep the items) to the same-size survivor
+        await prisma.orderItem.updateMany({
+          where: { productPackageId: existing.id },
+          data: { productPackageId: replacementId },
+        });
+        // Reassign containsPackageId refs from other packages
+        await prisma.productPackage.updateMany({
+          where: { containsPackageId: existing.id },
+          data: { containsPackageId: replacementId },
+        });
 
-          await prisma.productPackage.delete({ where: { id: existing.id } });
-        }
+        await prisma.productPackage.delete({ where: { id: existing.id } });
       }
     }
 
     // Handle suppliers: sync supplier-product links
+    let priceHistoryWritten = true;
     if (suppliers && Array.isArray(suppliers)) {
       // Get existing supplier links (exclude ADHOC — managed separately)
       const adhocSupplier = await prisma.supplier.findFirst({ where: { supplierCode: "ADHOC" } });
@@ -130,12 +204,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           await prisma.supplierProduct.delete({ where: { id: ex.id } });
         }
       }
-
-      // Resolve package IDs created in packages step above
-      const createdPkgIds = packages ? await prisma.productPackage.findMany({
-        where: { productId: id },
-        select: { id: true },
-      }).then((pkgs) => pkgs.map((p) => p.id)) : [];
 
       // Upsert supplier links
       for (const entry of suppliers) {
@@ -158,7 +226,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           }
         }
 
-        // Resolve packageIndex to actual package ID
+        // Resolve packageIndex against the form-ordered createdPkgIds (see above).
         let packageId = entry.productPackageId?.startsWith("new-") ? null : entry.productPackageId || null;
         if (!packageId && entry.packageIndex !== undefined && createdPkgIds[entry.packageIndex]) {
           packageId = createdPkgIds[entry.packageIndex];
@@ -169,13 +237,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             where: { supplierId, productId: id, productPackageId: packageId },
           });
           if (existingLink) {
-            await recordPriceChange({
+            const ok = await recordPriceChange({
               supplierId,
               productId: id,
               productPackageId: packageId,
               oldPrice: Number(existingLink.price),
               newPrice: Number(entry.price),
             });
+            if (!ok) priceHistoryWritten = false;
             await prisma.supplierProduct.update({
               where: { id: existingLink.id },
               data: { price: entry.price },
@@ -189,7 +258,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
 
-    return NextResponse.json(product);
+    return NextResponse.json({ ...product, priceHistoryWritten });
   } catch (err) {
     console.error("[products/[id] PATCH]", err);
     const message = err instanceof Error ? err.message : "Internal server error";
