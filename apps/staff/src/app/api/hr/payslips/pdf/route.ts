@@ -6,6 +6,8 @@ import { createServiceToken, verifyServiceToken } from "@celsius/auth";
 // token), so staff can only ever pull their OWN payslip PDF.
 import { supabaseAdmin } from "@/lib/supabase";
 import { prisma } from "@/lib/prisma";
+import { getMYTToday } from "@/lib/hr/constants";
+import { isPayslipReleased, payslipReleaseDate } from "@/lib/hr/payslip-release";
 import {
   generatePayslipPDF,
   mapPayslipData,
@@ -82,6 +84,25 @@ export async function GET(req: NextRequest) {
     if (!["confirmed", "paid"].includes(run.status) || run.cycle_type === "opening_balance") {
       return NextResponse.json(
         { error: "This payslip isn't available yet — ask HR once payroll is confirmed." },
+        { status: 409 },
+      );
+    }
+
+    // Release-day gate, enforced HERE as well as on the list. Hiding a payslip
+    // from /api/hr/payslips alone would be cosmetic: a link saved from last
+    // month, or a guessed item_id, would still stream the PDF. Both paths price
+    // visibility through the same pure function so they cannot disagree.
+    const { data: releaseSettings } = await supabaseAdmin
+      .from("hr_company_settings")
+      .select("payslip_release_day")
+      .limit(1)
+      .maybeSingle();
+    const releaseDay =
+      (releaseSettings as { payslip_release_day?: number | null } | null)?.payslip_release_day ?? null;
+    if (!isPayslipReleased(run, releaseDay, getMYTToday())) {
+      const opensOn = payslipReleaseDate(run, releaseDay);
+      return NextResponse.json(
+        { error: `This payslip opens on ${opensOn}.`, reason: "not_released", opens_on: opensOn },
         { status: 409 },
       );
     }
