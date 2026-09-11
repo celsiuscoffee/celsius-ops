@@ -39,6 +39,7 @@ type CompanySettings = {
   bank_client_batch_id: string | null;
   bank_version: string | null;
   auto_release_payslip: boolean | null;
+  payslip_release_day: number | null;
   payslip_hide_bik: boolean | null;
   payslip_disclaimer_enabled: boolean | null;
   payslip_disclaimer_text: string | null;
@@ -372,6 +373,24 @@ export default function CompanySettingsPage() {
             checked={form.auto_release_payslip ?? true}
             onChange={(v) => update("auto_release_payslip", v)}
           />
+          <Field label="Open monthly payslips on day of the following month">
+            <input
+              type="number"
+              min={1}
+              max={28}
+              value={form.payslip_release_day ?? ""}
+              onChange={(e) =>
+                update("payslip_release_day", e.target.value === "" ? null : Number(e.target.value))
+              }
+              className="input"
+              placeholder="Leave blank — open as soon as payroll is confirmed"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              e.g. 15 → August payslips open on 15 September. Blank keeps today&apos;s behaviour
+              (visible the moment the run is confirmed). Part-timer weekly payslips are never held
+              back by this — they open on confirmation regardless.
+            </p>
+          </Field>
           <Toggle
             label="Hide BIK (Benefits in Kind) lines on payslip"
             description="Display them on EA Form regardless; only affects monthly payslip rendering."
