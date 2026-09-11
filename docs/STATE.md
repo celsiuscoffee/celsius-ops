@@ -97,6 +97,87 @@ current month.
   through the app: the week had ended and Publish pushes to all 13 rostered
   staff. Swept every outlet after — 7–13 Sep all published, no other gap.
 
+- 2026-09-06 — **Audit cadence compliance measured: Chef Bo (Ibrahim Bin Zakir)
+  runs at ~44% of the agreed 1×/week/outlet, and the whole audit programme has
+  been dark since 24 Aug.** Owner asked whether Chef Bo meets the agreed weekly
+  outlet visit. Method: `AuditReport` rows joined to `AuditTemplate`
+  (`auditTarget = 'OUTLET'`, `status = 'COMPLETED'`) — the standard is the one
+  already encoded for ops-pulse (`docs/design/ops-kpi-pulse-loop.md`: "Outlet
+  audits = 1×/week per outlet"; `AUDIT.cadenceDays = 7`). Chef Bo is the
+  `chef_head` lane (Kitchen Quality + Food Quality outlet templates, Kitchen
+  Crew Skills staff template); `User` id `b9b91ab6-cc95-492a-8e03-f49ab50e5dc2`,
+  name "Chef Bo", fullName "Ibrahim Bin Zakir".
+  **Scope: 3 outlets, not 5.** `CF IOI Mall` and `CF Nilai` are ACTIVE in
+  `Outlet` but are **consignment points**, not staffed outlets —
+  `unified_sales.source = 'consignment'`, 28 and 76 txns in 3 months, both dead
+  since 19 Jul, and **zero audits ever** at either. Counting them as outlets
+  would have produced 26 phantom missed visits. Any cadence detector reading
+  `status = 'ACTIVE'` will over-report against them — filter on consignment.
+  **Results (21 complete weeks, 13 Apr – 6 Sep; the audit table starts
+  2026-04-15, so nothing earlier is measurable for anyone):** weeks covered —
+  Putrajaya 13/21 (62%), Shah Alam 8/21 (38%), Tamarind 7/21 (33%);
+  **28/63 = 44%** overall. Trailing 3 months (13 wks) is 18/39 = 46%, i.e. no
+  real difference — he averages one visit per outlet **every ~2 weeks**.
+  Longest gaps: Tamarind **57 days** (5 May → 1 Jul), Shah Alam 34 days
+  (18 May → 21 Jun), Putrajaya 18 days (11 Jul → 29 Jul). Three weeks blank at
+  every outlet (20 Apr, 25 May, 8 Jun). The Putrajaya bias is structural, not
+  recent — it is his best-covered outlet across the entire history.
+  **Audit quality is not the problem:** 79 reports, all COMPLETED, no abandoned
+  drafts, outlet scores avg 81–86 with genuine spread (Shah Alam Food Quality
+  scored 54 on 21 Jun), 14 distinct staff trained on skills audits. He does the
+  work properly when he shows up; he shows up half as often as agreed.
+  **THE WHOLE PROGRAMME IS DARK — bigger than one manager.** Last audit by
+  anyone anywhere is **24 Aug** (13 days). Syafiq Kaberi (`barista_head`) last
+  ran an *outlet* audit at CC001 on 17 Jul (51d), CC002 on 9 Jul (59d), CC003 on
+  **1 Jun (97d)**; his last report of any kind was 5 Aug. So barista-lane outlet
+  coverage has been absent for ~2–3 months and nothing surfaced it.
+  **Open question (not yet checked): are the ops-pulse audit alerts actually
+  armed?** `detectOutletAudit` exists and is supposed to fire LOW alerts per
+  outlet/role/week for exactly this, and the audit signal was moved into the
+  escalation set on 2026-06-24 ("tagged with the responsible lead's name so the
+  owner sees who isn't getting it done"). A 97-day gap that nobody was told
+  about suggests `OPS_PULSE_MODE` / `OPS_PULSE_DAILY_MODE` is still `shadow` or
+  `off` in prod, or the recipients aren't resolving. Verify before treating this
+  as purely a people problem.
+  **Two data-integrity flags on Chef Bo's reports:** (1) **11 Aug** has audits at
+  Shah Alam (05:42–05:54Z) and Tamarind (05:38–05:56Z) with *overlapping*
+  timestamps — two outlets ~40 km apart, so one was written up away from site or
+  is misattributed; (2) reports dated 29 Jul completed 1 Aug, and 6 Aug completed
+  9 Aug — audits finished days after the visit date, so `date` and `completedAt`
+  disagree and `completedAt` must not be used as the visit date.
+  **Lesson: anchor the window on the real current date.** The first two passes of
+  this analysis were anchored on 26 Aug rather than today, which hid the 13-day
+  silence and overstated the recent trend (reported 40%→56% improvement; it is
+  40%→48% once the last two weeks are counted).
+
+- 2026-09-06 — **Both audit leads compared: Syafiq Kaberi is the worse of the
+  two and has stopped completing audits entirely.** Same method and 21-week
+  window as the entry above (13 Apr – 6 Sep, outlet-weeks covered against
+  1×/week/outlet). Auditor lane: Chef Bo (`chef_head`) **28/63 = 44%**
+  (Putrajaya 13/21, Shah Alam 8/21, Tamarind 7/21); Syafiq (`barista_head`,
+  Barista Station Audit) **23/63 = 37%** (Putrajaya 9/21, Shah Alam 8/21,
+  Tamarind 6/21). The trends run opposite: outlet-weeks per month Chef Bo
+  4→5→4→7→8 (Apr→Aug, rising), Syafiq 8→11→3→2→**0** (collapsed after May).
+  **Syafiq's last COMPLETED audit is 17 Jul — 51 days.** The `max(date)` of
+  5 Aug that a naive query returns is an *abandoned draft*: after 17 Jul he
+  opened four audits (18 Jul, 21 Jul ×2, 5 Aug) and left every one
+  `IN_PROGRESS`. Chef Bo has 0 non-COMPLETED rows in 79 reports; Syafiq has 4
+  in 62. **Always filter `status = 'COMPLETED'` — an abandoned draft otherwise
+  reads as recent activity and hides a 7-week gap.**
+  Training lane (STAFF templates): Chef Bo 26 Kitchen Crew Skills reports,
+  16 distinct staff, 6 in the last 30d, avg 75.1 with 4 scores <70 (low 57);
+  Syafiq 25 Barista Skills reports, 13 distinct staff of ~23 active Baristas
+  (~57%), **0 in the last 30d**, avg 88.7 with **zero** below 70. Chef Bo's
+  scoring discriminates; Syafiq's does not — either the baristas really are
+  uniformly strong or the skill audit is being rubber-stamped. Unresolved;
+  worth a spot-check before trusting Barista Skills scores as a signal.
+  The design note's "skill = 1/week/staff" target (38 eligible staff) is
+  unmet by both by an order of magnitude and looks unrealistic as written —
+  revisit the target rather than treating it as two people failing.
+  **Neither lead was ever alerted.** Reinforces the open question above: verify
+  `OPS_PULSE_MODE` / `OPS_PULSE_DAILY_MODE` in prod before treating cadence as
+  a people problem.
+
 - 2026-09-05 — **The live Usage Variance / COGS "Expected = RM0.00" is a
   PRODUCTION bug, already fixed on PR #1216 (unmerged).** `main`'s
   `reports/ingredient-variance` still reads `prisma.salesTransaction` — the
