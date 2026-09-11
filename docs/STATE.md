@@ -105,13 +105,12 @@ current month.
   line fires. The window and outlet mapping are fine: Putrajaya has 1,986
   completed `pos_orders` (5,687 sold lines incl. the pickup app) between the
   2026-07-31 and 2026-08-20 counts. Commit adbae563 repoints both reports at
-  `lib/inventory/report-sales.ts`. **Branch previews on Vercel are skipped for
-  the backoffice and staff projects** ("Ignored" / Canceled by Ignored Build
-  Step), so backoffice and staff work cannot be previewed before merge — judge
-  unmerged UI from the diff/CI, and tell the owner a backoffice fix is invisible
-  to them until it lands on main. `celsius-pickup-app` (root `apps/order`) is
-  the exception: its previews DO build and reach READY on branches (verified
-  2026-09-11 on a docs-only commit), so `apps/order` UI is previewable.
+  `lib/inventory/report-sales.ts`. **Most branch previews on Vercel are canceled
+  by an Ignored Build Step**, so as a rule branch work cannot be previewed
+  before merge — judge unmerged UI from the diff/CI, and tell the owner a fix is
+  probably invisible to them until it lands on main. It is not absolute: see the
+  2026-09-11 note in the resume pointer — check the PR's Vercel comment for an
+  actual READY deployment before telling the owner a preview does not exist.
 
 - 2026-09-05 — **Split payments (deposit + balance) now matched — ap-match
   item (e) done.** Third pass in `lib/finance/ap-match.ts`, after the single
@@ -2752,13 +2751,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   **Two repo quirks, each now seen twice — do not re-investigate:** (1) a push
   can silently dispatch NO GitHub Actions run while other branches run fine in
   the same minute; always confirm a run exists for the head sha, and merge
-  origin/main into the branch to re-trigger it. (2) Vercel previews are skipped
-  per-project, not repo-wide: backoffice and staff always come back "Ignored"
-  (Canceled by Ignored Build Step), but `celsius-pickup-app` (root
-  `apps/order`) builds and reaches READY on branches — seen 2026-09-11 on PR
-  #1230, a docs-only commit. Earlier entries here said no branch was ever
-  previewable; that is wrong for `apps/order`. Judge unmerged backoffice/staff
-  UI from the diff and CI.
+  origin/main into the branch to re-trigger it. (2) Vercel's Ignored Build Step
+  cancels most branch previews, but NOT all of them, and not deterministically
+  per project. Verified against the Vercel API on PR #1230, two consecutive
+  pushes on this same branch: `d9b23b31` (a merge commit) built
+  `celsius-pickup-app` to READY with a live branch alias while backoffice and
+  staff were Ignored; `fbd05024` (docs-only, pushed 4 minutes later) had all
+  three CANCELED with errorLink = the ignored-build-step doc. So the older
+  "every branch preview is CANCELED / no branch is ever previewable" wording
+  was too strong, and so is any rule of the form "project X always previews".
+  Do not infer either way: read the deployment for the head sha
+  (`mcp__Vercel__get_deployment`, team_MbZi5UsM8IQ2fJRWdVgaTDMS) — the bot's PR
+  comment flickers between Building/Ready/Ignored while projects report in, so
+  a mid-stream read of it proves nothing.
   Any long-lived branch conflicts with main on docs/STATE.md on almost every
   sync (parallel sessions append to the same two sections). Keep-both is the
   usual resolution, but it is NOT automatic: on 2026-09-11 main's side carried
