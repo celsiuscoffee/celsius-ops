@@ -11,6 +11,27 @@ current month.
 
 ## Verified facts
 
+- 2026-09-11 — **Zikry converted full_time → part_time from 2026-09-01; his
+  August monthly pay is now exposed to any recompute.** Owner: served notice,
+  last day as a FULL-TIMER was 2026-08-31, continues as a PT. Profile
+  `aee35db7-8683-4ac6-aa9a-30b79b548797` set to `part_time`, `hourly_rate` and
+  `hourly_rate_weekend` 9.00 (Kitchen Crew standard — all 8 PT Kitchen Crew are
+  9.00/9.00), `basic_salary` 0.00. **`end_date` / `resigned_at` deliberately
+  left NULL** — "last day" meant last day full-time, and setting either marks a
+  leaver that `weekly/preflight` skips ("resigned in a prior cycle"), which
+  would silently drop him from every future weekly run.
+  **THE LIVE RISK:** the August monthly run `f2ddaf00-eedd-49cd-87aa-a05dab8ef390`
+  is still `ai_computed` (NOT confirmed) and holds his full month — gross
+  1,877.69, net **1,659.74**. `payroll/preflight` selects
+  `employment_type === "full_time"`, so now that he is part_time **any recompute
+  of August drops him entirely** and he loses a month he actually worked.
+  Confirming that run is what locks it in. Do not recompute August first.
+  His one PT day (4 Sep, 8.25h clocked) was added BY HAND as RM67.50 to the
+  already-confirmed weekly run `23da3529-134c-4e08-bca7-b8fdd7806261` (17 → 18
+  items, run total 4,800.50); the run had been confirmed while he was still
+  full_time, so the compute never saw him. The item carries a `manual_note` in
+  `computation_details`.
+
 - 2026-09-06 — **Procurement report reliability, measured (not assumed) after
   PR #1216 merged (648b12cc).** SALES SIDE IS CLEAN: last 30 days, 86 sold
   menus all map, ZERO unmapped lines, ZERO sold menus without a BOM, and
@@ -2607,6 +2628,20 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Lessons learned
 
+- 2026-09-11 — **PT weekly pay is NOT hours × rate — check the roster before
+  quoting a figure.** `payroll-calculator-weekly` pays the PAID WINDOW (clocked
+  ∩ rostered shift), less the roster's own `break_minutes`, floored to 30-minute
+  brackets by `otBracketHours`, priced by `ptRateForDate` — weekday base,
+  `hourly_rate_weekend` on Sat/Sun, **2× on a gazetted `hr_public_holidays`
+  date**. Zikry's 4 Sep looked like 8.25h × 9.00 = 74.25; the real answer was
+  67.50 (clocked 15:15 against a 15:30 roster start, so the early quarter-hour
+  does not pay: 8.00h window − 0.5h break = 7.50h). The 2× rates elsewhere in
+  that week were 31 Aug, Hari Kebangsaan — not an anomaly. There is also a
+  second rate column, `hourly_rate_weekend`, that is easy to miss when creating
+  a PT: every existing PT has it set, and leaving it NULL silently pays the
+  weekday base on weekends.
+
+
 - 2026-09-07 — **A format check cannot catch a valid-but-wrong bank account.**
   The wrong-person account was a perfectly well-formed 12-digit Maybank number;
   every structural check passes it. The only thing that catches it is comparing
@@ -2678,6 +2713,27 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-11 — **Three things waiting on a human, none of them code.**
+  (1) **Confirm the August monthly run** before anyone recomputes it — see the
+  Zikry entry above; RM1,659.74 rides on it. (2) **Haziq
+  `6ff33793-1374-459d-93f2-02cd9c0ff0f9`**: legal name "Mohd Haziq Bin Mohd
+  Zaini", bank account holder "Haziq Ashraff" (Public Bank). Unverified, not
+  proven wrong — no conflicting patronymic and he has been paid since April
+  without complaint — but since PR #1229 merged this **blocks his next monthly
+  payment file** until the field is corrected or waved through with
+  `ack_identity=1`. Ask him, then fix the field. (3) **BrioHR reconciliation**
+  of staff bank details has never been run: the connector shells out to `curl`
+  on the owner's Mac via an MCP server the remote sessions do not have, so it
+  must be run locally. It is the only check that catches a wrong account number
+  wearing a plausible name — the failure mode neither the name check nor the
+  format check in `lib/hr/bank-account.ts` can see.
+  Merged today: #1226 (shift swap off), #1227 (roster draft guardrail), #1229
+  (bank account identity guard). Still open from round-2 QA: contract/intern pay
+  cycle, auto-close past 7.5h, state-specific public holidays, staff OT
+  pre-booking page, missing EPF/SOCSO numbers. Two sick-leave requests
+  unreviewed: Ariff (7 Aug), Batrisyia (27 Aug).
+
 
 - 2026-09-07 — **PR #1216 MERGED (648b12cc, squashed).** Follow-up PR #1223 is
   open: prep time per batch on ProductRecipe + the Prep Manhours report, plus
