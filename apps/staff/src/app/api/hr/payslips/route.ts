@@ -4,6 +4,8 @@ import { getSession } from "@/lib/auth";
 // nothing (payslips were invisible to ALL staff since the lockdown). We scope to
 // the caller's own user_id below, which is the security boundary here.
 import { supabaseAdmin } from "@/lib/supabase";
+import { getMYTToday } from "@/lib/hr/constants";
+import { isPayslipReleased } from "@/lib/hr/payslip-release";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +34,28 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Release gate: HR can hold MONTHLY payslips until a fixed day of the
+  // following month (hr_company_settings.payslip_release_day). Unset = today's
+  // behaviour, visible the moment the run is confirmed. Weekly PT slips are
+  // never gated — see lib/hr/payslip-release.ts.
+  const { data: settings } = await supabaseAdmin
+    .from("hr_company_settings")
+    .select("payslip_release_day")
+    .limit(1)
+    .maybeSingle();
+  const releaseDay = (settings as { payslip_release_day?: number | null } | null)?.payslip_release_day ?? null;
+  const todayMyt = getMYTToday();
+
   // Add the flat aliases the native Payslip type reads
   // (apps/staff-native/lib/hr/api.ts): base_salary, overtime_pay (sum of
   // all OT tiers), pcb, and allowances as a NUMBER (sum of the
   // `allowances` jsonb amounts). Raw columns + the joined run are kept.
-  const rows = (items || []) as Array<Record<string, unknown>>;
+  const rows = ((items || []) as Array<Record<string, unknown>>).filter((row) => {
+    const run = row.hr_payroll_runs as
+      | { cycle_type?: string | null; period_month?: number | null; period_year?: number | null }
+      | null;
+    return !run || isPayslipReleased(run, releaseDay, todayMyt);
+  });
   const payslips = rows.map((row) => {
     const num = (v: unknown) => Number(v ?? 0) || 0;
     const overtime_pay =
