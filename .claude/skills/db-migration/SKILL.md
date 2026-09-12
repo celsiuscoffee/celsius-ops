@@ -49,3 +49,20 @@ and committed for audit.
 
 _Append dated entries when this skill misses something. Promote stable ones into
 the steps above._
+
+- 2026-09-08 — **Applying is two writes, not one; step 3 only covers the first.**
+  After `apply_migration` succeeds, the SQL also needs a copy under
+  `supabase/migrations/NNN_<name>.sql` — that directory is the record of what
+  actually ran, while `packages/db/prisma/migrations/` is the never-executed
+  audit trail. Without the second copy the only on-disk evidence of a live
+  column sits in a file whose header says it was never applied. Flip that
+  header too (`prepMinutes` shipped with "NOT YET APPLIED" in it), or the next
+  session reads a merged migration as still pending.
+- 2026-09-08 — **Verify by reading the column back, not by trusting
+  `{"success": true}`.** `select column_name, data_type, numeric_precision,
+  numeric_scale, is_nullable, col_description(...)` from
+  `information_schema.columns` confirms the type/precision/nullability and the
+  comment actually landed. Pair it with a row count over the new column
+  (`count(*)` vs `count(<col>)`) so the migration note can state plainly that
+  nothing was backfilled — that sentence is what makes the change auditable
+  later.

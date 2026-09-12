@@ -11,6 +11,49 @@ current month.
 
 ## Verified facts
 
+- 2026-09-12 — **Fresh Milk (DFM001) package + price reconciliation, applied to
+  prod.** Four defects, all fixed; rollback scripts in the session scratchpad
+  (`milk-merge/rollback*.sql`).
+  1. **Six packages, four of them duplicates.** Two `Bottle 1L` rows (SKUs
+     `-BTL`/`-BTL2`) and two 2L rows, with receiving/count history split across
+     both. The ingredient form could not delete either side — the PATCH
+     pre-flight in `api/inventory/products/[id]` blocks a drop that still has
+     references, in BOTH directions. Merged the `-BTL2` pair into the `-BTL`
+     pair across all seven referencing tables; the two duplicate `StockBalance`
+     rows were both CF Nilai at qty 0, so nothing was lost. Now four packages:
+     1,000ml Bottle (`-BTL1`), 2,000ml Bottle (`-BTL2`, default), and the two
+     cartons.
+  2. **PO CC-CC001-0430 had the wrong package.** RM83.90 is the 12x1L carton
+     price — its own paid invoice 1-15974 and two sibling invoices at the
+     identical RM671.20 (1-16076, 1-16077) are all 12x1L. Re-pointed.
+  3. **A float artefact was tripping the price guard on a no-op save.** The line
+     stored `83.90000000000001`; the edit route only guards a line when
+     `raw.unitPrice !== Number(line.unitPrice)`, so submitting `83.9` looked
+     like an edit. Normalised to `83.90`. **Worth a sweep** — any line with such
+     an artefact is unsaveable whenever its package/price pair is out of band.
+  4. **The 2L carton price was doubled.** Supplier confirmed a carton is 12 L in
+     BOTH formats ("dia samada 6 x 2L atau 12 x 1L shj / per carton masih 12L"),
+     so RM174.96 against RM84.46 for the same 12 L was double. Halved both
+     catalog rows (Milk n Moka 163.58 -> 81.79, The Milk Ministry 174.96 ->
+     87.48); all four milk catalog prices now sit in a RM6.82-7.29/L band.
+     Restated the six open POs whose payable was a GRNI placeholder, cutting
+     open AP by **RM3,586.68**, and voided the two PENDING payables sitting on
+     CANCELLED POs (GRNI-CC001-3136, GRNI-CC001-3301, RM1,224.72 each) by
+     deletion — the app's own void path for a pending placeholder
+     (`api/inventory/invoices/[id]` DELETE allows DRAFT/PENDING only).
+
+- 2026-09-12 — **Do not infer a pack size from price arithmetic.** Mid-task I
+  concluded the 2L carton held 12 bottles (24 L) because four price points fell
+  in a sane per-litre band under that reading and an absurd one under 12 L, and
+  I changed `conversionFactor` 12000 -> 24000 in prod on that basis. The
+  supplier then said the carton is 12 L either way; reverted. The arithmetic was
+  self-consistent and still wrong, because the alternative explanation — the
+  PRICE is doubled, not the volume — fits the same numbers exactly. Nothing in
+  the schema records a pack breakdown (`Invoice` has no line-item table, only
+  `photos`/`notes`), and the Supabase storage host that serves invoice images is
+  blocked by the egress proxy, so a session CANNOT read the paper itself. Ask a
+  human before changing a conversion factor.
+
 - 2026-09-11 — **Zikry converted full_time → part_time from 2026-09-01; his
   August monthly pay is now exposed to any recompute.** Owner: served notice,
   last day as a FULL-TIMER was 2026-08-31, continues as a PT. Profile
@@ -105,10 +148,12 @@ current month.
   line fires. The window and outlet mapping are fine: Putrajaya has 1,986
   completed `pos_orders` (5,687 sold lines incl. the pickup app) between the
   2026-07-31 and 2026-08-20 counts. Commit adbae563 repoints both reports at
-  `lib/inventory/report-sales.ts`. **Every branch preview deployment on Vercel
-  is CANCELED** (only `main` production builds reach READY), so branch work
-  cannot be previewed before merge — judge unmerged UI from the diff/CI, and
-  tell the owner a fix is invisible to them until it lands on main.
+  `lib/inventory/report-sales.ts`. **Most branch previews on Vercel are canceled
+  by an Ignored Build Step**, so as a rule branch work cannot be previewed
+  before merge — judge unmerged UI from the diff/CI, and tell the owner a fix is
+  probably invisible to them until it lands on main. It is not absolute: see the
+  2026-09-11 note in the resume pointer — check the PR's Vercel comment for an
+  actual READY deployment before telling the owner a preview does not exist.
 
 - 2026-09-05 — **Split payments (deposit + balance) now matched — ap-match
   item (e) done.** Third pass in `lib/finance/ap-match.ts`, after the single
@@ -2734,25 +2779,64 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   pre-booking page, missing EPF/SOCSO numbers. Two sick-leave requests
   unreviewed: Ariff (7 Aug), Batrisyia (27 Aug).
 
-
-- 2026-09-07 — **PR #1216 MERGED (648b12cc, squashed).** Follow-up PR #1223 is
-  open: prep time per batch on ProductRecipe + the Prep Manhours report, plus
-  the transfer-in fix above. **It cannot merge until the owner approves the
-  migration** `ALTER TABLE "ProductRecipe" ADD COLUMN IF NOT EXISTS
-  "prepMinutes" DECIMAL(10,2)` — the prep-recipes page and the new report both
-  select that column and will error without it.
+- 2026-09-08 — **PR #1223 MERGED (97ca76d9, squashed) and its migration is
+  APPLIED.** `ProductRecipe.prepMinutes DECIMAL(10,2) NULL` ran against prod on
+  2026-09-08 with the owner's explicit go-ahead; verified after apply as
+  `numeric(10,2)`, nullable, comment present, 14 recipes all NULL — nothing
+  backfilled. Applied-history copy is `supabase/migrations/110_prep_recipe_prep_minutes.sql`;
+  the audit-trail twin under `packages/db/prisma/migrations/` has had its
+  "NOT YET APPLIED" header flipped. Shipped with it: the Prep Manhours report
+  (`/inventory/reports/prep-labour`) and the Usage Variance transfer-in fix.
+  **Next on prep labour: nothing is timed yet.** All 14 recipes have
+  `prepMinutes` NULL, so the report will show 0 hours needed and name all 14 as
+  untimed until someone times the batches in Prep Recipes. That is the designed
+  behaviour, not a bug — do not "fix" it by defaulting to zero.
   **Two repo quirks, each now seen twice — do not re-investigate:** (1) a push
   can silently dispatch NO GitHub Actions run while other branches run fine in
   the same minute; always confirm a run exists for the head sha, and merge
-  origin/main into the branch to re-trigger it. (2) Vercel previews are off
-  repo-wide ("Canceled by Ignored Build Step"), so no branch is ever
-  previewable before merge — judge unmerged UI from the diff and CI.
-  This branch also conflicts with main on docs/STATE.md on almost every sync
-  (parallel sessions append to the same two sections); the resolution is always
-  a union keep-both, never a pick. Still held for the owner: the payment-side data repairs, setting
+  origin/main into the branch to re-trigger it. (2) Vercel's Ignored Build Step
+  cancels most branch previews, but NOT all of them, and not deterministically
+  per project. Verified against the Vercel API on PR #1230, two consecutive
+  pushes on this same branch: `d9b23b31` (a merge commit) built
+  `celsius-pickup-app` to READY with a live branch alias while backoffice and
+  staff were Ignored; `fbd05024` (docs-only, pushed 4 minutes later) had all
+  three CANCELED with errorLink = the ignored-build-step doc. So the older
+  "every branch preview is CANCELED / no branch is ever previewable" wording
+  was too strong, and so is any rule of the form "project X always previews".
+  Do not infer either way: read the deployment for the head sha
+  (`mcp__Vercel__get_deployment`, team_MbZi5UsM8IQ2fJRWdVgaTDMS) — the bot's PR
+  comment flickers between Building/Ready/Ignored while projects report in, so
+  a mid-stream read of it proves nothing.
+  Any long-lived branch conflicts with main on docs/STATE.md on almost every
+  sync (parallel sessions append to the same two sections). Keep-both is the
+  usual resolution, but it is NOT automatic: on 2026-09-11 main's side carried
+  a stale resume pointer saying #1223 "cannot merge until the owner approves
+  the migration", written before it merged. A blind union would have restored
+  the exact falsehood this branch existed to correct. Read both sides for
+  claims that later events have overtaken, and drop those.
+
+- 2026-09-08 — **Yow Seng August 2026 reconciliation is DONE but NOT WRITTEN —
+  waiting on the owner.** 27 scanned supplier invoices (RM12,523.29) matched
+  against the open GRNI placeholders. The match key that works: **outlet + PO
+  delivery date == supplier invoice date** — it holds for all 21 matched rows,
+  where amounts alone do not (our GRNI figures are PO estimates and run
+  RM435.41 over the supplier's actuals; three Putrajaya short-deliveries on
+  13/18/22 Aug account for ~RM790 of the spread). Three things need the owner's
+  call before anything is applied: (a) 6 invoices totalling RM890.50 have NO
+  payable at all — egg top-ups delivered with no PO, so they need new rows, not
+  matches; (b) `GRNI-CC002-3050` (RM443.80) is an open payable on a CANCELLED
+  PO (`CC-CC002-0368`) with no supplier invoice — looks like a duplicate PO
+  cancelled after the GRNI was minted, so it should be voided; (c) whether to
+  overwrite `amount` with the supplier's figure (the SQL does; otherwise the
+  payment run pays our estimate). Prepared SQL — 21 updates + 6 inserts, all
+  `dueDate = 2026-09-14`, one transaction — is in the session scratchpad, not
+  the repo. The September GRNIs (3272, 3314, 3273, 3316, 3274, 3315) were left
+  alone; they await September invoices.
+  Still held for the owner: the payment-side data repairs, setting
   TELEGRAM_ALLOWED_CHAT_IDS from the warn logs, and telling finance that
   Telegram-captured invoices now land as DRAFT.
-- 2026-09-07 — **Two PRs green and awaiting the owner's explicit merge word.**
+- 2026-09-07 — **#1226 and #1227 are MERGED** (`9eeba17b`, `50c2a054`) — the
+  entry below is kept for its still-open follow-ups, not as a merge request.
   #1226 `claude/disable-shift-swap` — `SHIFT_SWAP_ENABLED = false` in
   `apps/staff/src/lib/hr/constants.ts` gates the whole staff swap surface
   (fetch, pending-consent banner, Swap button, picker sheet); owner said
