@@ -20,6 +20,26 @@ if (dsn) {
     replaysSessionSampleRate: 0.0,
     replaysOnErrorSampleRate: process.env.NODE_ENV === "production" ? 1.0 : 0.0,
     // The default integrations cover global error / unhandled rejection.
+    //
+    // Mobile Safari throws "SecurityError: The operation is insecure." when
+    // Supabase Realtime (@supabase/phoenix) reopens its WebSocket while the
+    // page is being backgrounded (visibilitychange); the reconnect succeeds
+    // once the tab returns to the foreground, so these events are pure noise
+    // (CELSIUS-OPS-4, ~550 events since May). Drop only that exact
+    // signature — any other SecurityError still reports.
+    beforeSend(event) {
+      const ex = event.exception?.values?.[0];
+      if (ex?.type === "SecurityError") {
+        const frames = ex.stacktrace?.frames ?? [];
+        const fromRealtimeReconnect = frames.some(
+          (f) =>
+            f.filename?.includes("@supabase/phoenix") ||
+            f.function?.includes("transportConnect"),
+        );
+        if (fromRealtimeReconnect) return null;
+      }
+      return event;
+    },
   });
 }
 
