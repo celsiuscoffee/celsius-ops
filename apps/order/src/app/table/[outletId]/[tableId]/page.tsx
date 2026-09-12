@@ -10,8 +10,9 @@ import { TableEntry } from "./_TableEntry";
  * Scanning the QR lands here: we resolve the outlet name server-side,
  * then a tiny client component writes the dine-in context (outlet +
  * orderType "dine_in" + tableNumber) into the persisted store and
- * sends the customer straight to the menu — no outlet picker, no
- * pickup gate.
+ * pitches the native app ("10% off on the app" → /get-app store
+ * redirect) with a "Continue on web" path into the menu — no outlet
+ * picker, no pickup gate either way.
  */
 export const revalidate = 60;
 
