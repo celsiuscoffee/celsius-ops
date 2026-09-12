@@ -391,6 +391,14 @@ export const NAV_SECTIONS: NavSection[] = [
           { label: "GrabFood Ads",        href: "/ads/grab",      icon: <Megaphone className={ICON_SIZE} />,       moduleKey: "ads:grab" },
         ],
       },
+      {
+        // Job-board spend is hiring, not customer advertising — it is grouped
+        // apart so it never gets read as marketing budget.
+        label: "Recruitment",
+        items: [
+          { label: "Recruitment Ads",     href: "/ads/indeed",    icon: <Users className={ICON_SIZE} />,           moduleKey: "ads:recruitment" },
+        ],
+      },
     ],
   },
   // Catalog (= product catalog) is shared across POS, Pickup app, and the

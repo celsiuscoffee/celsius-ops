@@ -1,0 +1,21 @@
+-- Add CashCategory RECRUITMENT — job-board spend (Indeed), split out of the
+-- marketing group.
+--
+-- Why its own value rather than reusing an existing one:
+--   DIGITAL_ADS     is deduped out of bank opex (pnl-sourced.ts BANK_DIGITAL_ADS)
+--                   on the assumption the ads module already booked the spend.
+--                   That module is Google-only and indeed_ads_invoice /
+--                   indeed_ads_metric_daily are EMPTY, so routing Indeed there
+--                   erases the cost from the P&L with nothing replacing it.
+--   OTHER_MARKETING keeps it in opex but buries a hiring cost inside the
+--                   marketing line, which is what the cashflow pulse reports on.
+--
+-- Volume: RM13,922.43 across 11 claims since Jan-2025, all reimbursed through
+-- the director; RM4,165.92 in Aug-2026 alone, the largest month on record.
+--
+-- Additive + idempotent. NOT yet applied to the live DB — apply via Supabase
+-- (SQL editor or MCP apply_migration) with owner approval, then reclassify:
+--   POST /api/finance/reclassify {"full": true}
+
+-- AlterEnum
+ALTER TYPE "CashCategory" ADD VALUE IF NOT EXISTS 'RECRUITMENT';
