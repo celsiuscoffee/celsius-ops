@@ -11,6 +11,49 @@ current month.
 
 ## Verified facts
 
+- 2026-09-12 — **Fresh Milk (DFM001) package + price reconciliation, applied to
+  prod.** Four defects, all fixed; rollback scripts in the session scratchpad
+  (`milk-merge/rollback*.sql`).
+  1. **Six packages, four of them duplicates.** Two `Bottle 1L` rows (SKUs
+     `-BTL`/`-BTL2`) and two 2L rows, with receiving/count history split across
+     both. The ingredient form could not delete either side — the PATCH
+     pre-flight in `api/inventory/products/[id]` blocks a drop that still has
+     references, in BOTH directions. Merged the `-BTL2` pair into the `-BTL`
+     pair across all seven referencing tables; the two duplicate `StockBalance`
+     rows were both CF Nilai at qty 0, so nothing was lost. Now four packages:
+     1,000ml Bottle (`-BTL1`), 2,000ml Bottle (`-BTL2`, default), and the two
+     cartons.
+  2. **PO CC-CC001-0430 had the wrong package.** RM83.90 is the 12x1L carton
+     price — its own paid invoice 1-15974 and two sibling invoices at the
+     identical RM671.20 (1-16076, 1-16077) are all 12x1L. Re-pointed.
+  3. **A float artefact was tripping the price guard on a no-op save.** The line
+     stored `83.90000000000001`; the edit route only guards a line when
+     `raw.unitPrice !== Number(line.unitPrice)`, so submitting `83.9` looked
+     like an edit. Normalised to `83.90`. **Worth a sweep** — any line with such
+     an artefact is unsaveable whenever its package/price pair is out of band.
+  4. **The 2L carton price was doubled.** Supplier confirmed a carton is 12 L in
+     BOTH formats ("dia samada 6 x 2L atau 12 x 1L shj / per carton masih 12L"),
+     so RM174.96 against RM84.46 for the same 12 L was double. Halved both
+     catalog rows (Milk n Moka 163.58 -> 81.79, The Milk Ministry 174.96 ->
+     87.48); all four milk catalog prices now sit in a RM6.82-7.29/L band.
+     Restated the six open POs whose payable was a GRNI placeholder, cutting
+     open AP by **RM3,586.68**, and voided the two PENDING payables sitting on
+     CANCELLED POs (GRNI-CC001-3136, GRNI-CC001-3301, RM1,224.72 each) by
+     deletion — the app's own void path for a pending placeholder
+     (`api/inventory/invoices/[id]` DELETE allows DRAFT/PENDING only).
+
+- 2026-09-12 — **Do not infer a pack size from price arithmetic.** Mid-task I
+  concluded the 2L carton held 12 bottles (24 L) because four price points fell
+  in a sane per-litre band under that reading and an absurd one under 12 L, and
+  I changed `conversionFactor` 12000 -> 24000 in prod on that basis. The
+  supplier then said the carton is 12 L either way; reverted. The arithmetic was
+  self-consistent and still wrong, because the alternative explanation — the
+  PRICE is doubled, not the volume — fits the same numbers exactly. Nothing in
+  the schema records a pack breakdown (`Invoice` has no line-item table, only
+  `photos`/`notes`), and the Supabase storage host that serves invoice images is
+  blocked by the egress proxy, so a session CANNOT read the paper itself. Ask a
+  human before changing a conversion factor.
+
 - 2026-09-11 — **Zikry converted full_time → part_time from 2026-09-01; his
   August monthly pay is now exposed to any recompute.** Owner: served notice,
   last day as a FULL-TIMER was 2026-08-31, continues as a PT. Profile
