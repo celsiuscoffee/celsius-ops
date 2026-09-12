@@ -80,7 +80,7 @@ function AlertBanner({ alert }: { alert: StoreCard["alert"] }) {
   const map = {
     "open-no-orders": { cls: "bg-red-50 text-red-700 border-red-200", txt: "Open · 0 orders today" },
     quiet: { cls: "bg-amber-50 text-amber-800 border-amber-200", txt: "Quiet · running below usual" },
-    "manual-pause": { cls: "bg-amber-50 text-amber-800 border-amber-200", txt: "Manually paused — won't auto-reopen" },
+    "manual-pause": { cls: "bg-amber-50 text-amber-800 border-amber-200", txt: "Manually paused — auto-clears before opening tomorrow" },
   } as const;
   const m = map[alert];
   return (

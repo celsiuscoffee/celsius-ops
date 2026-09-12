@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { View, Text, Pressable, ScrollView, ActivityIndicator, Alert } from "react-native";
+import { View, Text, Pressable, ScrollView, ActivityIndicator, Alert, TextInput } from "react-native";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Constants from "expo-constants";
 import {
-  ChevronLeft, Printer, LayoutGrid, Receipt, FileText, Store, RefreshCw, CheckCircle2, AlertCircle, ExternalLink, Minus, Plus, ShoppingBag, Power,
+  ChevronLeft, Printer, LayoutGrid, Receipt, FileText, Store, RefreshCw, CheckCircle2, AlertCircle, ExternalLink, Minus, Plus, ShoppingBag, Power, CreditCard,
 } from "lucide-react-native";
+import { loadEcrConfig, saveEcrConfig, testEcrConnection, type EcrConfig } from "@/lib/maybank-ecr";
 import { usePos } from "@/lib/store";
 import { useSettings } from "@/lib/settings";
 import { useGridPrefs, ALL_COLS_MIN, ALL_COLS_MAX, ALL_IMG_MIN, ALL_IMG_MAX, ALL_IMG_STEP } from "@/lib/grid-prefs";
@@ -39,6 +40,27 @@ export default function SettingsScreen() {
 
   const [printer, setPrinter] = useState<{ connected: boolean; status?: string; name?: string; paper?: string } | null>(null);
   const [printerBusy, setPrinterBusy] = useState(false);
+
+  // ── Maybank X990 terminal (ECR over TCP) — per-till link config ──
+  const [ecr, setEcr] = useState<EcrConfig | null>(null);
+  const [ecrBusy, setEcrBusy] = useState(false);
+  const [ecrStatus, setEcrStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  useEffect(() => { loadEcrConfig().then(setEcr); }, []);
+  const patchEcr = (p: Partial<EcrConfig>) => {
+    setEcr((prev) => {
+      const next = { ...(prev ?? { enabled: false, host: "", port: 0, salt: "" }), ...p };
+      void saveEcrConfig(next);
+      return next;
+    });
+  };
+  async function onTestEcr() {
+    if (!ecr) return;
+    Haptics.selectionAsync();
+    setEcrBusy(true);
+    setEcrStatus(null);
+    setEcrStatus(await testEcrConnection(ecr));
+    setEcrBusy(false);
+  }
 
   // Store shift (open/close) — moved here from the register header, which now
   // shows a status-only indicator. Same primitives the register uses, so state
@@ -78,6 +100,14 @@ export default function SettingsScreen() {
               setClosedTotals(totals ?? { orders: 0, sales: 0 });
               await reloadShift();
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              // End-of-day terminal settlement (Maybank ECR). Best-effort and
+              // non-blocking — settlement can also be run on the terminal
+              // itself, so a failure must never hold up the store close.
+              import("@/lib/maybank-terminal").then(({ settleTerminal }) =>
+                settleTerminal().then((r) => {
+                  if (!r.ok) console.warn("[ecr] settlement:", r.message);
+                }),
+              ).catch(() => {});
             } finally {
               setShiftBusy(false);
             }
@@ -446,6 +476,41 @@ export default function SettingsScreen() {
             </Card>
           )}
 
+          {/* ── Maybank X990 payment terminal (ECR over TCP) ────────────
+              The terminal is a TCP server on the outlet LAN; IP/port/salt
+              come from the Maybank/ITBF terminal config sheet. While OFF
+              (or unconfigured) the card flow uses the rehearsal stub and
+              labels its approvals SIMULATION. */}
+          <Card title="Maybank Terminal" Icon={CreditCard}>
+            {ecr && (
+              <>
+                <ToggleRow
+                  label="Use terminal for card / DuitNow QR"
+                  hint={ecr.enabled ? "Charges go to the X990 over the LAN" : "OFF — card flow is a labelled simulation"}
+                  value={ecr.enabled}
+                  onToggle={() => { Haptics.selectionAsync(); patchEcr({ enabled: !ecr.enabled }); }}
+                />
+                <InputRow label="Terminal IP" value={ecr.host} placeholder="192.168.0.150"
+                  keyboardType="numbers-and-punctuation" onChange={(v) => patchEcr({ host: v.trim() })} />
+                <InputRow label="Port" value={ecr.port ? String(ecr.port) : ""} placeholder="e.g. 3388"
+                  keyboardType="number-pad" onChange={(v) => patchEcr({ port: parseInt(v, 10) || 0 })} />
+                <InputRow label="Checksum salt" value={ecr.salt} placeholder="from config sheet" secure
+                  onChange={(v) => patchEcr({ salt: v })} />
+                <View className="flex-row gap-3 mt-2">
+                  <Btn label={ecrBusy ? "Testing…" : "Test Connection"} Icon={RefreshCw} onPress={onTestEcr} disabled={ecrBusy || !ecr.host || !ecr.port} primary />
+                </View>
+                {ecrStatus && (
+                  <View className="flex-row items-center gap-2 mt-1">
+                    {ecrStatus.ok ? <CheckCircle2 size={14} color={OK} /> : <AlertCircle size={14} color={WARN} />}
+                    <Text className="text-xs flex-1" style={{ fontFamily: "SpaceGrotesk_500Medium", color: ecrStatus.ok ? OK : WARN }}>
+                      {ecrStatus.message}
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
+          </Card>
+
           {/* ── Terminal ── */}
           <Card title="Terminal" Icon={Store}>
             <Row label="Outlet" value={`${outletShort(outletId)} (${outletId ?? "—"})`} />
@@ -467,6 +532,34 @@ function Card({ title, Icon, children }: { title: string; Icon: any; children: R
         <Text className="text-cream text-base" style={{ fontFamily: "Peachi-Bold" }}>{title}</Text>
       </View>
       {children}
+    </View>
+  );
+}
+
+function InputRow({
+  label, value, placeholder, onChange, keyboardType, secure,
+}: {
+  label: string; value: string; placeholder?: string; onChange: (v: string) => void;
+  keyboardType?: "default" | "number-pad" | "numbers-and-punctuation"; secure?: boolean;
+}) {
+  return (
+    <View className="flex-row items-center justify-between py-1.5">
+      <Text className="text-cream/55 text-sm" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>{label}</Text>
+      <TextInput
+        value={value}
+        placeholder={placeholder}
+        placeholderTextColor="rgba(245,243,240,0.25)"
+        onChangeText={onChange}
+        keyboardType={keyboardType ?? "default"}
+        secureTextEntry={secure}
+        autoCapitalize="none"
+        autoCorrect={false}
+        className="text-cream text-sm text-right"
+        style={{
+          fontFamily: "SpaceGrotesk_600SemiBold", flex: 1, marginLeft: 16, paddingVertical: 8, paddingHorizontal: 12,
+          backgroundColor: "rgba(245,243,240,0.06)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(245,243,240,0.12)",
+        }}
+      />
     </View>
   );
 }

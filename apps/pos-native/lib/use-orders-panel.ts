@@ -51,7 +51,11 @@ const COUNTER_WINDOW_MS = 6 * 60 * 60 * 1000; // last 6h
 // so a live order is always well inside this window; the bound just stops a
 // historical backlog of un-advanced "open" orders from flooding the panel.
 const GRAB_WINDOW_MS = 12 * 60 * 60 * 1000; // last 12h
-const SAFETY_REFRESH_MS = 60 * 1000; // backstop refetch if a Realtime event is dropped
+// Backstop refetch if a Realtime event is dropped (flaky venue Wi-Fi). Kept
+// short: a dropped "order done" event leaves a finished order lingering in this
+// live list, which keeps the serving-time alarm blaring for an order that's
+// already been served — so we reconcile quickly rather than every 60s.
+const SAFETY_REFRESH_MS = 15 * 1000;
 
 export type KdsSource = "pickup" | "grab" | "counter";
 
