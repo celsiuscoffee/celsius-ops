@@ -163,7 +163,10 @@ export default function ReceivingsPage() {
   const openReceiveDialog = async (autoSelectOrderId?: string) => {
     // Fetch orders and transfers in parallel
     const [ordersRes, transfersRes] = await Promise.all([
-      fetch("/api/inventory/orders?tab=active"),
+      // tab=receivable filters to APPROVED/SENT/AWAITING_DELIVERY/
+      // PARTIALLY_RECEIVED server-side and sorts oldest-first, so the 100-row
+      // cap holds POs that can actually be received and the overdue ones lead.
+      fetch("/api/inventory/orders?tab=receivable"),
       fetch("/api/inventory/transfers"),
     ]);
     const ordersJson = ordersRes.ok ? await ordersRes.json() : [];
