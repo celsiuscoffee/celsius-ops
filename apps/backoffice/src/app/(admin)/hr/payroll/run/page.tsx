@@ -576,6 +576,7 @@ function EmployeeBreakdown({
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Earnings</p>
           <EditableRow
             label={earnLines[0].label}
+            detail={earnLines[0].detail}
             value={item.basic_salary}
             field="basic_salary"
             item={item}
@@ -589,6 +590,7 @@ function EmployeeBreakdown({
                   <EditableRow
                     key={line.key}
                     label={line.label}
+                    detail={line.detail}
                     value={line.amount}
                     field={line.field}
                     item={item}
@@ -596,7 +598,7 @@ function EmployeeBreakdown({
                     onItemUpdated={onItemUpdated}
                   />
                 ) : (
-                  <Row key={line.key} label={line.label} value={line.amount} />
+                  <Row key={line.key} label={line.label} detail={line.detail} value={line.amount} />
                 ),
               )}
               {totalOT === 0 && <Row label={`OT (${item.total_ot_hours.toFixed(1)} hrs)`} value={totalOT} />}
@@ -1118,10 +1120,15 @@ function AdjustmentForm({
   );
 }
 
-function Row({ label, value, bold = false }: { label: string; value: number; bold?: boolean }) {
+function Row({ label, value, detail, bold = false }: { label: string; value: number; detail?: string; bold?: boolean }) {
   return (
     <div className={`flex items-center justify-between ${bold ? "border-t pt-1 font-medium" : ""}`}>
-      <span className="text-gray-500">{label}</span>
+      <span className="text-gray-500">
+        {label}
+        {/* Quantity and rate behind the amount — the Employment Act wants the
+            overtime hours and the rate shown, not a lump sum. */}
+        {detail ? <span className="ml-1.5 text-[10px] text-gray-400">{detail}</span> : null}
+      </span>
       <span className="font-mono">RM {value.toFixed(2)}</span>
     </div>
   );
@@ -1133,10 +1140,11 @@ function Row({ label, value, bold = false }: { label: string; value: number; bol
 //   - "allowance:CODE"        → patches allowances jsonb entry
 //   - "other_deduction:CODE"  → patches other_deductions jsonb entry
 function EditableRow({
-  label, value, field, item, editable, onItemUpdated,
+  label, value, detail, field, item, editable, onItemUpdated,
 }: {
   label: string;
   value: number;
+  detail?: string;
   field: string;
   item: PayrollItem;
   editable: boolean;
@@ -1149,7 +1157,7 @@ function EditableRow({
   const wasOverridden = !!overrides[field];
 
   if (!editable) {
-    return <Row label={label} value={value} />;
+    return <Row label={label} value={value} detail={detail} />;
   }
 
   const startEdit = () => {

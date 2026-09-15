@@ -13,6 +13,10 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { earningsLines, otHoursFromDetails, type OtHoursByRate } from "./pay-lines";
 
+/** One earnings row: description, amount, and the "18.5 hrs × 16.92" detail
+ *  (empty for lines with no meaningful quantity, e.g. salary or an allowance). */
+type EarningsRow = [label: string, amount: number, detail?: string];
+
 // Logo bytes loaded lazily — file read once per process.
 let _logoBytes: Uint8Array | null | undefined;
 function loadLogoBytes(): Uint8Array | null {
@@ -263,7 +267,7 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
   // Basic + every OT / day-type line, derived once in pay-lines.ts so the PDF,
   // the run page, the staff payslip page and the manager app read identically.
   const otH = d.otHoursByRate || {};
-  const earnings: [string, number][] = earningsLines({
+  const earnings: EarningsRow[] = earningsLines({
     basicSalary: d.basicSalary,
     ot1xAmount: d.ot1xAmount,
     ot1_5xAmount: d.ot1_5xAmount,
@@ -281,7 +285,7 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
       rest_day_days_worked: d.restDayDays,
       rest_day_wage_days: d.restDayWageDays,
     },
-  }).map((line) => [line.label, line.amount] as [string, number]);
+  }).map((line) => [line.label, line.amount, line.detail] as EarningsRow);
   for (const a of d.allowances) {
     if (a.amount > 0) earnings.push([a.label, a.amount]);
   }
@@ -316,9 +320,17 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
   let leftY = y;
   let rightY = y;
   const rowH = 13;
-  for (const [label, amt] of earnings) {
+  for (const [label, amt, detail] of earnings) {
     drawRow(page, font, bold, leftX + 6, leftY, colW - 12, label, amt, black);
     leftY -= rowH;
+    // Quantity and rate under the description. The Employment Act requires the
+    // overtime hours AND the rate applied to be shown, not a lump sum, and the
+    // earnings/deductions columns are each only half the page — too narrow for
+    // real Qty and Rate columns, so they ride beneath in a smaller grey face.
+    if (detail) {
+      page.drawText(detail, { x: leftX + 12, y: leftY + 3, size: 7, font, color: gray });
+      leftY -= 9;
+    }
   }
   for (const [label, amt] of deductions) {
     drawRow(page, font, bold, rightX + 6, rightY, colW - 12, label, amt, black);

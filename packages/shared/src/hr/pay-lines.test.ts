@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  earningsLines,
-  otLineLabel,
-  publicHolidayPayLabel,
-  restDayPayLabel,
-  hourlyWagesLabel,
-} from "./pay-lines";
+import { earningsLines, otLineLabel, OT_LINE_BASE } from "./pay-lines";
 
 // The August 2026 payslip the owner queried: RM2,200 basic, 18.5h weekday OT,
 // one public holiday worked (7h), 1h past normal hours on that holiday.
@@ -24,84 +18,114 @@ const AUG = {
   },
 };
 
-describe("labels", () => {
-  it("never renders a wage quantity as a rate multiplier", () => {
-    // "(1 day × 2)" read as a 2× rate next to "OT 1.5×" / "OT 3.0×" — the
-    // complaint that prompted this. A wage quantity is spelled out in days.
-    const label = publicHolidayPayLabel(1, 7);
-    expect(label).toBe("Public Holiday Pay (1 day worked) · 2 days' wages");
-    expect(label).not.toContain("× 2");
+const rows = (input: Parameters<typeof earningsLines>[0]) =>
+  earningsLines(input).map((l) => [l.label, l.qty, l.rate, l.amount]);
+
+describe("descriptions", () => {
+  it("are the plain industry term, with nothing explained in brackets", () => {
+    // Owner: "no need to explain the 1day x 2 etc. weekday etc. this is very
+    // weird." Which DAY earns which multiplier is the calculator's business.
+    expect(Object.values(OT_LINE_BASE)).toEqual([
+      "Overtime 1.0×", "Overtime 1.5×", "Overtime 2.0×", "Overtime 3.0×",
+    ]);
+    for (const label of Object.values(OT_LINE_BASE)) {
+      expect(label).not.toMatch(/[()]/);
+    }
+    expect(otLineLabel("1_5x")).toBe("Overtime 1.5×");
   });
 
-  it("scales the wage quantity with the holidays worked", () => {
-    expect(publicHolidayPayLabel(2, 14)).toBe("Public Holiday Pay (2 days worked) · 4 days' wages");
-  });
-
-  it("states hours but not a wage quantity for legacy items with no day count", () => {
-    // Pre-2026-09-03 items carry hours only; the number of holidays behind
-    // those hours is unknown, so the wage quantity would be a guess.
-    expect(publicHolidayPayLabel(0, 7)).toBe("Public Holiday Pay (7.0h worked)");
-    expect(publicHolidayPayLabel(0, 0)).toBe("Public Holiday Pay");
-  });
-
-  it("renders a half day's rest-day wages as ½, not ×0.5", () => {
-    expect(restDayPayLabel(1, 0.5)).toBe("Rest Day Pay (1 day worked) · ½ day's wages");
-    expect(restDayPayLabel(1, 1)).toBe("Rest Day Pay (1 day worked) · 1 day's wages");
-    expect(restDayPayLabel(2, 1.5)).toBe("Rest Day Pay (2 days worked) · 1½ days' wages");
-    // Items computed before rest_day_wage_days existed omit the quantity.
-    expect(restDayPayLabel(2, 0)).toBe("Rest Day Pay (2 days worked)");
-    expect(restDayPayLabel(0, 0)).toBe("Rest Day Pay");
-  });
-
-  it("pads whole hours to one decimal so surfaces cannot disagree", () => {
-    // The manager app's hand-copy said "1h" where every other surface said "1.0h".
-    expect(otLineLabel("3x", 1)).toBe("OT 3.0× (Public Holiday) · 1.0h");
-    expect(otLineLabel("1_5x", 18.5)).toBe("OT 1.5× (Weekday) · 18.5h");
-    expect(otLineLabel("1x", 0)).toBe("OT 1.0× (Plain Rate)");
-  });
-
-  it("labels the weekly part-timer's basic line by hours and rate", () => {
-    expect(hourlyWagesLabel(42.5, 8)).toBe("Hourly Wages · 42.5h × RM8.00/h");
-    expect(hourlyWagesLabel(42.5, 0)).toBe("Hourly Wages · 42.5h");
-    expect(hourlyWagesLabel(0, 8)).toBe("Hourly Wages");
+  it("never puts a quantity inside the description", () => {
+    for (const l of earningsLines(AUG)) {
+      expect(l.label).not.toMatch(/\d+\s*(day|hr|h\b)/i);
+      expect(l.label).not.toContain("× 2");
+    }
   });
 });
 
 describe("earningsLines", () => {
-  it("renders the August payslip as basic + three lines, summing to gross", () => {
-    const lines = earningsLines(AUG);
-    expect(lines.map((l) => [l.label, l.amount])).toEqual([
-      ["Basic Salary", 2200],
-      ["OT 1.5× (Weekday) · 18.5h", 313.08],
-      ["Public Holiday Pay (1 day worked) · 2 days' wages", 169.23],
-      ["OT 3.0× (Public Holiday) · 1.0h", 33.85],
+  it("renders the August payslip with the arithmetic in its own columns", () => {
+    expect(rows(AUG)).toEqual([
+      ["Basic Salary",       "",         "",      2200],
+      ["Overtime 1.5×",      "18.5 hrs", "16.92", 313.08],
+      ["Public Holiday Pay", "2 days",   "84.62", 169.23],
+      ["Overtime 3.0×",      "1.0 hrs",  "33.85", 33.85],
     ]);
-    // 2,876.15 gross less the RM160 performance allowance, which is not an
-    // earnings LINE — allowances are appended by each surface.
-    expect(lines.reduce((s, l) => s + l.amount, 0)).toBeCloseTo(2716.16, 2);
+  });
+
+  it("states the holiday quantity as days' WAGES, so 2 days × ORP ties out", () => {
+    // s.60D(3)(a): two days' wages per holiday worked. One holiday -> 2 days at
+    // the ordinary rate (2200/26 = 84.62). This is the "× 2" the old label was
+    // trying to explain in prose.
+    const ph = earningsLines(AUG).find((l) => l.key === "public_holiday")!;
+    expect(ph.qty).toBe("2 days");
+    expect(Number(ph.rate)).toBeCloseTo(2200 / 26, 1);
+    expect(ph.detail).toBe("2 days × 84.62");
+  });
+
+  it("keeps the AMOUNT authoritative — a displayed rate is rounded to 2dp", () => {
+    // 169.23 / 2 = 84.615, which prints as 84.62; 84.62 x 2 reads back 169.24.
+    // A payslip cannot show 84.615, so the cent has to land somewhere: it lands
+    // in the rate, never in the amount. Gross always ties to the amount column.
+    const ph = earningsLines(AUG).find((l) => l.key === "public_holiday")!;
+    expect(ph.rate).toBe("84.62");
+    expect(ph.amount).toBe(169.23);
+    // At most one cent per unit of quantity, and it never touches the amount.
+    expect(Math.round(Math.abs(Number(ph.rate) * 2 - ph.amount) * 100)).toBeLessThanOrEqual(2);
+  });
+
+  it("scales the holiday quantity with the holidays worked", () => {
+    const two = earningsLines({
+      ...AUG, ot2xAmount: 338.46,
+      details: { ...AUG.details, ph_premium_amount: 338.46, ph_days_worked: 2 },
+    }).find((l) => l.key === "public_holiday")!;
+    expect(two.qty).toBe("4 days");
+    expect(two.rate).toBe("84.62");
+  });
+
+  it("rates rest-day pay on days' wages, not days worked", () => {
+    // Two rest days, one short (half a day's wages) and one full = 1.5 days'
+    // wages. Rating on "2 days worked" would understate the daily rate.
+    const rd = earningsLines({
+      basicSalary: 2200,
+      ot1xAmount: 126.92,
+      details: { rest_day_pay_amount: 126.92, rest_day_days_worked: 2, rest_day_wage_days: 1.5 },
+    }).find((l) => l.key === "rest_day")!;
+    expect(rd.qty).toBe("1.5 days");
+    expect(Number(rd.rate)).toBeCloseTo(2200 / 26, 1);
+    expect(rd.amount).toBe(126.92);
+  });
+
+  it("leaves qty and rate empty for a monthly salary", () => {
+    // A monthly salary is the contracted figure, not 26 × a daily rate.
+    const [basic] = earningsLines(AUG);
+    expect([basic.qty, basic.rate, basic.detail]).toEqual(["", "", ""]);
+  });
+
+  it("rates a weekly part-timer's wages by the hours clocked", () => {
+    const [basic] = earningsLines({
+      basicSalary: 340, isWeekly: true, regularHours: 42.5, details: {},
+    });
+    expect([basic.label, basic.qty, basic.rate]).toEqual(["Hourly Wages", "42.5 hrs", "8.00"]);
   });
 
   it("splits a column carrying both a holiday premium and real rest-day OT", () => {
     const lines = earningsLines({
-      ...AUG,
-      ot2xAmount: 250,
+      ...AUG, ot2xAmount: 250,
       details: { ...AUG.details, ot_hours_2x: 3 },
     });
     const two = lines.filter((l) => l.field === "ot_2x_amount");
-    expect(two.map((l) => [l.label, l.amount])).toEqual([
-      ["Public Holiday Pay (1 day worked) · 2 days' wages", 169.23],
-      ["OT 2.0× (Rest Day) · 3.0h", 80.77],
+    expect(two.map((l) => [l.label, l.qty, l.amount])).toEqual([
+      ["Public Holiday Pay", "2 days", 169.23],
+      ["Overtime 2.0×", "3.0 hrs", 80.77], // not 80.77000000000001
     ]);
     // Neither half may be edited inline: the run page writes the whole column.
     expect(two.every((l) => !l.ownsField)).toBe(true);
   });
 
   it("gives a premium the whole column when no overtime remains", () => {
-    // A sub-cent rounding remainder must not fall out of the payslip and leave
-    // the earnings column short of gross.
+    // A sub-cent remainder must not fall out and leave earnings short of gross.
     const lines = earningsLines({
-      ...AUG,
-      ot2xAmount: 169.234,
+      ...AUG, ot2xAmount: 169.234,
       details: { ...AUG.details, ph_premium_amount: 169.23 },
     });
     const ph = lines.find((l) => l.key === "public_holiday")!;
@@ -110,21 +134,9 @@ describe("earningsLines", () => {
     expect(lines.some((l) => l.key === "ot_2x")).toBe(false);
   });
 
-  it("shows plain overtime when the column carries no premium", () => {
-    const lines = earningsLines({
-      basicSalary: 2200,
-      ot2xAmount: 80.77,
-      details: { ot_hours_2x: 3 },
-    });
-    expect(lines[1]).toMatchObject({ key: "ot_2x", label: "OT 2.0× (Rest Day) · 3.0h", ownsField: true });
-  });
-
   it("never invents a negative overtime line from a stale detail block", () => {
-    // ph_premium_amount larger than the column it rides in — e.g. details
-    // written by an older run against a hand-edited 2× amount.
     const lines = earningsLines({
-      basicSalary: 2200,
-      ot2xAmount: 50,
+      basicSalary: 2200, ot2xAmount: 50,
       details: { ph_premium_amount: 169.23, ph_days_worked: 1 },
     });
     expect(lines.filter((l) => l.field === "ot_2x_amount")).toHaveLength(1);
@@ -132,20 +144,20 @@ describe("earningsLines", () => {
     expect(lines.every((l) => l.amount >= 0)).toBe(true);
   });
 
-  it("emits basic alone when there is no overtime at all", () => {
-    expect(earningsLines({ basicSalary: 2200, details: {} })).toEqual([
-      { key: "basic", field: "basic_salary", label: "Basic Salary", amount: 2200, ownsField: true },
-    ]);
+  it("omits qty and rate rather than dividing by a missing quantity", () => {
+    // Historical items carry an amount with no hours recorded.
+    const lines = earningsLines({
+      basicSalary: 2200, ot1_5xAmount: 313.08, details: {},
+    });
+    const ot = lines.find((l) => l.key === "ot_1_5x")!;
+    expect([ot.qty, ot.rate, ot.detail]).toEqual(["", "", ""]);
+    expect(ot.amount).toBe(313.08);
   });
 
-  it("labels a weekly run's basic line as hourly wages", () => {
-    const [basic] = earningsLines({
-      basicSalary: 340,
-      isWeekly: true,
-      regularHours: 42.5,
-      hourlyRate: 8,
-      details: {},
-    });
-    expect(basic.label).toBe("Hourly Wages · 42.5h × RM8.00/h");
+  it("emits basic alone when there is no overtime at all", () => {
+    expect(earningsLines({ basicSalary: 2200, details: {} })).toEqual([
+      { key: "basic", field: "basic_salary", label: "Basic Salary",
+        qty: "", rate: "", detail: "", amount: 2200, ownsField: true },
+    ]);
   });
 });

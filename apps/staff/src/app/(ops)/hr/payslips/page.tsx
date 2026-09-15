@@ -171,7 +171,7 @@ export default function PayslipsPage() {
                       ot3xAmount: Number(slip.ot_3x_amount || 0),
                       details: (slip.computation_details || {}) as Record<string, unknown>,
                     }).map((line) => (
-                      <Row key={line.key} label={line.label} value={fmt(line.amount)} />
+                      <Row key={line.key} label={line.label} detail={line.detail} value={fmt(line.amount)} />
                     ))}
                     {totalAllowances > 0 && allowanceEntries.map(([key, a]) => (
                       <Row
@@ -227,10 +227,16 @@ export default function PayslipsPage() {
   );
 }
 
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+function Row({ label, value, detail, bold }: { label: string; value: string; detail?: string; bold?: boolean }) {
   return (
     <div className={`flex justify-between py-1 ${bold ? "font-semibold" : ""}`}>
-      <span className="text-gray-600">{label}</span>
+      <span className="text-gray-600">
+        {label}
+        {/* Quantity and rate. The Employment Act wants the hours and the rate
+            shown rather than a lump sum; at this width they read better under
+            the description than as their own columns. */}
+        {detail ? <span className="ml-2 text-[11px] text-gray-400">{detail}</span> : null}
+      </span>
       <span>{value}</span>
     </div>
   );

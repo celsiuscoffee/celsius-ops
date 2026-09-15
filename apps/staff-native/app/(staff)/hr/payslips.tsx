@@ -60,7 +60,10 @@ export default function PayslipsScreen() {
 // pay-lines.vendored.test.ts. Hand-copying just the label strings is what let
 // this screen drift to "Basic salary" and "1h" while every other surface said
 // "Basic Salary" and "1.0h".
-function earningLinesFor(p: Payslip, isWeekly: boolean): Array<{ label: string; value: number }> {
+function earningLinesFor(
+  p: Payslip,
+  isWeekly: boolean,
+): Array<{ label: string; value: number; detail?: string }> {
   const n = (v: unknown) => Number(v ?? 0) || 0;
   const d = (p.computation_details ?? {}) as Record<string, unknown>;
   const lines = earningsLines({
@@ -73,11 +76,11 @@ function earningLinesFor(p: Payslip, isWeekly: boolean): Array<{ label: string; 
     ot2xAmount: n(p.ot_2x_amount),
     ot3xAmount: n(p.ot_3x_amount),
     details: d,
-  }).map((l) => ({ label: l.label, value: l.amount }));
+  }).map((l) => ({ label: l.label, value: l.amount, detail: l.detail }));
   // Older items have no detail block and no per-rate amounts: fall back to one
   // overtime line after the basic so the gross still ties out.
   if (lines.length === 1 && n(p.overtime_pay) > 0.004) {
-    lines.push({ label: "Overtime", value: n(p.overtime_pay) });
+    lines.push({ label: "Overtime", value: n(p.overtime_pay), detail: "" });
   }
   return lines;
 }
@@ -201,7 +204,7 @@ function PayslipCard({ payslip }: { payslip: Payslip }) {
           <SectionLabel>Earnings</SectionLabel>
           <View className="gap-1">
             {earningLines.map((l) => (
-              <PayRow key={l.label} label={l.label} value={l.value} />
+              <PayRow key={l.label} label={l.label} detail={l.detail} value={l.value} />
             ))}
             {allow > 0 ? <PayRow label="Performance Allowance" value={allow} /> : null}
           </View>
@@ -289,16 +292,27 @@ function Subtotal({ label, value }: { label: string; value: number }) {
 function PayRow({
   label,
   value,
+  detail,
   muted,
 }: {
   label: string;
   value: number;
+  /** "18.5 hrs × 16.92" — quantity and rate, under the description. */
+  detail?: string;
   muted?: boolean;
 }) {
   const isNeg = value < 0;
   return (
     <View className="flex-row justify-between">
-      <Text className="text-sm font-body text-muted-fg">{label}</Text>
+      <View className="flex-1 pr-3">
+        <Text className="text-sm font-body text-muted-fg">{label}</Text>
+        {/* The Employment Act wants the overtime hours and the rate applied
+            shown, not a lump sum. A phone has no room for Qty and Rate columns,
+            so they sit beneath the description. */}
+        {detail ? (
+          <Text className="text-[11px] font-body text-muted-fg opacity-60">{detail}</Text>
+        ) : null}
+      </View>
       <Text
         className={`text-sm font-body-medium ${
           muted ? "text-muted-fg" : isNeg ? "text-danger" : "text-espresso"
