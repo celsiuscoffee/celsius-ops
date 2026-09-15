@@ -65,7 +65,7 @@ async function pickOutletByLocation(candidateIds: string[], lat: number | undefi
 // just-past-midnight clock-in for the previous evening's shift.
 const ROSTER_STALE_GRACE_MS = 4 * 3600 * 1000;
 
-async function findRosterShift(userId: string, clockIn: Date): Promise<{ scheduled_start: string; scheduled_end: string | null; scheduled_date: string } | null> {
+async function findRosterShift(userId: string, clockIn: Date): Promise<{ scheduled_start: string; scheduled_end: string | null; scheduled_date: string; scheduled_break_minutes: number | null } | null> {
   const todayMyt = mytDateString(clockIn);
   const prevMyt = mytDateString(new Date(clockIn.getTime() - 24 * 3600 * 1000));
   // Accept ANY roster shift (draft or published). Rosters are often left as
@@ -74,10 +74,10 @@ async function findRosterShift(userId: string, clockIn: Date): Promise<{ schedul
   // time). We no longer filter on hr_schedules.status.
   const { data } = await supabase
     .from("hr_schedule_shifts")
-    .select("shift_date, start_time, end_time")
+    .select("shift_date, start_time, end_time, break_minutes")
     .eq("user_id", userId)
     .in("shift_date", [prevMyt, todayMyt]);
-  const shifts = (data ?? []) as { shift_date: string; start_time: string; end_time: string | null }[];
+  const shifts = (data ?? []) as { shift_date: string; start_time: string; end_time: string | null; break_minutes: number | null }[];
   let best: { shift: (typeof shifts)[number]; diff: number } | null = null;
   for (const s of shifts) {
     const startInstant = mytInstant(s.shift_date, s.start_time);
@@ -111,7 +111,12 @@ async function findRosterShift(userId: string, clockIn: Date): Promise<{ schedul
   // downstream (the auto-close cron falls through to its stale-session
   // backstop); a stale one silently corrupts lateness, pay and the close time.
   if (!best) return null;
-  return { scheduled_start: best.shift.start_time, scheduled_end: best.shift.end_time, scheduled_date: best.shift.shift_date };
+  return {
+    scheduled_start: best.shift.start_time,
+    scheduled_end: best.shift.end_time,
+    scheduled_date: best.shift.shift_date,
+    scheduled_break_minutes: best.shift.break_minutes,
+  };
 }
 
 // Day-type inputs for the pay-hours split (employment type, PH, rostered rest
@@ -274,6 +279,7 @@ export async function POST(req: NextRequest) {
       isRestDay: ctx.isRestDay,
       scheduledStart: mytInstant(shiftDate, staleLog.scheduled_start),
       scheduledEnd: mytInstant(shiftDate, staleLog.scheduled_end),
+      rosteredBreakMinutes: staleLog.scheduled_break_minutes ?? null,
     });
     const priorFlags: string[] = Array.isArray(staleLog.ai_flags) ? staleLog.ai_flags : [];
     const flags = [...priorFlags, "auto_closed_forgot_clockout", ...derived.dayTypeFlags]
@@ -407,6 +413,9 @@ export async function POST(req: NextRequest) {
         scheduled_start: roster?.scheduled_start ?? null,
         scheduled_end: roster?.scheduled_end ?? null,
         scheduled_date: roster?.scheduled_date ?? null,
+        // The roster's own unpaid break, pinned with the window so a later
+        // roster edit can't change what this shift was paid against.
+        scheduled_break_minutes: roster?.scheduled_break_minutes ?? null,
         ai_status: "pending",
       })
       .select()
@@ -512,6 +521,7 @@ export async function POST(req: NextRequest) {
       // the backoffice processor — this tap-out writes regular_hours directly.
       scheduledStart: mytInstant(activeLog.scheduled_date ?? clockInDate, activeLog.scheduled_start),
       scheduledEnd: mytInstant(activeLog.scheduled_date ?? clockInDate, activeLog.scheduled_end),
+      rosteredBreakMinutes: activeLog.scheduled_break_minutes ?? null,
     });
     const totalHours = derived.totalHours;
 

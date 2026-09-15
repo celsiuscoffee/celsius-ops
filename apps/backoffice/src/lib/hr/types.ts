@@ -142,6 +142,8 @@ export type AttendanceLog = {
   scheduled_start: string | null;
   scheduled_end: string | null;
   scheduled_date: string | null;
+  /** Rostered unpaid break stamped at clock-in; null = no roster row. */
+  scheduled_break_minutes: number | null;
   ai_status: "pending" | "approved" | "flagged" | "reviewed";
   ai_flags: string[];
   ai_processed_at: string | null;
