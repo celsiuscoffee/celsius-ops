@@ -107,6 +107,37 @@ jobs:
           fi
           echo "Migration guard passed."
 
+  # The guard above proves a migration FILE exists. It cannot know whether the
+  # SQL was ever RUN — migrations here are applied by hand (hard rule 1). That
+  # gap shipped code ahead of the schema twice in one week: #1233's
+  # payslip_release_day sat inert for four days, and #1235's
+  # scheduled_break_minutes took production clock-in down, because the deployed
+  # INSERT named a column that did not exist.
+  #
+  # This job closes it by comparing every migration against the LIVE schema.
+  # It needs a database URL, so it is skipped (not failed) when the secret is
+  # absent — a fork PR must not fail on a secret it cannot have.
+  migration-applied:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check every migration is present in the live schema
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DIRECT_URL" ] && [ -z "$DATABASE_URL" ]; then
+            echo "::notice::No database URL available — skipping the applied-migration check."
+            exit 0
+          fi
+          npm run check:migrations
+
   # In-field runtime guard. An `eas update` publish targets the runtimeVersion
   # app.json resolves to; an INSTALLED app only accepts updates matching the
   # runtimeVersion it was BUILT with. When those diverge the publish still

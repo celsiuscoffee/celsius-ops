@@ -1,28 +1,81 @@
 import { describe, it, expect } from "vitest";
-import { deriveHours, otBracketHours, paidWindowHours, pickShiftWindow } from "./hours";
+import { deriveHours, otBracketHours, paidWindowHours, pickShiftWindow, breakHoursFor } from "./hours";
 
 const at = (iso: string) => new Date(iso);
 const base = { employmentType: "full_time", isPublicHoliday: false, isRestDay: false };
 
-// FT: 7.5h/day OT threshold, 1h unpaid break when the shift runs over 5h.
+// FT: 7.5h/day OT threshold, 30-min unpaid break when the shift runs over 5h.
+// (The cohort default was 1h until 2026-09-15 — the only rule in the system
+// claiming more than the 30 minutes every template and roster row carries.
+// Correcting it adds half an hour of paid time, which also spills into OT.)
+describe("breakHoursFor — the roster is authoritative", () => {
+  // Owner 2026-09-15: "roster break_minutes should be authoritative."
+  it("uses the rostered break over the cohort default", () => {
+    expect(breakHoursFor("full_time", 8, 30)).toBe(0.5);
+    expect(breakHoursFor("full_time", 8, 60)).toBe(1);
+    expect(breakHoursFor("part_time", 8, 45)).toBe(0.75);
+  });
+
+  it("honours an explicit zero — a shift a manager marked as having no break", () => {
+    // The bug this guards: `breakMinutes || cohort` would treat 0 as absent and
+    // silently dock the break anyway.
+    expect(breakHoursFor("full_time", 8, 0)).toBe(0);
+    expect(breakHoursFor("part_time", 8, 0)).toBe(0);
+  });
+
+  it("falls back to the cohort default when there is no roster row", () => {
+    expect(breakHoursFor("full_time", 8, null)).toBe(0.5);
+    expect(breakHoursFor("full_time", 8, undefined)).toBe(0.5);
+    expect(breakHoursFor("part_time", 8)).toBe(0.5);
+    // Short shifts take no break either way.
+    expect(breakHoursFor("full_time", 4)).toBe(0);
+    expect(breakHoursFor("part_time", 3)).toBe(0);
+  });
+
+  it("never deducts more break than the shift is long", () => {
+    expect(breakHoursFor("full_time", 0.25, 60)).toBe(0.25);
+  });
+
+  it("ignores a nonsense rostered value and falls back", () => {
+    expect(breakHoursFor("full_time", 8, -30)).toBe(0.5);
+    expect(breakHoursFor("full_time", 8, Number.NaN)).toBe(0.5);
+  });
+});
+
+describe("deriveHours — rostered break", () => {
+  it("pays the roster's 30 minutes, not the old 1-hour cohort rule", () => {
+    // Haziq, 31 Aug 2026: rostered 15:30–23:30 break 30, clocked 15:00–23:30.
+    // Paid window is the rostered 8h; the early tap does not pay.
+    const d = deriveHours({
+      ...base,
+      clockIn: at("2026-08-31T07:00:00Z"),
+      clockOut: at("2026-08-31T15:30:00Z"),
+      scheduledStart: at("2026-08-31T07:30:00Z"),
+      scheduledEnd: at("2026-08-31T15:30:00Z"),
+      rosteredBreakMinutes: 30,
+    });
+    expect(d.regularHours).toBe(7.5); // was 7.0 under the 1h cohort break
+  });
+});
+
 describe("deriveHours", () => {
   it("brackets threshold OT to half hours: 30min over → 0.5, 1h10m over → 1 (owner 2026-09-03: pay the 0.5h)", () => {
-    // worked 8h (30min over 7.5) → OT 0.5
+    // clocked 9h − 0.5h break = 8.5h worked (1h over 7.5) → OT 1
     const halfOver = deriveHours({ ...base, clockIn: at("2026-07-20T01:00:00Z"), clockOut: at("2026-07-20T10:00:00Z") });
-    expect(halfOver.overtimeHours).toBe(0.5);
+    expect(halfOver.overtimeHours).toBe(1);
     expect(halfOver.regularHours).toBe(7.5); // over threshold: regular caps at 7.5
-    // worked 8h40m (1h10m over 7.5) → OT 1 (the 10 min below a bracket is dropped)
+    // clocked 9h40m − 0.5h = 9h10m worked (1h40m over 7.5) → OT 1.5
     const overAnHour = deriveHours({ ...base, clockIn: at("2026-07-20T01:00:00Z"), clockOut: at("2026-07-20T10:40:00Z") });
-    expect(overAnHour.overtimeHours).toBe(1);
+    expect(overAnHour.overtimeHours).toBe(1.5);
     expect(overAnHour.regularHours).toBe(7.5);
-    // 25 min over is under one bracket → 0
+    // clocked 8h55m − 0.5h = 8h25m worked → 55 min over, one bracket → 0.5
     const under = deriveHours({ ...base, clockIn: at("2026-07-20T01:00:00Z"), clockOut: at("2026-07-20T09:55:00Z") });
-    expect(under.overtimeHours).toBe(0);
+    expect(under.overtimeHours).toBe(0.5);
   });
 
   it("early clock-in pays from the rostered start, not the tap-in", () => {
     // Shift 09:00 MYT (01:00Z), tapped in 08:00 MYT, out 19:00 MYT: clocked 11h
-    // but payable 10h − 1h break = 9h worked → OT floor(1.5) = 1 (not 2).
+    // but payable 10h − 0.5h break = 9.5h worked → OT 2.
     const d = deriveHours({
       ...base,
       clockIn: at("2026-07-20T00:00:00Z"),
@@ -31,18 +84,18 @@ describe("deriveHours", () => {
     });
     expect(d.totalHours).toBe(11); // actual clocked span kept on record
     expect(d.regularHours).toBe(7.5);
-    expect(d.overtimeHours).toBe(1.5); // 30-min brackets since 2026-09-03 (was floored to 1)
+    expect(d.overtimeHours).toBe(2);
   });
 
   it("late clock-in is unaffected by the roster start", () => {
-    // Shift 09:00, arrived 10:00, left 18:00 → 8h clocked − 1h break = 7h worked.
+    // Shift 09:00, arrived 10:00, left 18:00 → 8h clocked − 0.5h break = 7.5h worked.
     const d = deriveHours({
       ...base,
       clockIn: at("2026-07-20T02:00:00Z"),
       clockOut: at("2026-07-20T10:00:00Z"),
       scheduledStart: at("2026-07-20T01:00:00Z"),
     });
-    expect(d.regularHours).toBe(7);
+    expect(d.regularHours).toBe(7.5);
     expect(d.overtimeHours).toBe(0);
   });
 
@@ -481,9 +534,9 @@ describe("deriveHours — rest-day rows are not windows", () => {
       scheduledStart: REST_MIDNIGHT,
       scheduledEnd: REST_MIDNIGHT,
     });
-    // 6h clocked less the 1h FT break. Clamped at 00:00 MYT it would pay 3h.
+    // 6h clocked less the 0.5h FT break. Clamped at 00:00 MYT it would pay 3h.
     expect(d.totalHours).toBe(6);
-    expect(d.regularHours).toBe(5);
+    expect(d.regularHours).toBe(5.5);
   });
 
   it("reports no OT tail against a rest-day row", () => {

@@ -19,7 +19,9 @@ import {
 } from "lucide-react";
 import { detectAnomalies, type AnomalyFlag } from "@/lib/hr/payroll/anomalies";
 import { useFetch } from "@/lib/use-fetch";
-import { otLineLabel, otHoursFromDetails, publicHolidayPayLabel, restDayPayLabel } from "@celsius/shared/src/hr/pay-lines";
+import { earningsLines } from "@celsius/shared/src/hr/pay-lines";
+
+import { monthlyCycleEndMs, cycleStillOpen, lastEndedCycle } from "@/lib/hr/cycle-window";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -94,8 +96,11 @@ type Step = "setup" | "review" | "approved";
 export default function PayrollRunPage() {
   const router = useRouter();
   const now = new Date();
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
+  // Default to the month that just ENDED — the current one cannot be computed
+  // (lib/hr/cycle-window), so defaulting to it opened on a disabled option.
+  const defaultCycle = lastEndedCycle(now.getTime());
+  const [month, setMonth] = useState(defaultCycle.month);
+  const [year, setYear] = useState(defaultCycle.year);
   // Payday is always the 3rd of the month FOLLOWING the cycle. Auto-syncs
   // when month/year changes — operators can still override manually.
   // Format as local date (not toISOString — UTC conversion shifts MYT back a day).
@@ -225,9 +230,17 @@ export default function PayrollRunPage() {
               disabled={step !== "setup"}
               className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-60"
             >
-              {MONTHS.map((m, i) => (
-                <option key={m} value={i + 1}>{m}</option>
-              ))}
+              {/* A cycle that has not ended cannot be computed — basic salary
+                  would compute in full against attendance that does not exist
+                  yet. The API refuses it too; this stops it being picked. */}
+              {MONTHS.map((m, i) => {
+                const open = cycleStillOpen(monthlyCycleEndMs(year, i + 1), Date.now());
+                return (
+                  <option key={m} value={i + 1} disabled={open}>
+                    {m}{open ? " — not ended" : ""}
+                  </option>
+                );
+              })}
             </select>
           </Field>
           <Field label="Year">
@@ -548,19 +561,25 @@ function EmployeeBreakdown({
 
   const totalOT = (item.ot_1x_amount || 0) + item.ot_1_5x_amount + item.ot_2x_amount + item.ot_3x_amount;
   const statutoryStale = !!item.computation_details?.statutory_stale;
-  // Public-holiday premium (EA s.60D) rides in the 2× line. It is NOT
-  // overtime — a full-timer who worked a normal 31-Aug shift has 0 OT hours
-  // and a real amount here — so the OT block must key on money, not hours,
-  // or the premium is in gross with no line explaining it (owner 2026-09-03:
-  // "the PH OT not in payroll").
-  const phHours = Number(item.computation_details?.ph_premium_hours || 0);
-  const phAmount = Number(item.computation_details?.ph_premium_amount || 0);
-  const phDays = Number(item.computation_details?.ph_days_worked || 0);
-  const restDay2x = Math.max(0, item.ot_2x_amount - phAmount);
-  const restDayPay = Number(item.computation_details?.rest_day_pay_amount || 0);
-  const restDayDays = Number(item.computation_details?.rest_day_days_worked || 0);
-  // One label set for run page / payslip page / PDF — packages/shared pay-lines.
-  const otH = otHoursFromDetails(item.computation_details as Record<string, unknown> | null);
+  // One derivation for run page / payslip page / PDF / manager app — labels AND
+  // the money split live in packages/shared pay-lines.
+  //
+  // Keyed on MONEY, not OT hours: the public-holiday wages (EA s.60D) ride in
+  // the 2× line, and a full-timer who worked a normal 31-Aug shift has 0 OT
+  // hours with a real amount there. Gating on hours put the premium in gross
+  // with no line explaining it (owner 2026-09-03: "the PH OT not in payroll").
+  const earnLines = earningsLines({
+    basicSalary: Number(item.basic_salary || 0),
+    ot1xAmount: Number(item.ot_1x_amount || 0),
+    ot1_5xAmount: Number(item.ot_1_5x_amount || 0),
+    ot2xAmount: Number(item.ot_2x_amount || 0),
+    ot3xAmount: Number(item.ot_3x_amount || 0),
+    details: item.computation_details as Record<string, unknown> | null,
+  });
+  // This page edits a COLUMN, not a concept: when a day-type premium and real
+  // overtime share one rate the column yields two lines, and neither may offer
+  // an inline edit of half the stored value. Those render read-only.
+  const otLines = earnLines.filter((l) => l.key !== "basic");
 
   return (
     <div className="space-y-4">
@@ -569,7 +588,8 @@ function EmployeeBreakdown({
         <div>
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Earnings</p>
           <EditableRow
-            label="Basic"
+            label={earnLines[0].label}
+            detail={earnLines[0].detail}
             value={item.basic_salary}
             field="basic_salary"
             item={item}
@@ -578,39 +598,21 @@ function EmployeeBreakdown({
           />
           {(item.total_ot_hours > 0 || totalOT > 0) && (
             <>
-              {Number(item.ot_1x_amount || 0) > 0 && (
-                <EditableRow
-                  label={restDayPay > 0 && Number(item.ot_1x_amount || 0) - restDayPay < 0.01 ? restDayPayLabel(restDayDays) : otLineLabel("1x", otH["1x"])}
-                  value={Number(item.ot_1x_amount || 0)}
-                  field="ot_1x_amount"
-                  item={item}
-                  editable={editable}
-                  onItemUpdated={onItemUpdated}
-                />
-              )}
-              {restDayPay > 0 && Number(item.ot_1x_amount || 0) - restDayPay >= 0.01 && (
-                <p className="pl-2 text-[10px] text-gray-500">incl. {restDayPayLabel(restDayDays)} RM{restDayPay.toFixed(2)}</p>
-              )}
-              {item.ot_1_5x_amount > 0 && (
-                <EditableRow label={otLineLabel("1_5x", otH["1_5x"])} value={item.ot_1_5x_amount} field="ot_1_5x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
-              )}
-              {item.ot_2x_amount > 0 && (
-                <EditableRow
-                  label={phAmount > 0 && restDay2x < 0.01 ? publicHolidayPayLabel(phDays, phHours) : otLineLabel("2x", otH["2x"])}
-                  value={item.ot_2x_amount}
-                  field="ot_2x_amount"
-                  item={item}
-                  editable={editable}
-                  onItemUpdated={onItemUpdated}
-                />
-              )}
-              {phAmount > 0 && restDay2x >= 0.01 && (
-                <p className="pl-2 text-[10px] text-gray-500">
-                  incl. {publicHolidayPayLabel(phDays, phHours)} RM{phAmount.toFixed(2)} · {otLineLabel("2x", otH["2x"])} RM{restDay2x.toFixed(2)}
-                </p>
-              )}
-              {item.ot_3x_amount > 0 && (
-                <EditableRow label={otLineLabel("3x", otH["3x"])} value={item.ot_3x_amount} field="ot_3x_amount" item={item} editable={editable} onItemUpdated={onItemUpdated} />
+              {otLines.map((line) =>
+                line.ownsField ? (
+                  <EditableRow
+                    key={line.key}
+                    label={line.label}
+                    detail={line.detail}
+                    value={line.amount}
+                    field={line.field}
+                    item={item}
+                    editable={editable}
+                    onItemUpdated={onItemUpdated}
+                  />
+                ) : (
+                  <Row key={line.key} label={line.label} detail={line.detail} value={line.amount} />
+                ),
               )}
               {totalOT === 0 && <Row label={`OT (${item.total_ot_hours.toFixed(1)} hrs)`} value={totalOT} />}
             </>
@@ -1131,10 +1133,15 @@ function AdjustmentForm({
   );
 }
 
-function Row({ label, value, bold = false }: { label: string; value: number; bold?: boolean }) {
+function Row({ label, value, detail, bold = false }: { label: string; value: number; detail?: string; bold?: boolean }) {
   return (
     <div className={`flex items-center justify-between ${bold ? "border-t pt-1 font-medium" : ""}`}>
-      <span className="text-gray-500">{label}</span>
+      <span className="text-gray-500">
+        {label}
+        {/* Quantity and rate behind the amount — the Employment Act wants the
+            overtime hours and the rate shown, not a lump sum. */}
+        {detail ? <span className="ml-1.5 text-[10px] text-gray-400">{detail}</span> : null}
+      </span>
       <span className="font-mono">RM {value.toFixed(2)}</span>
     </div>
   );
@@ -1146,10 +1153,11 @@ function Row({ label, value, bold = false }: { label: string; value: number; bol
 //   - "allowance:CODE"        → patches allowances jsonb entry
 //   - "other_deduction:CODE"  → patches other_deductions jsonb entry
 function EditableRow({
-  label, value, field, item, editable, onItemUpdated,
+  label, value, detail, field, item, editable, onItemUpdated,
 }: {
   label: string;
   value: number;
+  detail?: string;
   field: string;
   item: PayrollItem;
   editable: boolean;
@@ -1162,7 +1170,7 @@ function EditableRow({
   const wasOverridden = !!overrides[field];
 
   if (!editable) {
-    return <Row label={label} value={value} />;
+    return <Row label={label} value={value} detail={detail} />;
   }
 
   const startEdit = () => {

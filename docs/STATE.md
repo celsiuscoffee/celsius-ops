@@ -11,6 +11,50 @@ current month.
 
 ## Verified facts
 
+- 2026-09-15 — **The confirmed-and-paid August run was deleted; its per-employee
+  lines are gone, and the replacement is RM862.45 LOWER.** Timeline from
+  `ActivityLog` (all UTC, today): 05:32:02 `payroll.confirm` monthly 8/2026 —
+  net **47,035.66**, gross 54,446.81, `missing_bank_override: true`, run
+  `f2ddaf00`; 05:32–06:35 payslip bundle + KWSP/PERKESO/CP39/by-outlet all
+  downloaded (so finance paid off these figures); 08:47 #1234 + #1235 merged
+  and deployed; 06:57 `payroll.revert` confirmed → ai_computed; 08:56:15
+  `payroll.delete` (24 items); 08:56:24 run `90d613cd` computed — net
+  **46,173.21**, 23 items. **Deleting a run cascades its items** — no orphans
+  survive (verified: every `hr_payroll_items.payroll_run_id` resolves to a live
+  run), `hr_payslips` is EMPTY (0 rows, ever), and `fin_bank_transactions` is
+  empty, so **the ONLY surviving record of what August actually paid per person
+  is the by-outlet file / payslip bundle downloaded at 05:32.** Get it from the
+  owner before building any balance-payment table; it cannot be recovered from
+  the database.
+  The new run is lower, not higher, because **Zikry was dropped** (−1,659.74)
+  more than offsetting the PH premium doubling (+892.30). **Finance must not
+  pay a balance off `90d613cd`.**
+
+- 2026-09-15 — **A recompute WILL now pick Zikry up — six things checked, all
+  clear.** His FT stint row was written today (`hr_salary_history`, monthly /
+  approved / 1800.00 / effective 2026-01-16 / **end_date 2026-08-31**), which is
+  exactly what `ftStints` in `payroll-calculator.ts` queries. Verified against
+  the code, not assumed: (1) the calculator's profile fetch is `select("*")`
+  with NO employment_type filter — the FT-only filter is in `payroll/preflight`,
+  a different route; (2) his row matches the `ftStints` predicate (monthly +
+  approved + end_date within the cycle); (3) amount 1800 > 0 — a 0 or unreadable
+  amount is silently skipped by design; (4) his profile's `end_date` and
+  `resigned_at` are both still NULL, so the "resigned before this cycle" guard
+  does not skip him; (5) no second profile shares his IC (050909142437), so the
+  one-person-one-line dedupe cannot drop him; (6) **`statutory_applicable: false`
+  on his profile does NOT zero his EPF** — that column is read by nothing in the
+  payroll calculator (only named in a write-ops INSERT column list); EPF category
+  A, `socso_category`, `eis_enabled` all still apply. He comes through as
+  employment_type coerced to full_time, basic 1800, end_date 2026-08-31,
+  calendar proration 31/31 = full RM1,800.
+
+- 2026-09-15 — **Four 31-Aug logs approved; they need a recompute to earn their
+  PH pay.** Firdaus `d94463f7`, Syafiq K. `a34db50c`, Haziq `e9d6bc2a`, Sherry
+  `aca57abe` set to `final_status='approved'` at 09:01:46 — **five minutes AFTER
+  run `90d613cd` was computed at 08:56**, so their PH pay is still RM0 in it.
+  `isOtApproved()` gates the PH/rest-day premium as well as OT, which is why an
+  unapproved flag on a holiday shift silently costs the whole 2-ORP entitlement.
+
 - 2026-09-12 — **Fresh Milk (DFM001) package + price reconciliation, applied to
   prod.** Four defects, all fixed; rollback scripts in the session scratchpad
   (`milk-merge/rollback*.sql`).
