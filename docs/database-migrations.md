@@ -38,6 +38,65 @@ For every schema change:
 5. **Run `npx prisma generate`** to refresh the TypeScript client.
 6. **Commit both** the schema change AND the migration SQL.
 
+## Verifying a migration actually ran
+
+```bash
+npm run check:migrations          # report; exit 1 if anything is missing
+npm run check:migrations -- --json
+```
+
+Needs `DIRECT_URL` (or `DATABASE_URL`). It reads every migration in
+`packages/db/prisma/migrations/`, works out what each one would create, and asks
+the live database whether it is there.
+
+**Why this exists.** CI's `migration-guard` proves a `.sql` FILE exists beside a
+`schema.prisma` change. It cannot know whether the SQL was ever RUN — these are
+applied by hand. That gap bit twice in one week:
+
+| | |
+| --- | --- |
+| #1233 `payslip_release_day` | Sat unapplied four days. The reader fell back to `NULL`, so "hold payslips until the 15th" was simply inert. Nobody noticed. |
+| #1235 `scheduled_break_minutes` | Took **production clock-in down**. The deployed `INSERT` named a column that did not exist, and no staff member could start a shift. |
+
+Both were invisible because the file existed and CI was green.
+
+**Run it before merging anything that adds a migration, and after applying one.**
+The CI job `migration-applied` runs it on every PR when a database URL secret is
+available, and skips (does not fail) when it is not.
+
+### What it can and cannot verify
+
+Verified: added columns, created tables, indexes, **named** constraints, enum
+types. Not verified: `INSERT`/`UPDATE` data, policies, RLS enables, functions,
+`ALTER COLUMN`, `RENAME`, and constraints added without a name (Postgres
+generates that name, so it cannot be predicted).
+
+A migration containing only unverifiable statements is reported **unknown**,
+never "applied" — a checker that quietly said "all clear" for the statements it
+happens to understand would rebuild the exact blind spot it replaces.
+
+### Accepting drift you have decided to live with
+
+`packages/db/prisma/migrations/KNOWN_UNAPPLIED.json` lists migrations knowingly
+not applied. They are **reported, not failed**. Every entry needs a real reason
+and is meant to be temporary — resolve it by applying the migration or deleting
+the file.
+
+This exists so the check does not fail every PR from the day it lands over one
+harmless pre-existing gap. A check that blocks unrelated work is a check people
+turn off. Accepting drift is therefore explicit, per-migration, and written
+down — never a blanket "ignore failures" switch.
+
+If an allowlisted migration turns out to be applied after all, the check says so
+and asks you to remove the entry, so the list cannot quietly rot into a place
+real drift hides.
+
+An object dropped by another migration is reported **superseded**, not missing.
+That test is order-independent on purpose: filename order is not a sound proxy
+for application order — `20260619_menu_packaging_service_mode` creates an index
+that `20260619_menu_ingredient_uniq_modifier` drops, yet sharing a date prefix
+the dropper sorts first.
+
 ## What about the existing schema?
 
 We have a 95-model `schema.prisma` with no captured history. Options:

@@ -22,7 +22,8 @@
     "typecheck:apps": "npm run typecheck -w apps/backoffice && npm run typecheck -w apps/staff && npm run typecheck -w apps/order",
     "lint": "turbo run lint",
     "typecheck:all": "turbo run typecheck",
-    "build:all": "turbo run build"
+    "build:all": "turbo run build",
+    "check:migrations": "node scripts/check-migrations.mjs"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
