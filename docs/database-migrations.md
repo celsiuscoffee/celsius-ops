@@ -75,6 +75,22 @@ A migration containing only unverifiable statements is reported **unknown**,
 never "applied" — a checker that quietly said "all clear" for the statements it
 happens to understand would rebuild the exact blind spot it replaces.
 
+### Accepting drift you have decided to live with
+
+`packages/db/prisma/migrations/KNOWN_UNAPPLIED.json` lists migrations knowingly
+not applied. They are **reported, not failed**. Every entry needs a real reason
+and is meant to be temporary — resolve it by applying the migration or deleting
+the file.
+
+This exists so the check does not fail every PR from the day it lands over one
+harmless pre-existing gap. A check that blocks unrelated work is a check people
+turn off. Accepting drift is therefore explicit, per-migration, and written
+down — never a blanket "ignore failures" switch.
+
+If an allowlisted migration turns out to be applied after all, the check says so
+and asks you to remove the entry, so the list cannot quietly rot into a place
+real drift hides.
+
 An object dropped by another migration is reported **superseded**, not missing.
 That test is order-independent on purpose: filename order is not a sound proxy
 for application order — `20260619_menu_packaging_service_mode` creates an index

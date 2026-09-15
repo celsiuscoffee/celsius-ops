@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { expectedObjects, droppedObjects, verdictFor, supersedeCheck, type ExpectedObject } from "./migration-objects";
+import { expectedObjects, droppedObjects, verdictFor, supersedeCheck, triageDrift, type ExpectedObject } from "./migration-objects";
 
 describe("expectedObjects", () => {
   it("reads the migration that took clock-in down", () => {
@@ -217,5 +217,26 @@ describe("supersedeCheck", () => {
   it("leaves an object nobody drops as drift", () => {
     const migrations = [{ name: "m1", expected: [idx], dropped: [] }];
     expect(supersedeCheck(migrations)("m1", idx)).toBe(false);
+  });
+});
+
+describe("triageDrift", () => {
+  const known = { known_one: "Superseded by hr_performance_overrides; decide apply-or-delete." };
+
+  it("fails only on drift nobody has accepted", () => {
+    const t = triageDrift(["known_one", "surprise"], [], known);
+    expect(t.blocking).toEqual(["surprise"]);
+    expect(t.accepted).toEqual(["known_one"]);
+  });
+
+  it("flags an allowlist entry that is actually applied now", () => {
+    // Otherwise the list rots into a place real drift can hide.
+    const t = triageDrift([], ["known_one"], known);
+    expect(t.staleAllowlist).toEqual(["known_one"]);
+    expect(t.blocking).toEqual([]);
+  });
+
+  it("is clean when nothing is missing and the list is empty", () => {
+    expect(triageDrift([], ["a", "b"], {})).toEqual({ blocking: [], accepted: [], staleAllowlist: [] });
   });
 });

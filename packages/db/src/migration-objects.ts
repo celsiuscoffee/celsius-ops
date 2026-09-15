@@ -234,3 +234,46 @@ export function supersedeCheck(
     return false;
   };
 }
+
+/** migration directory name -> why it is knowingly not applied. */
+export type KnownUnapplied = Record<string, string>;
+
+export type DriftTriage = {
+  /** Unapplied and NOT accepted — these fail the check. */
+  blocking: string[];
+  /** Unapplied, listed in the allowlist with a reason — reported, not failed. */
+  accepted: string[];
+  /**
+   * Listed as unapplied but actually present now. The entry is a lie and
+   * should be removed — without this an allowlist quietly rots into a place
+   * where real drift can hide.
+   */
+  staleAllowlist: string[];
+};
+
+/**
+ * Splits missing migrations into what should fail the build and what has been
+ * knowingly accepted.
+ *
+ * WHY AN ALLOWLIST. This repo already carries one unapplied migration that
+ * breaks nothing (20260803_hr_performance_deduction_waivers — the feature
+ * shipped through hr_performance_overrides instead). Without a way to record
+ * that decision the new check would fail every PR from the moment it landed,
+ * including PRs that touch nothing near the database. A check that blocks
+ * unrelated work is a check people turn off.
+ *
+ * Accepting drift is therefore explicit, per-migration and needs a written
+ * reason — never a blanket "ignore failures" switch.
+ */
+export function triageDrift(
+  missingMigrations: string[],
+  appliedMigrations: string[],
+  known: KnownUnapplied,
+): DriftTriage {
+  const knownNames = Object.keys(known);
+  return {
+    blocking: missingMigrations.filter((m) => !knownNames.includes(m)),
+    accepted: missingMigrations.filter((m) => knownNames.includes(m)),
+    staleAllowlist: knownNames.filter((m) => appliedMigrations.includes(m)),
+  };
+}

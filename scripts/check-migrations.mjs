@@ -29,10 +29,10 @@ const JSON_OUT = process.argv.includes("--json");
 // The parser is TypeScript shared with the unit tests; strip its types rather
 // than duplicate the logic here, so the thing under test is the thing that runs.
 const require = createRequire(import.meta.url);
-let expectedObjects, droppedObjects, verdictFor, supersedeCheck;
+let expectedObjects, droppedObjects, verdictFor, supersedeCheck, triageDrift;
 try {
   require("tsx/cjs");
-  ({ expectedObjects, droppedObjects, verdictFor, supersedeCheck } = require(join(ROOT, "packages/db/src/migration-objects.ts")));
+  ({ expectedObjects, droppedObjects, verdictFor, supersedeCheck, triageDrift } = require(join(ROOT, "packages/db/src/migration-objects.ts")));
 } catch (err) {
   console.error("Could not load the migration parser (is tsx installed?):", err.message);
   process.exit(2);
@@ -114,15 +114,40 @@ const results = parsed.map((m) => {
   return { migration: m.name, checked: m.expected.length, ...v };
 });
 
+// Drift someone has explicitly accepted, with a reason, is reported but does
+// not fail — see triageDrift. Without this the check would fail every PR from
+// the day it landed over one harmless pre-existing gap, and a check that blocks
+// unrelated work is a check people turn off.
+let known = {};
+const knownPath = join(MIGRATIONS, "KNOWN_UNAPPLIED.json");
+if (existsSync(knownPath)) {
+  try {
+    known = JSON.parse(readFileSync(knownPath, "utf8"));
+    delete known._README;
+  } catch (err) {
+    console.error(`Could not parse ${knownPath}:`, err.message);
+    process.exit(2);
+  }
+}
+
 const missing    = results.filter((r) => r.verdict === "missing");
 const unknown    = results.filter((r) => r.verdict === "unknown");
 const applied    = results.filter((r) => r.verdict === "applied");
 const superseded = results.filter((r) => r.verdict === "superseded");
 
+const triage = triageDrift(
+  missing.map((r) => r.migration),
+  applied.map((r) => r.migration),
+  known,
+);
+const blocking = missing.filter((r) => triage.blocking.includes(r.migration));
+const accepted = missing.filter((r) => triage.accepted.includes(r.migration));
+
 if (JSON_OUT) {
   console.log(JSON.stringify({
-    applied: applied.length, superseded: superseded.length,
-    unknown: unknown.length, missing: missing.length, results,
+    applied: applied.length, superseded: superseded.length, unknown: unknown.length,
+    blocking: blocking.length, accepted: accepted.length,
+    staleAllowlist: triage.staleAllowlist, results,
   }, null, 2));
 } else {
   const fmt = (o) =>
@@ -130,9 +155,9 @@ if (JSON_OUT) {
     : o.kind === "constraint" ? `constraint ${o.name} on ${o.table}`
     : `${o.kind} ${o.name}`;
 
-  if (missing.length) {
-    console.log(`\n✗ ${missing.length} migration${missing.length === 1 ? "" : "s"} NOT APPLIED to the live schema:\n`);
-    for (const r of missing) {
+  if (blocking.length) {
+    console.log(`\n✗ ${blocking.length} migration${blocking.length === 1 ? "" : "s"} NOT APPLIED to the live schema:\n`);
+    for (const r of blocking) {
       console.log(`  ${r.migration}`);
       for (const o of r.missing) console.log(`      missing ${fmt(o)}`);
     }
@@ -140,6 +165,16 @@ if (JSON_OUT) {
     console.log(`  NEVER prisma db push / prisma migrate deploy.\n`);
   } else {
     console.log(`\n✓ All ${applied.length} verifiable migrations are present in the live schema.\n`);
+  }
+  if (accepted.length) {
+    console.log(`  ${accepted.length} unapplied but accepted (KNOWN_UNAPPLIED.json) — reported, not failed:`);
+    for (const r of accepted) console.log(`      ${r.migration} — ${known[r.migration]}`);
+    console.log("");
+  }
+  if (triage.staleAllowlist.length) {
+    console.log(`  ⚠ ${triage.staleAllowlist.length} allowlist entr${triage.staleAllowlist.length === 1 ? "y is" : "ies are"} stale — applied now, so remove from KNOWN_UNAPPLIED.json:`);
+    for (const m of triage.staleAllowlist) console.log(`      ${m}`);
+    console.log("");
   }
   if (superseded.length) {
     console.log(`  ${superseded.length} superseded — everything they created was dropped by a later migration:`);
@@ -153,4 +188,4 @@ if (JSON_OUT) {
   }
 }
 
-process.exit(missing.length > 0 ? 1 : 0);
+process.exit(blocking.length > 0 ? 1 : 0);
