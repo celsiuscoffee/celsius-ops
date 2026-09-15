@@ -62,13 +62,14 @@ describe("what the misclassification costs", () => {
   it("a normal day gives weekday OT at 1.5x", () => {
     const d = deriveHours({ ...shift, isRestDay: false });
     expect(d.overtimeType).toBe("ot_1_5x");
-    expect(d.overtimeHours).toBe(1.5); // 30-min brackets since 2026-09-03 (was floored to 1)
+    // 10h clocked − 0.5h break = 9.5h worked, 2h over the 7.5h threshold.
+    expect(d.overtimeHours).toBe(2);
   });
 
   it("the SAME shift called a rest day gives 2x instead — the rate is wrong, not just the label", () => {
     const d = deriveHours({ ...shift, isRestDay: true });
     expect(d.overtimeType).toBe("ot_2x");
-    expect(d.overtimeHours).toBe(1.5); // 30-min brackets since 2026-09-03 (was floored to 1)
+    expect(d.overtimeHours).toBe(2);
   });
 
   it("under the threshold, a false rest day swallows the OT classification entirely", () => {
@@ -101,17 +102,17 @@ describe("rest-day pay policy (owner 2026-08-03)", () => {
   };
 
   it("pays NO premium for rest-day work within normal hours", () => {
-    // 08:00-15:00 = 7h clocked, 6h worked after break.
+    // 08:00-15:00 = 7h clocked, 6.5h worked after the 30-min break.
     const d = deriveHours({ ...restDay, clockOut: at("2026-07-22T07:00:00Z") });
     expect(d.overtimeType).toBe("rest_day_1x");
     expect(d.overtimeHours).toBe(0);
-    expect(d.regularHours).toBe(6);
+    expect(d.regularHours).toBe(6.5);
   });
 
   it("pays 2x only for the hours BEYOND the threshold", () => {
     const d = deriveHours({ ...restDay, clockOut: at("2026-07-22T10:00:00Z") });
     expect(d.overtimeType).toBe("ot_2x");
-    expect(d.overtimeHours).toBe(1.5); // 30-min brackets since 2026-09-03 (was floored to 1)
+    expect(d.overtimeHours).toBe(2);
     expect(d.regularHours).toBe(7.5);
   });
 });

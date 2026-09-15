@@ -164,6 +164,7 @@ export async function processAttendance(): Promise<ProcessResult> {
         // outside it is an OT tail needing approval, not automatic pay.
         scheduledStart: mytInstant(log.scheduled_date ?? clockDate, log.scheduled_start),
         scheduledEnd: mytInstant(log.scheduled_date ?? clockDate, log.scheduled_end),
+        rosteredBreakMinutes: log.scheduled_break_minutes ?? null,
       });
       totalHours = derived.totalHours;
       regularHours = derived.regularHours;

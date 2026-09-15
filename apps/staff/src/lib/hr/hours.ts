@@ -66,10 +66,32 @@ export const OT_THRESHOLD_HOURS: Record<string, number> = {
   intern: Number.POSITIVE_INFINITY,
 };
 
-/** Unpaid break hours to deduct from a shift's gross duration. */
-export function breakHoursFor(employmentType: string, totalHours: number): number {
+/**
+ * Unpaid break hours to deduct from a shift's gross duration.
+ *
+ * THE ROSTER WINS. `rosteredBreakMinutes` is the shift's own break_minutes,
+ * stamped on the log at clock-in — that is where a manager expresses "this
+ * shift has no break" or "this one has an hour", so it is authoritative
+ * whenever it is present (including an explicit 0).
+ *
+ * The cohort default below is only a fallback, for a cover shift with no roster
+ * row or a log written before the break was stamped. Until 2026-09-15 it was
+ * the ONLY rule for full-timers and returned 1 hour — the single place in the
+ * system claiming anything other than 30 minutes, while all nine shift
+ * templates, every production roster row and the weekly PT calculator all said
+ * 30. Full-timers were docked an extra half hour on every shift over 5h.
+ */
+export function breakHoursFor(
+  employmentType: string,
+  totalHours: number,
+  rosteredBreakMinutes?: number | null,
+): number {
+  if (rosteredBreakMinutes != null && Number.isFinite(rosteredBreakMinutes) && rosteredBreakMinutes >= 0) {
+    // A break can never exceed the shift it sits inside.
+    return Math.min(Math.max(0, rosteredBreakMinutes) / 60, Math.max(0, totalHours));
+  }
   if (employmentType === "part_time" || employmentType === "intern") return totalHours > 4 ? 0.5 : 0;
-  return totalHours > 5 ? 1 : 0; // full_time / contract: 1h break if shift > 5h
+  return totalHours > 5 ? 0.5 : 0; // full_time / contract: the standard 30-min break
 }
 
 export type DerivedHours = {
@@ -120,6 +142,9 @@ export function deriveHours(opts: {
   scheduledStart?: Date | null;
   /** Rostered shift-end instant (null/undefined = no roster → pay to clock-out). */
   scheduledEnd?: Date | null;
+  /** The rostered shift's unpaid break, stamped at clock-in. Authoritative
+   *  when present (0 included); null → the cohort default. */
+  rosteredBreakMinutes?: number | null;
 }): DerivedHours {
   const { clockIn, clockOut, employmentType, isPublicHoliday, isRestDay } = opts;
   // A rest-day roster row is 00:00→00:00; left as a window it hits the
@@ -165,7 +190,7 @@ export function deriveHours(opts: {
         + otBracketHours(Math.max(0, Math.round((clockOut.getTime() - schedEndMs) / 60000)))
       ) * 100) / 100
     : 0;
-  const workedHours = payableHours - breakHoursFor(employmentType, payableHours);
+  const workedHours = payableHours - breakHoursFor(employmentType, payableHours, opts.rosteredBreakMinutes);
 
   let regularHours = 0;
   let overtimeHours = 0;
