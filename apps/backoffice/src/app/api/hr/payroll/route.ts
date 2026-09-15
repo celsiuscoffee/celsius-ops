@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { monthlyCycleEndMs, cycleEndMsFor, cycleStillOpen, daysRemaining } from "@/lib/hr/cycle-window";
 import { calculatePayroll } from "@/lib/hr/agents/payroll-calculator";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/activity-log";
@@ -67,11 +68,41 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { action, month, year, run_id, allow_early_confirm, allow_missing_bank, allow_unprorated_resignation } = body;
+  const { action, month, year, run_id, allow_early_confirm, allow_early_compute, allow_missing_bank, allow_unprorated_resignation } = body;
 
   if (action === "compute") {
     if (!month || !year) {
       return NextResponse.json({ error: "month and year required" }, { status: 400 });
+    }
+
+    // A cycle that has not ended must not be computed. Confirm has refused this
+    // for a while; compute did not, and the month picker offered all twelve
+    // months — so December could be computed in September at a full month's
+    // BASIC SALARY with no attendance behind it. Basic salary does not depend on
+    // attendance, so the run looks perfectly normal, which is the danger.
+    // Owner 2026-09-15: "block the future cycle. it can be miss compute."
+    //
+    // Escape hatch mirrors allow_early_confirm: a deliberate mid-month preview
+    // is legitimate, an accidental one is not.
+    if (!allow_early_compute) {
+      const endMs = monthlyCycleEndMs(Number(year), Number(month));
+      const now = Date.now();
+      if (cycleStillOpen(endMs, now)) {
+        const left = daysRemaining(endMs as number, now);
+        return NextResponse.json(
+          {
+            error:
+              `This cycle has not ended — ${left} day${left === 1 ? "" : "s"} left. `
+              + `Attendance for the rest of it does not exist yet, so overtime and attendance-based `
+              + `allowances would be incomplete while basic salary computes in full. `
+              + `Compute after the cycle ends, or pass allow_early_compute for a deliberate preview.`,
+            reason: "cycle_not_ended",
+            cycleEndsAt: new Date(endMs as number).toISOString(),
+            daysLeft: left,
+          },
+          { status: 409 },
+        );
+      }
     }
 
     // Log agent run
@@ -120,10 +151,12 @@ export async function POST(req: NextRequest) {
 
     // Refuse to confirm a cycle that is still running.
     //
-    // Computing early is fine and often useful — previewing cash needs, checking
-    // a new joiner's prorated figure. The run sits at 'ai_computed' and hurts
-    // nobody. CONFIRM is the irreversible step: it is what payslips and the bank
-    // file are generated from. Confirming mid-cycle books attendance that has not
+    // Compute is now guarded too (see the compute action above), but this gate
+    // stays: the two are not the same risk. Compute's block is about producing a
+    // plausible-looking run for a month that has not happened; this one is about
+    // the irreversible step, since payslips and the bank file are generated from
+    // a confirmed run. A deliberate allow_early_compute preview must still not
+    // slide into a confirmation by itself. Confirming mid-cycle books attendance that has not
     // happened yet, so OT is 0 and the performance levers score an empty month.
     // The Aug 2026 run was computed on 1 August with 0 regular hours and 0 OT
     // across all 28 lines, and nothing here would have stopped it being paid.
@@ -138,19 +171,13 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (cycle && !allow_early_confirm) {
-      // Cycle end in MYT (UTC+8), not UTC — otherwise the guard would keep
-      // blocking until 08:00 local on the 1st.
-      let cycleEndMs: number | null = null;
-      if (cycle.period_end) {
-        cycleEndMs = Date.parse(`${cycle.period_end}T23:59:59+08:00`);
-      } else if (cycle.period_year && cycle.period_month) {
-        const lastDay = new Date(cycle.period_year, cycle.period_month, 0).getDate();
-        const mm = String(cycle.period_month).padStart(2, "0");
-        cycleEndMs = Date.parse(`${cycle.period_year}-${mm}-${String(lastDay).padStart(2, "0")}T23:59:59+08:00`);
-      }
+      // Same cycle-end arithmetic as the compute guard above (lib/hr/cycle-window),
+      // in MYT — a UTC comparison would keep blocking until 08:00 local on the 1st.
+      const cycleEndMs = cycleEndMsFor(cycle);
+      const nowMs = Date.now();
 
-      if (cycleEndMs != null && !Number.isNaN(cycleEndMs) && Date.now() < cycleEndMs) {
-        const daysLeft = Math.ceil((cycleEndMs - Date.now()) / 86_400_000);
+      if (cycleStillOpen(cycleEndMs, nowMs)) {
+        const daysLeft = daysRemaining(cycleEndMs as number, nowMs);
         return NextResponse.json(
           {
             error:
@@ -158,7 +185,7 @@ export async function POST(req: NextRequest) {
               + `Attendance for the rest of it does not exist yet, so overtime and attendance-based allowances are incomplete. `
               + `Recompute after the cycle ends, or confirm deliberately with allow_early_confirm if you are paying before month end.`,
             reason: "cycle_not_ended",
-            cycleEndsAt: new Date(cycleEndMs).toISOString(),
+            cycleEndsAt: new Date(cycleEndMs as number).toISOString(),
             daysLeft,
           },
           { status: 409 },

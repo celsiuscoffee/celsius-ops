@@ -58,12 +58,18 @@ function perfAllowance(item: PayrollItem): number {
   return Number(item.allowances?.performance?.amount ?? 0);
 }
 
+import { monthlyCycleEndMs, cycleStillOpen, lastEndedCycle } from "@/lib/hr/cycle-window";
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export default function PayrollPage() {
   const now = new Date();
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
+  // Default to the month that just ENDED, not the current one — the current
+  // month cannot be computed (see lib/hr/cycle-window), so defaulting to it
+  // opened the page on a disabled option.
+  const defaultCycle = lastEndedCycle(now.getTime());
+  const [month, setMonth] = useState(defaultCycle.month);
+  const [year, setYear] = useState(defaultCycle.year);
   const { data, mutate } = useFetch<{ runs: PayrollRun[] }>("/api/hr/payroll");
   const [computing, setComputing] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -236,7 +242,17 @@ export default function PayrollPage() {
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted-foreground">Month</span>
             <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="rounded-lg border bg-background px-3 py-2 text-sm">
-              {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+              {/* A cycle that has not ended cannot be computed — basic salary
+                  would compute in full against attendance that does not exist
+                  yet. The API refuses it too; this stops it being picked. */}
+              {MONTHS.map((m, i) => {
+                const open = cycleStillOpen(monthlyCycleEndMs(year, i + 1), Date.now());
+                return (
+                  <option key={i} value={i + 1} disabled={open}>
+                    {m}{open ? " — not ended" : ""}
+                  </option>
+                );
+              })}
             </select>
           </label>
           <label className="block">
