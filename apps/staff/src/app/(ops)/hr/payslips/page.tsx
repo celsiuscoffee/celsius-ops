@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Receipt, ChevronDown, ChevronUp, ArrowLeft, Download } from "lucide-react";
 import { PAYROLL_UI_ENABLED } from "@/lib/hr/constants";
 import { FetchError } from "@/components/fetch-error";
-import { otLineLabel, otHoursFromDetails, publicHolidayPayLabel, restDayPayLabel } from "@celsius/shared/src/hr/pay-lines";
+import { earningsLines } from "@celsius/shared/src/hr/pay-lines";
 
 type AllowanceItem = { amount: number; base?: number; score?: number };
 type OtherDeductions = {
@@ -130,11 +130,6 @@ export default function PayslipsPage() {
               : `${MONTHS[(run.period_month as number) - 1]} ${run.period_year}`;
             const hourlyRate = Number(slip.computation_details?.hourly_rate || 0);
             const isOpen = expanded === slip.id;
-            const totalOT =
-              Number(slip.ot_1x_amount || 0) +
-              Number(slip.ot_1_5x_amount || 0) +
-              Number(slip.ot_2x_amount || 0) +
-              Number(slip.ot_3x_amount || 0);
             const allowances = slip.allowances || {};
             const allowanceEntries = Object.entries(allowances).filter(([, v]) => Number(v?.amount || 0) > 0);
             const totalAllowances = allowanceEntries.reduce((s, [, v]) => s + Number(v.amount || 0), 0);
@@ -162,29 +157,22 @@ export default function PayslipsPage() {
                   <div className="border-t px-4 pb-4 pt-3 text-sm">
                     {/* Earnings */}
                     <p className="mb-2 font-semibold text-green-700">Earnings</p>
-                    <Row
-                      label={isWeekly
-                        ? `Wages (${slip.total_regular_hours}h${hourlyRate > 0 ? ` × RM${hourlyRate}/h` : ""})`
-                        : "Basic Salary"}
-                      value={fmt(slip.basic_salary)}
-                    />
-                    {totalOT > 0 && (() => {
-                      // Same label set as the backoffice run page and the PDF.
-                      const det = slip.computation_details || {};
-                      const otH = otHoursFromDetails(det as Record<string, unknown>);
-                      const phAmt = Number(det.ph_premium_amount || 0);
-                      const rdAmt = Number(det.rest_day_pay_amount || 0);
-                      const ot1 = Number(slip.ot_1x_amount || 0);
-                      const ot2 = Number(slip.ot_2x_amount || 0);
-                      return (
-                        <>
-                          {ot1 > 0 && <Row label={rdAmt > 0 && ot1 - rdAmt < 0.01 ? restDayPayLabel(det.rest_day_days_worked) : otLineLabel("1x", otH["1x"])} value={fmt(ot1)} />}
-                          {Number(slip.ot_1_5x_amount) > 0 && <Row label={otLineLabel("1_5x", otH["1_5x"])} value={fmt(slip.ot_1_5x_amount)} />}
-                          {ot2 > 0 && <Row label={phAmt > 0 && ot2 - phAmt < 0.01 ? publicHolidayPayLabel(det.ph_days_worked, det.ph_premium_hours) : otLineLabel("2x", otH["2x"])} value={fmt(ot2)} />}
-                          {Number(slip.ot_3x_amount) > 0 && <Row label={otLineLabel("3x", otH["3x"])} value={fmt(slip.ot_3x_amount)} />}
-                        </>
-                      );
-                    })()}
+                    {/* Basic + every OT / day-type line, derived once in
+                        pay-lines.ts so this page, the run page, the PDF and the
+                        manager app cannot drift apart again. */}
+                    {earningsLines({
+                      basicSalary: Number(slip.basic_salary || 0),
+                      isWeekly,
+                      regularHours: Number(slip.total_regular_hours || 0),
+                      hourlyRate,
+                      ot1xAmount: Number(slip.ot_1x_amount || 0),
+                      ot1_5xAmount: Number(slip.ot_1_5x_amount || 0),
+                      ot2xAmount: Number(slip.ot_2x_amount || 0),
+                      ot3xAmount: Number(slip.ot_3x_amount || 0),
+                      details: (slip.computation_details || {}) as Record<string, unknown>,
+                    }).map((line) => (
+                      <Row key={line.key} label={line.label} detail={line.detail} value={fmt(line.amount)} />
+                    ))}
                     {totalAllowances > 0 && allowanceEntries.map(([key, a]) => (
                       <Row
                         key={key}
@@ -239,10 +227,16 @@ export default function PayslipsPage() {
   );
 }
 
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+function Row({ label, value, detail, bold }: { label: string; value: string; detail?: string; bold?: boolean }) {
   return (
     <div className={`flex justify-between py-1 ${bold ? "font-semibold" : ""}`}>
-      <span className="text-gray-600">{label}</span>
+      <span className="text-gray-600">
+        {label}
+        {/* Quantity and rate. The Employment Act wants the hours and the rate
+            shown rather than a lump sum; at this width they read better under
+            the description than as their own columns. */}
+        {detail ? <span className="ml-2 text-[11px] text-gray-400">{detail}</span> : null}
+      </span>
       <span>{value}</span>
     </div>
   );

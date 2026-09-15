@@ -79,6 +79,8 @@ export type Payslip = {
   ot_1_5x_amount?: number | null;
   ot_2x_amount?: number | null;
   ot_3x_amount?: number | null;
+  /** Clocked regular hours — labels the weekly part-timer's wages line. */
+  total_regular_hours?: number | null;
   other_deductions?: Record<string, number | string | null> | null;
   computation_details?: {
     ot_hours_1x?: number;
@@ -86,9 +88,13 @@ export type Payslip = {
     ot_hours_2x?: number;
     ot_hours_3x?: number;
     ph_days_worked?: number;
+    ph_premium_hours?: number;
     ph_premium_amount?: number;
     rest_day_days_worked?: number;
+    /** Days' WAGES paid for rest days (0.5 per short shift), not days worked. */
+    rest_day_wage_days?: number;
     rest_day_pay_amount?: number;
+    hourly_rate?: number;
   } | null;
   hr_payroll_runs: {
     status: string;
