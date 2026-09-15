@@ -11,7 +11,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFP
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { otLineLabel, otHoursFromDetails, publicHolidayPayLabel, restDayPayLabel, type OtHoursByRate } from "./pay-lines";
+import { earningsLines, otHoursFromDetails, type OtHoursByRate } from "./pay-lines";
 
 // Logo bytes loaded lazily — file read once per process.
 let _logoBytes: Uint8Array | null | undefined;
@@ -59,6 +59,8 @@ export type PayslipData = {
   phPremiumHours?: number;
   phPremiumAmount?: number;
   restDayDays?: number;
+  /** Days' WAGES paid for rest days (0.5 per short shift) — not days worked. */
+  restDayWageDays?: number;
   restDayPayAmount?: number;
   allowances: { label: string; amount: number }[];
   // Catch-all for earnings not itemized into OT or allowances — e.g.
@@ -258,25 +260,28 @@ function drawPayslip(page: PDFPage, font: PDFFont, bold: PDFFont, d: PayslipData
   y -= 22;
 
   // Earnings rows
-  const earnings: [string, number][] = [
-    ["Basic Salary", d.basicSalary],
-  ];
-  // Keyed on MONEY, not OT hours: the public-holiday second-day wage (EA
-  // s.60D) rides in the 2× line with ZERO OT hours — a full-timer who worked a
-  // normal 31-Aug shift. Gating on hours hid it from the payslip while it sat
-  // in gross (owner 2026-09-03: "the PH OT not in payroll"). Labels come from
-  // pay-lines.ts so the PDF, the run page and the staff app read the same.
+  // Basic + every OT / day-type line, derived once in pay-lines.ts so the PDF,
+  // the run page, the staff payslip page and the manager app read identically.
   const otH = d.otHoursByRate || {};
-  const phAmt = d.phPremiumAmount || 0;
-  const rdAmt = d.restDayPayAmount || 0;
-  if (d.ot1xAmount > 0) {
-    earnings.push([rdAmt > 0 && d.ot1xAmount - rdAmt < 0.01 ? restDayPayLabel(d.restDayDays) : otLineLabel("1x", otH["1x"]), d.ot1xAmount]);
-  }
-  if (d.ot1_5xAmount > 0) earnings.push([otLineLabel("1_5x", otH["1_5x"]), d.ot1_5xAmount]);
-  if (d.ot2xAmount > 0) {
-    earnings.push([phAmt > 0 && d.ot2xAmount - phAmt < 0.01 ? publicHolidayPayLabel(d.phDaysWorked, d.phPremiumHours) : otLineLabel("2x", otH["2x"]), d.ot2xAmount]);
-  }
-  if (d.ot3xAmount > 0) earnings.push([otLineLabel("3x", otH["3x"]), d.ot3xAmount]);
+  const earnings: [string, number][] = earningsLines({
+    basicSalary: d.basicSalary,
+    ot1xAmount: d.ot1xAmount,
+    ot1_5xAmount: d.ot1_5xAmount,
+    ot2xAmount: d.ot2xAmount,
+    ot3xAmount: d.ot3xAmount,
+    details: {
+      ot_hours_1x: otH["1x"],
+      ot_hours_1_5x: otH["1_5x"],
+      ot_hours_2x: otH["2x"],
+      ot_hours_3x: otH["3x"],
+      ph_premium_amount: d.phPremiumAmount || 0,
+      ph_days_worked: d.phDaysWorked,
+      ph_premium_hours: d.phPremiumHours,
+      rest_day_pay_amount: d.restDayPayAmount || 0,
+      rest_day_days_worked: d.restDayDays,
+      rest_day_wage_days: d.restDayWageDays,
+    },
+  }).map((line) => [line.label, line.amount] as [string, number]);
   for (const a of d.allowances) {
     if (a.amount > 0) earnings.push([a.label, a.amount]);
   }
@@ -574,6 +579,7 @@ export function mapPayslipData(
     phPremiumHours: num(det?.ph_premium_hours),
     phPremiumAmount: num(det?.ph_premium_amount),
     restDayDays: num(det?.rest_day_days_worked),
+    restDayWageDays: num(det?.rest_day_wage_days),
     restDayPayAmount: num(det?.rest_day_pay_amount),
     allowances: allowanceList,
     otherEarnings,

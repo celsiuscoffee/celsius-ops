@@ -48,6 +48,13 @@ export type DayTypePay = {
   restDayHours: number;
   /** Half or one ORP per rest day worked, by hours. */
   restDayAmount: number;
+  /**
+   * Days' WAGES paid for rest days — 0.5 for a short shift, 1 for a long one,
+   * summed. Distinct from restDayDays (days WORKED): two rest days can pay
+   * anywhere from 1 to 2 days' wages. The payslip line states it, and it
+   * cannot be recovered from the day count alone.
+   */
+  restDayWageDays: number;
 };
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -55,7 +62,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 export function dayTypePay(input: DayTypeInput): DayTypePay {
   const out: DayTypePay = {
     publicHolidayDays: 0, publicHolidayHours: 0, publicHolidayAmount: 0,
-    restDayDays: 0, restDayHours: 0, restDayAmount: 0,
+    restDayDays: 0, restDayHours: 0, restDayAmount: 0, restDayWageDays: 0,
   };
   const orp = Math.max(0, input.orp);
   const half = input.normalHoursPerDay / 2;
@@ -73,11 +80,14 @@ export function dayTypePay(input: DayTypeInput): DayTypePay {
     if (!(hours > 0)) continue;
     out.restDayDays++;
     out.restDayHours += hours;
-    out.restDayAmount += hours <= half ? orp / 2 : orp;
+    const wageDays = hours <= half ? 0.5 : 1;
+    out.restDayWageDays += wageDays;
+    out.restDayAmount += orp * wageDays;
   }
   out.publicHolidayHours = r2(out.publicHolidayHours);
   out.publicHolidayAmount = r2(out.publicHolidayAmount);
   out.restDayHours = r2(out.restDayHours);
   out.restDayAmount = r2(out.restDayAmount);
+  out.restDayWageDays = r2(out.restDayWageDays);
   return out;
 }

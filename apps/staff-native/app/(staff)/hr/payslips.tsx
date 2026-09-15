@@ -13,6 +13,7 @@ import { ChevronDown, ChevronUp, Download } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { fetchPayslips, fetchPayslipDownloadUrl, type Payslip } from "../../../lib/hr/api";
+import { earningsLines } from "../../../lib/hr/pay-lines";
 
 export default function PayslipsScreen() {
   const { data, isLoading, error } = useQuery({
@@ -54,37 +55,30 @@ export default function PayslipsScreen() {
   );
 }
 
-// The earnings lines exactly as the backoffice run page and the PDF label
-// them (packages/shared/src/hr/pay-lines.ts): OT by rate with the hours, and
-// the day-type pay — the 2× line carries the public-holiday second-day wage
-// and the 1× line the rest-day day-pay, which are not overtime and were shown
-// here as "Overtime".
-function earningLinesFor(p: Payslip): Array<{ label: string; value: number }> {
+// Basic + every OT / day-type line, derived once in lib/hr/pay-lines.ts — a
+// vendored copy of packages/shared/src/hr/pay-lines.ts, held identical by
+// pay-lines.vendored.test.ts. Hand-copying just the label strings is what let
+// this screen drift to "Basic salary" and "1h" while every other surface said
+// "Basic Salary" and "1.0h".
+function earningLinesFor(p: Payslip, isWeekly: boolean): Array<{ label: string; value: number }> {
   const n = (v: unknown) => Number(v ?? 0) || 0;
-  const d = p.computation_details ?? {};
-  const phPay = n(d.ph_premium_amount);
-  const restPay = n(d.rest_day_pay_amount);
-  const hrs = (h: number | undefined) => (h && h > 0 ? ` · ${h}h` : "");
-  const lines: Array<{ label: string; value: number }> = [];
-  const ot1 = n(p.ot_1x_amount) - restPay;
-  const ot15 = n(p.ot_1_5x_amount);
-  const ot2 = n(p.ot_2x_amount) - phPay;
-  const ot3 = n(p.ot_3x_amount);
-  if (ot1 > 0.004) lines.push({ label: `OT 1.0× (Plain Rate)${hrs(d.ot_hours_1x)}`, value: ot1 });
-  if (ot15 > 0.004) lines.push({ label: `OT 1.5× (Weekday)${hrs(d.ot_hours_1_5x)}`, value: ot15 });
-  if (ot2 > 0.004) lines.push({ label: `OT 2.0× (Rest Day)${hrs(d.ot_hours_2x)}`, value: ot2 });
-  if (ot3 > 0.004) lines.push({ label: `OT 3.0× (Public Holiday)${hrs(d.ot_hours_3x)}`, value: ot3 });
-  if (phPay > 0.004) {
-    const days = n(d.ph_days_worked);
-    lines.push({ label: `Public Holiday Pay (${days || 1} day${days === 1 || !days ? "" : "s"} × 2)`, value: phPay });
+  const d = (p.computation_details ?? {}) as Record<string, unknown>;
+  const lines = earningsLines({
+    basicSalary: n(p.base_salary),
+    isWeekly,
+    regularHours: n(p.total_regular_hours),
+    hourlyRate: n(d.hourly_rate),
+    ot1xAmount: n(p.ot_1x_amount),
+    ot1_5xAmount: n(p.ot_1_5x_amount),
+    ot2xAmount: n(p.ot_2x_amount),
+    ot3xAmount: n(p.ot_3x_amount),
+    details: d,
+  }).map((l) => ({ label: l.label, value: l.amount }));
+  // Older items have no detail block and no per-rate amounts: fall back to one
+  // overtime line after the basic so the gross still ties out.
+  if (lines.length === 1 && n(p.overtime_pay) > 0.004) {
+    lines.push({ label: "Overtime", value: n(p.overtime_pay) });
   }
-  if (restPay > 0.004) {
-    const days = n(d.rest_day_days_worked);
-    lines.push({ label: `Rest Day Pay (${days || 1} day${days === 1 || !days ? "" : "s"})`, value: restPay });
-  }
-  // Older items have no detail block: fall back to one overtime line so the
-  // gross still ties out.
-  if (lines.length === 0 && n(p.overtime_pay) > 0.004) lines.push({ label: "Overtime", value: n(p.overtime_pay) });
   return lines;
 }
 
@@ -144,10 +138,9 @@ function PayslipCard({ payslip }: { payslip: Payslip }) {
       .toLocaleDateString([], { month: "long", year: "numeric" });
   }
 
-  const base = Number(payslip.base_salary ?? 0);
   const allow = Number(payslip.allowances ?? 0);
   const gross = Number(payslip.total_gross ?? 0);
-  const earningLines = earningLinesFor(payslip);
+  const earningLines = earningLinesFor(payslip, isWeekly);
 
   const epf = Number(payslip.epf_employee ?? 0);
   const socso = Number(payslip.socso_employee ?? 0);
@@ -207,7 +200,6 @@ function PayslipCard({ payslip }: { payslip: Payslip }) {
           {/* Earnings */}
           <SectionLabel>Earnings</SectionLabel>
           <View className="gap-1">
-            <PayRow label={isWeekly ? "Hourly wages" : "Basic salary"} value={base} />
             {earningLines.map((l) => (
               <PayRow key={l.label} label={l.label} value={l.value} />
             ))}
