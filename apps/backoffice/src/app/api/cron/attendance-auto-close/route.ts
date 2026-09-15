@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
   // Active attendance logs
   const { data: activeLogs } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("id, user_id, outlet_id, clock_in, scheduled_start, scheduled_end, scheduled_date, ai_flags")
+    .select("id, user_id, outlet_id, clock_in, scheduled_start, scheduled_end, scheduled_date, scheduled_break_minutes, ai_flags")
     .is("clock_out", null);
 
   if (!activeLogs || activeLogs.length === 0) {
@@ -227,6 +227,7 @@ export async function GET(req: NextRequest) {
       // end bound mostly just makes the two paths agree.
       scheduledStart: mytInstant(log.scheduled_date ?? mytDateString(clockIn), log.scheduled_start),
       scheduledEnd: mytInstant(log.scheduled_date ?? mytDateString(clockIn), log.scheduled_end),
+      rosteredBreakMinutes: log.scheduled_break_minutes ?? null,
     });
 
     flags.push(`auto_closed_${reason}`, ...derived.dayTypeFlags);

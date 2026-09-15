@@ -258,6 +258,7 @@ type ExistingLog = {
   scheduled_start: string | null;
   scheduled_end: string | null;
   scheduled_date: string | null;
+  scheduled_break_minutes: number | null;
 };
 
 type ReviewInput = {
@@ -330,7 +331,7 @@ async function reviewOne(
   // Load the log first so we can gate MANAGER access by its outlet.
   const { data: existingLog } = await hrSupabaseAdmin
     .from("hr_attendance_logs")
-    .select("user_id, outlet_id, clock_in, clock_out, overtime_type, scheduled_start, scheduled_end, scheduled_date")
+    .select("user_id, outlet_id, clock_in, clock_out, overtime_type, scheduled_start, scheduled_end, scheduled_date, scheduled_break_minutes")
     .eq("id", id)
     .maybeSingle();
   if (!existingLog) return { ok: false, status: 404, error: "Attendance log not found" };
@@ -442,6 +443,7 @@ async function setTimes(
     // The paid window: only time inside the rostered shift counts.
     scheduledStart: mytInstant(log.scheduled_date ?? mytDate, log.scheduled_start),
     scheduledEnd: mytInstant(log.scheduled_date ?? mytDate, log.scheduled_end),
+    rosteredBreakMinutes: log.scheduled_break_minutes ?? null,
   });
   const wasOpen = !log.clock_out;
   const { data: updated, error: setErr } = await hrSupabaseAdmin

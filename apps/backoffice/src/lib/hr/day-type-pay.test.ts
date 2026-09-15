@@ -6,7 +6,7 @@ import { dayTypePay } from "./day-type-pay";
 const ORP = 2200 / 26;
 
 describe("dayTypePay — public holiday", () => {
-  it("pays ONE ORP per holiday worked regardless of hours (31 Aug 2026, 7.0h shift)", () => {
+  it("pays TWO ORP per holiday worked regardless of hours (31 Aug 2026, 7.0h shift)", () => {
     const r = dayTypePay({
       orp: ORP, normalHoursPerDay: 7.5,
       publicHolidayHours: new Map([["2026-08-31", 7]]),
@@ -14,16 +14,44 @@ describe("dayTypePay — public holiday", () => {
     });
     expect(r.publicHolidayDays).toBe(1);
     expect(r.publicHolidayHours).toBe(7);
-    expect(r.publicHolidayAmount).toBeCloseTo(84.62, 2); // not 7 × 11.28 = 78.97
+    // s.60D(3)(a): two days' wages IN ADDITION TO the holiday pay already in
+    // the monthly salary. Not 84.62 (one ORP — the pre-2026-09-15 bug), and
+    // not 78.97 (7 × hourly — the PR #1209 bug).
+    expect(r.publicHolidayAmount).toBeCloseTo(169.23, 2);
   });
 
-  it("a short holiday shift (Syafiq 5.77h) still earns the full second day's wage", () => {
+  it("a short holiday shift (Syafiq 5.77h) still earns the full two days' wages", () => {
     const r = dayTypePay({
       orp: 3500 / 26, normalHoursPerDay: 7.5,
       publicHolidayHours: new Map([["2026-08-31", 5.77]]),
       restDayHours: new Map(),
     });
-    expect(r.publicHolidayAmount).toBeCloseTo(134.62, 2);
+    // "regardless that the period of work done on that day is less than the
+    // normal hours of work" — 2 × 134.62.
+    expect(r.publicHolidayAmount).toBeCloseTo(269.23, 2);
+  });
+
+  it("matches the published worked example: RM1,200/month → 3 days' value", () => {
+    // maukerja "Kiraan OT Public Holiday": basic RM1,200 → RM46.15/day; working
+    // the holiday pays RM138.45 for the date, i.e. 3 × 46.15 (1 day of salary
+    // + 2 days' premium). The premium this function returns is the 2-day part.
+    const r = dayTypePay({
+      orp: 1200 / 26, normalHoursPerDay: 8,
+      publicHolidayHours: new Map([["2026-05-01", 8]]),
+      restDayHours: new Map(),
+    });
+    expect(r.publicHolidayAmount).toBeCloseTo(92.31, 2);
+    expect(1200 / 26 + r.publicHolidayAmount).toBeCloseTo(138.46, 2);
+  });
+
+  it("two holidays worked in one cycle pay two premiums", () => {
+    const r = dayTypePay({
+      orp: ORP, normalHoursPerDay: 7.5,
+      publicHolidayHours: new Map([["2026-08-31", 7], ["2026-09-16", 6]]),
+      restDayHours: new Map(),
+    });
+    expect(r.publicHolidayDays).toBe(2);
+    expect(r.publicHolidayAmount).toBeCloseTo(338.46, 2);
   });
 
   it("split shifts on one holiday are one premium, not two", () => {
@@ -41,7 +69,7 @@ describe("dayTypePay — public holiday", () => {
       publicHolidayHours: new Map([["2026-08-31", 7]]),
       restDayHours: new Map([["2026-08-31", 7]]),
     });
-    expect(r.publicHolidayAmount).toBeCloseTo(84.62, 2);
+    expect(r.publicHolidayAmount).toBeCloseTo(169.23, 2);
     expect(r.restDayAmount).toBe(0);
   });
 });

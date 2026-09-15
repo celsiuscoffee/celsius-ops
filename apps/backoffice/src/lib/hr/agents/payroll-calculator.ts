@@ -701,8 +701,9 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       // owner 2026-09-03: "31 aug is PH, it should be counted as OT — follow
       // the act") or on a ROSTERED rest day (s.60(3)(b)). Collected per MYT
       // date here and priced after the loop by dayTypePay: a monthly-rated
-      // employee earns a second DAY's wages (ORP = basic/26) per holiday
-      // worked, regardless of hours; a rest day pays half or one ORP by hours.
+      // employee earns TWO days' wages (ORP = basic/26) per holiday worked,
+      // on top of the holiday pay already in salary, regardless of hours; a
+      // rest day pays half or one ORP by hours.
       // Hours BEYOND the roster on those days keep the 3×/2× OT path above.
       //
       // Not overtime, so no hr_overtime_requests budget applies — the holiday
@@ -713,7 +714,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
       if (isOtApproved(a) && !isPartTime) {
         const mytDate = mytDateString(new Date(a.clock_in));
         const regular = Number(a.regular_hours) || 0;
-        // The holiday TABLE alone decides the second day's wage. The stamp
+        // The holiday TABLE alone decides the two days' wages. The stamp
         // fallback let a manager-entered "3x" request on a normal Tuesday
         // (mapped to ot_3x) pay a public-holiday day on top of the 3× OT; a
         // holiday added after processing is covered because the table is read
@@ -751,7 +752,7 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
     const phPremiumAmount = dayPay.publicHolidayAmount;
     if (dayPay.publicHolidayDays > 0) {
       notes.push(
-        `${profile.user_id.slice(0, 8)}: ${dayPay.publicHolidayDays} public holiday${dayPay.publicHolidayDays === 1 ? "" : "s"} worked (${phPremiumHours}h) — second day's wage RM${phPremiumAmount.toFixed(2)} at ORP (EA s.60D), in the 2× line.`,
+        `${profile.user_id.slice(0, 8)}: ${dayPay.publicHolidayDays} public holiday${dayPay.publicHolidayDays === 1 ? "" : "s"} worked (${phPremiumHours}h) — two days' wages RM${phPremiumAmount.toFixed(2)} at ORP (EA s.60D(3)(a)), in the 2× line.`,
       );
     }
     if (dayPay.restDayDays > 0) {
