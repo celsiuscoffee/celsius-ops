@@ -1128,6 +1128,10 @@ export async function calculatePayroll(month: number, year: number): Promise<Pay
         ph_days_worked: dayPay.publicHolidayDays,
         rest_day_days_worked: dayPay.restDayDays,
         rest_day_pay_amount: dayPay.restDayAmount,
+        // Days' wages, not days worked — half a day for a short rest-day shift.
+        // The payslip line says "Rest Day Pay (2 days worked) · 1½ days' wages"
+        // and cannot derive the second half from the first.
+        rest_day_wage_days: dayPay.restDayWageDays,
         // Pay basis used for EPF/SOCSO/EIS, for audit against the payslip.
         statutory_basis: statutoryBasis,
         employment_type: profile.employment_type,
