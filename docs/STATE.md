@@ -11,6 +11,29 @@ current month.
 
 ## Verified facts
 
+- 2026-09-16 — **Owner to-do kanban built, NOT live (PR open; migration
+  not applied).** Office-hours scoped it (docs/design/owner-todo-kanban.md):
+  the real cost was re-scanning five apps, not missed tasks, so the product is
+  one board fed automatically. Capture reads the owner's OWN WhatsApp Desktop
+  store — a plain SQLite at
+  `~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite`
+  (verified readable on his Mac: ~3.6k msgs/week, ~40 active chats/day; copy
+  .sqlite+-wal+-shm first, never open the live file). Local launchd scanner
+  `apps/backoffice/scripts/owner-todo-scanner.mjs` (hourly + 23:30, state in
+  `~/.celsius-owner-todo/state.json` = Z_PK high-water mark) ships chat
+  windows to `POST /api/owner/todo/ingest` (bearer OWNER_TODO_INGEST_SECRET,
+  falls back to FINANCE_INGEST_SECRET); `lib/owner-todo/capture.ts` runs
+  claude-sonnet-4-6 per chat, proposes OpsReminder cards (new columns: source,
+  sourceRef UNIQUE with source, sourceChat, sourceExcerpt, stage,
+  triageDecision, proposedByAgent, confidence). Board `/owner/todo` (OWNER
+  only via `owner:*` moduleKey; dnd-kit columns Triage/To Do/Doing/Waiting
+  on/Done). Digest `lib/owner-todo/digest.ts` rides the 9am briefing firing
+  of celsius-overview; buttons dispatch `owner_todo` in pulse-webhook.
+  Registry: `owner_todo_capture` SHADOW (arm at >=70% accepted over 14d,
+  review 2026-09-30), `owner_todo_nudge` ARMED. Telegram capture needs an
+  MTProto user login only the owner can do = phase 2. Dry-run of the scanner
+  passed; nothing has been posted to prod yet.
+
 - 2026-09-11 — **Zikry converted full_time → part_time from 2026-09-01; his
   August monthly pay is now exposed to any recompute.** Owner: served notice,
   last day as a FULL-TIMER was 2026-08-31, continues as a PT. Profile
@@ -2713,6 +2736,17 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-16 — **Owner to-do kanban: three steps to go live, in order.**
+  (1) Apply `supabase/migrations/111_owner_todo_capture.sql` via Supabase MCP
+  (owner approval, hard rule 6) and date the header. (2) Merge the PR (Vercel
+  deploys backoffice). (3) On the owner's Mac: copy
+  `apps/backoffice/scripts/launchd/com.celsius.owner-todo-scanner.plist` to
+  `~/Library/LaunchAgents/` with the FINANCE_INGEST_SECRET value pasted in,
+  run `node apps/backoffice/scripts/owner-todo-scanner.mjs --seed` (or skip
+  seed to ingest the last 24h), then `launchctl bootstrap gui/$(id -u) <plist>`.
+  Check the first run in `~/.celsius-owner-todo/scanner.log` and the Triage
+  column. Review precision on 2026-09-30 before arming capture.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the

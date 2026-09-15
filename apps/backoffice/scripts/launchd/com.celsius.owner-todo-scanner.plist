@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Owner to-do scanner (docs/design/owner-todo-kanban.md). Install on the
+  owner's Mac as ~/Library/LaunchAgents/com.celsius.owner-todo-scanner.plist
+  with the secret filled in, then:
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.celsius.owner-todo-scanner.plist
+  Hourly while the Mac is awake, plus a 23:30 catch-up. First install: run
+  `node scripts/owner-todo-scanner.mjs --seed` so the first ingest is not
+  the whole chat history (or skip it to ingest the last 24h once).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.celsius.owner-todo-scanner</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>/Users/ammarshahrin/celsius-inventory/apps/backoffice/scripts/owner-todo-scanner.mjs</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CELSIUS_TODO_INGEST_URL</key><string>https://backoffice.celsiuscoffee.com/api/owner/todo/ingest</string>
+    <key>CELSIUS_INGEST_SECRET</key><string>REPLACE_WITH_FINANCE_INGEST_SECRET</string>
+  </dict>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>23</integer><key>Minute</key><integer>30</integer></dict>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/ammarshahrin/.celsius-owner-todo/stdout.log</string>
+  <key>StandardErrorPath</key><string>/Users/ammarshahrin/.celsius-owner-todo/stderr.log</string>
+</dict>
+</plist>

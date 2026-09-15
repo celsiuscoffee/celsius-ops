@@ -73,6 +73,7 @@ import {
   Printer,
   Landmark,
   ChefHat,
+  KanbanSquare,
 } from "lucide-react";
 import { GRANTABLE_MODULE_KEYS } from "@/lib/modules";
 
@@ -220,6 +221,9 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Ops Workspace",    href: "/ops/chat-inbox",  icon: <MessageSquare className={ICON_SIZE} />,   moduleKey: "ops:chat-inbox" },
       { label: "Audits",           href: "/ops/audit",       icon: <ClipboardCheck className={ICON_SIZE} />,  moduleKey: "ops:audit" },
       { label: "SOPs & Templates", href: "/ops/sops",        icon: <BookOpen className={ICON_SIZE} />,        moduleKey: "ops:sops" },
+      // The owner's private kanban (docs/design/owner-todo-kanban.md). owner:*
+      // keys are OWNER-only in canAccess and not grantable, like finance:*.
+      { label: "My board",         href: "/owner/todo",      icon: <KanbanSquare className={ICON_SIZE} />,    moduleKey: "owner:todo" },
     ],
   },
   {
@@ -502,7 +506,9 @@ if (process.env.NODE_ENV !== "production") {
     const items = [...(section.items ?? []), ...(section.subgroups?.flatMap((sg) => sg.items) ?? [])];
     for (const item of items) if (item.moduleKey) navKeys.add(item.moduleKey);
   }
-  const missingFromRegistry = [...navKeys].filter((k) => !k.startsWith("finance:") && !GRANTABLE_MODULE_KEYS.has(k));
+  const missingFromRegistry = [...navKeys].filter(
+    (k) => !k.startsWith("finance:") && !k.startsWith("owner:") && !GRANTABLE_MODULE_KEYS.has(k),
+  );
   const missingFromNav = [...GRANTABLE_MODULE_KEYS].filter((k) => !navKeys.has(k));
   if (missingFromRegistry.length) {
     console.warn("[perms] nav moduleKeys not grantable in Staff & Access (add to lib/modules.ts):", missingFromRegistry);
@@ -530,6 +536,11 @@ export function canAccess(user: UserProfile | undefined, moduleKey?: string): bo
   // override this even if it ends up set on a Manager record.
   if (moduleKey?.startsWith("finance:")) {
     return user.role === "ADMIN" || user.role === "OWNER";
+  }
+  // The owner's personal board — his own chats feed it. OWNER only, not even
+  // ADMIN, and never grantable.
+  if (moduleKey?.startsWith("owner:")) {
+    return user.role === "OWNER";
   }
   // Payroll (runs / allowances / statutory) is Owner/Admin only — managers never
   // see it in the nav even if the moduleAccess checkbox is set (payroll routes are

@@ -5,6 +5,7 @@ import { runCelsiusOverviewAgent } from "@/lib/ai-agent/celsius-overview";
 import { runCommsDigest } from "@celsius/agents/src/digest";
 import { touchAgentRun } from "@celsius/agents/src/substrate";
 import { runIntelligenceBriefing } from "@/lib/agents/intelligence-briefing";
+import { runOwnerTodoDigest } from "@/lib/owner-todo/digest";
 import { runOpsIntelligence } from "@/lib/ops/ops-intelligence";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +69,13 @@ async function runHandler(req: NextRequest) {
         await runIntelligenceBriefing();
       } catch (briefErr) {
         console.error("[ai-agent] folded morning-briefing failed:", briefErr);
+      }
+      // The owner's to-do digest rides the same 9am firing (Triage proposals
+      // with Accept/Reject, overdue with Done/Tomorrow). Best-effort.
+      try {
+        await runOwnerTodoDigest();
+      } catch (todoErr) {
+        console.error("[ai-agent] folded owner-todo digest failed:", todoErr);
       }
     }
 

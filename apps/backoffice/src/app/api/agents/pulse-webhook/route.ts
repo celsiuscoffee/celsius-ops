@@ -4,6 +4,7 @@ import { logAgentMessage } from "@celsius/agents/src/messages";
 import { answerPulseCallback, pulseChatId, pulseOwnerUserId, sendPulse, sendPulseTo } from "@celsius/agents/src/pulse";
 import { resolvePrompt, findPromptByMessageId } from "@celsius/agents/src/ask-owner";
 import { writeApMatch, type ApMatch } from "@/lib/finance/ap-match";
+import { getOwnerUser, moveCard, rejectCard, snoozeCardToTomorrow } from "@/lib/owner-todo/board";
 import { runIntelligence } from "@/lib/agents/intelligence";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,34 @@ async function dispatchPromptAction(payload: Record<string, unknown> | null, val
     } catch (e) {
       console.error("[pulse-webhook] clear_ap_match failed:", e);
       await sendPulse("⚠️ Couldn't clear that invoice automatically — please settle it in the finance inbox.");
+    }
+  }
+
+  // Owner to-do board buttons (lib/owner-todo/digest.ts): accept / reject a
+  // proposed card, or done / tomorrow on a due one. The pulse chat IS the
+  // owner, so the card is looked up on the OWNER account's board.
+  if (action === "owner_todo") {
+    const reminderId = typeof payload.reminderId === "string" ? payload.reminderId : null;
+    if (!reminderId) return;
+    try {
+      const owner = await getOwnerUser();
+      if (!owner) return;
+      if (value === "accept") {
+        const c = await moveCard(reminderId, owner.id, "todo", "telegram");
+        if (c) await sendPulse(`✅ On the board: ${escapeHtml(c.title)}`);
+      } else if (value === "reject") {
+        const ok = await rejectCard(reminderId, owner.id, "telegram");
+        if (ok) await sendPulse("🗑 Rejected. It won't be proposed again.");
+      } else if (value === "done") {
+        const c = await moveCard(reminderId, owner.id, "done", "telegram");
+        if (c) await sendPulse(`✅ Done: ${escapeHtml(c.title)}`);
+      } else if (value === "tomorrow") {
+        const c = await snoozeCardToTomorrow(reminderId, owner.id);
+        if (c) await sendPulse(`⏭ Moved to tomorrow: ${escapeHtml(c.title)}`);
+      }
+    } catch (e) {
+      console.error("[pulse-webhook] owner_todo failed:", e);
+      await sendPulse("⚠️ Couldn't update that card. Open the board to fix it.");
     }
   }
 }

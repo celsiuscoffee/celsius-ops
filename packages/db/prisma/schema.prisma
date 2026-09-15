@@ -1610,12 +1610,31 @@ model OpsReminder {
   // assign, then re-nudged when it falls due). Null = never notified. Drives
   // the due-nudge cron's de-dupe so we don't re-ping every run.
   lastNotifiedAt  DateTime?
+  // ── Owner to-do capture (docs/design/owner-todo-kanban.md) ──────────────
+  // Where the card came from: manual | whatsapp | telegram | email | notes |
+  // sheet. Agent-proposed cards carry the originating message in sourceRef
+  // (chat jid + message pk) so a rescan can never propose the same ask twice.
+  source          String    @default("manual")
+  sourceRef       String?
+  sourceChat      String?   // human chat/thread name for the card
+  sourceExcerpt   String?   // the message text the ask was extracted from
+  // Kanban column: triage | todo | doing | waiting | done. Status stays the
+  // lifecycle (OPEN/DONE/...); stage is the board position. done <=> DONE.
+  stage           String    @default("todo")
+  // Owner's verdict on an agent-proposed card: accepted | rejected. Null for
+  // manual cards and for proposals still in Triage. This is the outcome the
+  // capture agent's precision (arming criteria) is computed from.
+  triageDecision  String?
+  proposedByAgent Boolean   @default(false)
+  confidence      Float?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  @@unique([source, sourceRef])
   @@index([status, dueAt])
   @@index([assigneeUserId, status])
   @@index([createdByUserId, status])
+  @@index([stage, status])
 }
 
 // A directive/announcement the owner or a manager sends to staff over WhatsApp
