@@ -2815,23 +2815,35 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   the exact falsehood this branch existed to correct. Read both sides for
   claims that later events have overtaken, and drop those.
 
-- 2026-09-08 — **Yow Seng August 2026 reconciliation is DONE but NOT WRITTEN —
-  waiting on the owner.** 27 scanned supplier invoices (RM12,523.29) matched
-  against the open GRNI placeholders. The match key that works: **outlet + PO
-  delivery date == supplier invoice date** — it holds for all 21 matched rows,
-  where amounts alone do not (our GRNI figures are PO estimates and run
-  RM435.41 over the supplier's actuals; three Putrajaya short-deliveries on
-  13/18/22 Aug account for ~RM790 of the spread). Three things need the owner's
-  call before anything is applied: (a) 6 invoices totalling RM890.50 have NO
-  payable at all — egg top-ups delivered with no PO, so they need new rows, not
-  matches; (b) `GRNI-CC002-3050` (RM443.80) is an open payable on a CANCELLED
-  PO (`CC-CC002-0368`) with no supplier invoice — looks like a duplicate PO
-  cancelled after the GRNI was minted, so it should be voided; (c) whether to
-  overwrite `amount` with the supplier's figure (the SQL does; otherwise the
-  payment run pays our estimate). Prepared SQL — 21 updates + 6 inserts, all
-  `dueDate = 2026-09-14`, one transaction — is in the session scratchpad, not
-  the repo. The September GRNIs (3272, 3314, 3273, 3316, 3274, 3315) were left
-  alone; they await September invoices.
+- 2026-09-15 — **Yow Seng August 2026 reconciliation APPLIED to prod**
+  (supersedes the 2026-09-08 "held" note). 27 invoices, RM12,523.29, all
+  `dueDate = 2026-09-14`: 21 GRNI placeholders became the supplier's real
+  numbers with `amount` overwritten by the supplier's figure, and 6 payables
+  were created for egg top-ups delivered with no PO (RM890.50). Owner also had
+  `GRNI-CC002-3050` (RM443.80) voided — a payable on CANCELLED PO
+  `CC-CC002-0368`, deleted via the app's own void path for a pending
+  placeholder. August GRNIs: 21 -> 0. Rollbacks in the session scratchpad
+  (`yowseng/rollback.sql`, `yowseng/rollback-void-3050.sql`).
+  **This is a MONTHLY job, not a one-off** — April, May, June and July were all
+  reconciled the same way (April used the same `YSIV26MM-NNNN` numbering).
+  August was simply the month nobody ran, which is the entire reason those
+  payables never appeared on any due-date view.
+  **Two reusable findings.** (1) The match key is **outlet + PO delivery date ==
+  supplier invoice date** — it held for all 21 rows, where amounts alone do not:
+  GRNI figures are PO estimates and ran RM435.41 over the supplier's actuals,
+  with three Putrajaya short-deliveries (13/18/22 Aug) accounting for ~RM790 of
+  the spread. (2) The due-date convention is **the 14th of the following
+  month** — derivable from the data (July's batch was dated 14 Aug), so a future
+  session need not ask.
+  **A GRNI placeholder is minted with `dueDate` NULL and therefore cannot
+  appear on any due-date report** — all 117 open placeholders system-wide carry
+  NULL, against 9 of 28 real invoices. That is why "why isn't this showing as
+  due" has a structural answer, not just a per-supplier one. Once August got a
+  due date the overdue sweep picked all 27 up within the hour (PENDING ->
+  OVERDUE at 07:15 on 2026-09-15).
+  September is deliberately left open on the owner's instruction: 12 GRNIs,
+  RM10,839.60, awaiting the September statement (due 14 Oct on the convention
+  above).
   Still held for the owner: the payment-side data repairs, setting
   TELEGRAM_ALLOWED_CHAT_IDS from the warn logs, and telling finance that
   Telegram-captured invoices now land as DRAFT.
