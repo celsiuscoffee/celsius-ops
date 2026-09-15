@@ -21,6 +21,8 @@ import { detectAnomalies, type AnomalyFlag } from "@/lib/hr/payroll/anomalies";
 import { useFetch } from "@/lib/use-fetch";
 import { earningsLines } from "@celsius/shared/src/hr/pay-lines";
 
+import { monthlyCycleEndMs, cycleStillOpen, lastEndedCycle } from "@/lib/hr/cycle-window";
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 type PayrollRun = {
@@ -94,8 +96,11 @@ type Step = "setup" | "review" | "approved";
 export default function PayrollRunPage() {
   const router = useRouter();
   const now = new Date();
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [year, setYear] = useState(now.getFullYear());
+  // Default to the month that just ENDED — the current one cannot be computed
+  // (lib/hr/cycle-window), so defaulting to it opened on a disabled option.
+  const defaultCycle = lastEndedCycle(now.getTime());
+  const [month, setMonth] = useState(defaultCycle.month);
+  const [year, setYear] = useState(defaultCycle.year);
   // Payday is always the 3rd of the month FOLLOWING the cycle. Auto-syncs
   // when month/year changes — operators can still override manually.
   // Format as local date (not toISOString — UTC conversion shifts MYT back a day).
@@ -225,9 +230,17 @@ export default function PayrollRunPage() {
               disabled={step !== "setup"}
               className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-60"
             >
-              {MONTHS.map((m, i) => (
-                <option key={m} value={i + 1}>{m}</option>
-              ))}
+              {/* A cycle that has not ended cannot be computed — basic salary
+                  would compute in full against attendance that does not exist
+                  yet. The API refuses it too; this stops it being picked. */}
+              {MONTHS.map((m, i) => {
+                const open = cycleStillOpen(monthlyCycleEndMs(year, i + 1), Date.now());
+                return (
+                  <option key={m} value={i + 1} disabled={open}>
+                    {m}{open ? " — not ended" : ""}
+                  </option>
+                );
+              })}
             </select>
           </Field>
           <Field label="Year">
