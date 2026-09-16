@@ -37,9 +37,24 @@ export async function GET(req: NextRequest) {
       { outlet: { name: { contains: search, mode: "insensitive" } } },
     ];
   }
-  if (status) {
-    where.status = status;
+  // `status` accepts a comma-separated list. The receiving screens need this:
+  // they used to fetch every status and filter in the browser, so a page of 100
+  // was mostly COMPLETED/DRAFT/CANCELLED rows and the receivable POs beyond the
+  // cut were unreachable — 220 of 358 receivable POs (RM148k) were invisible.
+  const statuses = status.split(",").map((s) => s.trim()).filter(Boolean);
+  if (statuses.length === 1) {
+    where.status = statuses[0];
+  } else if (statuses.length > 1) {
+    where.status = { in: statuses };
   }
+
+  // A work queue reads oldest-first: the PO most overdue for receipt has to be
+  // the one on screen, not the one buried under three weeks of newer orders.
+  // Undated POs sort last so a missing deliveryDate can't jump the queue.
+  const oldestFirst = url.searchParams.get("sort") === "oldest";
+  const orderBy = oldestFirst
+    ? [{ deliveryDate: { sort: "asc" as const, nulls: "last" as const } }, { createdAt: "asc" as const }]
+    : [{ createdAt: "desc" as const }];
 
   const [orders, total] = await Promise.all([
     prisma.order.findMany({
@@ -73,7 +88,7 @@ export async function GET(req: NextRequest) {
         },
         _count: { select: { receivings: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy,
       skip,
       take: limit,
     }),

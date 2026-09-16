@@ -155,7 +155,14 @@ export default function ReceivePage() {
     setLoading(true);
     try {
       const [ordersRes, receivingsRes, userRes] = await Promise.all([
-        fetch("/api/orders?limit=100"),
+        // Filter server-side and sort oldest-first. Fetching every status and
+        // filtering below spent most of the 100-row page on COMPLETED and
+        // CANCELLED POs, and newest-first buried the overdue ones — together
+        // that hid 220 of 358 receivable POs from the people meant to receive
+        // them. The client-side filter stays as a belt-and-braces check.
+        fetch(
+          `/api/orders?limit=100&sort=oldest&status=${PENDING_STATUSES.join(",")}`,
+        ),
         fetch("/api/receivings?limit=10"),
         fetch("/api/auth/me"),
       ]);
