@@ -13,10 +13,16 @@ export async function GET(req: NextRequest) {
 
   const ACTIVE_STATUSES = ["DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
   const COMPLETED_STATUSES = ["COMPLETED", "CANCELLED"];
+  // Goods can only arrive against a PO procurement has actually transmitted, so
+  // the receive picker wants these four and not the whole active set. It used to
+  // ask for tab=active and drop DRAFT/PENDING_APPROVAL in the browser, which
+  // spent slots of the 100-row cap on POs that can never be received.
+  const RECEIVABLE_STATUSES = ["APPROVED", "SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
 
   const where: Record<string, unknown> = { orderType: "PURCHASE_ORDER" };
   if (tab === "active") where.status = { in: ACTIVE_STATUSES };
   else if (tab === "completed") where.status = { in: COMPLETED_STATUSES };
+  else if (tab === "receivable") where.status = { in: RECEIVABLE_STATUSES };
 
   if (search) {
     where.OR = [
@@ -93,7 +99,14 @@ export async function GET(req: NextRequest) {
       },
       _count: { select: { receivings: true } },
     },
-    orderBy: { createdAt: "desc" },
+    // The receive picker is a work queue, so it reads oldest-first — the most
+    // overdue PO has to be on screen rather than buried under newer orders.
+    // Undated POs sort last so a missing deliveryDate can't jump the queue.
+    // Every other tab keeps newest-first.
+    orderBy:
+      tab === "receivable"
+        ? [{ deliveryDate: { sort: "asc" as const, nulls: "last" as const } }, { createdAt: "asc" as const }]
+        : [{ createdAt: "desc" as const }],
   });
 
   const mapped = orders.map((o) => ({
