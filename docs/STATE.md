@@ -2950,6 +2950,17 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   record in-channel of whether anyone did.
   Report and the 61-row gap list are in the session scratchpad
   (`payment-reconciliation.md`, `true_gap.csv`).
+  **Matcher fixed the same day** (`lib/inventory/pop-leg.ts` + step 4b in the
+  Telegram webhook): a POP is now classified as full / deposit / balance, and
+  the balance leg matches on `amount - amountPaid`. Two distinct failure modes
+  were closed, which is why a status-only fix is wrong: an invoice moved to
+  DEPOSIT_PAID fell out of the candidate status filter entirely, while one left
+  at INITIATED stayed in the pool but matched neither the full nor the deposit
+  amount. **Eligibility keys on `amountPaid > 0`, not on status** — the only two
+  part-paid invoices in the database (RM4,372.20 outstanding) carry INITIATED,
+  so gating on DEPOSIT_PAID/PARTIALLY_PAID would have missed exactly the live
+  cases. The `updateMany` status guard had to widen too or the write is a silent
+  no-op. Precedence: full beats balance beats deposit.
 
 - 2026-09-17 — **`Invoice.issueDate` holds impossible dates** — the column
   spans 2011-04-14 to 2029-05-29 across 3,487 rows. Found while reconciling the
