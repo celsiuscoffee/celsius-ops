@@ -2972,6 +2972,36 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   Still held for the owner: the payment-side data repairs, setting
   TELEGRAM_ALLOWED_CHAT_IDS from the warn logs, and telling finance that
   Telegram-captured invoices now land as DRAFT.
+  **The batch attached no source documents** (owner flagged this on 09-17).
+  19 of the 27 carry no `photos` at all; the other 8 only inherited whatever
+  the receiver photographed at the door on the GRNI placeholder, which is a
+  delivery-note snap, not the supplier's invoice. A future monthly run must
+  treat "attach the PDF" as part of the job, not a follow-up.
+  **A session cannot do the attaching.** The egress proxy rejects CONNECT to
+  `kqdcdhpnyuwrxqhbuyfl.supabase.co:443` (403), so Supabase Storage is
+  unreachable from here — the same block that stopped the invoice-image reads
+  during the 12-vs-24-litre investigation. Uploads have to go through the
+  backoffice UI from the owner's machine.
+  What a session CAN do is remove the re-matching work: the 27 scans are pure
+  CCITT images with no text layer (`pdftotext` yields one byte), so the mapping
+  was verified by rendering the pages. Two rules recover it from the filenames
+  alone: the trailing number in `<C|S|T> CELSIUS INV & CN AUG 2026-N.pdf` is a
+  **global chronological sequence across all three outlets**, and the letter is
+  the **supplier's customer code**, not our outlet. Both exceptions were read
+  off the page rather than inferred: `-7-8` is one two-page invoice
+  (YSIV2608-0586, "Page 1 of 2"/"2 of 2"), and `S-28` is YSIV2608-2307, billed
+  to Shah Alam's code 300-C-385 but stamped "DELIVER TO ; CELSIUS PUTRAJAYA" —
+  which is why it is booked to CC001 and why the C/S file counts look off by
+  one in each direction.
+
+- 2026-09-17 — **79% of the `Invoice` table is base64 image data.** 199 rows
+  store photos as inline `data:image/...;base64,` URIs in the `photos` text
+  array instead of a storage URL: 38 MB of a 48 MB table, single values up to
+  184 KB. (Three of the eight photo-bearing Yow Seng August invoices are like
+  this; the other five hold normal ~148-char storage URLs, so both writers are
+  live.) Every read of those rows drags the image bytes through Postgres and
+  the API. Not yet traced to the writing code path — find which uploader falls
+  back to a data URI before this grows further.
 - 2026-09-07 — **#1226 and #1227 are MERGED** (`9eeba17b`, `50c2a054`) — the
   entry below is kept for its still-open follow-ups, not as a merge request.
   #1226 `claude/disable-shift-swap` — `SHIFT_SWAP_ENABLED = false` in
