@@ -2913,6 +2913,60 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   which is why it is booked to CC001 and why the C/S file counts look off by
   one in each direction.
 
+- 2026-09-17 — **Payment channel reconciled against the ledger** (Telegram
+  "Celsius - Payment" export, 3,965 messages, 14 Apr – 17 Sep 2026, 618 receipt
+  PDFs). The matcher placed 1,670 payments / 1,666 distinct bank refs /
+  RM617,440.43 — 937 supplier, 733 staff claims.
+  **The true unreconciled gap is RM36,416.45 over 61 payments, not the
+  RM59,956.83 the channel appears to show.** 56 of the 119 "no matching unpaid
+  invoice" POPs are the same receipt posted twice: the ref was matched on
+  another posting or now sits on an invoice. Always dedupe by bank ref before
+  quoting an exposure from this channel — the raw count overstates it by 64%.
+  **Root cause of 45% of the gap is a matcher blind spot on deposit terms.**
+  Collective Project is the ONLY supplier with a deposit policy (10%,
+  14-day). Its unplaced amounts are exactly 90% of invoice face value —
+  RM2,533.50 = 90% of 2,815, RM1,703.70 = 90% of 1,893, RM1,696.50 = 90% of
+  1,885. The matcher looks for an *unpaid invoice of the full amount*, so once
+  the 10% deposit lands the invoice stops looking unpaid and every balance leg
+  falls through: RM16,380.30 across 16 payments. The invoices themselves show
+  the full amount settled, so this is a missing audit trail, not missing cash.
+  Any fix to the matcher has to handle the deposit/balance split.
+  **Two payments need the bank statement, not a query**: ref 8900146083
+  (RM181.00) marks both F26041408 (CC002) and F26041477 (CC001) PAID at RM181
+  each, and ref 8900121535 (RM342.80) marks both INV-10058317 and INV-10058318.
+  Each pair is the same amount at two outlets — either two transfers with one
+  receipt uploaded, or one transfer credited twice (RM523.80 at stake). Held
+  for the owner; do not adjust either way from the data alone.
+  **128 review flags were never cleared**: 54 amount-within-±RM0.50, 37 paid to
+  an account that differs from the supplier's stored account, 33 ref pointing
+  at an already-paid invoice, 3 possible missed payments, 1 duplicate POP. The
+  37 account mismatches read first — most look like a truncated stored account
+  number (Aryzta: 12 digits stored vs 13 paid) but that is also the shape of a
+  redirected payment.
+  **330 POPs never reached the supplier** ("no-supplier-phone") — a fifth of
+  all channel traffic, so those suppliers have no proof of payment. 12 receipts
+  were unreadable and dropped silently; 89 POPs had several candidate invoices
+  (same amount, different outlet) and asked the sender to choose, with no
+  record in-channel of whether anyone did.
+  Report and the 61-row gap list are in the session scratchpad
+  (`payment-reconciliation.md`, `true_gap.csv`).
+  **Matcher fixed the same day** (`lib/inventory/pop-leg.ts` + step 4b in the
+  Telegram webhook): a POP is now classified as full / deposit / balance, and
+  the balance leg matches on `amount - amountPaid`. Two distinct failure modes
+  were closed, which is why a status-only fix is wrong: an invoice moved to
+  DEPOSIT_PAID fell out of the candidate status filter entirely, while one left
+  at INITIATED stayed in the pool but matched neither the full nor the deposit
+  amount. **Eligibility keys on `amountPaid > 0`, not on status** — the only two
+  part-paid invoices in the database (RM4,372.20 outstanding) carry INITIATED,
+  so gating on DEPOSIT_PAID/PARTIALLY_PAID would have missed exactly the live
+  cases. The `updateMany` status guard had to widen too or the write is a silent
+  no-op. Precedence: full beats balance beats deposit.
+
+- 2026-09-17 — **`Invoice.issueDate` holds impossible dates** — the column
+  spans 2011-04-14 to 2029-05-29 across 3,487 rows. Found while reconciling the
+  payment channel; not investigated. Anything that windows on `issueDate`
+  inherits the error.
+
 - 2026-09-17 — **79% of the `Invoice` table is base64 image data.** 199 rows
   store photos as inline `data:image/...;base64,` URIs in the `photos` text
   array instead of a storage URL: 38 MB of a 48 MB table, single values up to
