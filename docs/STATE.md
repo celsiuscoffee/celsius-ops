@@ -2803,6 +2803,17 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-09-17 — **GBP phone change built, waiting on merge + owner's two clicks.**
+  Owner wants the Google Business Profile primary phone set to
+  **+60 11-3750 6488 on all four connected outlets**. Shipped
+  `/api/reviews/gbp-phone` (same dry-run/`?apply=1` pattern as gbp-relink /
+  gbp-categories; ADMIN session or cron secret; additionalPhones preserved
+  because the phoneNumbers updateMask swaps the whole object) plus
+  `getLocationPhones`/`updateLocationPhone` in `lib/reviews/gbp.ts`. After the
+  PR merges + deploys, the owner hits the dry-run URL to eyeball current
+  numbers, then re-runs with `&apply=1`. Verify next session: dry-run shows the
+  numbers changed, and the next weekly digest still reads all four outlets.
+
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the
   Zikry entry above; RM1,659.74 rides on it. (2) **Haziq
