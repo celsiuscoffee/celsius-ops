@@ -11,6 +11,54 @@ current month.
 
 ## Verified facts
 
+- 2026-09-17 — **New FT hire created in production: Shahidan (Barista, Shah
+  Alam), user `44482952`.** From the owner's LoE + typed details. Basic
+  RM1,900.00 monthly, join 2026-09-21, EPF 24837327, IC 041221060367 (→ DOB
+  2004-12-21, M, via `icDerive`), CIMB Bank Berhad 7653359633, staff-app PIN set
+  and verified against the stored hash. Crew access preset (ops+inventory,
+  byte-identical to Nur Afiqah Roslan's), stations `{foh}`, 1 salary-history +
+  1 job-history row, 2026 leave seeded annual **2.0** / sick 14.0 — s.60E counts
+  COMPLETED months, so a 21 Sep join earns nothing for September: 8 × 3/12 = 2.
+  **Three terms read off the LoE PDF that the owner's message did not state.**
+  That PDF uses subset fonts with scrambled encodings — decode it (its
+  `/ToUnicode` CMaps, or a crib-built substitution), never trust a typed
+  summary. (1) Probation is **one (1) month**, to 2026-10-20, and confirmation
+  is NOT automatic — it takes effect only on a written confirmation letter.
+  (2) The RM200 is a **discretionary "up to" performance allowance** on
+  individual + outlet metrics, not a fixed sum. (3) Salary is payable on or
+  before the **7th**; notice is 2 weeks in probation, 1 month after.
+  **Both allowance fields deliberately left NULL** — setting RM200 now would pay
+  it in the September and October runs before it is earned. The house split for
+  confirmed staff is RM100 performance + RM100 attendance; which he gets is a
+  confirmation-day decision.
+  September pays a part month: `calendar` proration (s.60I(1B), the default for
+  outlet staff) 10/30 → **RM633.33** basic. The LoE's looser phrase "based on
+  the number of working days" is not what the system does, and switching him to
+  a working-days basis would put him out of step with every other outlet
+  employee. Preflight raises two warnings and no blocks: no SOCSO number, no
+  LHDN tax number.
+  **A candidate PIN can be collision-checked without any hash leaving the
+  database:** `extensions.crypt('<pin>', pin) = pin` over ACTIVE users with a
+  `$2%` hash (pgcrypto lives in the `extensions` schema). Pulling the hashes out
+  to compare them locally is blocked by the sandbox, and rightly.
+  **`"User"` has NO database-side default for `id` or `updatedAt`** — both are
+  Prisma-client defaults, so any direct INSERT must supply them itself.
+
+- 2026-09-15 — **#1236, #1237 and #1238 all merged, and the staff-native OTA
+  that #1236 triggered is verified by RUNTIME, not by a green tick.** Merge
+  commits `c2baa65f` (payslip earnings get qty/rate columns), `cb286e4f` (refuse
+  to compute an unfinished payroll cycle), `a9f240cd` (migration drift check).
+  **#1236 changed three files under `apps/staff-native/`, so merging it WAS a
+  production OTA deploy** — an earlier claim in that session that "none touches
+  a native app" was wrong and was caught before the merge. OTA run 35007539332
+  published to **runtime 1.0.0**, which equals `app.json`'s `expo.version` under
+  the `appVersion` policy and matches what installed manager binaries report, so
+  the update lineage is unbroken; `ota-runtimes.json` `extraRuntimes` is
+  correctly `[]` while those two agree. CI's new `migration-applied` job still
+  SKIPS — neither `DIRECT_URL` nor `DATABASE_URL` is set in Actions — so the
+  check that would have caught the `scheduled_break_minutes` outage is present
+  but inert.
+
 - 2026-09-15 — **The confirmed-and-paid August run was deleted; its per-employee
   lines are gone, and the replacement is RM862.45 LOWER.** Timeline from
   `ActivityLog` (all UTC, today): 05:32:02 `payroll.confirm` monthly 8/2026 —
@@ -2514,6 +2562,18 @@ current month.
 
 ## Open failures
 
+- 2026-09-17 — **The LoE import path creates a half-provisioned employee.**
+  `apps/backoffice/src/app/api/hr/loe-import/commit/route.ts` does NOT call
+  `seedLeaveBalancesForHire` and does NOT apply `applyStaffPreset`, and its
+  `ImportRecord` type has no field for EPF number, bank details or PIN —
+  whereas `employees/create/route.ts` and the HR agent's `execCreateStaff` do
+  all of it. Anyone onboarded through `/hr/employees/import` therefore starts
+  with **zero leave-balance rows and an empty staff-app footprint** (no tabs on
+  their phone), and needs EPF and bank filled in by hand afterwards or the KWSP
+  / PERKESO / bank files silently skip them. Same shape as the 2026-07-28 BrioHR
+  reconciliation where 15 FT staff had no balances at all. Not fixed — Shahidan
+  was created through the full path instead, so he is unaffected.
+
 - 2026-08-20 — **RM settlement lag incident (~12:30–15:30 MYT): Revenue
   Monster's Query Payment Checkout kept answering PENDING for ~2h on
   FPX payments whose money had already left the customer's bank — paid
@@ -2802,6 +2862,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-17 — **Shahidan's onboarding is complete bar two owner actions.**
+  (1) **File the LoE PDF** on his employee page — remote sessions have no write
+  access to the `hr-documents` storage bucket, so it cannot be done from here.
+  (2) **Around 2026-10-20, decide his allowance split**, set `confirmed_at` and
+  issue the confirmation letter (`employees/[id]/confirmation-letter`). His
+  SOCSO and LHDN tax numbers are still blank — warnings, not blockers.
+  Unchanged from the previous session, all owner calls: Sherry's 19 Aug 3.5h OT
+  request is still pending (held because the log carries the opposite shift's
+  rostered window — the real overstay is ~3 min); Hafifie has 12.5h of pending
+  August OT including an 8.0h claim on 3 Aug that looks like the same
+  stale-stamp artefact; Zikry's September WEEKLY pay may be missing the RM50
+  allowance that vanished when his profile flipped to part_time on 1 Sep;
+  `20260803_hr_performance_deduction_waivers` needs applying or deleting (it is
+  allowlisted in `KNOWN_UNAPPLIED.json`); and whether to give CI a database
+  secret — a read-only, catalog-only role is enough — so `migration-applied`
+  actually guards PRs instead of skipping.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the
