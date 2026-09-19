@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { createClient } from "@supabase/supabase-js";
+import { HireError, hireEmployee, type HireRole } from "@/lib/hr/hire";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -11,11 +11,15 @@ const supabaseUrl = process.env.NEXT_PUBLIC_LOYALTY_SUPABASE_URL || "";
 const supabaseKey = process.env.LOYALTY_SUPABASE_SERVICE_ROLE_KEY || "";
 const BUCKET = "hr-documents";
 
+const makeStorageClient = () =>
+  supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+type StorageClient = ReturnType<typeof makeStorageClient>;
+
 type ImportRecord = {
   fileIndex: number;           // index into uploaded files[]
   name: string;
   fullName: string | null;
-  role: "STAFF" | "MANAGER" | "ADMIN" | "OWNER";
+  role: HireRole;
   employmentType: "full_time" | "part_time" | "contract" | "intern";
   position: string | null;
   outletId: string | null;     // resolved on client
@@ -27,19 +31,34 @@ type ImportRecord = {
   email: string | null;
   icNumber: string | null;
   notes: string | null;
+  // Never printed on a Letter of Employment — typed in on the review screen so
+  // a bulk import doesn't have to be finished by hand, one employee page at a
+  // time. That manual round is how staff ended up with no EPF number and no
+  // bank account, which the KWSP and payment files then silently skip.
+  epfNumber: string | null;
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  bankAccountName: string | null;
+  pin: string | null;
 };
 
 type CommitResult = {
   fileName: string;
   status: "created" | "skipped" | "error";
   userId?: string;
+  /** Set when the employee was created but their LoE could not be filed. */
+  warning?: string;
   error?: string;
 };
 
 // POST multipart/form-data:
 //   - `records`: JSON string of ImportRecord[]
 //   - `file_0`, `file_1`, … : the matching LoE PDFs
-// Creates User + hr_employee_profiles + uploads LoE into hr-documents.
+//
+// Each record is hired through lib/hr/hire, the single provisioning path, so
+// an imported employee is indistinguishable from one created through the
+// backoffice form: access preset, leave balances, IC-derived DOB/gender,
+// stations and the salary/job audit rows all come with them.
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
@@ -58,7 +77,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid records JSON" }, { status: 400 });
   }
 
-  const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+  const supabase = makeStorageClient();
   // Make sure bucket exists for LoE uploads
   if (supabase) {
     const { data: buckets } = await supabase.storage.listBuckets();
@@ -69,134 +88,113 @@ export async function POST(req: NextRequest) {
 
   const results: CommitResult[] = [];
 
+  // Sequential on purpose. Each hire commits before the next one is checked,
+  // so a phone, email, IC or PIN repeated WITHIN this batch trips the same
+  // gates that catch a clash with somebody already on file.
   for (const rec of records) {
     const file = form.get(`file_${rec.fileIndex}`) as File | null;
     const fileName = file?.name ?? `record_${rec.fileIndex}.pdf`;
 
-    // Validation — required fields
-    if (!rec.name) {
-      results.push({ fileName, status: "error", error: "name is required" });
-      continue;
-    }
-    if (rec.employmentType === "part_time" && !rec.hourlyRate) {
-      results.push({ fileName, status: "error", error: "part-time requires hourly rate" });
-      continue;
-    }
-    if (rec.employmentType === "full_time" && !rec.basicSalary) {
-      results.push({ fileName, status: "error", error: "full-time requires basic salary" });
+    // An import must not mint an OWNER from a client-edited record.
+    if (rec.role === "OWNER" && session.role !== "OWNER") {
+      results.push({ fileName, status: "error", error: "Only an OWNER can create an OWNER account" });
       continue;
     }
 
+    let userId: string;
     try {
-      // Uniqueness check — phone (if provided) shouldn't collide
-      if (rec.phone) {
-        const clash = await prisma.user.findUnique({ where: { phone: rec.phone } });
-        if (clash) {
-          results.push({
-            fileName, status: "skipped",
-            error: `Phone ${rec.phone} already registered to ${clash.name}`,
-          });
-          continue;
-        }
-      }
-
-      // Same guard as employees/create: an import must not mint an OWNER (or
-      // an unknown role) from a client-edited record.
-      if (!["STAFF", "MANAGER", "ADMIN", "OWNER"].includes(rec.role) || (rec.role === "OWNER" && session.role !== "OWNER")) {
-        results.push({ fileName, status: "error", error: rec.role === "OWNER" ? "Only an OWNER can create an OWNER account" : `Invalid role: ${String(rec.role)}` });
-        continue;
-      }
-
-      // 1. Create the User
-      const user = await prisma.user.create({
-        data: {
-          name: rec.name,
-          fullName: rec.fullName,
-          phone: rec.phone || null,
-          email: rec.email || null,
-          role: rec.role,
-          outletId: rec.outletId || null,
-          status: "ACTIVE",
-          appAccess: [],
-          moduleAccess: {},
-        },
-        select: { id: true },
+      const hired = await hireEmployee({
+        name: rec.name,
+        fullName: rec.fullName,
+        phone: rec.phone,
+        email: rec.email,
+        role: rec.role,
+        outletId: rec.outletId,
+        position: rec.position,
+        employmentType: rec.employmentType,
+        joinDate: rec.joinDate,
+        basicSalary: rec.basicSalary,
+        hourlyRate: rec.hourlyRate,
+        performanceAllowance: rec.performanceAllowance,
+        icNumber: rec.icNumber,
+        epfNumber: rec.epfNumber,
+        bankName: rec.bankName,
+        bankAccountNumber: rec.bankAccountNumber,
+        bankAccountName: rec.bankAccountName,
+        pin: rec.pin,
+        notes: rec.notes,
+        createdBy: session.id,
+        salaryComment: `Imported from LoE ${fileName}`.trim(),
+        jobNote: "Imported from LoE",
       });
-
-      // 2. Create hr_employee_profiles
-      const { error: profErr } = await hrSupabaseAdmin
-        .from("hr_employee_profiles")
-        .insert({
-          user_id: user.id,
-          employment_type: rec.employmentType,
-          position: rec.position || null,
-          join_date: rec.joinDate || new Date().toISOString().slice(0, 10),
-          basic_salary: rec.basicSalary ?? 0,
-          hourly_rate: rec.hourlyRate ?? null,
-          ic_number: rec.icNumber || null,
-          performance_allowance_amount: rec.performanceAllowance,
-          notes: rec.notes || null,
-          nationality: "Malaysian",
-        });
-      if (profErr) {
-        // Roll back the User so we don't leave an orphan
-        await prisma.user.delete({ where: { id: user.id } });
-        results.push({ fileName, status: "error", error: `Profile insert failed: ${profErr.message}` });
-        continue;
-      }
-
-      // 3. Upload the LoE file to hr-documents + link in hr_employee_documents
-      if (file && supabase) {
-        const buffer = Buffer.from(await file.arrayBuffer());
-        const ext = (file.name.split(".").pop() || "pdf").toLowerCase();
-        const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const storagePath = `${user.id}/loe/${stamp}.${ext}`;
-        const { error: upErr } = await supabase.storage
-          .from(BUCKET)
-          .upload(storagePath, buffer, {
-            contentType: file.type || "application/pdf",
-            upsert: false,
-          });
-        if (!upErr) {
-          await hrSupabaseAdmin.from("hr_employee_documents").insert({
-            user_id: user.id,
-            doc_type: "loe",
-            title: `LoE — ${rec.joinDate || "imported"}`,
-            file_name: file.name,
-            storage_path: storagePath,
-            size_bytes: buffer.byteLength,
-            mime_type: file.type || "application/pdf",
-            effective_date: rec.joinDate || null,
-            uploaded_by: session.id,
-          });
-        }
-      }
-
-      // 4. Salary + job history audit trails
-      await hrSupabaseAdmin.from("hr_salary_history").insert({
-        user_id: user.id,
-        effective_date: rec.joinDate || new Date().toISOString().slice(0, 10),
-        salary_type: rec.employmentType === "part_time" ? "hourly" : "monthly",
-        amount: rec.employmentType === "part_time" ? (rec.hourlyRate ?? 0) : (rec.basicSalary ?? 0),
-        comment: `Imported from LoE ${file?.name ?? ""}`.trim(),
-        created_by: session.id,
-      });
-      await hrSupabaseAdmin.from("hr_job_history").insert({
-        user_id: user.id,
-        effective_date: rec.joinDate || new Date().toISOString().slice(0, 10),
-        job_title: rec.position || rec.role,
-        outlet_id: rec.outletId || null,
-        employment_type: rec.employmentType,
-        note: "Imported from LoE",
-        created_by: session.id,
-      });
-
-      results.push({ fileName, status: "created", userId: user.id });
+      userId = hired.userId;
     } catch (err) {
+      if (err instanceof HireError) {
+        // A duplicate is the human's call to resolve, not an error in the
+        // file — report it as skipped so the batch summary stays honest.
+        results.push({
+          fileName,
+          status: err.code === "duplicate" ? "skipped" : "error",
+          error: err.message,
+        });
+        continue;
+      }
       const message = err instanceof Error ? err.message : "Unknown error";
       results.push({ fileName, status: "error", error: message });
+      continue;
     }
+
+    // Filing the letter happens after the hire commits, because object
+    // storage cannot join the transaction. A failure here leaves a correct
+    // employee with an unfiled letter, so it is reported rather than
+    // swallowed — the old code dropped it silently and the document simply
+    // never appeared.
+    const warning = await fileLetter(supabase, file, userId, rec.joinDate, session.id);
+    results.push({ fileName, status: "created", userId, ...(warning ? { warning } : {}) });
   }
 
   return NextResponse.json({ results });
+}
+
+/** Upload the LoE and link it on the employee. Returns a warning, or null. */
+async function fileLetter(
+  supabase: StorageClient,
+  file: File | null,
+  userId: string,
+  joinDate: string | null,
+  uploadedBy: string,
+): Promise<string | null> {
+  if (!file) return null;
+  if (!supabase) return "Employee created, but the LoE was not filed (document storage is not configured)";
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const ext = (file.name.split(".").pop() || "pdf").toLowerCase();
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const storagePath = `${userId}/loe/${stamp}.${ext}`;
+    const { error: upErr } = await supabase.storage
+      .from(BUCKET)
+      .upload(storagePath, buffer, {
+        contentType: file.type || "application/pdf",
+        upsert: false,
+      });
+    if (upErr) return `Employee created, but the LoE was not filed: ${upErr.message}`;
+
+    const { error: docErr } = await hrSupabaseAdmin.from("hr_employee_documents").insert({
+      user_id: userId,
+      doc_type: "loe",
+      title: `LoE — ${joinDate || "imported"}`,
+      file_name: file.name,
+      storage_path: storagePath,
+      size_bytes: buffer.byteLength,
+      mime_type: file.type || "application/pdf",
+      effective_date: joinDate || null,
+      uploaded_by: uploadedBy,
+    });
+    if (docErr) return `Employee created and the LoE uploaded, but linking it failed: ${docErr.message}`;
+    return null;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return `Employee created, but the LoE was not filed: ${message}`;
+  }
 }
