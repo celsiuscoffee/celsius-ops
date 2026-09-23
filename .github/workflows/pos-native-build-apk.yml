@@ -50,6 +50,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Runs 6, 7 and 8 each ran until GitHub's 6-hour default killed them, which
+    # looks indistinguishable from "still building" for most of a working day.
+    # Fail visibly instead; a healthy build of this app is well under an hour.
+    timeout-minutes: 75
     defaults:
       run:
         working-directory: apps/pos-native
@@ -64,6 +68,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+          cache: gradle
 
       # Provides cmdline-tools + auto-accepts licenses so gradle/AGP can fetch
       # any missing SDK platform / NDK on demand.
@@ -102,7 +107,17 @@ jobs:
         env:
           SENTRY_DISABLE_AUTO_UPLOAD: "true"
           SENTRY_ALLOW_FAILURE: "true"
-        run: ./gradlew assembleRelease --no-daemon
+        # reactNativeArchitectures is the difference between a build that
+        # finishes and one that does not. The generated gradle.properties
+        # builds all four ABIs, and with newArchEnabled the New Architecture
+        # C++ is compiled once per ABI — four full NDK passes on a 2-core
+        # runner, which is why runs 6/7/8 hit the 6-hour ceiling.
+        #
+        # x86 and x86_64 exist for emulators; no SUNMI can run them, so they
+        # were pure waste. Both ARM ABIs are kept because older SUNMI hardware
+        # is armeabi-v7a while current models are arm64-v8a, and an APK missing
+        # the device's ABI simply refuses to install.
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
 
       - name: Verify all 3 native modules are compiled into the APK
         run: |
