@@ -67,7 +67,16 @@ jobs:
 
       # Provides cmdline-tools + auto-accepts licenses so gradle/AGP can fetch
       # any missing SDK platform / NDK on demand.
+      #
+      # `packages` is pinned because the action's default is "tools
+      # platform-tools", and the legacy `tools` package has been withdrawn from
+      # the SDK repository — sdkmanager now exits 1 on it and fails the whole
+      # run before any of our code is touched ("Failed to find package 'tools'").
+      # platform-tools is current and still wanted for adb; everything else the
+      # build needs is installed by the explicit step below.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools"
 
       - name: Pre-install SDK packages (match the local build)
         run: |
