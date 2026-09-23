@@ -7,6 +7,7 @@ import {
   ChevronLeft, Printer, LayoutGrid, Receipt, FileText, Store, RefreshCw, CheckCircle2, AlertCircle, ExternalLink, Minus, Plus, ShoppingBag, Power, CreditCard,
 } from "lucide-react-native";
 import { loadEcrConfig, saveEcrConfig, testEcrConnection, type EcrConfig } from "@/lib/maybank-ecr";
+import { probeTerminal, saveProbeReport, DEFAULT_TERMINAL_HOST, DEFAULT_TERMINAL_PORT, type ProbeStep } from "@/lib/terminal-probe";
 import { usePos } from "@/lib/store";
 import { useSettings } from "@/lib/settings";
 import { useGridPrefs, ALL_COLS_MIN, ALL_COLS_MAX, ALL_IMG_MIN, ALL_IMG_MAX, ALL_IMG_STEP } from "@/lib/grid-prefs";
@@ -53,6 +54,39 @@ export default function SettingsScreen() {
       return next;
     });
   };
+  // ── GHL/ADAPTIS terminal probe ──
+  // The till is on the outlet LAN that the terminal sits on; no dev machine
+  // is. So the diagnostic runs here and files its result to Supabase to be
+  // read remotely. It cannot take a payment — see lib/terminal-probe.ts.
+  const [probeHost, setProbeHost] = useState(DEFAULT_TERMINAL_HOST);
+  const [probePort, setProbePort] = useState(String(DEFAULT_TERMINAL_PORT));
+  const [probeBusy, setProbeBusy] = useState(false);
+  const [probeSteps, setProbeSteps] = useState<ProbeStep[]>([]);
+  const [probeVerdict, setProbeVerdict] = useState<string | null>(null);
+  const [probeSaved, setProbeSaved] = useState<string | null>(null);
+
+  async function onRunProbe() {
+    Haptics.selectionAsync();
+    setProbeBusy(true);
+    setProbeSteps([]);
+    setProbeVerdict(null);
+    setProbeSaved(null);
+    try {
+      const report = await probeTerminal(
+        probeHost.trim(),
+        parseInt(probePort, 10) || DEFAULT_TERMINAL_PORT,
+        (step) => setProbeSteps((prev) => [...prev, step]),
+      );
+      setProbeVerdict(report.verdict);
+      const res = await saveProbeReport(report, outletId ?? null);
+      setProbeSaved(res.saved ? "Result uploaded" : `Not uploaded: ${res.error ?? "unknown"}`);
+    } catch (e: any) {
+      setProbeVerdict(`Probe failed: ${String(e?.message ?? e)}`);
+    } finally {
+      setProbeBusy(false);
+    }
+  }
+
   async function onTestEcr() {
     if (!ecr) return;
     Haptics.selectionAsync();
@@ -475,6 +509,43 @@ export default function SettingsScreen() {
               <Row label="SST No." value={settings.einvoice_sst_no || "—"} />
             </Card>
           )}
+
+          {/* ── GHL / ADAPTIS terminal diagnostic ──
+              Safe: GETs plus a QUERY STATUS for a reference that does not
+              exist. It cannot charge. Results upload so they can be read
+              remotely rather than photographed off this screen. */}
+          <Card title="Terminal Diagnostic (GHL)" Icon={RefreshCw}>
+            <Text className="text-cream/55 text-xs mb-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+              Checks whether the payment terminal answers on this outlet's network. Safe — it cannot take a payment.
+            </Text>
+            <InputRow label="Terminal IP" value={probeHost} placeholder={DEFAULT_TERMINAL_HOST}
+              keyboardType="numbers-and-punctuation" onChange={setProbeHost} />
+            <InputRow label="Port" value={probePort} placeholder={String(DEFAULT_TERMINAL_PORT)}
+              keyboardType="number-pad" onChange={setProbePort} />
+            <View className="flex-row gap-3 mt-2">
+              <Btn label={probeBusy ? "Probing…" : "Run Diagnostic"} Icon={RefreshCw} onPress={onRunProbe} disabled={probeBusy} primary />
+            </View>
+            {probeSteps.length > 0 && (
+              <View className="mt-2" style={{ gap: 2 }}>
+                {probeSteps.map((s, i) => (
+                  <Text key={i} className="text-[11px]" numberOfLines={2}
+                    style={{ fontFamily: "SpaceGrotesk_500Medium", color: s.ok ? OK : "rgba(245,243,240,0.45)" }}>
+                    {s.ok ? `✓ ${s.label} → ${s.status} (${s.bodyBytes ?? 0}B)` : `· ${s.label} → ${s.error}`}
+                  </Text>
+                ))}
+              </View>
+            )}
+            {probeVerdict && (
+              <Text className="text-cream/80 text-xs mt-2" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>
+                {probeVerdict}
+              </Text>
+            )}
+            {probeSaved && (
+              <Text className="text-[11px] mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium", color: probeSaved.startsWith("Result uploaded") ? OK : WARN }}>
+                {probeSaved}
+              </Text>
+            )}
+          </Card>
 
           {/* ── Maybank X990 payment terminal (ECR over TCP) ────────────
               The terminal is a TCP server on the outlet LAN; IP/port/salt
