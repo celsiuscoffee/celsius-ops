@@ -7,12 +7,15 @@
  * laptop, the till does the probing itself and files the result to Supabase,
  * where it can be read remotely.
  *
- * Deliberately HTTP-only (`fetch`), for two reasons:
- *   1. the terminal advertises itself as http://<ip> on its home screen and
- *      the vendor pointed us at Postman, so the PayHereDirect interface is
- *      very likely HTTP rather than the raw socket the sample frames imply;
- *   2. `fetch` needs no native module, so this ships over the air. A raw-TCP
- *      probe would need react-native-tcp-socket and therefore a new APK.
+ * Probes BOTH transports, because which one PayHereDirect actually speaks is
+ * the open question:
+ *   - HTTP, because the terminal advertises itself as http://<ip> on its home
+ *     screen and the vendor pointed us at Postman;
+ *   - raw TCP, because the sample commands are STX/ETX framed binary with a
+ *     checksum, which is socket framing, not HTTP.
+ * Whichever answers settles it. The TCP leg needs react-native-tcp-socket, so
+ * it only works in an APK built with that module present; it degrades to a
+ * clear "driver missing" step otherwise rather than failing the run.
  *
  * NOTHING HERE CAN TAKE A PAYMENT. Every request is either a plain GET or a
  * QUERY STATUS (command 0xE3) for a reference that does not exist. SALE is
@@ -55,6 +58,73 @@ export type ProbeReport = {
 };
 
 const TIMEOUT_MS = 8000;
+const TCP_TIMEOUT_MS = 10000;
+
+function hexToBytes(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+function bytesToHex(b: Uint8Array): string {
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0").toUpperCase()).join("");
+}
+
+/** Raw-TCP leg: connect, send QUERY STATUS, report whatever comes back.
+ *  Same safety as the HTTP leg — the reference does not exist, so no money
+ *  can move whatever the terminal decides to do with it. */
+function tcpProbe(host: string, port: number): Promise<ProbeStep> {
+  const t0 = Date.now();
+  const label = `TCP ${port} (query status)`;
+  const url = `tcp://${host}:${port}`;
+  let TcpSocket: any = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires -- absent unless the APK bundled it
+    TcpSocket = require("react-native-tcp-socket");
+  } catch {
+    return Promise.resolve({
+      label, url, method: "TCP", ok: false,
+      error: "TCP driver not in this build — HTTP results still apply",
+      ms: 0,
+    });
+  }
+  return new Promise((resolve) => {
+    const chunks: number[] = [];
+    let settled = false;
+    const done = (extra: Partial<ProbeStep>) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { client?.destroy(); } catch { /* already gone */ }
+      const bytes = Uint8Array.from(chunks);
+      resolve({
+        label, url, method: "TCP",
+        ok: bytes.length > 0,
+        bodyPreview: bytes.length ? bytesToHex(bytes) : undefined,
+        bodyBytes: bytes.length,
+        ms: Date.now() - t0,
+        ...extra,
+      });
+    };
+    const timer = setTimeout(() => done({ error: chunks.length ? undefined : "connected but silent for 10s" }), TCP_TIMEOUT_MS);
+    let client: any;
+    try {
+      client = TcpSocket.default.createConnection({ host, port }, () => {
+        client.write(hexToBytes(QUERY_STATUS_HEX));
+      });
+      client.on("data", (d: any) => {
+        const arr: number[] = typeof d === "string"
+          ? Array.from(d as string, (c: string) => c.charCodeAt(0))
+          : Array.from(d as Uint8Array);
+        chunks.push(...arr);
+      });
+      client.on("error", (e: Error) => done({ error: e.message }));
+      client.on("close", () => done({}));
+    } catch (e: any) {
+      done({ error: String(e?.message ?? e) });
+    }
+  });
+}
 
 async function attempt(
   label: string,
@@ -119,10 +189,17 @@ export async function probeTerminal(
     }));
   }
 
+  // 3. Raw TCP — settles the HTTP-vs-socket question either way.
+  push(await tcpProbe(host, port));
+
   return { host, port, startedAt: new Date().toISOString(), steps, verdict: verdictFor(steps) };
 }
 
 function verdictFor(steps: ProbeStep[]): string {
+  const tcp = steps.find((s) => s.method === "TCP");
+  if (tcp?.ok && (tcp.bodyBytes ?? 0) > 0) {
+    return `RAW TCP confirmed — the terminal replied with ${tcp.bodyBytes} bytes to a framed command. This is the interface to build against.`;
+  }
   const answered = steps.filter((s) => s.ok);
   if (answered.length === 0) {
     const refused = steps.some((s) => /refus/i.test(s.error ?? ""));
