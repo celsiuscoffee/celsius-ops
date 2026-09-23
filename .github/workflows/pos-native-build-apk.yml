@@ -103,11 +103,33 @@ jobs:
           node -e "const e=require('./eas.json').build['production-apk'].env;const fs=require('fs');fs.writeFileSync('.env',Object.entries(e).filter(([k])=>k.startsWith('EXPO_PUBLIC_')).map(([k,v])=>k+'='+v).join('\n')+'\n')"
           sed -E 's/(ANON_KEY=).*/\1<redacted>/' .env
 
+      # The channel is baked into the APK and decides which OTA stream the
+      # device follows for the rest of its life. A test device must NOT sit on
+      # "production", or the next routine OTA lands on it mid-experiment — and
+      # equally, publishing terminal work to production would push it to every
+      # live till. workflow_dispatch has a channel picker, but the marker-push
+      # path had no way to choose, so it silently produced production APKs.
+      #
+      # Now the marker file can name the channel as its first word, e.g.
+      #   preview 2026-09-23T16:00:00Z testing the GHL terminal
+      # Anything else (including a bare timestamp) keeps the old default.
+      - name: Resolve OTA channel
+        id: chan
+        run: |
+          CH="${{ github.event.inputs.channel }}"
+          if [ -z "$CH" ]; then
+            FIRST=$(awk 'NR==1{print $1}' .apk-build-trigger 2>/dev/null)
+            case "$FIRST" in
+              preview|development|production) CH="$FIRST" ;;
+              *) CH="production" ;;
+            esac
+          fi
+          echo "channel=$CH" >> "$GITHUB_OUTPUT"
+          echo "::notice::APK will be baked to the '$CH' OTA channel"
+
       - name: Expo prebuild (autolinks the local native modules)
         env:
-          # workflow_dispatch supplies the channel; the marker-push path has no
-          # input, so default to production.
-          EXPO_OTA_CHANNEL: ${{ github.event.inputs.channel || 'production' }}
+          EXPO_OTA_CHANNEL: ${{ steps.chan.outputs.channel }}
         run: npx expo prebuild --clean --platform android --no-install
 
       - name: Gradle assembleRelease
@@ -166,6 +188,8 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pos-native-apk
+          # Channel in the name so a preview test build can never be mistaken
+          # for the production one when both are sitting in Downloads.
+          name: pos-native-apk-${{ steps.chan.outputs.channel }}
           path: apps/pos-native/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
