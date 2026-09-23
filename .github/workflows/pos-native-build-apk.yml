@@ -115,6 +115,7 @@ jobs:
         env:
           SENTRY_DISABLE_AUTO_UPLOAD: "true"
           SENTRY_ALLOW_FAILURE: "true"
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=2g"
         # reactNativeArchitectures is the difference between a build that
         # finishes and one that does not. The generated gradle.properties
         # builds all four ABIs, and with newArchEnabled the New Architecture
@@ -125,7 +126,18 @@ jobs:
         # were pure waste. Both ARM ABIs are kept because older SUNMI hardware
         # is armeabi-v7a while current models are arm64-v8a, and an APK missing
         # the device's ABI simply refuses to install.
-        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
+        #
+        # lintVital is excluded, and deliberately so. Run 12 compiled all 993
+        # tasks successfully and then died in AndroidLintWorkAction with
+        # "OutOfMemoryError: Metaspace" analysing Features.kt — lint's analyser
+        # exhausts metaspace on a hosted runner. Lint is static analysis; it
+        # contributes nothing to the APK, and letting it fail the job threw
+        # away a complete, working build. Code quality is covered by the CI
+        # workflow; this job's only purpose is to emit an installable APK.
+        run: |
+          ./gradlew assembleRelease --no-daemon \
+            -PreactNativeArchitectures=armeabi-v7a,arm64-v8a \
+            -x lintVitalRelease -x lintVitalAnalyzeRelease
 
       - name: Verify all 3 native modules are compiled into the APK
         run: |
