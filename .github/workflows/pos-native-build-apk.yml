@@ -43,9 +43,17 @@ on:
     paths:
       - "apps/pos-native/.apk-build-trigger"
 
+# One shared group with cancel-in-progress:false meant a stuck run blocked every
+# later one behind it — and cancelling a gradle/NDK job is not instant, because
+# the toolchain ignores the termination signal, so "cancelled" can sit
+# in_progress for a long time while newer builds queue up unable to start.
+#
+# Scope the group per ref so branches never block each other, and let a newer
+# build supersede an older one on the same ref: the newest commit is the one
+# anybody actually wants an APK of.
 concurrency:
-  group: pos-native-apk
-  cancel-in-progress: false
+  group: pos-native-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
