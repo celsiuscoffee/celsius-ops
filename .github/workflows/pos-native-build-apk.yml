@@ -38,6 +38,7 @@ on:
   push:
     branches:
       - "claude/awesome-davinci-CvikE"
+      - "claude/item-linking-grab-orders-snzf2b"
       - "main"
     paths:
       - "apps/pos-native/.apk-build-trigger"
