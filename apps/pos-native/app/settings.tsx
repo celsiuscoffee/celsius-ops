@@ -60,7 +60,8 @@ export default function SettingsScreen() {
   useEffect(() => { loadGhlConfig().then(setGhl); }, []);
   const patchGhl = (p: Partial<GhlConfig>) => {
     setGhl((prev) => {
-      const next = { ...(prev ?? { enabled: false, host: "", port: 33898, transport: "auto" as GhlTransport }), ...p };
+      if (!prev) return prev;   // config loads before the card renders
+      const next: GhlConfig = { ...prev, ...p };
       void saveGhlConfig(next);
       return next;
     });

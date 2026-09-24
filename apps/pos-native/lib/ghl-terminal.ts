@@ -1,117 +1,63 @@
 /**
  * GHL / NTT Data ADAPTIS card terminal — POS client.
  *
- * Talks to the terminal on the outlet LAN (PayHereDirect, "Device Interface"
- * protocol). Card sale is the priority path; DuitNow QR is the same SALE
- * command plus one tag and is wired here too, but the H2H DuitNow API is a
- * separate integration and is not this file.
+ * Ported from the working integration in celsiuscoffee/gosame-ops, which is
+ * live-tested against the same hardware. Two things there are worth repeating
+ * because they were not obvious from the vendor's documentation:
  *
- * ── What is PROVEN and what is ASSUMED ──────────────────────────────────────
- * PROVEN — the request side. The framing, the BCD amount and the CRC below are
- * reproduced byte-for-byte from the vendor's seven published sample commands;
- * the same codec lives in packages/shared/src/ghl/frame.ts with those samples
- * as tests. (Duplicated rather than imported because pos-native is not part of
- * the npm workspace, so @celsius/shared does not resolve here. Keep the two in
- * step; the shared copy is the tested one.)
+ *   1. The transport is an ordinary HTTP POST, not a socket. The framed
+ *      message goes in the body as hex and the reply comes back the same way
+ *      (NTT DATA's own Postman example). So this needs no native module and
+ *      ships over the air — the earlier assumption that a raw TCP socket was
+ *      required, and therefore a new APK, was wrong.
+ *   2. The eTSK encryption described in spec 2.9.26 section 4.2 applies to the
+ *      raw socket path. Over HTTP the terminal accepts the plain framed
+ *      message, so the key exchange is not a blocker for this route.
  *
- * ASSUMED — nothing about the RESPONSE. The vendor's Device Interface manual
- * defines the result codes and we do not hold it, and no terminal reply has
- * been captured yet. So `interpretSaleResponse` deliberately never returns
- * "approved": it reports the raw reply and asks the cashier to read the
- * terminal. Guessing here is how you book a sale that was never paid — and how
- * "TXNID_NOT_FOUND" nearly got reported as a decline on the Maybank client.
- * Fill it in from the manual, or from a captured reply, and nothing else in
- * this file needs to change.
+ * The codec and command builders live in lib/ecr/ and are copied verbatim from
+ * that repo, where they are verified against the spec's own samples. Keep them
+ * in step rather than editing them here.
  *
- * ── Transport ───────────────────────────────────────────────────────────────
- * Which transport PayHereDirect speaks is still open: the terminal advertises
- * http://<ip> on its home screen and the vendor pointed at Postman, but the
- * sample commands are STX/ETX framed binary. Both are implemented; "auto"
- * tries HTTP then falls back to the socket. Settings → Terminal Diagnostic
- * answers this empirically.
+ * Two rules, carried over deliberately:
+ *   • Never assume a failure. A lost reply is not a failed payment — ask the
+ *     terminal what happened before anyone concludes anything.
+ *   • Never charge twice. Every attempt carries our own invoice reference so
+ *     a status query or a void can find it again.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { decode, STATUS, statusText, toHex, fromHex, type Message } from "./ecr/device-interface";
+import { saleRequest, queryRequest, voidRequest, settleRequest, DEFAULT_OPTIONS, type Flavour, type Method } from "./ecr/commands";
 
-// ── Frame codec (mirror of packages/shared/src/ghl/frame.ts) ────────────────
-const STX = 0x02, ETX = 0x03;
-const HEADER = Uint8Array.from([0x00, 0x0c, 0x01, 0x0b, 0x01]);
-export const GhlCmd = { SALE: 0xa1, VOID: 0xa2, SETTLE: 0xa3, QUERY: 0xe3, REPRINT: 0xe6 } as const;
-const TAG = { AMOUNT: 0xc001, ECR_REF: 0xc013, PRODUCT: 0xc01a } as const;
-export const PRODUCT_DUITNOW_QR = "DUITNOW QR";
-
-function crc16Arc(data: Uint8Array): number {
-  let crc = 0;
-  for (const b of data) {
-    crc ^= b;
-    for (let i = 0; i < 8; i++) crc = crc & 1 ? (crc >>> 1) ^ 0xa001 : crc >>> 1;
-  }
-  return crc & 0xffff;
-}
-
-function bcd6(sen: number): Uint8Array {
-  if (!Number.isInteger(sen) || sen < 0) throw new RangeError(`bad amount ${sen}`);
-  const d = String(sen).padStart(12, "0");
-  if (d.length > 12) throw new RangeError(`amount ${sen} exceeds 12 digits`);
-  const out = new Uint8Array(6);
-  for (let i = 0; i < 6; i++) out[i] = (Number(d[i * 2]) << 4) | Number(d[i * 2 + 1]);
-  return out;
-}
-
-function ascii(s: string): Uint8Array {
-  const out = new Uint8Array(s.length);
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c > 0x7f) throw new RangeError(`non-ASCII in ECR field: ${s}`);
-    out[i] = c;
-  }
-  return out;
-}
-
-function frame(cmd: number, tlvs: Array<[number, Uint8Array]>): Uint8Array {
-  let bodyLen = 0;
-  for (const [, v] of tlvs) bodyLen += 4 + v.length;
-  if (bodyLen > 0xff) throw new RangeError("TLV payload too long for the 1-byte length field");
-  const covered = new Uint8Array(HEADER.length + 4 + bodyLen);
-  covered.set(HEADER, 0);
-  covered[HEADER.length] = cmd;
-  covered[HEADER.length + 3] = bodyLen;
-  let i = HEADER.length + 4;
-  for (const [tag, v] of tlvs) {
-    covered[i++] = (tag >> 8) & 0xff; covered[i++] = tag & 0xff;
-    covered[i++] = (v.length >> 8) & 0xff; covered[i++] = v.length & 0xff;
-    covered.set(v, i); i += v.length;
-  }
-  const crc = crc16Arc(covered);
-  const out = new Uint8Array(covered.length + 4);
-  out[0] = STX; out.set(covered, 1);
-  out[covered.length + 1] = (crc >> 8) & 0xff;
-  out[covered.length + 2] = crc & 0xff;
-  out[covered.length + 3] = ETX;
-  return out;
-}
-
-const toHex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0").toUpperCase()).join("");
-
-export function buildSale(amountSen: number, ecrRef: string, duitnowQr = false): Uint8Array {
-  const tlvs: Array<[number, Uint8Array]> = [
-    [TAG.AMOUNT, bcd6(amountSen)],
-    [TAG.ECR_REF, ascii(ecrRef)],
-  ];
-  if (duitnowQr) tlvs.push([TAG.PRODUCT, ascii(PRODUCT_DUITNOW_QR)]);
-  return frame(GhlCmd.SALE, tlvs);
-}
-
-export const buildQuery = (amountSen: number, ecrRef: string) =>
-  frame(GhlCmd.QUERY, [[TAG.AMOUNT, bcd6(amountSen)], [TAG.ECR_REF, ascii(ecrRef)]]);
-export const buildVoid = (amountSen: number, ecrRef: string) =>
-  frame(GhlCmd.VOID, [[TAG.AMOUNT, bcd6(amountSen)], [TAG.ECR_REF, ascii(ecrRef)]]);
-export const buildSettle = () => frame(GhlCmd.SETTLE, []);
-
-// ── Config ──────────────────────────────────────────────────────────────────
 const CFG_KEY = "pos.ghl.terminal.v1";
+
+/** Retained for the Settings screen. HTTP is the real transport; the socket
+ *  path is not implemented because it would require the eTSK key exchange. */
 export type GhlTransport = "auto" | "http" | "tcp";
-export type GhlConfig = { enabled: boolean; host: string; port: number; transport: GhlTransport };
-const DEFAULTS: GhlConfig = { enabled: false, host: "", port: 33898, transport: "auto" };
+
+export type GhlConfig = {
+  enabled: boolean;
+  host: string;
+  port: number;
+  transport: GhlTransport;
+  /** "direct" is the ADAPTIS/PayHereDirect on our counters; "ecr" is the
+   *  other build NTT Data ship, which answers status queries differently. */
+  flavour: Flavour;
+  /** NTT Data's DuitNow product code. QRC returns the QR as a string, which
+   *  is what we want; DQR returns an image. A wrong code is not rejected —
+   *  the terminal simply sits for ~15s and cancels. */
+  qrProductId: string;
+  saleTimeoutMs: number;
+  quickTimeoutMs: number;
+  pendingTries: number;
+  pendingGapMs: number;
+};
+
+const DEFAULTS: GhlConfig = {
+  enabled: false, host: "", port: 33898, transport: "http",
+  flavour: "direct", qrProductId: "DUITNOWQRC",
+  saleTimeoutMs: 90_000, quickTimeoutMs: 15_000,
+  pendingTries: 40, pendingGapMs: 3_000,
+};
 
 export async function loadGhlConfig(): Promise<GhlConfig> {
   try {
@@ -122,182 +68,183 @@ export async function loadGhlConfig(): Promise<GhlConfig> {
 export async function saveGhlConfig(c: GhlConfig) { await AsyncStorage.setItem(CFG_KEY, JSON.stringify(c)); }
 export const ghlConfigured = (c: GhlConfig) => c.enabled && !!c.host && c.port > 0;
 
-/** ECR reference: unique per attempt, and short enough for the slip. */
+/** Our own reference, unique per attempt: it goes on the terminal slip and is
+ *  how a status query or void finds the transaction again. */
 export function newEcrRef(orderNo?: string): string {
   const d = new Date(), p = (n: number) => String(n).padStart(2, "0");
   const stamp = `${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
   return (orderNo ? orderNo.replace(/[^A-Za-z0-9]/g, "").slice(0, 6) : "POS") + stamp;
 }
 
-// ── Transport ───────────────────────────────────────────────────────────────
-export type RawReply = { via: "http" | "tcp"; bytes?: Uint8Array; text?: string; status?: number };
-
-async function sendHttp(host: string, port: number, payload: Uint8Array, timeoutMs: number): Promise<RawReply> {
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), timeoutMs);
-  try {
-    const res = await fetch(`http://${host}:${port}/`, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: toHex(payload),
-      signal: ctl.signal,
-    });
-    return { via: "http", text: await res.text().catch(() => ""), status: res.status };
-  } finally { clearTimeout(t); }
-}
-
-function sendTcp(host: string, port: number, payload: Uint8Array, timeoutMs: number): Promise<RawReply> {
-  let TcpSocket: any;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires -- native; absent on an OTA-only build
-    TcpSocket = require("react-native-tcp-socket");
-  } catch {
-    return Promise.reject(new Error("GHL_TCP_DRIVER_MISSING"));
-  }
-  return new Promise((resolve, reject) => {
-    const chunks: number[] = [];
-    let settled = false;
-    const finish = (err?: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try { sock?.destroy(); } catch { /* already closed */ }
-      if (err && !chunks.length) reject(err);
-      else resolve({ via: "tcp", bytes: Uint8Array.from(chunks) });
-    };
-    const timer = setTimeout(() => finish(new Error("GHL_TIMEOUT")), timeoutMs);
-    let sock: any;
-    try {
-      sock = TcpSocket.default.createConnection({ host, port }, () => sock.write(payload));
-      sock.on("data", (d: any) => {
-        chunks.push(...(typeof d === "string" ? Array.from(d as string, (c: string) => c.charCodeAt(0)) : Array.from(d as Uint8Array)));
-      });
-      sock.on("error", (e: Error) => finish(e));
-      sock.on("close", () => finish());
-    } catch (e: any) { finish(e); }
-  });
-}
-
-async function send(cfg: GhlConfig, payload: Uint8Array, timeoutMs: number): Promise<RawReply> {
-  if (cfg.transport === "http") return sendHttp(cfg.host, cfg.port, payload, timeoutMs);
-  if (cfg.transport === "tcp") return sendTcp(cfg.host, cfg.port, payload, timeoutMs);
-  try { return await sendHttp(cfg.host, cfg.port, payload, timeoutMs); }
-  catch { return sendTcp(cfg.host, cfg.port, payload, timeoutMs); }
-}
-
-// ── Outcome ─────────────────────────────────────────────────────────────────
 export type GhlOutcome =
   | { status: "approved"; approvalCode: string; rrn: string; maskedPan: string | null; issuer: string | null; entry: string | null; raw: string }
   | { status: "declined"; reason: string; raw: string }
-  /** The terminal's verdict could not be established. NEVER treat as unpaid:
-   *  the customer may have been charged. The UI must send staff to the
-   *  terminal screen, never offer a silent retry. */
+  /** The verdict could not be established. NEVER treat as unpaid — the guest
+   *  may have been charged. Send staff to the terminal; never auto-retry. */
   | { status: "unknown"; reason: string; raw: string };
 
-function rawOf(r: RawReply): string {
-  return r.bytes?.length ? toHex(r.bytes) : (r.text ?? "");
+class TerminalBusy extends Error {}
+class TerminalLost extends Error {}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** One message to the terminal and its reply, over HTTP. */
+async function talk(cfg: GhlConfig, frame: number[], readTimeoutMs: number): Promise<Message> {
+  if (!cfg.host) throw new TerminalLost("No terminal address in settings");
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), readTimeoutMs);
+  let body: string;
+  try {
+    const res = await fetch(`http://${cfg.host}:${cfg.port}`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: toHex(frame),
+      signal: stop.signal,
+    });
+    body = (await res.text()).trim();
+    // BUSY means the terminal still has something on its screen. Nothing was
+    // taken, so say that plainly rather than implying a lost payment.
+    if (res.status === 400 && /busy/i.test(body)) {
+      throw new TerminalBusy("The terminal is mid-transaction — clear its screen and try again");
+    }
+    if (!res.ok) throw new TerminalLost(`The terminal answered ${res.status}${body ? `: ${body.slice(0, 60)}` : ""}`);
+  } catch (e) {
+    if (e instanceof TerminalBusy) throw e;
+    throw new TerminalLost(e instanceof TerminalLost ? e.message : String((e as Error)?.message ?? e));
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!body) throw new TerminalLost("The terminal did not answer");
+  return decode(fromHex(body));
 }
 
-/**
- * Turn a terminal reply into a verdict.
- *
- * NOT IMPLEMENTED, on purpose. The result codes live in the vendor's Device
- * Interface manual, which we do not have, and no reply has been captured yet.
- * Until one of those exists this returns "unknown" with the raw payload, so a
- * sale can only ever be recorded by a human who has read the terminal.
- *
- * To finish it: run Settings → Terminal Diagnostic against a real transaction,
- * read the captured reply out of the terminal_diagnostics table, and map the
- * result field here. The frame is already structurally decodable — see
- * decodeReply below and packages/shared/src/ghl/frame.ts.
- */
-export function interpretSaleResponse(reply: RawReply): GhlOutcome {
-  const raw = rawOf(reply);
+function approvedFrom(m: Message, raw: string): GhlOutcome {
   return {
-    status: "unknown",
-    reason: raw
-      ? "Terminal replied, but this build cannot yet read GHL result codes — confirm on the terminal screen"
-      : "No reply from the terminal — confirm on the terminal screen before charging again",
+    status: "approved",
+    approvalCode: m.text("approvalCode")?.trim() || "",
+    rrn: m.text("rrn")?.trim() || "",
+    maskedPan: m.text("maskedPan")?.trim() || null,
+    issuer: m.text("productBrand")?.trim() || null,
+    entry: m.text("entryModeText")?.trim() || null,
     raw,
   };
 }
 
-/** Structural decode of a framed reply: command, TLVs and CRC validity.
- *  Says nothing about approval — that is interpretSaleResponse's job. */
-export function decodeReply(bytes: Uint8Array) {
-  if (bytes.length < HEADER.length + 8 || bytes[0] !== STX) return null;
-  const covered = bytes.subarray(1, bytes.length - 3);
-  const crcOk = crc16Arc(covered) === ((bytes[bytes.length - 3] << 8) | bytes[bytes.length - 2]);
-  const tlvs: Array<{ tag: number; value: Uint8Array }> = [];
-  const body = covered.subarray(HEADER.length + 4);
-  let i = 0;
-  while (i + 4 <= body.length) {
-    const tag = (body[i] << 8) | body[i + 1];
-    const len = (body[i + 2] << 8) | body[i + 3];
-    if (i + 4 + len > body.length) break;
-    tlvs.push({ tag, value: body.subarray(i + 4, i + 4 + len) });
-    i += 4 + len;
+/** What a status query means. The two builds answer differently. */
+function readStatus(cfg: GhlConfig, m: Message): "approved" | "pending" | "gone" | "declined" {
+  if (cfg.flavour === "ecr") {
+    const original = m.text("originalStatus")?.trim().toUpperCase();
+    if (m.status !== STATUS.ok) return m.status === STATUS.noTransaction ? "gone" : "pending";
+    if (original === "00") return "approved";
+    if (original === "EA" || !original) return "pending";
+    return "declined";
   }
-  return { command: covered[HEADER.length], crcOk, tlvs };
+  // "direct" answers as if it were the sale itself
+  if (m.status === STATUS.ok) return "approved";
+  if (m.status === STATUS.pending) return "pending";
+  if (m.status === STATUS.noTransaction) return "gone";
+  return "declined";
 }
 
-/**
- * Charge a card (or DuitNow QR) on the terminal.
- *
- * Sends SALE, then polls QUERY STATUS until a verdict or the deadline. The
- * poll exists because the customer's interaction — insert, PIN, or scanning a
- * QR — takes as long as it takes.
- *
- * Any failure to establish the outcome returns "unknown", never "declined":
- * telling a cashier a payment failed when it may have succeeded is what
- * produces double charges.
- */
+/** A QR payment sits pending until the guest pays or gives up. */
+async function pollPending(cfg: GhlConfig, ringgit: number, ref: string, say: (s: string) => void): Promise<GhlOutcome> {
+  for (let i = 0; i < cfg.pendingTries; i++) {
+    await sleep(cfg.pendingGapMs);
+    let m: Message;
+    try {
+      m = await talk(cfg, queryRequest(ringgit, ref, cfg.flavour), cfg.quickTimeoutMs);
+    } catch {
+      continue; // a check that did not get through says nothing either way
+    }
+    const what = readStatus(cfg, m);
+    if (what === "approved") return approvedFrom(m, "");
+    if (what === "declined") {
+      return { status: "declined", reason: m.text("originalMessage")?.trim() || statusText(m.status), raw: "" };
+    }
+    if (what === "gone") return { status: "declined", reason: "The guest did not pay — nothing was charged", raw: "" };
+    say(`Waiting for the guest to pay (${i + 1})`);
+  }
+  return { status: "unknown", reason: "The guest has not finished paying. Check the terminal before charging again.", raw: "" };
+}
+
+/** A reply was lost. The payment may well have gone through, so ask. */
+async function resolveLost(cfg: GhlConfig, ringgit: number, ref: string, why: string, say: (s: string) => void): Promise<GhlOutcome> {
+  say("Lost the terminal — checking what happened");
+  for (let i = 0; i < 3; i++) {
+    try {
+      const m = await talk(cfg, queryRequest(ringgit, ref, cfg.flavour), cfg.quickTimeoutMs);
+      const what = readStatus(cfg, m);
+      if (what === "approved") return approvedFrom(m, "");
+      if (what === "gone") return { status: "declined", reason: "Nothing was charged", raw: "" };
+      if (what === "declined") return { status: "declined", reason: statusText(m.status), raw: "" };
+    } catch {
+      await sleep(1500);
+    }
+  }
+  return {
+    status: "unknown",
+    reason: `Lost contact with the terminal (${why}). Check the terminal screen before charging again.`,
+    raw: "",
+  };
+}
+
+async function settleOutcome(cfg: GhlConfig, m: Message, ringgit: number, ref: string, say: (s: string) => void): Promise<GhlOutcome> {
+  if (m.status === STATUS.ok) return approvedFrom(m, "");
+  if (m.status === STATUS.pending) { say("Waiting for the guest to pay"); return pollPending(cfg, ringgit, ref, say); }
+  if (m.status === STATUS.cancelled || m.status === STATUS.deviceTimeout) {
+    return { status: "declined", reason: statusText(m.status), raw: "" };
+  }
+  return { status: "declined", reason: statusText(m.status), raw: "" };
+}
+
+/** Charge the guest: card, their own wallet code, or a DuitNow QR on screen. */
 export async function chargeOnTerminal(args: {
   amountSen: number;
   orderNo?: string;
   duitnowQr?: boolean;
-  timeoutMs?: number;
+  method?: Method;
+  cashierId?: string;
   onStatus?: (s: string) => void;
 }): Promise<GhlOutcome & { ecrRef: string }> {
   const cfg = await loadGhlConfig();
   const ecrRef = newEcrRef(args.orderNo);
+  const say = args.onStatus ?? (() => {});
   if (!ghlConfigured(cfg)) {
     return { status: "unknown", reason: "Terminal not configured (Settings → GHL Terminal)", raw: "", ecrRef };
   }
-  const deadline = Date.now() + (args.timeoutMs ?? 120_000);
+  const ringgit = args.amountSen / 100;
+  const method: Method = args.method ?? (args.duitnowQr ? "qr_pay" : "card");
+  const frame = saleRequest({
+    ringgit, ecrInvoice: ecrRef, method, cashierId: args.cashierId,
+    options: { ...DEFAULT_OPTIONS, flavour: cfg.flavour, qrProductId: cfg.qrProductId },
+  });
 
-  let first: RawReply;
+  say(method === "qr_pay" ? "Showing the QR on the terminal" : method === "ewallet" ? "Ask the guest to show their code" : "Ask the guest to tap or insert");
+
+  let m: Message;
   try {
-    first = await send(cfg, buildSale(args.amountSen, ecrRef, args.duitnowQr), 20_000);
-  } catch (e: any) {
-    return {
-      status: "unknown",
-      reason: String(e?.message) === "GHL_TCP_DRIVER_MISSING"
-        ? "This build cannot reach the terminal over TCP — install the APK, not an OTA update"
-        : `Could not reach the terminal: ${String(e?.message ?? e)}`,
-      raw: "", ecrRef,
-    };
+    m = await talk(cfg, frame, cfg.saleTimeoutMs);
+  } catch (e) {
+    // A busy terminal never took the message: nothing was attempted, so do
+    // not send the cashier hunting for a payment that does not exist.
+    if (e instanceof TerminalBusy) return { status: "declined", reason: (e as Error).message, raw: "", ecrRef };
+    return { ...(await resolveLost(cfg, ringgit, ecrRef, String((e as Error)?.message ?? e), say)), ecrRef };
   }
+  return { ...(await settleOutcome(cfg, m, ringgit, ecrRef, say)), ecrRef };
+}
 
-  // The vendor states TCP ECR sends no ACK, so a reply here may already be the
-  // final result — or nothing at all, with the verdict only visible by polling.
-  const immediate = interpretSaleResponse(first);
-  if (immediate.status !== "unknown") return { ...immediate, ecrRef };
-
-  const query = buildQuery(args.amountSen, ecrRef);
-  let last: GhlOutcome = immediate;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 1500));
-    args.onStatus?.("Waiting for the terminal…");
-    try {
-      const verdict = interpretSaleResponse(await send(cfg, query, 10_000));
-      if (verdict.status !== "unknown") return { ...verdict, ecrRef };
-      last = verdict;
-    } catch {
-      /* transient — the terminal is mid-interaction; keep polling */
-    }
+/** Void a transaction we still hold the reference for. */
+export async function voidOnTerminal(amountSen: number, ecrRef: string): Promise<{ ok: boolean; message: string }> {
+  const cfg = await loadGhlConfig();
+  if (!ghlConfigured(cfg)) return { ok: false, message: "Terminal not configured" };
+  try {
+    const m = await talk(cfg, voidRequest(amountSen / 100, ecrRef), cfg.quickTimeoutMs);
+    return m.status === STATUS.ok
+      ? { ok: true, message: "Voided" }
+      : { ok: false, message: statusText(m.status) };
+  } catch (e) {
+    return { ok: false, message: `Could not void: ${String((e as Error)?.message ?? e)}` };
   }
-  return { ...last, ecrRef };
 }
 
 /** End-of-day settlement. Best-effort: it can also be run from the terminal's
@@ -306,12 +253,11 @@ export async function settleOnTerminal(): Promise<{ ok: boolean; message: string
   const cfg = await loadGhlConfig();
   if (!ghlConfigured(cfg)) return { ok: true, message: "Terminal not configured — nothing to settle" };
   try {
-    const reply = await send(cfg, buildSettle(), 180_000);
-    const raw = rawOf(reply);
-    return raw
-      ? { ok: true, message: "Settlement sent — confirm the slip on the terminal" }
-      : { ok: false, message: "No settlement reply — run settlement from the terminal menu" };
-  } catch (e: any) {
-    return { ok: false, message: `Settlement failed: ${String(e?.message ?? e)}` };
+    const m = await talk(cfg, settleRequest(), 180_000);
+    if (m.status === STATUS.ok) return { ok: true, message: "Settlement complete" };
+    if (m.status === STATUS.batchEmpty) return { ok: true, message: "Nothing to settle" };
+    return { ok: false, message: statusText(m.status) };
+  } catch (e) {
+    return { ok: false, message: `Settlement failed: ${String((e as Error)?.message ?? e)}` };
   }
 }
