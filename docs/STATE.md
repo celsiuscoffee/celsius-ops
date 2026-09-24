@@ -43,8 +43,14 @@ current month.
   (`isIpay88Ready`). iPay88's legal name is now **NTT DATA eCommerce
   Solutions Sdn. Bhd.**; its only lines in our bank so far are the two
   RM1,620 setup-fee DEBITS on 2026-09-10 (quotes QT-202609/0002 Tamarind,
-  /0003 SA). New `CashCategory.IPAY88` (migration `20260924_cashcategory_ipay88`,
-  NOT YET APPLIED, listed in KNOWN_UNAPPLIED) — apply before PR #1245 merges.
+  /0003 SA). `CashCategory.IPAY88` **APPLIED to live 2026-09-24** (owner
+  approved; `supabase/migrations/111`), unused. **Owner then said: wire the
+  payment method first, don't change finance yet** — so the finance code
+  (classifier rule, GL contra 1000-02, IPAY88 in cash-in/sales recon, close
+  prep, cashflow, settlement forecast + tests) was pulled back out of PR #1245.
+  It is intact in commit `eec28bf`; restore with
+  `git checkout eec28bf -- apps/backoffice/src/lib/finance` when the owner
+  asks, ideally after the first real iPay88 payout shows its bank wording.
 
 - 2026-09-15 — **The confirmed-and-paid August run was deleted; its per-employee
   lines are gone, and the replacement is RM862.45 LOWER.** Timeline from
@@ -2843,16 +2849,15 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   (a) someone with access checks the four iPay88 spec pages against
   `apps/order/src/lib/ipay88/client.ts` (signature strings, entry/requery
   URLs, requery GET + Amount format, RefNo reuse after a failed attempt);
-  (b) iPay88 sandbox creds + `IPAY88_PAYMENT_IDS` (Apple Pay etc.) set in the
+  (b) iPay88 sandbox creds + `IPAY88_PAYMENT_IDS` (EVERY method — none default) set in the
   Vercel `celsius-pickup-app` project; (c) sandbox test of every method, web
   + iOS + Android; (d) one-outlet live test incl. settlement landing in the
   right company's bank. Apple/Google Pay only after the pickup-native OTA has
   propagated. Not built yet: refunds (iPay88 Refund API — search results say
   it signs MerchantCode BEFORE MerchantKey with plain SHA-256, unverified),
-  finance payout sync (bank-line classifier, GL map, recons now handle
-  IPAY88; the per-transaction payout sync needs iPay88's settlement report
-  format — and the classifier regex needs checking against the first real
-  payout line), dropping
+  finance handling of iPay88 payouts (built, parked in `eec28bf` — see above;
+  per-transaction payout sync still needs iPay88's settlement report format),
+  dropping
   STRIPE_SECRET_KEY from the order app's required env once Stripe is retired.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**

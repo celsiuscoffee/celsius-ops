@@ -59,9 +59,6 @@ describe("contraFor", () => {
   it("clears the Cash & QR debtor for Revenue Monster settlements (already accrued by EOD)", () => {
     expect(contraFor("REVENUE_MONSTER")).toEqual({ code: "1000-02", suspense: false });
   });
-  it("clears the same Cash & QR debtor for iPay88 settlements (RM's replacement)", () => {
-    expect(contraFor("IPAY88")).toEqual({ code: "1000-02", suspense: false });
-  });
   it("maps costs, capex and financing to real accounts", () => {
     expect(contraFor("RAW_MATERIALS").code).toBe("6000-01");
     expect(contraFor("DIGITAL_ADS").code).toBe("6503-01");

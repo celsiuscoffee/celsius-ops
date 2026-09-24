@@ -233,7 +233,7 @@ export async function buildIncomingForecast(from: string, to: string): Promise<I
   const bankRows = await prisma.$queryRawUnsafe<{ grab_per_day: number; other_per_day: number }[]>(`
     SELECT
       COALESCE(SUM(amount) FILTER (WHERE category::text IN ('GRAB','GRAB_PUTRAJAYA')),0)::float / ${trailingDays} AS grab_per_day,
-      COALESCE(SUM(amount) FILTER (WHERE category::text NOT IN ('CARD','REVENUE_MONSTER','IPAY88','QR','GRAB','GRAB_PUTRAJAYA','GASTROHUB')),0)::float / ${trailingDays} AS other_per_day
+      COALESCE(SUM(amount) FILTER (WHERE category::text NOT IN ('CARD','REVENUE_MONSTER','QR','GRAB','GRAB_PUTRAJAYA','GASTROHUB')),0)::float / ${trailingDays} AS other_per_day
     FROM "BankStatementLine"
     WHERE direction='CR' AND "isInterCo" = false
       AND ("txnDate" + interval '8 hours')::date >= $1::date

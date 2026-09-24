@@ -345,7 +345,7 @@ async function projectPayroll(start: Date, end: Date): Promise<{ date: Date; amo
 // Sales channels — DOW-shaped projection (revenue varies by day-of-week)
 const SALES_INFLOW_CATEGORIES = [
   "CARD", "QR", "STOREHUB", "GRAB", "GRAB_PUTRAJAYA",
-  "FOODPANDA", "MEETINGS_EVENTS", "GASTROHUB", "REVENUE_MONSTER", "IPAY88",
+  "FOODPANDA", "MEETINGS_EVENTS", "GASTROHUB", "REVENUE_MONSTER",
 ] as const;
 
 // Non-operating DR — financing / distributions / capex. These are lumpy and
@@ -1700,10 +1700,7 @@ async function loadOperatingCashFlow(): Promise<CashflowResult["operatingCashFlo
         case "FOODPANDA":      row.sales.foodpanda+= amt; break;
         case "GASTROHUB":      row.sales.gastrohub+= amt; break;
         case "MEETINGS_EVENTS":row.sales.meetings += amt; break;
-        // revenueMonster is the online-gateway bucket: RM and iPay88 both
-        // settle pickup + table-QR sales, and iPay88 replaces RM over time.
-        case "REVENUE_MONSTER":
-        case "IPAY88":         row.sales.revenueMonster += amt; break;
+        case "REVENUE_MONSTER":row.sales.revenueMonster += amt; break;
         // Other CR categories (LOAN, CAPITAL, OTHER_INFLOW, refunds)
         // are NOT operating — excluded.
       }

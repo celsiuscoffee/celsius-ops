@@ -42,7 +42,7 @@ export const COMPANY_BANK_SUFFIX: Record<string, string> = {
 
 const SALES_CATEGORIES = [
   "CARD", "QR", "STOREHUB", "GRAB", "GRAB_PUTRAJAYA",
-  "FOODPANDA", "MEETINGS_EVENTS", "GASTROHUB", "REVENUE_MONSTER", "IPAY88",
+  "FOODPANDA", "MEETINGS_EVENTS", "GASTROHUB", "REVENUE_MONSTER",
 ];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;

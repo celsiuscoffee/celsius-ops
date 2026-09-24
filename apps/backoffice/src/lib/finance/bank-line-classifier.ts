@@ -105,15 +105,6 @@ const INFLOW_RULES: Rule[] = [
   // GHL terminal settlement — "IBG TRANSACTION DMS A3 (FOR GHL)"
   { name: "card_ghl_settlement", match: /\bDMS\s*A3\b.*\bGHL\b|\bFOR\s*GHL\b/i, direction: "CR", category: "CARD" as CashCategory },
 
-  // iPay88 / ADAPTIS — online (pickup + table-QR) settlement once methods move
-  // off Revenue Monster. The merchant is NTT DATA eCommerce Solutions Sdn Bhd
-  // (formerly iPay88 (M)); Maybank glues the payee onto the preceding text
-  // ("CELSIUS COFFEE SDN BNTT DATA ECOMMERCE * QT-…" on the 2026-09-10 setup-fee
-  // debits), so no leading \b on NTT. CR only — the DR side is us paying them.
-  // Ahead of the suffix rules so a settlement reference can't be read as a
-  // purpose. Exact settlement wording unconfirmed until the first payout lands.
-  { name: "ipay88", match: /NTT\s*DATA\s*E-?COMMERCE|\bIPAY\s*88\b|\bADAPTIS\b|\bMOBILE\s*88\b/i, direction: "CR", category: "IPAY88" as CashCategory },
-
   // Inflow suffix rules — "TRANSFER TO A/C <party> * <purpose>" pattern.
   // Like the outflow side, the prefix is just routing; the suffix tells
   // us why money came in.
