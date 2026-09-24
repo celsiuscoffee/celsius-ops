@@ -15,6 +15,19 @@ describe("bank-line-classifier", () => {
     expect(cr("INTERBANK GIRO STOREHUB SDN BHD").category).toBe("STOREHUB");
   });
 
+  it("maps iPay88 / ADAPTIS settlements to IPAY88 (CR only)", () => {
+    // Maybank glues the payee onto the prior text — the real 2026-09-10 lines
+    // read "CELSIUS COFFEE SDN BNTT DATA ECOMMERCE * QT-202609/0003".
+    expect(cr("IBG NTT DATA ECOMMERCE SOLUTIONS SDN BHD").category).toBe("IPAY88");
+    expect(cr("CELSIUS COFFEE SDN BNTT DATA ECOMMERCE * SETTLEMENT").category).toBe("IPAY88");
+    expect(cr("INTERBANK GIRO IPAY88 (M) SDN BHD").category).toBe("IPAY88");
+    expect(cr("ADAPTIS SETTLEMENT 240926").category).toBe("IPAY88");
+    // Paying them (setup fee) is not a sales settlement.
+    expect(dr("CELSIUS TAMARIND NTT DATA ECOMMERCE * QT-202609/0002").category).not.toBe("IPAY88");
+    // Revenue Monster is unaffected.
+    expect(cr("290626 SETTLEMENT REVENUE MONSTER SDN*RMSB SETTLEMENT").category).toBe("REVENUE_MONSTER");
+  });
+
   it("flags ANY inter-entity transfer as inter-company, regardless of purpose", () => {
     expect(dr("TRANSFER TO A/C CELSIUS COFFEE TAMA Loan").isInterCo).toBe(true);
     expect(cr("TRANSFER FR A/C CELSIUS COFFEE SDN. Payback loan").isInterCo).toBe(true);

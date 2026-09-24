@@ -4,6 +4,7 @@ import { isIpay88Checkout } from "@/lib/payments/checkout-query";
 import {
   IPAY88_CHECKOUT_PREFIX,
   buildPaymentRequest,
+  isIpay88Ready,
   merchantForStore,
   paymentUrl,
   renderAutoSubmitPage,
@@ -63,15 +64,18 @@ export async function GET(request: NextRequest) {
   if (!isIpay88Checkout(order.payment_checkout_id) || order.total == null || order.total <= 0) {
     return new NextResponse("This order isn't set up for iPay88 payment", { status: 409 });
   }
+  const methodId = method || order.payment_method || "";
   const merchant = merchantForStore(order.store_id);
-  if (!merchant) return new NextResponse("iPay88 is not configured for this outlet", { status: 503 });
+  if (!merchant || !isIpay88Ready(methodId, order.store_id)) {
+    return new NextResponse("This payment method isn't available right now", { status: 503 });
+  }
 
   const refNo = order.payment_checkout_id!.slice(IPAY88_CHECKOUT_PREFIX.length);
   const fields = buildPaymentRequest({
     merchant,
     refNo,
     amountSen: order.total,
-    methodId: method || order.payment_method || "",
+    methodId,
     prodDesc: `Celsius Coffee order ${order.order_number}`,
     userName: order.customer_name?.trim() || "Celsius Customer",
     // orders carry no email; iPay88 requires one for its receipt field.

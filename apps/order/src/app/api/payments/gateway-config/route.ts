@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { DEFAULT_GATEWAY_METHODS, METHOD_ORDER, clientProvider, type GatewayProvider } from "@/lib/payments/gateway-methods";
+import { isIpay88Ready } from "@/lib/ipay88/client";
 
 /**
  * GET /api/payments/gateway-config
@@ -68,7 +69,9 @@ export async function GET() {
     paymentsEnabled,
     methods: sorted.map((m) => ({
       method_id: m.method_id,
-      enabled: m.enabled,
+      // An iPay88 method with no PaymentId / merchant account would dead-end
+      // on iPay88's error page — show it as unavailable instead.
+      enabled: m.enabled && (m.provider !== "ipay88" || isIpay88Ready(m.method_id)),
       provider: clientProvider(m.provider),
       gateway: m.provider,
     })),

@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { createPayment } from "@/lib/revenue-monster/client";
 import { ipay88CheckoutId, queryOrderCheckout } from "@/lib/payments/checkout-query";
 import { providerForMethod } from "@/lib/payments/routing";
-import { merchantForStore } from "@/lib/ipay88/client";
+import { isIpay88Ready } from "@/lib/ipay88/client";
 import { markRmOrderPaid } from "@/lib/revenue-monster/order-status";
 import type { OrderRow } from "@/lib/supabase/types";
 
@@ -87,8 +87,8 @@ export async function POST(request: NextRequest) {
     // page. Same response shape as RM, so released native builds (which call
     // this for every "revenue_monster" method) pay through iPay88 unchanged.
     if ((await providerForMethod(paymentMethod)) === "ipay88") {
-      if (!merchantForStore(order.store_id)) {
-        return NextResponse.json({ error: "iPay88 is not configured for this outlet" }, { status: 503 });
+      if (!isIpay88Ready(paymentMethod, order.store_id)) {
+        return NextResponse.json({ error: "This payment method isn't available right now" }, { status: 503 });
       }
       await supabase
         .from("orders")

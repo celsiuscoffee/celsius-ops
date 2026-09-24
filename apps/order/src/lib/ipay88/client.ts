@@ -30,10 +30,11 @@ import { createHmac, timingSafeEqual } from "crypto";
 //   IPAY88_PAYMENT_URL   hosted page (default: production entry.asp)
 //   IPAY88_REQUERY_URL   requery endpoint (default: production enquiry.asp)
 //   IPAY88_PAYMENT_IDS   JSON { "<method_id>": "<iPay88 PaymentId>" } — which
-//                        iPay88 payment option to open for each app method.
-//                        A method with no PaymentId opens iPay88's own
-//                        method-selection page instead (still works, one
-//                        extra tap for the customer).
+//                        iPay88 payment option each app method opens. REQUIRED
+//                        per method: NTT DATA (iPay88) confirmed every payment
+//                        request must carry a PaymentId (email, 2026-09-11). A
+//                        method switched to iPay88 without one is hidden from
+//                        customers and refused server-side (see isIpay88Ready).
 
 const DEFAULT_PAYMENT_URL = "https://payment.ipay88.com.my/ePayment/entry.asp";
 const DEFAULT_REQUERY_URL = "https://payment.ipay88.com.my/ePayment/enquiry.asp";
@@ -43,14 +44,6 @@ export const IPAY88_SIGNATURE_TYPE = "HMACSHA512";
 
 /** payment_checkout_id prefix marking an order as iPay88-routed. */
 export const IPAY88_CHECKOUT_PREFIX = "ipay88:";
-
-// PaymentIds published in iPay88's MYR technical spec for years; everything
-// else (e-wallets, Apple Pay, Google Pay) must come from IPAY88_PAYMENT_IDS
-// once confirmed against the merchant's PaymentId page.
-const DEFAULT_PAYMENT_IDS: Record<string, string> = {
-  card: "2",
-  fpx: "16",
-};
 
 export interface Ipay88Merchant {
   code: string;
@@ -106,11 +99,24 @@ export function requeryUrl(): string {
   return env("IPAY88_REQUERY_URL") || DEFAULT_REQUERY_URL;
 }
 
-/** iPay88 PaymentId for an app method id, or "" to let the customer pick on iPay88's page. */
+/** iPay88 PaymentId for an app method id, or "" when none is configured. */
 export function paymentIdFor(methodId: string): string {
-  const overrides = parseJsonEnv<Record<string, string | number>>("IPAY88_PAYMENT_IDS") ?? {};
-  const v = overrides[methodId] ?? DEFAULT_PAYMENT_IDS[methodId];
+  const ids = parseJsonEnv<Record<string, string | number>>("IPAY88_PAYMENT_IDS") ?? {};
+  const v = ids[methodId];
   return v == null ? "" : String(v).trim();
+}
+
+/**
+ * Whether a method can actually be paid through iPay88: it has a PaymentId
+ * and (for a given outlet, or any outlet when storeId is omitted) a merchant
+ * account. Routing a method that fails this would send customers to an
+ * iPay88 error page, so callers hide or refuse it instead.
+ */
+export function isIpay88Ready(methodId: string, storeId?: string): boolean {
+  if (!paymentIdFor(methodId)) return false;
+  if (storeId) return merchantForStore(storeId) != null;
+  const { byStore, fallback } = allMerchants();
+  return fallback != null || Object.keys(byStore).length > 0;
 }
 
 /** Sen → iPay88 amount string: two decimals with thousands separators ("1,278.99"). */

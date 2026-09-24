@@ -37,6 +37,14 @@ current month.
   (5) Revenue Monster settles per outlet into 3 separate Sdn Bhds — iPay88
   needs the same (`IPAY88_MERCHANTS` per-store JSON), or all sales land in
   one company.
+  (6) NTT DATA (iPay88) confirmed by email 2026-09-11 that **every payment
+  request must carry a PaymentId** — no iPay88 method picker fallback. So
+  PaymentIds are env-only, no defaults, and a method without one is hidden
+  (`isIpay88Ready`). iPay88's legal name is now **NTT DATA eCommerce
+  Solutions Sdn. Bhd.**; its only lines in our bank so far are the two
+  RM1,620 setup-fee DEBITS on 2026-09-10 (quotes QT-202609/0002 Tamarind,
+  /0003 SA). New `CashCategory.IPAY88` (migration `20260924_cashcategory_ipay88`,
+  NOT YET APPLIED, listed in KNOWN_UNAPPLIED) — apply before PR #1245 merges.
 
 - 2026-09-15 — **The confirmed-and-paid August run was deleted; its per-employee
   lines are gone, and the replacement is RM862.45 LOWER.** Timeline from
@@ -2841,8 +2849,10 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   right company's bank. Apple/Google Pay only after the pickup-native OTA has
   propagated. Not built yet: refunds (iPay88 Refund API — search results say
   it signs MerchantCode BEFORE MerchantKey with plain SHA-256, unverified),
-  finance payout sync / bank-line classifier / GL map entries for iPay88
-  settlements (needs iPay88's settlement report format), dropping
+  finance payout sync (bank-line classifier, GL map, recons now handle
+  IPAY88; the per-transaction payout sync needs iPay88's settlement report
+  format — and the classifier regex needs checking against the first real
+  payout line), dropping
   STRIPE_SECRET_KEY from the order app's required env once Stripe is retired.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**

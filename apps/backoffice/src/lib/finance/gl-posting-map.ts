@@ -23,6 +23,7 @@ export const CONTRA_ACCOUNT: Record<string, string> = {
   GRAB: "1005",            // Grabfood debtors
   GRAB_PUTRAJAYA: "1999",  // settles into HQ bank but debtor sits in Conezion; CR lines route via resolveGrabSettlementRouting, this fallback only parks odd cases (DR side, or the outlet company's own bank)
   FOODPANDA: "1005",       // marketplace debtor (no separate FP account yet)
+  IPAY88: "1000-02",          // iPay88 / ADAPTIS — same role as REVENUE_MONSTER (online sales already accrued by EOD)
   REVENUE_MONSTER: "1000-02", // RM terminal settling pickup/table QR+e-wallet sales already accrued by EOD → clears the Cash & QR debtor (crediting income here double-counted revenue)
   // ── inflows NOT in EOD (B2B / online) → recognise income directly ──
   MEETINGS_EVENTS: "5000-10",

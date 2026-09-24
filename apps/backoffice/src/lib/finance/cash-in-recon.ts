@@ -10,7 +10,7 @@
 //
 // Revenue sources by channel:
 //   card / qr  : in-store till tender (pos_order_payments; outlets are cashless)
-//   online     : pickup app orders (RM gateway), settle as REVENUE_MONSTER
+//   online     : pickup app + table-QR orders, settle as REVENUE_MONSTER or IPAY88
 //   grab       : GrabFood gross (unified), settles net of commission + ads
 //   consignment: GastroHub advices (consignment_sales), settle net of commission
 // Cash is intentionally omitted, the tills are effectively cashless (~RM0).
@@ -32,7 +32,7 @@ const ACCOUNT_SUFFIX: Record<string, string> = {
 const EXPECTED_PCT: Record<string, number> = {
   card: 1.0,        // Maybank / NTT MDR (Maybank date-matched, measured ~0.5-1%)
   qr: 0,            // DuitNow QR is real-time and free — should tie to ~0
-  online: 2.0,      // Revenue Monster gateway (measured ~2.0-2.6%)
+  online: 2.0,      // Revenue Monster gateway (measured ~2.0-2.6%); iPay88 fee unmeasured until its first payouts
   grab: 45,         // 33% commission + SST + ~12% GrabAds (both netted at settlement)
   consignment: 30,  // GastroHub commission
 };
@@ -151,19 +151,30 @@ export async function cashInReconByChannel(from: string, to: string): Promise<Ca
   // residual is the true ~2% gateway fee rather than a window-boundary tail.
   // Pull a week past `to` to catch the last days' T+2 settlements.
   const rmSettleEnd = new Date(end.getTime() + 7 * 86_400_000);
-  const rmCredits = await prisma.$queryRaw<{ suffix: string; description: string; rm: number }[]>(Prisma.sql`
-    SELECT substring(s."accountName" from '\\((\\d{4})\\)') AS suffix, l.description, l.amount::float AS rm
+  // iPay88 (replacing RM) credits ride the same "online" row. Their bank
+  // wording carries no sales date we know of yet, so they bucket by the day
+  // they landed (like undated card lines) — revisit once the first iPay88
+  // payouts show what the description holds.
+  const rmCredits = await prisma.$queryRaw<{ suffix: string; description: string; rm: number; category: string; txnDate: Date }[]>(Prisma.sql`
+    SELECT substring(s."accountName" from '\\((\\d{4})\\)') AS suffix, l.description, l.amount::float AS rm,
+           l.category::text AS category, l."txnDate"
     FROM "BankStatementLine" l
     JOIN "BankStatement" s ON s.id = l."statementId"
-    WHERE l.direction='CR' AND l."isInterCo"=false AND l.category::text='REVENUE_MONSTER'
+    WHERE l.direction='CR' AND l."isInterCo"=false AND l.category::text IN ('REVENUE_MONSTER','IPAY88')
       AND l."txnDate" >= ${start} AND l."txnDate" <= ${rmSettleEnd}
   `);
   const SUFFIX_COMPANY: Record<string, string> = Object.fromEntries(Object.entries(ACCOUNT_SUFFIX).map(([c, s]) => [s, c]));
+  const landedDay = (d: Date) => new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
   const onlineBankedBy: Record<string, number> = {};
   for (const cr of rmCredits) {
-    const m = cr.description.match(/^(\d{2})(\d{2})(\d{2})\s+SETTLEMENT/);
-    if (!m) continue;
-    const salesDate = `20${m[3]}-${m[2]}-${m[1]}`; // DDMMYY → YYYY-MM-DD
+    let salesDate: string;
+    if (cr.category === "IPAY88") {
+      salesDate = landedDay(cr.txnDate);
+    } else {
+      const m = cr.description.match(/^(\d{2})(\d{2})(\d{2})\s+SETTLEMENT/);
+      if (!m) continue;
+      salesDate = `20${m[3]}-${m[2]}-${m[1]}`; // DDMMYY → YYYY-MM-DD
+    }
     if (salesDate < from || salesDate > to) continue;
     const company = SUFFIX_COMPANY[cr.suffix ?? ""];
     if (!company) continue;

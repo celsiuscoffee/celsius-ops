@@ -4,6 +4,7 @@ import {
   buildPaymentRequest,
   classifyRequery,
   formatAmount,
+  isIpay88Ready,
   merchantByCode,
   merchantForStore,
   parseAmountSen,
@@ -112,15 +113,26 @@ describe("merchants", () => {
 });
 
 describe("payment request", () => {
-  it("maps methods to PaymentIds, with env overrides and a blank for unknown methods", () => {
-    expect(paymentIdFor("card")).toBe("2");
+  it("maps methods to PaymentIds from env only — no guessed defaults", () => {
+    expect(paymentIdFor("card")).toBe("");
     expect(paymentIdFor("apple_pay")).toBe("");
     process.env.IPAY88_PAYMENT_IDS = JSON.stringify({ apple_pay: 999, card: "55" });
     expect(paymentIdFor("apple_pay")).toBe("999");
     expect(paymentIdFor("card")).toBe("55");
   });
 
+  it("is ready only with both a PaymentId and a merchant account", () => {
+    process.env.IPAY88_PAYMENT_IDS = JSON.stringify({ apple_pay: "999" });
+    expect(isIpay88Ready("apple_pay")).toBe(false); // no merchant yet
+    process.env.IPAY88_MERCHANTS = JSON.stringify({ tamarind: { code: "TAM", key: "k" } });
+    expect(isIpay88Ready("apple_pay")).toBe(true);
+    expect(isIpay88Ready("apple_pay", "tamarind")).toBe(true);
+    expect(isIpay88Ready("apple_pay", "conezion")).toBe(false); // outlet has no account
+    expect(isIpay88Ready("card", "tamarind")).toBe(false); // method has no PaymentId
+  });
+
   it("builds a signed request", () => {
+    process.env.IPAY88_PAYMENT_IDS = JSON.stringify({ card: "2" });
     const req = buildPaymentRequest({
       merchant: M,
       refNo: "C-AB12CD",

@@ -17,7 +17,7 @@ import { getUnifiedSalesForOutlet } from "@/app/api/sales/_lib/unified-sales";
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
-const SALES_INFLOW = ["CARD", "QR", "STOREHUB", "GRAB", "GRAB_PUTRAJAYA", "FOODPANDA", "MEETINGS_EVENTS", "GASTROHUB", "REVENUE_MONSTER"] as const;
+const SALES_INFLOW = ["CARD", "QR", "STOREHUB", "GRAB", "GRAB_PUTRAJAYA", "FOODPANDA", "MEETINGS_EVENTS", "GASTROHUB", "REVENUE_MONSTER", "IPAY88"] as const;
 
 export type CashInRecon = {
   from: string; to: string;
@@ -71,7 +71,7 @@ export async function cashInRecon(opts: { sinceDays?: number } = {}): Promise<Ca
   const salesGross = round2(sales.instore + sales.online + sales.grab + sales.foodpanda);
   const salesByChannel = [
     { channel: "In-store (card/QR/cash)", amount: round2(sales.instore) },
-    { channel: "Online (Revenue Monster)", amount: round2(sales.online) },
+    { channel: "Online (Revenue Monster / iPay88)", amount: round2(sales.online) },
     { channel: "GrabFood", amount: round2(sales.grab) },
     { channel: "FoodPanda", amount: round2(sales.foodpanda) },
   ].filter((c) => c.amount > 0);

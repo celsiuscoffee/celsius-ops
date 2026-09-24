@@ -13,7 +13,7 @@ import {
 import type { OrderRow } from "@/lib/supabase/types";
 import { methodSets, type GatewayMethod } from "@/lib/payments/gateway-methods";
 import { ipay88CheckoutId } from "@/lib/payments/checkout-query";
-import { merchantForStore } from "@/lib/ipay88/client";
+import { isIpay88Ready } from "@/lib/ipay88/client";
 import { getOutletSst } from "@/lib/outlet-sst";
 import { fetchValidTableLabels } from "@/lib/table-layout";
 import { resolveOrderReward } from "@celsius/shared";
@@ -654,9 +654,9 @@ export async function POST(request: NextRequest) {
     // back signed to /api/payments/ipay88/callback/web and .../webhook.
     if (IPAY88_METHODS.has(paymentMethod)) {
       const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL ?? "https://order.celsiuscoffee.com").trim();
-      if (!merchantForStore(order.store_id)) {
+      if (!isIpay88Ready(paymentMethod, order.store_id)) {
         await supabase.from("orders").update({ status: "failed" } as Record<string, unknown>).eq("id", order.id);
-        return NextResponse.json({ error: "iPay88 not configured" }, { status: 500 });
+        return NextResponse.json({ error: "This payment method isn't available right now" }, { status: 503 });
       }
       await supabase
         .from("orders")
