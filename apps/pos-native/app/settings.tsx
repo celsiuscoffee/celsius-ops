@@ -8,6 +8,7 @@ import {
 } from "lucide-react-native";
 import { loadEcrConfig, saveEcrConfig, testEcrConnection, type EcrConfig } from "@/lib/maybank-ecr";
 import { probeTerminal, saveProbeReport, DEFAULT_TERMINAL_HOST, DEFAULT_TERMINAL_PORT, type ProbeStep } from "@/lib/terminal-probe";
+import { loadGhlConfig, saveGhlConfig, type GhlConfig, type GhlTransport } from "@/lib/ghl-terminal";
 import { usePos } from "@/lib/store";
 import { useSettings } from "@/lib/settings";
 import { useGridPrefs, ALL_COLS_MIN, ALL_COLS_MAX, ALL_IMG_MIN, ALL_IMG_MAX, ALL_IMG_STEP } from "@/lib/grid-prefs";
@@ -54,6 +55,17 @@ export default function SettingsScreen() {
       return next;
     });
   };
+  // ── GHL / ADAPTIS card terminal — the live one at Putrajaya & Shah Alam ──
+  const [ghl, setGhl] = useState<GhlConfig | null>(null);
+  useEffect(() => { loadGhlConfig().then(setGhl); }, []);
+  const patchGhl = (p: Partial<GhlConfig>) => {
+    setGhl((prev) => {
+      const next = { ...(prev ?? { enabled: false, host: "", port: 33898, transport: "auto" as GhlTransport }), ...p };
+      void saveGhlConfig(next);
+      return next;
+    });
+  };
+
   // ── GHL/ADAPTIS terminal probe ──
   // The till is on the outlet LAN that the terminal sits on; no dev machine
   // is. So the diagnostic runs here and files its result to Supabase to be
@@ -509,6 +521,48 @@ export default function SettingsScreen() {
               <Row label="SST No." value={settings.einvoice_sst_no || "—"} />
             </Card>
           )}
+
+          {/* ── GHL / ADAPTIS card terminal ──
+              Enabling this makes the checkout's Card button drive the REAL
+              terminal instead of the rehearsal stub. Until the vendor's result
+              codes are known the till cannot read an approval off the wire, so
+              the cashier confirms from the terminal screen — which is safe,
+              because an unreadable reply is reported as "check the terminal",
+              never as a decline. */}
+          <Card title="GHL Terminal (card)" Icon={CreditCard}>
+            {ghl && (
+              <>
+                <ToggleRow
+                  label="Use GHL terminal for card"
+                  hint={ghl.enabled
+                    ? "Card charges go to the ADAPTIS terminal"
+                    : "OFF — card flow is a labelled simulation"}
+                  value={ghl.enabled}
+                  onToggle={() => { Haptics.selectionAsync(); patchGhl({ enabled: !ghl.enabled }); }}
+                />
+                <InputRow label="Terminal IP" value={ghl.host} placeholder={DEFAULT_TERMINAL_HOST}
+                  keyboardType="numbers-and-punctuation" onChange={(v) => patchGhl({ host: v.trim() })} />
+                <InputRow label="Port" value={ghl.port ? String(ghl.port) : ""} placeholder="33898"
+                  keyboardType="number-pad" onChange={(v) => patchGhl({ port: parseInt(v, 10) || 0 })} />
+                <View className="flex-row items-center justify-between py-2">
+                  <Text className="text-cream/70 text-sm" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Transport</Text>
+                  <View className="flex-row gap-2">
+                    {(["auto", "http", "tcp"] as GhlTransport[]).map((t) => (
+                      <Pressable key={t} onPress={() => { Haptics.selectionAsync(); patchGhl({ transport: t }); }}
+                        className="px-3 h-9 items-center justify-center rounded-xl active:opacity-70"
+                        style={{ backgroundColor: ghl.transport === t ? BRAND : "rgba(245,243,240,0.06)",
+                                 borderWidth: 1, borderColor: ghl.transport === t ? BRAND : "rgba(245,243,240,0.12)" }}>
+                        <Text className="text-cream text-xs" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>{t.toUpperCase()}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+                <Text className="text-cream/40 text-[11px] mt-1" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
+                  Leave on AUTO unless the diagnostic below shows which one answers.
+                </Text>
+              </>
+            )}
+          </Card>
 
           {/* ── GHL / ADAPTIS terminal diagnostic ──
               Safe: GETs plus a QUERY STATUS for a reference that does not
