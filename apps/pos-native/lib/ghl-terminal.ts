@@ -42,6 +42,14 @@ export type GhlConfig = {
   /** "direct" is the ADAPTIS/PayHereDirect on our counters; "ecr" is the
    *  other build NTT Data ship, which answers status queries differently. */
   flavour: Flavour;
+  /** Test mode: the terminal address points at the ECR simulator rather than
+   *  real hardware, so no money moves. Approvals are still real *replies*, and
+   *  without this flag they are indistinguishable from a genuine charge — they
+   *  would land in the receipts, the Z-report and the payment QA sweep as
+   *  revenue nobody paid. Defaults ON so the mistake fails in the harmless
+   *  direction: a real sale mislabelled as a test is noticed immediately,
+   *  a test sale booked as real is not. */
+  testMode: boolean;
   /** NTT Data's DuitNow product code. QRC returns the QR as a string, which
    *  is what we want; DQR returns an image. A wrong code is not rejected —
    *  the terminal simply sits for ~15s and cancels. */
@@ -53,7 +61,7 @@ export type GhlConfig = {
 };
 
 const DEFAULTS: GhlConfig = {
-  enabled: false, host: "", port: 33898, transport: "http",
+  enabled: false, host: "", port: 33898, transport: "http", testMode: true,
   flavour: "direct", qrProductId: "DUITNOWQRC",
   saleTimeoutMs: 90_000, quickTimeoutMs: 15_000,
   pendingTries: 40, pendingGapMs: 3_000,
@@ -77,7 +85,7 @@ export function newEcrRef(orderNo?: string): string {
 }
 
 export type GhlOutcome =
-  | { status: "approved"; approvalCode: string; rrn: string; maskedPan: string | null; issuer: string | null; entry: string | null; raw: string }
+  | { status: "approved"; approvalCode: string; rrn: string; maskedPan: string | null; issuer: string | null; entry: string | null; raw: string; simulated?: boolean }
   | { status: "declined"; reason: string; raw: string }
   /** The verdict could not be established. NEVER treat as unpaid — the guest
    *  may have been charged. Send staff to the terminal; never auto-retry. */
@@ -118,9 +126,10 @@ async function talk(cfg: GhlConfig, frame: number[], readTimeoutMs: number): Pro
   return decode(fromHex(body));
 }
 
-function approvedFrom(m: Message, raw: string): GhlOutcome {
+function approvedFrom(m: Message, raw: string, simulated = false): GhlOutcome {
   return {
     status: "approved",
+    simulated,
     approvalCode: m.text("approvalCode")?.trim() || "",
     rrn: m.text("rrn")?.trim() || "",
     maskedPan: m.text("maskedPan")?.trim() || null,
@@ -157,7 +166,7 @@ async function pollPending(cfg: GhlConfig, ringgit: number, ref: string, say: (s
       continue; // a check that did not get through says nothing either way
     }
     const what = readStatus(cfg, m);
-    if (what === "approved") return approvedFrom(m, "");
+    if (what === "approved") return approvedFrom(m, "", cfg.testMode);
     if (what === "declined") {
       return { status: "declined", reason: m.text("originalMessage")?.trim() || statusText(m.status), raw: "" };
     }
@@ -174,7 +183,7 @@ async function resolveLost(cfg: GhlConfig, ringgit: number, ref: string, why: st
     try {
       const m = await talk(cfg, queryRequest(ringgit, ref, cfg.flavour), cfg.quickTimeoutMs);
       const what = readStatus(cfg, m);
-      if (what === "approved") return approvedFrom(m, "");
+      if (what === "approved") return approvedFrom(m, "", cfg.testMode);
       if (what === "gone") return { status: "declined", reason: "Nothing was charged", raw: "" };
       if (what === "declined") return { status: "declined", reason: statusText(m.status), raw: "" };
     } catch {
@@ -189,7 +198,7 @@ async function resolveLost(cfg: GhlConfig, ringgit: number, ref: string, why: st
 }
 
 async function settleOutcome(cfg: GhlConfig, m: Message, ringgit: number, ref: string, say: (s: string) => void): Promise<GhlOutcome> {
-  if (m.status === STATUS.ok) return approvedFrom(m, "");
+  if (m.status === STATUS.ok) return approvedFrom(m, "", cfg.testMode);
   if (m.status === STATUS.pending) { say("Waiting for the guest to pay"); return pollPending(cfg, ringgit, ref, say); }
   if (m.status === STATUS.cancelled || m.status === STATUS.deviceTimeout) {
     return { status: "declined", reason: statusText(m.status), raw: "" };

@@ -541,6 +541,14 @@ export default function SettingsScreen() {
                   value={ghl.enabled}
                   onToggle={() => { Haptics.selectionAsync(); patchGhl({ enabled: !ghl.enabled }); }}
                 />
+                <ToggleRow
+                  label="Test mode (no real money)"
+                  hint={ghl.testMode
+                    ? "Approvals are labelled SIMULATION — use for the simulator"
+                    : "LIVE — approvals are treated as real charges"}
+                  value={ghl.testMode}
+                  onToggle={() => { Haptics.selectionAsync(); patchGhl({ testMode: !ghl.testMode }); }}
+                />
                 <InputRow label="Terminal IP" value={ghl.host} placeholder={DEFAULT_TERMINAL_HOST}
                   keyboardType="numbers-and-punctuation" onChange={(v) => patchGhl({ host: v.trim() })} />
                 <InputRow label="Port" value={ghl.port ? String(ghl.port) : ""} placeholder="33898"

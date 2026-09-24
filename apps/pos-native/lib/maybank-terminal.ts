@@ -81,6 +81,9 @@ function fromGhl(o: GhlOutcome & { ecrRef: string }): MaybankTerminalResult {
         maskedPan: o.maskedPan ?? (o.entry === "DUITNOWQR" ? "DuitNow QR" : ""),
         txnRef: o.rrn || o.ecrRef,
         entry: o.entry ?? undefined,
+        // A simulator reply is a real reply; only this flag distinguishes it
+        // from money actually moving, so it must reach the cashier's screen.
+        simulated: o.simulated,
       };
     case "declined":
       return { status: "declined", reason: o.reason };
