@@ -91,9 +91,30 @@ jobs:
         with:
           packages: "platform-tools"
 
+      # `|| true` used to swallow failures here, which is how a half-downloaded
+      # NDK reached gradle: the directory exists but has no source.properties,
+      # and the build dies much later with the unhelpful CXX1101. Clear a
+      # partial install, then verify rather than assume.
       - name: Pre-install SDK packages (match the local build)
         run: |
-          yes | sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006" "cmake;3.22.1" >/dev/null || true
+          set -euo pipefail
+          NDK_VER=27.1.12297006
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          NDK_DIR="$SDK/ndk/$NDK_VER"
+          if [ -d "$NDK_DIR" ] && [ ! -f "$NDK_DIR/source.properties" ]; then
+            echo "::warning::partial NDK at $NDK_DIR — removing so it reinstalls cleanly"
+            rm -rf "$NDK_DIR"
+          fi
+          for attempt in 1 2; do
+            yes | sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;$NDK_VER" "cmake;3.22.1" >/dev/null && break
+            echo "::warning::sdkmanager attempt $attempt failed; retrying"
+            rm -rf "$NDK_DIR"
+          done
+          if [ ! -f "$NDK_DIR/source.properties" ]; then
+            echo "::error::NDK $NDK_VER is incomplete at $NDK_DIR — gradle would fail with CXX1101"
+            exit 1
+          fi
+          echo "NDK ok: $(grep -m1 Pkg.Revision "$NDK_DIR/source.properties")"
 
       - name: Install JS dependencies
         run: npm ci
