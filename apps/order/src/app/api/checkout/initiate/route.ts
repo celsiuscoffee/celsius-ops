@@ -11,7 +11,9 @@ import {
   type CartLine,
 } from "@/lib/loyalty/promotions";
 import type { OrderRow } from "@/lib/supabase/types";
-import { defaultMethodSets } from "@/lib/payments/gateway-methods";
+import { methodSets, type GatewayMethod } from "@/lib/payments/gateway-methods";
+import { ipay88CheckoutId } from "@/lib/payments/checkout-query";
+import { merchantForStore } from "@/lib/ipay88/client";
 import { getOutletSst } from "@/lib/outlet-sst";
 import { fetchValidTableLabels } from "@/lib/table-layout";
 import { resolveOrderReward } from "@celsius/shared";
@@ -160,21 +162,11 @@ export async function POST(request: NextRequest) {
       .from("payment_gateway_config")
       .select("method_id, enabled, provider");
 
-    let STRIPE_METHODS: Set<string>;
-    let RM_METHODS:     Set<string>;
-
-    if (pgRows && pgRows.length > 0) {
-      STRIPE_METHODS = new Set(
-        pgRows.filter((r) => r.enabled && r.provider === "stripe").map((r) => r.method_id as string)
-      );
-      RM_METHODS = new Set(
-        pgRows.filter((r) => r.enabled && r.provider === "revenue_monster").map((r) => r.method_id as string)
-      );
-    } else {
-      const defaults = defaultMethodSets();
-      STRIPE_METHODS = defaults.stripe;
-      RM_METHODS     = defaults.rm;
-    }
+    const {
+      stripe: STRIPE_METHODS,
+      rm: RM_METHODS,
+      ipay88: IPAY88_METHODS,
+    } = methodSets(pgRows as GatewayMethod[] | null);
 
     // Per-method routing is now authoritative: whatever provider the
     // backoffice picked for each method_id is what we use. The earlier
@@ -183,7 +175,7 @@ export async function POST(request: NextRequest) {
     // wallets, FPX, and GrabPay — they always went to Stripe regardless.
     // Keep no provider override; trust the DB.
 
-    if (!STRIPE_METHODS.has(paymentMethod) && !RM_METHODS.has(paymentMethod)) {
+    if (!STRIPE_METHODS.has(paymentMethod) && !RM_METHODS.has(paymentMethod) && !IPAY88_METHODS.has(paymentMethod)) {
       return NextResponse.json({ error: "Payment method not available" }, { status: 400 });
     }
 
@@ -451,9 +443,13 @@ export async function POST(request: NextRequest) {
     const pointsToEarn         = Math.round(basePoints * tierMul);
 
     // ── Create order ───────────────────────────────────────────────────────
-    const storedPaymentMethod = (paymentMethod === "apple_pay" || paymentMethod === "google_pay")
-      ? "wallet"
-      : paymentMethod;
+    // Stripe wallet payments are stored as "wallet" (Stripe.js picks the
+    // wallet on the client); iPay88 keeps the real method so retries and the
+    // PaymentId mapping know which option to open.
+    const storedPaymentMethod =
+      (paymentMethod === "apple_pay" || paymentMethod === "google_pay") && !IPAY88_METHODS.has(paymentMethod)
+        ? "wallet"
+        : paymentMethod;
 
     const { data, error: orderError } = await supabase
       .from("orders")
@@ -648,6 +644,31 @@ export async function POST(request: NextRequest) {
         orderNumber:  order.order_number,
         totalSen,
         clientSecret: intentData.client_secret,
+      });
+    }
+
+    // ── iPay88 (any method routed to it in /pickup/settings) ───────────────
+    // Mark the order as iPay88-routed (payment_checkout_id = "ipay88:<RefNo>",
+    // RefNo = order_number) and send the browser to our hand-off page, which
+    // auto-posts the signed request to iPay88's hosted page. The result comes
+    // back signed to /api/payments/ipay88/callback/web and .../webhook.
+    if (IPAY88_METHODS.has(paymentMethod)) {
+      const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL ?? "https://order.celsiuscoffee.com").trim();
+      if (!merchantForStore(order.store_id)) {
+        await supabase.from("orders").update({ status: "failed" } as Record<string, unknown>).eq("id", order.id);
+        return NextResponse.json({ error: "iPay88 not configured" }, { status: 500 });
+      }
+      await supabase
+        .from("orders")
+        .update({ payment_checkout_id: ipay88CheckoutId(order.order_number) } as Record<string, unknown>)
+        .eq("id", order.id);
+      const qs = new URLSearchParams({ orderId: order.id, method: paymentMethod, return: "web" });
+      return NextResponse.json({
+        orderId:     order.id,
+        orderNumber: order.order_number,
+        totalSen,
+        paymentType: "redirect",
+        paymentUrl:  `${baseUrl}/api/payments/ipay88/pay?${qs.toString()}`,
       });
     }
 

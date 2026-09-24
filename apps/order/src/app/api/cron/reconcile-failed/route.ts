@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { checkCronAuth } from "@celsius/shared";
-import { queryCheckoutStatus } from "@/lib/revenue-monster/client";
+import { queryOrderCheckout } from "@/lib/payments/checkout-query";
 import { markRmOrderPaid } from "@/lib/revenue-monster/order-status";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
 
@@ -57,7 +57,7 @@ type PaidButFailed = {
   storeId: string;
   totalSen: number;
   method: string | null;
-  gateway: "revenue_monster" | "stripe";
+  gateway: "revenue_monster" | "ipay88" | "stripe";
   transactionId: string | null;
   failureReason: string | null;
   createdAt: string;
@@ -101,10 +101,14 @@ export async function GET(request: NextRequest) {
   const errors: string[] = [];
 
   async function audit(order: FailedOrder): Promise<void> {
-    // RM-routed: the checkout id is the authoritative handle. Orders
+    // Hosted-checkout (RM / iPay88): the checkout id is the authoritative handle. Orders
     // that never reached a checkout can't have taken money.
     if (order.payment_checkout_id) {
-      const rm = await queryCheckoutStatus(order.payment_checkout_id);
+      const rm = await queryOrderCheckout({
+        payment_checkout_id: order.payment_checkout_id,
+        store_id: order.store_id,
+        total: order.total,
+      });
       checked += 1;
       if (rm.status !== "SUCCESS") return;
       let applied = false;
@@ -117,7 +121,7 @@ export async function GET(request: NextRequest) {
         storeId: order.store_id,
         totalSen: order.total,
         method: order.payment_method,
-        gateway: "revenue_monster",
+        gateway: rm.gateway,
         transactionId: rm.transactionId,
         failureReason: order.payment_failure_reason,
         createdAt: order.created_at,
@@ -126,7 +130,7 @@ export async function GET(request: NextRequest) {
       return;
     }
 
-    // No RM checkout — check Stripe by the intent's orderId metadata.
+    // No hosted checkout — check Stripe by the intent's orderId metadata.
     // Covers the declined-then-retried-successfully intent case.
     if (!stripe) { deferred += 1; return; }
     const search = await stripe.paymentIntents.search({
