@@ -81,10 +81,14 @@ describe("fetchAllRows", () => {
     expect(t.calls()).toBe(2);
   });
 
-  it("returns what it has if a page errors, rather than throwing mid-payroll", async () => {
+  it("throws if a page errors, rather than returning a plausible partial month", async () => {
+    // Security review 2026-09-25 H14 reversed the earlier "return what it has"
+    // choice: two good pages then a failed third looked like a complete
+    // 2,000-row month to the payroll calculator, and the run confirmed
+    // normally with the last shifts unpaid. A thrown error fails the compute
+    // loudly; the operator re-runs it.
     const t = table(5000, { errorAt: 3 });
-    const rows = await fetchAllRows(t.build);
-    expect(rows.length).toBe(2000); // two good pages, then it stopped
+    await expect(fetchAllRows(t.build)).rejects.toThrow(/page starting at row 2000.*boom/);
   });
 
   it("bails at 100k so a dropped filter cannot page forever inside a payroll run", async () => {
