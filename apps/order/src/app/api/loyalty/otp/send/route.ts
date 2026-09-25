@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendOTP } from "@/lib/otp";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { normalizePhone } from "@celsius/shared/src/otp";
 
 // Match every common stored shape — "+60123456789", "60123456789", "0123456789",
 // "123456789", etc. — so the existing-member lookup doesn't miss a customer
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
     if (!phone) return NextResponse.json({ success: false, error: "Phone required" }, { status: 400 });
 
     // Rate-limit by phone (the loyalty endpoint used to enforce this).
-    const rate = await checkRateLimit(phone, RATE_LIMITS.OTP_SEND);
+    const rate = await checkRateLimit(normalizePhone(phone), RATE_LIMITS.OTP_SEND);
     if (!rate.allowed) {
       return NextResponse.json(
         { success: false, error: `Too many OTP requests. Try again in ${Math.ceil((rate.retryAfter || 300) / 60)} minutes.` },

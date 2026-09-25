@@ -19,6 +19,12 @@ import { requireCustomerSession } from "@/lib/customer-jwt";
 import { attributeOrderToCampaign } from "@/lib/push/attribution";
 import { attributeOrderToPoster } from "@/lib/poster/attribution";
 import { getOutletSst } from "@/lib/outlet-sst";
+import {
+  bindLoyaltyToSession,
+  insertOrderWithRetry,
+  modifierPriceMap,
+  serverModifierDeltaSen,
+} from "@/lib/checkout/guards";
 
 function normalisePhoneForLookup(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -57,10 +63,6 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
-}
-
-function generateOrderNumber(): string {
-  return `C-${String(Math.floor(Math.random() * 9999)).padStart(4, "0")}`;
 }
 
 // Catalog reward resolution + validation + discount now live in
@@ -102,8 +104,8 @@ export async function POST(request: NextRequest) {
       rewardId: rewardIdInput,
       rewardName: rewardNameInput,
       walletVoucherId: walletVoucherIdInput,
-      loyaltyPhone,
-      loyaltyId,
+      loyaltyPhone: loyaltyPhoneInput,
+      loyaltyId: loyaltyIdInput,
       clientSupportsSkipPayment,
       pickupAt: pickupAtInput,
       orderType: orderTypeInput,
@@ -159,6 +161,18 @@ export async function POST(request: NextRequest) {
     if (!items?.length || !selectedStore || !paymentMethod) {
       return NextResponse.json({ error: "Invalid order data" }, { status: 400 });
     }
+
+    // Loyalty fields are bound to the customer session: a guest order carries
+    // none; an order with any of them must prove the member is the caller.
+    const bound = await bindLoyaltyToSession(request, getSupabaseAdmin(), {
+      loyaltyId: loyaltyIdInput,
+      loyaltyPhone: loyaltyPhoneInput,
+      rewardId: rewardIdInput,
+      walletVoucherId: walletVoucherIdInput,
+    });
+    if (!bound.ok) return bound.response;
+    const loyaltyId = bound.loyaltyId;
+    const loyaltyPhone = bound.loyaltyPhone;
 
     // pickup_at sanity: must be in the future (clock skew tolerance:
     // -2 min), within 7 days, and fall inside this outlet's opening
@@ -319,12 +333,7 @@ export async function POST(request: NextRequest) {
     const outletSst    = await getOutletSst(supabase, storeId);
     const sstRate      = outletSst.enabled ? outletSst.rate : 0;
 
-    if (minOrderRm > 0 && total < minOrderRm) {
-      return NextResponse.json(
-        { error: `Minimum order is RM${minOrderRm.toFixed(2)}` },
-        { status: 400 }
-      );
-    }
+    void total; // client figure — the minimum-order check uses the server total below
 
     // Server-side voucher validation: check active, not expired, not over
     // max_uses. LEGACY `vouchers` table only — a wallet voucher
@@ -354,8 +363,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const orderNumber        = generateOrderNumber();
-
     // ── Server-authoritative subtotal ───────────────────────────────────────
     // SECURITY: never trust the client `total` for the charged amount. Look up
     // each product's real price from the DB and recompute base × qty, adding
@@ -375,13 +382,18 @@ export async function POST(request: NextRequest) {
       .filter(Boolean) as string[];
     const { data: pricedProducts, error: pricedErr } = await supabase
       .from("products")
-      .select("id, price")
+      .select("id, price, modifiers")
       .in("id", pricingIds);
     if (pricedErr || !pricedProducts || pricedProducts.length === 0) {
       return NextResponse.json({ error: "Failed to verify product prices" }, { status: 400 });
     }
     const pricedMap = new Map(
       (pricedProducts as Array<{ id: string; price: number }>).map((p) => [p.id, p.price]),
+    );
+    // Modifier upcharges are priced from the product row too — the client's
+    // priceDelta is never trusted for an option the product defines.
+    const modMap = new Map(
+      (pricedProducts as Array<{ id: string; modifiers?: unknown }>).map((p) => [p.id, modifierPriceMap(p.modifiers)]),
     );
     let serverSubtotalSen = 0;
     for (const it of pricingItems) {
@@ -390,12 +402,7 @@ export async function POST(request: NextRequest) {
       if (dbPrice == null) {
         return NextResponse.json({ error: `Product ${pid} not found` }, { status: 400 });
       }
-      const mods = Array.isArray(it.modifiers)
-        ? (it.modifiers as Array<{ priceDelta?: number }>)
-        : (((it.modifiers as { selections?: Array<{ priceDelta?: number }> } | null)?.selections) ?? []);
-      const modifierDeltaSen = mods.reduce(
-        (sum, m) => sum + Math.max(0, Math.round((m.priceDelta ?? 0) * 100)), 0,
-      );
+      const modifierDeltaSen = serverModifierDeltaSen(modMap.get(pid) ?? new Map(), it.modifiers);
       const unitPriceSen = Math.round(dbPrice * 100) + modifierDeltaSen;
       serverSubtotalSen += unitPriceSen * it.quantity;
     }
@@ -582,6 +589,12 @@ export async function POST(request: NextRequest) {
 
     const totalDiscountSen   = voucherDiscountSen + rewardDiscountSenAmt + fodDiscountSen + promoDiscountSen;
     const afterDiscount      = Math.max(0, subtotalSen - totalDiscountSen);
+    if (minOrderRm > 0 && afterDiscount / 100 < minOrderRm) {
+      return NextResponse.json(
+        { error: `Minimum order is RM${minOrderRm.toFixed(2)}` },
+        { status: 400 },
+      );
+    }
     // Server-authoritative SST. Ignores the client-supplied `sst` —
     // the backoffice toggle in app_settings.sst.enabled is the only
     // source of truth. When disabled, sstRate = 0 so sstSen = 0.
@@ -613,10 +626,7 @@ export async function POST(request: NextRequest) {
     const tierMul      = loyaltyId ? await getTierMultiplier(loyaltyId) : 1;
     const pointsToEarn = Math.round(basePoints * tierMul);
 
-    const { data, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        order_number:           orderNumber,
+    const { data, error: orderError } = await insertOrderWithRetry(supabase, {
         store_id:               selectedStore.id,
         status:                 "pending",
         payment_method:         paymentMethod,
@@ -645,9 +655,7 @@ export async function POST(request: NextRequest) {
         order_type:             orderType,
         table_number:           tableNumber,
         source:                 orderSource,    // origin attribution (app vs web)
-      } as Record<string, unknown>)
-      .select()
-      .single();
+      } as Record<string, unknown>);
 
     if (orderError || !data) {
       console.error("Order insert error:", orderError);

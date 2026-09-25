@@ -67,9 +67,15 @@ async function resolveCatalogReward(args: {
 }): Promise<ResolvedOrderReward> {
   const { supabase, rewardId, items, subtotalSen, memberId } = args;
 
+  // A catalog reward is always a member's reward: it either burns points or
+  // is an auto-issued entitlement. Without a member there is nothing to
+  // check against, and the post-payment deduct only runs `if (loyalty_id)`,
+  // so a memberless request used to get the discount for free.
+  if (!memberId) return { ok: false, error: "Sign in to redeem rewards" };
+
   const { data: reward } = await supabase
     .from("voucher_templates")
-    .select("id, is_active, valid_from, valid_until, stock, points_cost, " + DISCOUNT_SPEC_COLUMNS)
+    .select("id, is_active, valid_from, valid_until, stock, points_cost, auto_issue, " + DISCOUNT_SPEC_COLUMNS)
     .eq("legacy_reward_id", rewardId)
     .maybeSingle<
       {
@@ -79,6 +85,7 @@ async function resolveCatalogReward(args: {
         valid_until: string | null;
         stock: number | null;
         points_cost: number | null;
+        auto_issue: boolean | null;
       } & DiscountSpecRow
     >();
 
@@ -102,31 +109,39 @@ async function resolveCatalogReward(args: {
     };
   }
 
+  // Does the member hold this reward as an active wallet voucher? Auto-issued
+  // vouchers (Welcome BOGO, birthday, post-purchase) don't deduct points and
+  // are ONLY redeemable through such a voucher — mirrors the gate in
+  // deductLoyaltyPoints, which until now ran after the discounted payment
+  // had already been taken and could only log "RECONCILE MANUALLY".
+  const nowIso = new Date().toISOString();
+  const { data: voucher } = await supabase
+    .from("issued_rewards")
+    .select("id")
+    .eq("member_id", memberId)
+    .eq("reward_id", rewardId) // issued_rewards.reward_id holds the legacy text id
+    .eq("status", "active")
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
+    .limit(1)
+    .maybeSingle();
+  if (reward.auto_issue && !voucher) {
+    return { ok: false, error: "This reward needs a voucher in your wallet" };
+  }
+
   // Pre-check the points balance for catalog rewards so the customer
   // doesn't pay a discounted amount only for post-payment deduct to find
-  // a shortfall. Skip when the member already holds an active issued_reward
-  // for this reward (auto-issued vouchers don't deduct points).
+  // a shortfall. Skipped when the member holds a voucher for it.
   const pointsCost = reward.points_cost ?? 0;
-  if (pointsCost > 0 && memberId) {
-    const { data: voucher } = await supabase
-      .from("issued_rewards")
-      .select("id")
+  if (pointsCost > 0 && !voucher) {
+    const { data: mb } = await supabase
+      .from("member_brands")
+      .select("points_balance")
       .eq("member_id", memberId)
-      .eq("reward_id", rewardId) // issued_rewards.reward_id holds the legacy text id
-      .eq("status", "active")
-      .limit(1)
-      .maybeSingle();
-    if (!voucher) {
-      const { data: mb } = await supabase
-        .from("member_brands")
-        .select("points_balance")
-        .eq("member_id", memberId)
-        .eq("brand_id", args.brandId)
-        .single<{ points_balance: number }>();
-      const balance = mb?.points_balance ?? 0;
-      if (balance < pointsCost) {
-        return { ok: false, error: `Not enough points (need ${pointsCost}, have ${balance})` };
-      }
+      .eq("brand_id", args.brandId)
+      .single<{ points_balance: number }>();
+    const balance = mb?.points_balance ?? 0;
+    if (balance < pointsCost) {
+      return { ok: false, error: `Not enough points (need ${pointsCost}, have ${balance})` };
     }
   }
 

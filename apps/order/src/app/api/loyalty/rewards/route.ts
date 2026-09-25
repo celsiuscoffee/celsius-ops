@@ -15,6 +15,8 @@
 // concerns again.
 
 import { NextRequest, NextResponse } from "next/server";
+import { readCustomerSession } from "@/lib/customer-jwt";
+import { phoneDigits } from "@/lib/checkout/guards";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { fetchAffordableCatalogForMember } from "@celsius/shared";
 
@@ -30,7 +32,15 @@ function normalisePhone(phone: string): string {
 }
 
 export async function GET(request: NextRequest) {
-  const phone = request.nextUrl.searchParams.get("phone");
+  // The member lookup (id + points balance) is served only for the caller's
+  // own phone, proven by the customer session. Any other phone — or no
+  // session at all — gets the anonymous catalogue rather than a 401, so an
+  // older app build without a token still renders the rail. Member ids
+  // were enumerable by phone here before.
+  const rawPhone = request.nextUrl.searchParams.get("phone");
+  const session = readCustomerSession(request);
+  const phone =
+    rawPhone && session && phoneDigits(session.phone) === phoneDigits(rawPhone) ? rawPhone : null;
   const supabase = getSupabaseAdmin();
 
   try {
