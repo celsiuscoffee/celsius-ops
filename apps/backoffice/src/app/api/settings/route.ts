@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, hasModulePermission } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 // Backoffice-side wrapper around the shared `app_settings` table.
 // Read endpoint is open to admins; PUT writes back via service role.
@@ -29,6 +30,13 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
+  // app_settings carries payments_enabled / min_app_version / points_per_rm —
+  // OWNER/ADMIN, or a manager granted one of the pages that edit it.
+  const allowed =
+    (await hasModulePermission(auth.user, "pickup:settings", prisma)) ||
+    (await hasModulePermission(auth.user, "loyalty:rewards", prisma)) ||
+    (await hasModulePermission(auth.user, "settings:integrations", prisma));
+  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const { key, value } = await request.json();

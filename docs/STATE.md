@@ -11,6 +11,43 @@ current month.
 
 ## Verified facts
 
+- 2026-09-25 — **Codebase QA + security review (full report in the session
+  scratchpad `qa-report-2026-09-25.md`; ranked C/H/M/L, every item verified at
+  file:line).** Baseline is healthy: 1246/1246 tests, tsc clean, 0 lint errors,
+  no secrets in git, all six webhooks verify signatures, payment settlement is
+  atomic. **Structural fact:** no app's middleware authenticates `/api/*` —
+  every route self-protects, and the only middleware check is an Origin header
+  that `curl` passes. Three auth guards fail OPEN when their env var is unset
+  (`STRICT_CUSTOMER_AUTH`, `STAFF_AUTH_ENFORCE` in order; `POS_AUTH_ENFORCE`
+  in backoffice); Vercel env listing is 403 from a session, so their prod
+  value is UNVERIFIED — owner to check. Live Supabase advisor: 9 tables with
+  RLS disabled (incl. `members_ghost_archive_20260803` PII), 11 SECURITY
+  DEFINER functions executable by anon (incl. `add_loyalty_points` = mint
+  points to any member with the public key, and `create_pos_sale`).
+  **Tier 1 fixes shipped as a separate PR** (branch `claude/security-tier1`):
+  auth on the order app's `PUT /api/settings` (removed; GET allowlisted),
+  bearer/cookie session on the 5 POS control routes (`pos/order-status`,
+  `availability`, `ordering-open`, `grab/store-control`, `grab/order-edit`),
+  rate limits on `pos/auth/pin` + `verify-manager` (the latter now also needs
+  a cashier session), module/role gates on expo-blast, adjust-points,
+  grant-tier, member DELETE, settings PUT, outlets CRUD, and a grants-only
+  migration `20260925_revoke_anon_security_definer_rpc` (in KNOWN_UNAPPLIED
+  until the owner applies it; `create_pos_sale` deliberately excluded because
+  the till calls it with the anon key). **Still open, highest first:** points
+  rewards granted with no member/no points and any `loyaltyId` usable at
+  checkout (`POST /api/orders`, `checkout/initiate` take them from the body
+  with no session; `order-reward.ts:109` skips the balance check when
+  `memberId` is null); modifier `priceDelta` client-controlled; `/api/orders`
+  order numbers are 4 random digits against a UNIQUE index (1,545 used →
+  ~15% of creates fail 500 today); OTP limiter keyed on the raw phone string
+  (bypass by reformatting); manager-override gate on POS discounts is dead
+  code (`"STAFF" === "staff"`, register.tsx:3683); two finance bugs (monthly +
+  annual depreciation both post 6512; backfill cron reverses DRAFT AR
+  journals); customer phone+name sent to Sentry from pickup-native.
+  `git ls-remote origin main` through the session git proxy returned a stale
+  sha (f01ebf4) while GitHub's real main was 90fa0fd — branch from the PR
+  base sha in local objects, not from `origin/main`, when this happens.
+
 - 2026-09-15 — **The confirmed-and-paid August run was deleted; its per-employee
   lines are gone, and the replacement is RM862.45 LOWER.** Timeline from
   `ActivityLog` (all UTC, today): 05:32:02 `payroll.confirm` monthly 8/2026 —
@@ -2802,6 +2839,19 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-25 — **Security Tier 1 PR open on `claude/security-tier1`; iPay88
+  PR #1245 still draft, waiting on merchant keys.** Next: (1) owner applies
+  `supabase/migrations/112_revoke_anon_security_definer_rpc.sql` (grants only;
+  re-runnable) and removes its KNOWN_UNAPPLIED entry; (2) owner confirms the
+  three fail-open env flags in Vercel; (3) Tier 2 = order-app checkout
+  hardening (see the 2026-09-25 verified-facts entry — session on `POST
+  /api/orders` + `checkout/initiate`, reward/points guards, modifier prices
+  from `products.modifiers`, order-number sequence, OTP limiter on the
+  normalised phone); (4) Tier 3 finance (depreciation double-post, backfill
+  draft reversal, `postJournal` stranded drafts, `fetchAllRows` swallowing
+  errors) is owner-gated under hard rule 6; (5) the POS discount-gate fix and
+  Sentry PII scrub ship OTA — use the `ota-release` skill.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the
