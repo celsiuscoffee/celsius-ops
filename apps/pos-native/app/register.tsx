@@ -20,7 +20,7 @@ import { supabase } from "@/lib/supabase";
 import { usePickupPrinter } from "@/lib/use-pickup-printer";
 import { useGrabPrinter } from "@/lib/use-grab-printer";
 import LockScreen from "@/components/lock-screen";
-import { chargeMaybankCard, type MaybankTerminalResult } from "@/lib/maybank-terminal";
+import { chargeCard, type TerminalResult } from "@/lib/terminal";
 import { fetchCategories, fetchProducts, type Product, type ModifierOption } from "@/lib/menu";
 import { useCart, cartSubtotal, type CartLine } from "@/lib/cart";
 import { useDisplay } from "@/lib/display";
@@ -163,13 +163,13 @@ export default function Register() {
   // the rehearsal stub, whose approvals are labelled SIMULATION on screen.
   // "unknown" is deliberately distinct from "declined": when the terminal link
   // fails we do NOT know whether the customer was charged, and telling staff
-  // "declined" invites a re-charge. See lib/maybank-ecr.ts EcrOutcome.
+  // "declined" invites a re-charge. See lib/ghl-terminal.ts GhlOutcome.
   const [cardStage, setCardStage] = useState<"idle" | "prompting" | "approved" | "declined" | "unknown">("idle");
   // The terminal's approval payload — held so the cashier-verification
   // screen can show the approval code + masked PAN before we record the
   // sale. Card payments now require a manual confirm (mirrors QR), so the
   // terminal "approved" result no longer auto-commits.
-  const [cardResult, setCardResult] = useState<Extract<MaybankTerminalResult, { status: "approved" }> | null>(null);
+  const [cardResult, setCardResult] = useState<Extract<TerminalResult, { status: "approved" }> | null>(null);
   // Decline/error detail for the failure card, + the terminal's live state
   // ("CARD_INSERTION", …) streamed into the prompting screen.
   const [cardError, setCardError] = useState<string | null>(null);
@@ -2430,7 +2430,7 @@ export default function Register() {
                     setCardError(null);
                     setCardLive(null);
                     try {
-                      const result = await chargeMaybankCard(total, (s) => setCardLive(s));
+                      const result = await chargeCard(total, (s) => setCardLive(s));
                       if (result.status === "approved") {
                         // Don't auto-commit. Park on a verify screen so the
                         // cashier confirms the approval on the physical
@@ -2532,11 +2532,6 @@ export default function Register() {
                           <Text className="text-cream/55 text-xs" style={{ fontFamily: "SpaceGrotesk_500Medium" }}>
                             Approval {cardResult.approvalCode} · {cardResult.txnRef}
                           </Text>
-                          {cardResult.signatureVerified === false && (
-                            <Text className="text-xs mt-1" style={{ fontFamily: "SpaceGrotesk_600SemiBold", color: "#FBBF24" }}>
-                              ⚠ Reply signature unverified — confirm the approval on the terminal itself
-                            </Text>
-                          )}
                         </View>
                       )}
                     </View>

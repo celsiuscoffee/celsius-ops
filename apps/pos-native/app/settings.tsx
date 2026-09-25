@@ -6,7 +6,6 @@ import Constants from "expo-constants";
 import {
   ChevronLeft, Printer, LayoutGrid, Receipt, FileText, Store, RefreshCw, CheckCircle2, AlertCircle, ExternalLink, Minus, Plus, ShoppingBag, Power, CreditCard,
 } from "lucide-react-native";
-import { loadEcrConfig, saveEcrConfig, testEcrConnection, type EcrConfig } from "@/lib/maybank-ecr";
 import { probeTerminal, saveProbeReport, DEFAULT_TERMINAL_HOST, DEFAULT_TERMINAL_PORT, type ProbeStep } from "@/lib/terminal-probe";
 import { loadGhlConfig, saveGhlConfig, type GhlConfig, type GhlTransport } from "@/lib/ghl-terminal";
 import { usePos } from "@/lib/store";
@@ -43,18 +42,6 @@ export default function SettingsScreen() {
   const [printer, setPrinter] = useState<{ connected: boolean; status?: string; name?: string; paper?: string } | null>(null);
   const [printerBusy, setPrinterBusy] = useState(false);
 
-  // ── Maybank X990 terminal (ECR over TCP) — per-till link config ──
-  const [ecr, setEcr] = useState<EcrConfig | null>(null);
-  const [ecrBusy, setEcrBusy] = useState(false);
-  const [ecrStatus, setEcrStatus] = useState<{ ok: boolean; message: string } | null>(null);
-  useEffect(() => { loadEcrConfig().then(setEcr); }, []);
-  const patchEcr = (p: Partial<EcrConfig>) => {
-    setEcr((prev) => {
-      const next = { ...(prev ?? { enabled: false, host: "", port: 0, salt: "" }), ...p };
-      void saveEcrConfig(next);
-      return next;
-    });
-  };
   // ── GHL / ADAPTIS card terminal — the live one at Putrajaya & Shah Alam ──
   const [ghl, setGhl] = useState<GhlConfig | null>(null);
   useEffect(() => { loadGhlConfig().then(setGhl); }, []);
@@ -100,15 +87,6 @@ export default function SettingsScreen() {
     }
   }
 
-  async function onTestEcr() {
-    if (!ecr) return;
-    Haptics.selectionAsync();
-    setEcrBusy(true);
-    setEcrStatus(null);
-    setEcrStatus(await testEcrConnection(ecr));
-    setEcrBusy(false);
-  }
-
   // Store shift (open/close) — moved here from the register header, which now
   // shows a status-only indicator. Same primitives the register uses, so state
   // stays consistent (the register re-checks the shift when it regains focus).
@@ -150,7 +128,7 @@ export default function SettingsScreen() {
               // End-of-day terminal settlement (Maybank ECR). Best-effort and
               // non-blocking — settlement can also be run on the terminal
               // itself, so a failure must never hold up the store close.
-              import("@/lib/maybank-terminal").then(({ settleTerminal }) =>
+              import("@/lib/terminal").then(({ settleTerminal }) =>
                 settleTerminal().then((r) => {
                   if (!r.ok) console.warn("[ecr] settlement:", r.message);
                 }),
@@ -610,40 +588,6 @@ export default function SettingsScreen() {
             )}
           </Card>
 
-          {/* ── Maybank X990 payment terminal (ECR over TCP) ────────────
-              The terminal is a TCP server on the outlet LAN; IP/port/salt
-              come from the Maybank/ITBF terminal config sheet. While OFF
-              (or unconfigured) the card flow uses the rehearsal stub and
-              labels its approvals SIMULATION. */}
-          <Card title="Maybank Terminal" Icon={CreditCard}>
-            {ecr && (
-              <>
-                <ToggleRow
-                  label="Use terminal for card / DuitNow QR"
-                  hint={ecr.enabled ? "Charges go to the X990 over the LAN" : "OFF — card flow is a labelled simulation"}
-                  value={ecr.enabled}
-                  onToggle={() => { Haptics.selectionAsync(); patchEcr({ enabled: !ecr.enabled }); }}
-                />
-                <InputRow label="Terminal IP" value={ecr.host} placeholder="192.168.0.150"
-                  keyboardType="numbers-and-punctuation" onChange={(v) => patchEcr({ host: v.trim() })} />
-                <InputRow label="Port" value={ecr.port ? String(ecr.port) : ""} placeholder="e.g. 3388"
-                  keyboardType="number-pad" onChange={(v) => patchEcr({ port: parseInt(v, 10) || 0 })} />
-                <InputRow label="Checksum salt" value={ecr.salt} placeholder="from config sheet" secure
-                  onChange={(v) => patchEcr({ salt: v })} />
-                <View className="flex-row gap-3 mt-2">
-                  <Btn label={ecrBusy ? "Testing…" : "Test Connection"} Icon={RefreshCw} onPress={onTestEcr} disabled={ecrBusy || !ecr.host || !ecr.port} primary />
-                </View>
-                {ecrStatus && (
-                  <View className="flex-row items-center gap-2 mt-1">
-                    {ecrStatus.ok ? <CheckCircle2 size={14} color={OK} /> : <AlertCircle size={14} color={WARN} />}
-                    <Text className="text-xs flex-1" style={{ fontFamily: "SpaceGrotesk_500Medium", color: ecrStatus.ok ? OK : WARN }}>
-                      {ecrStatus.message}
-                    </Text>
-                  </View>
-                )}
-              </>
-            )}
-          </Card>
 
           {/* ── Terminal ── */}
           <Card title="Terminal" Icon={Store}>
