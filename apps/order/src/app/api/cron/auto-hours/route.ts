@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     }
 
     const hoursMap = hoursRow.value as OutletHoursMap;
-    const overrideMap =
+    let overrideMap =
       (overrideRow?.value as Record<string, boolean> | undefined) ?? {};
 
     // Current Malaysia time (UTC+8)
@@ -62,15 +62,47 @@ export async function GET(request: NextRequest) {
     const dayNum  = rawDay === 0 ? 7 : rawDay; // 1=Mon … 7=Sun
     const currentMinutes = myDate.getUTCHours() * 60 + myDate.getUTCMinutes();
 
+    // ── Daily override reset ─────────────────────────────────────────────
+    // A manual pause means "closed for the REST OF TODAY", not forever: a
+    // pause set during an outage used to survive until someone remembered
+    // "Resume schedule" (one outlet once sat paused for 11 days, silently
+    // rejecting online orders every morning). Any tick in the pre-open
+    // 05:30–06:30 MYT window wipes the map, so every outlet starts the day
+    // back on schedule control. Idempotent — clearing twice is harmless.
+    const RESET_START_MIN = 5 * 60 + 30, RESET_END_MIN = 6 * 60 + 30;
+    let overridesCleared: string[] = [];
+    if (
+      currentMinutes >= RESET_START_MIN &&
+      currentMinutes < RESET_END_MIN &&
+      Object.keys(overrideMap).length > 0
+    ) {
+      overridesCleared = Object.keys(overrideMap);
+      const { error: clearErr } = await supabase
+        .from("app_settings")
+        .upsert(
+          { key: "outlet_open_override", value: {}, updated_at: nowUtc.toISOString() },
+          { onConflict: "key" },
+        );
+      if (clearErr) {
+        // Couldn't clear → keep honouring the stored overrides this tick and
+        // retry on the next one (still inside the window every 10 min).
+        console.error("[auto-hours] override reset failed:", clearErr);
+        overridesCleared = [];
+      } else {
+        console.warn(`[auto-hours] daily override reset: released ${overridesCleared.join(", ")}`);
+        overrideMap = {};
+      }
+    }
+
     const updated: string[] = [];
     const skipped: string[] = [];
 
     for (const [storeId, hours] of Object.entries(hoursMap)) {
-      // Manual override wins. The backoffice toggle sets this flag
-      // when an admin flips an outlet open/closed mid-schedule, so the
-      // next cron tick doesn't undo their decision. The admin can
-      // clear the override (returning the outlet to schedule control)
-      // by clicking "Resume schedule" in /pickup/settings.
+      // Manual override wins FOR THE REST OF THE DAY. The backoffice / POS
+      // toggle sets this flag when an outlet is flipped open/closed
+      // mid-schedule, so the next cron tick doesn't undo that decision. It
+      // clears via "Resume schedule" in /pickup/settings, re-opening from the
+      // till, or automatically at the daily 05:30–06:30 MYT reset above.
       if (overrideMap[storeId] === true) {
         skipped.push(`${storeId}=override`);
         continue;
@@ -129,7 +161,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ updated, skipped });
+    return NextResponse.json({ updated, skipped, overridesCleared });
   } catch (err) {
     console.error("Auto-hours cron error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
