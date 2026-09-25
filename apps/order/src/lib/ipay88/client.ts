@@ -22,10 +22,12 @@ import { createHmac, timingSafeEqual } from "crypto";
 //
 // Config (all .trim()'d — Vercel's textarea keeps trailing newlines):
 //   IPAY88_MERCHANT_CODE / IPAY88_MERCHANT_KEY  default merchant account
-//   IPAY88_MERCHANTS     JSON { "<orders.store_id>": { "code": "...", "key": "..." } }
+//   IPAY88_MERCHANTS     JSON { "<orders.store_id>": { "key": "...", "code"?: "..." } }
 //                        per-outlet accounts, so each outlet's sales settle into
 //                        its own company's bank account (same reason RM keeps a
-//                        per-outlet store map). Outlets missing here fall back
+//                        per-outlet store map). `code` defaults to the outlet's
+//                        entry in OUTLET_MERCHANT_CODES below, so normally only
+//                        the secret key is set. Outlets missing here fall back
 //                        to the default account.
 //   IPAY88_PAYMENT_URL   hosted page (default: production entry.asp)
 //   IPAY88_REQUERY_URL   requery endpoint (default: production enquiry.asp)
@@ -44,6 +46,17 @@ export const IPAY88_SIGNATURE_TYPE = "HMACSHA512";
 
 /** payment_checkout_id prefix marking an order as iPay88-routed. */
 export const IPAY88_CHECKOUT_PREFIX = "ipay88:";
+
+// Production MerchantCodes per outlet, one per operating company — from
+// NTT DATA (iPay88), email to Ammar, 2026-09-25. The MerchantCode is sent in
+// every request, so it is not secret; the matching MerchantKey is, and lives
+// only in IPAY88_MERCHANTS. Keys are orders.store_id. ADAPTIS Merchant IDs are
+// recorded for the portal/support, not used by the API.
+export const OUTLET_MERCHANT_CODES: Record<string, string> = {
+  "shah-alam": "MM26330009", // CELSIUS COFFEE SDN. BHD.            (Merchant ID 563652522644021256)
+  conezion: "MM26330007",    // CELSIUS COFFEE CONEZION SDN. BHD.   (Merchant ID 563646006876643336)
+  tamarind: "MM26330008",    // CELSIUS COFFEE TAMARIND SDN. BHD.   (Merchant ID 563649369844424712)
+};
 
 export interface Ipay88Merchant {
   code: string;
@@ -69,7 +82,7 @@ function allMerchants(): { byStore: Record<string, Ipay88Merchant>; fallback: Ip
   const byStore: Record<string, Ipay88Merchant> = {};
   const map = parseJsonEnv<Record<string, { code?: string; key?: string }>>("IPAY88_MERCHANTS") ?? {};
   for (const [storeId, m] of Object.entries(map)) {
-    const code = (m?.code ?? "").trim();
+    const code = (m?.code ?? OUTLET_MERCHANT_CODES[storeId] ?? "").trim();
     const key = (m?.key ?? "").trim();
     if (code && key) byStore[storeId] = { code, key };
   }

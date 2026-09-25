@@ -37,6 +37,11 @@ current month.
   (5) Revenue Monster settles per outlet into 3 separate Sdn Bhds — iPay88
   needs the same (`IPAY88_MERCHANTS` per-store JSON), or all sales land in
   one company.
+  (5b) **Production MerchantCodes received 2026-09-25** (NTT DATA email):
+  shah-alam = MM26330009 (Celsius Coffee Sdn Bhd), conezion = MM26330007,
+  tamarind = MM26330008 — built into `OUTLET_MERCHANT_CODES` in
+  `lib/ipay88/client.ts`. The secret MerchantKeys are STILL NOT in hand; they go
+  in Vercel as `IPAY88_MERCHANTS={"shah-alam":{"key":"…"},…}`.
   (6) NTT DATA (iPay88) confirmed by email 2026-09-11 that **every payment
   request must carry a PaymentId** — no iPay88 method picker fallback. So
   PaymentIds are env-only, no defaults, and a method without one is hidden

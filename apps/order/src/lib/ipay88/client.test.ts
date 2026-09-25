@@ -107,6 +107,14 @@ describe("merchants", () => {
     expect(merchantByCode("NOPE")).toBeNull();
   });
 
+  it("uses the outlet's built-in MerchantCode when only the key is set", () => {
+    process.env.IPAY88_MERCHANTS = JSON.stringify({ tamarind: { key: "kT" }, "shah-alam": { key: "kS" } });
+    expect(merchantForStore("tamarind")).toEqual({ code: "MM26330008", key: "kT" });
+    expect(merchantForStore("shah-alam")).toEqual({ code: "MM26330009", key: "kS" });
+    expect(merchantForStore("conezion")).toBeNull(); // no key yet
+    expect(merchantByCode("MM26330008")).toEqual({ code: "MM26330008", key: "kT" });
+  });
+
   it("returns null when nothing is configured", () => {
     expect(merchantForStore("shah-alam")).toBeNull();
   });
