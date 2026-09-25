@@ -95,7 +95,14 @@ export async function postJournal(input: PostJournalInput): Promise<PostJournalR
       .update({ status: "posted" })
       .eq("id", txnId);
     if (postError) {
-      // Trigger may have rejected (unbalanced or closed period). Surface raw error.
+      // Trigger rejected the flip (unbalanced, or closed period). Remove the
+      // draft we just wrote: left behind, it carries the posting_key and every
+      // idempotency guard that keys on it ("already posted", "already
+      // accrued") would read the stranded draft as the real journal — the
+      // day's revenue would then never post, silently. Lines first (FK),
+      // then the header; both are allowed on a draft by the 096 guards.
+      await client.from("fin_journal_lines").delete().eq("transaction_id", txnId);
+      await client.from("fin_transactions").delete().eq("id", txnId);
       throw postError;
     }
   }
