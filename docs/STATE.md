@@ -11,6 +11,27 @@ current month.
 
 ## Verified facts
 
+- 2026-09-25 — **Native security fixes on `claude/security-native`** (fourth
+  PR from the review; Tiers 1–3 are #1246 / #1247 / #1248). JS-only, no
+  version-identity change (`native-runtime-guard` passes against the base;
+  `app.json` / `package.json` untouched in both apps), so it is an OTA under
+  either runtime policy — **merging it deploys to every SUNMI till and every
+  customer phone on next launch** (`ota-release` skill; hard rule 6 for
+  pos-native). What it fixes: (1) `register.tsx` compared the cashier role
+  against lowercase `"staff"` while `/api/pos/auth/pin` returns the Prisma
+  enum (`STAFF`), so the manager-PIN gate on order-level discounts never
+  fired for anyone — now `needsManagerPin()` normalises case and treats
+  MANAGER/ADMIN/OWNER as exempt; (2) the per-line discount sheet had no
+  gate at all — it now asks for the manager PIN when a cashier adds or
+  changes a line discount (clearing one does not prompt); PIN floor raised
+  4→6 to match the owner ruling and Tier 1's server check; (3) a corrupt
+  offline menu cache no longer turns into an unhandled `JSON.parse`
+  rejection; (4) pickup-native `identifyMember` sends only the member id to
+  Sentry — phone and name were going into every error event. Amplitude still
+  receives name/phone/tier (product analytics; left for the owner to decide).
+  Post-merge, per the skill: read the "Publish to in-field legacy runtimes"
+  step in each OTA run, not just the green tick.
+
 - 2026-09-15 — **The confirmed-and-paid August run was deleted; its per-employee
   lines are gone, and the replacement is RM862.45 LOWER.** Timeline from
   `ActivityLog` (all UTC, today): 05:32:02 `payroll.confirm` monthly 8/2026 —
@@ -2802,6 +2823,22 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-25 — **Four security PRs open (#1246 Tier 1, #1247 Tier 2, #1248
+  Tier 3 finance, `claude/security-native` OTA) plus iPay88 #1245.** All
+  append to this file — expect STATE.md conflicts on every merge after the
+  first; keep every entry. Owner actions: apply
+  `supabase/migrations/112_revoke_anon_security_definer_rpc.sql`, confirm the
+  three fail-open env flags in Vercel, approve the Tier 3 commits
+  individually (esp. `fetchAllRows` now throwing), and merge the native PR
+  only when ready to watch the two OTA runs (tills + customer phones).
+  Remaining from the review after these: reward reservation at order create
+  (double-spend across concurrent pending orders), inbox double-approve,
+  concurrent-reversal guard, `salary-accrual` ORDER BY, `create_pos_sale`
+  still anon-executable (till calls it with the anon key — needs the sale
+  sync moved behind the POS API before it can be revoked), 9 tables with RLS
+  off, and the CI/OTA workflow hardening (`needs: ci`, `npm ci`,
+  `permissions:` blocks).
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the

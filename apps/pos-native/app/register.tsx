@@ -2699,6 +2699,7 @@ export default function Register() {
               onInc={() => inc(line.key)}
               onDec={() => dec(line.key)}
               onRemove={() => { remove(line.key); setEditLineKey(null); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); }}
+              staffRole={staff?.role ?? "staff"}
               onSetDiscount={(sen) => { setLineDiscount(line.key, sen); }}
               onSetNote={(note) => { setLineNote(line.key, note); }}
               onToggleTakeaway={(takeaway) => { setLineTakeaway(line.key, takeaway); }}
@@ -3491,8 +3492,10 @@ function LineEditorSheet({
   onSetNote,
   onToggleTakeaway,
   onEditOptions,
+  staffRole,
 }: {
   line: CartLine;
+  staffRole: string;
   onClose: () => void;
   onInc: () => void;
   onDec: () => void;
@@ -3527,6 +3530,29 @@ function LineEditorSheet({
       : Math.round(parsed * 100);
   const clampedDisc = Math.max(0, Math.min(computedDiscSen, lineGross));
   const net = Math.max(0, lineGross - clampedDisc);
+  // A per-line discount is a discount like any other: a cashier needs a
+  // manager PIN to add or change one (clearing it, or re-applying the same
+  // amount, does not re-prompt). Until 2026-09-25 this sheet had no gate at
+  // all while the order-level DiscountSheet asked for a PIN.
+  const [managerPin, setManagerPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const needsPin = needsManagerPin(staffRole) && clampedDisc > 0 && clampedDisc !== currentDisc;
+  async function applyLine() {
+    if (needsPin) {
+      if (managerPin.length < 6) { setPinError("Enter manager PIN"); return; }
+      setVerifying(true);
+      try {
+        await apiPost("/api/pos/auth/verify-manager", { pin: managerPin });
+      } catch {
+        setPinError("Invalid manager PIN");
+        setVerifying(false);
+        return;
+      }
+      setVerifying(false);
+    }
+    onSetDiscount(clampedDisc); onSetNote(noteVal); onClose(); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
 
   return (
     <Pressable
@@ -3623,6 +3649,23 @@ function LineEditorSheet({
               <Text className="text-xs text-primary" style={{ fontFamily: "SpaceGrotesk_700Bold", letterSpacing: 1 }}>CLEAR DISCOUNT</Text>
             </Pressable>
           )}
+          {needsPin && (
+            <View style={{ gap: 6 }}>
+              <Text className="text-[#D4A843] text-xs" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Manager PIN required for a line discount</Text>
+              <NumpadField
+                value={managerPin}
+                onChangeText={(t) => { setManagerPin(t); setPinError(""); }}
+                mode="integer"
+                secure
+                maxLength={6}
+                placeholder="Enter manager PIN"
+                title="Manager PIN"
+                className="rounded-xl px-3 py-2.5"
+                style={{ backgroundColor: "rgba(245,243,240,0.04)", borderWidth: 1, borderColor: pinError ? DANGER : "rgba(245,243,240,0.14)" }}
+              />
+              {!!pinError && <Text className="text-xs" style={{ fontFamily: "SpaceGrotesk_500Medium", color: DANGER }}>{pinError}</Text>}
+            </View>
+          )}
         </View>
 
         {/* Item note — prints under this item on the kitchen docket */}
@@ -3658,10 +3701,12 @@ function LineEditorSheet({
             <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1.4, color: DANGER }}>REMOVE</Text>
           </Pressable>
           <Pressable
-            onPress={() => { onSetDiscount(clampedDisc); onSetNote(noteVal); onClose(); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }}
+            onPress={() => { void applyLine(); }}
+            disabled={verifying}
             className="flex-1 h-12 rounded-2xl items-center justify-center bg-primary active:opacity-80"
+            style={{ opacity: verifying ? 0.6 : 1 }}
           >
-            <Text className="text-cream" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1.6 }}>APPLY</Text>
+            <Text className="text-cream" style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 12, letterSpacing: 1.6 }}>{verifying ? "CHECKING…" : "APPLY"}</Text>
           </Pressable>
         </View>
         </ScrollView>
@@ -3673,6 +3718,15 @@ function LineEditorSheet({
 // Cashier-applied manual discount. Percentage is taken off the subtotal
 // (mirrors the web DiscountModal); the register clamps the result to what's
 // still owed. Staff-role cashiers must clear a manager PIN to apply one.
+/** Roles that may discount without a manager PIN. The server returns the
+ *  Prisma enum — STAFF / MANAGER / ADMIN / OWNER, uppercase. Older bundles
+ *  compared the role against lowercase "staff", which never matched, so the
+ *  manager-PIN gate on discounts was dead code for every cashier. */
+const MANAGER_ROLES = new Set(["MANAGER", "ADMIN", "OWNER"]);
+function needsManagerPin(role: string | null | undefined): boolean {
+  return !MANAGER_ROLES.has((role ?? "").trim().toUpperCase());
+}
+
 function DiscountSheet({ subtotal, staffRole, onClose, onApply }: { subtotal: number; staffRole: string; onClose: () => void; onApply: (sen: number) => void }) {
   const [type, setType] = useState<"percent" | "fixed">("percent");
   const [value, setValue] = useState("");
@@ -3680,7 +3734,7 @@ function DiscountSheet({ subtotal, staffRole, onClose, onApply }: { subtotal: nu
   const [pinError, setPinError] = useState("");
   const [verifying, setVerifying] = useState(false);
 
-  const needsManagerOverride = staffRole === "staff";
+  const needsManagerOverride = needsManagerPin(staffRole);
   const numValue = parseFloat(value) || 0;
   const raw = type === "percent" ? Math.round(subtotal * (numValue / 100)) : Math.round(numValue * 100);
   const discountAmount = Math.max(0, Math.min(raw, subtotal));
@@ -3689,7 +3743,7 @@ function DiscountSheet({ subtotal, staffRole, onClose, onApply }: { subtotal: nu
   async function apply() {
     if (discountAmount <= 0) return;
     if (needsManagerOverride) {
-      if (managerPin.length < 4) { setPinError("Enter manager PIN"); return; }
+      if (managerPin.length < 6) { setPinError("Enter manager PIN"); return; }
       setVerifying(true);
       try {
         await apiPost("/api/pos/auth/verify-manager", { pin: managerPin });
