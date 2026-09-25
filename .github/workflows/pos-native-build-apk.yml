@@ -95,23 +95,28 @@ jobs:
       # NDK reached gradle: the directory exists but has no source.properties,
       # and the build dies much later with the unhelpful CXX1101. Clear a
       # partial install, then verify rather than assume.
+      # Judge this step by whether the NDK is actually on disk, never by exit
+      # codes. `yes | sdkmanager` always ends with `yes` taking a SIGPIPE once
+      # sdkmanager stops reading, so under `pipefail` a perfectly good install
+      # reports failure — and a retry loop that trusts that will delete the NDK
+      # it just installed. A half-downloaded NDK is the real hazard: the
+      # directory exists without source.properties and gradle dies much later
+      # with the unhelpful CXX1101.
       - name: Pre-install SDK packages (match the local build)
         run: |
-          set -euo pipefail
+          set -eu
           NDK_VER=27.1.12297006
           SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           NDK_DIR="$SDK/ndk/$NDK_VER"
-          if [ -d "$NDK_DIR" ] && [ ! -f "$NDK_DIR/source.properties" ]; then
-            echo "::warning::partial NDK at $NDK_DIR — removing so it reinstalls cleanly"
-            rm -rf "$NDK_DIR"
-          fi
-          for attempt in 1 2; do
-            yes | sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;$NDK_VER" "cmake;3.22.1" >/dev/null && break
-            echo "::warning::sdkmanager attempt $attempt failed; retrying"
-            rm -rf "$NDK_DIR"
+          ok () { [ -f "$NDK_DIR/source.properties" ]; }
+          for attempt in 1 2 3; do
+            if ok; then break; fi
+            [ -d "$NDK_DIR" ] && { echo "::warning::clearing partial NDK at $NDK_DIR"; rm -rf "$NDK_DIR"; }
+            yes | sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;$NDK_VER" "cmake;3.22.1" >/dev/null 2>&1 || true
+            ok || echo "::warning::NDK still incomplete after attempt $attempt"
           done
-          if [ ! -f "$NDK_DIR/source.properties" ]; then
-            echo "::error::NDK $NDK_VER is incomplete at $NDK_DIR — gradle would fail with CXX1101"
+          if ! ok; then
+            echo "::error::NDK $NDK_VER incomplete at $NDK_DIR after 3 attempts — gradle would fail with CXX1101"
             exit 1
           fi
           echo "NDK ok: $(grep -m1 Pkg.Revision "$NDK_DIR/source.properties")"
