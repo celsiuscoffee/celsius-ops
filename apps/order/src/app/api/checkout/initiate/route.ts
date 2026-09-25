@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { supersedePendingRewardOrders } from "@/lib/checkout/reward-supersede";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireMinAppVersion } from "@/lib/min-app-version";
 import { createPayment } from "@/lib/revenue-monster/client";
@@ -313,6 +314,12 @@ export async function POST(request: NextRequest) {
       }
       rewardDiscountSenAmt = resolved.discountSen;
       if (resolved.kind === "wallet") resolvedWalletVoucherId = resolved.walletVoucherId;
+      // Only the newest checkout against a given reward may still be paid.
+      await supersedePendingRewardOrders(supabase, {
+        walletVoucherId: resolvedWalletVoucherId,
+        rewardId: resolvedWalletVoucherId ? null : rewardId,
+        memberId: loyaltyId ?? null,
+      });
     }
 
     // ── Server-side SST calculation ───────────────────────────────────────

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAllowedFetchUrl } from "@/lib/safe-fetch-url";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireAuth } from "@/lib/auth";
 
@@ -53,6 +54,10 @@ export async function POST(req: NextRequest) {
     const contentBlocks: Anthropic.ContentBlockParam[] = [];
 
     for (const url of urls) {
+      // SSRF guard: a caller-supplied URL is only fetched from our storage hosts.
+      if (!isAllowedFetchUrl(url)) {
+        return NextResponse.json({ error: `Refusing to fetch ${url}: not a storage URL` }, { status: 400 });
+      }
       const isPdf = /\.pdf($|\?)/i.test(url) || url.includes("/raw/");
 
       if (isPdf) {

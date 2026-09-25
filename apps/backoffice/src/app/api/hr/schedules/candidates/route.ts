@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isSafeFilterIdent } from "@/lib/postgrest-safe";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
@@ -69,6 +70,7 @@ export async function GET(req: NextRequest) {
   const closeT = (outlet.closeTime || "22:00").slice(0, 5);
 
   // Shift templates for the window picker.
+  if (!isSafeFilterIdent(outletId)) return NextResponse.json({ error: "Invalid outletId" }, { status: 400 });
   const { data: tpls } = await hrSupabaseAdmin
     .from("hr_shift_templates")
     .select("id, label, start_time, end_time, break_minutes")

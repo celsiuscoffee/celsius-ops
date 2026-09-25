@@ -17,6 +17,7 @@ import {
 import { evaluateAudience, reachableCandidateMemberIds, type RuleNode } from "@/lib/push/audience";
 import { touchAgentRun } from "@celsius/agents/src/substrate";
 import { logAgentMessage } from "@celsius/agents/src/messages";
+import { checkCronAuth } from "@celsius/shared";
 
 /**
  * Cron-driven loyalty push fan-out. One endpoint, one sweep per
@@ -37,26 +38,18 @@ import { logAgentMessage } from "@celsius/agents/src/messages";
  *   "0  3 * * *"     /api/cron/loyalty-pushes?job=sitting-on-beans (11am MYT)
  *   "0  3 * * 1"     /api/cron/loyalty-pushes?job=miss-you        (11am MYT Mon)
  *
- * Auth: header `Authorization: Bearer ${CRON_SECRET}` OR Vercel-
- * native `x-vercel-cron` header. Local dev: pass ?secret= for
- * manual testing.
+ * Auth: `Authorization: Bearer ${CRON_SECRET}` only, via the shared
+ * fail-closed checkCronAuth (Vercel sends this header for scheduled
+ * crons). The old `x-vercel-cron` / `?secret=` shortcuts were spoofable
+ * and put the secret in request logs.
  */
 
 const BRAND_ID = "brand-celsius";
 
-function authorized(req: NextRequest): boolean {
-  if (req.headers.get("x-vercel-cron")) return true;
-  const expected = process.env.CRON_SECRET;
-  if (!expected) return false;
-  const header = req.headers.get("authorization");
-  const bearer = header?.startsWith("Bearer ") ? header.slice(7) : null;
-  const qs     = req.nextUrl.searchParams.get("secret");
-  return bearer === expected || qs === expected;
-}
-
 export async function GET(request: NextRequest) {
-  if (!authorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const cronAuth = checkCronAuth(request.headers);
+  if (!cronAuth.ok) {
+    return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
   }
   const job = request.nextUrl.searchParams.get("job") ?? "";
 

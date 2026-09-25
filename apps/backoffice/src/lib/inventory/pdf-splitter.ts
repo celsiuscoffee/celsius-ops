@@ -1,4 +1,5 @@
 import { PDFDocument } from "pdf-lib";
+import { assertAllowedFetchUrl } from "@/lib/safe-fetch-url";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_LOYALTY_SUPABASE_URL || "";
@@ -165,6 +166,7 @@ export async function deleteFromStorage(path: string): Promise<void> {
  * Get page count of a PDF from a URL.
  */
 export async function getPdfPageCount(url: string): Promise<number> {
+  assertAllowedFetchUrl(url);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch PDF: ${res.status}`);
   const buffer = Buffer.from(await res.arrayBuffer());
@@ -180,6 +182,7 @@ export async function splitPdfFromUrl(
   url: string,
   baseFileName: string,
 ): Promise<string[]> {
+  assertAllowedFetchUrl(url);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch PDF: ${res.status}`);
   const buffer = Buffer.from(await res.arrayBuffer());

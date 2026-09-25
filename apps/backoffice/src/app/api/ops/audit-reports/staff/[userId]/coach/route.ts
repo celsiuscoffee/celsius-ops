@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@celsius/auth";
+import { getSession } from "@/lib/auth";
 import { getSkillsCoachInsights } from "@/lib/hr/agents/skills-coach";
 
 export const dynamic = "force-dynamic";

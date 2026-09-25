@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isSafeFilterIdent } from "@/lib/postgrest-safe";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
@@ -186,6 +187,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Load shift templates from DB (outlet-specific + generic)
+  if (!isSafeFilterIdent(outletId)) return NextResponse.json({ error: "Invalid outletId" }, { status: 400 });
   const { data: outletTemplates } = await hrSupabaseAdmin
     .from("hr_shift_templates")
     .select("*")

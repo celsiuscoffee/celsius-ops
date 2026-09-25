@@ -19,6 +19,7 @@ import { requireCustomerSession } from "@/lib/customer-jwt";
 import { attributeOrderToCampaign } from "@/lib/push/attribution";
 import { attributeOrderToPoster } from "@/lib/poster/attribution";
 import { getOutletSst } from "@/lib/outlet-sst";
+import { supersedePendingRewardOrders } from "@/lib/checkout/reward-supersede";
 
 function normalisePhoneForLookup(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -443,6 +444,12 @@ export async function POST(request: NextRequest) {
       } else if (resolved.kind === "catalog") {
         walletVoucherId = null;
       }
+      // Only the newest checkout against a given reward may still be paid.
+      await supersedePendingRewardOrders(supabase, {
+        walletVoucherId: walletVoucherId ?? null,
+        rewardId: rewardId ?? null,
+        memberId: loyaltyId ?? null,
+      });
     }
 
     // First-order discount: server validates independently — checks the orders

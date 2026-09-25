@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkHrDocumentFile } from "@/lib/hr/document-upload";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
@@ -146,15 +147,19 @@ export async function POST(req: NextRequest) {
       }
 
       // 3. Upload the LoE file to hr-documents + link in hr_employee_documents
-      if (file && supabase) {
+      const fileCheck = file ? checkHrDocumentFile(file) : null;
+      if (fileCheck && !fileCheck.ok) {
+        console.warn(`[loe-import] ${fileName}: LoE file not stored — ${fileCheck.error}`);
+      }
+      if (file && supabase && fileCheck?.ok) {
         const buffer = Buffer.from(await file.arrayBuffer());
-        const ext = (file.name.split(".").pop() || "pdf").toLowerCase();
+        const ext = fileCheck.ext;
         const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const storagePath = `${user.id}/loe/${stamp}.${ext}`;
         const { error: upErr } = await supabase.storage
           .from(BUCKET)
           .upload(storagePath, buffer, {
-            contentType: file.type || "application/pdf",
+            contentType: fileCheck.contentType,
             upsert: false,
           });
         if (!upErr) {
