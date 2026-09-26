@@ -11,6 +11,19 @@ current month.
 
 ## Verified facts
 
+- 2026-09-26 — **POS sale sync moved behind the POS API (branch
+  `claude/security-pos-sale`).** `apps/pos-native/lib/sale-sync.ts` now POSTs
+  the unchanged SalePayload to `/api/pos/sales` (new backoffice route:
+  `requirePosApiAuth` → `create_pos_sale` via service role; 400/422 = per-sale
+  rejection → dead-letter as before, 401/5xx = new "retry" outcome that stops
+  the drain without burning attempts). `apiPostResult` in `lib/api.ts` is the
+  non-throwing POST that makes the split possible. The anon REVOKE on
+  `create_pos_sale` is written (`20260926_revoke_anon_create_pos_sale`, mirror
+  `supabase/migrations/114_…`) but must be applied ONLY after the OTA has
+  reached every till — an old build would dead-letter its sales. The route
+  only WARNS on employee/outlet mismatch vs the session (offline queues drain
+  under the current cashier); enforce later once the warning volume is known.
+
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):

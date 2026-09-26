@@ -64,6 +64,26 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** POST that only throws on TRANSPORT failure (no route, timeout, DNS). Any
+ *  HTTP response — success or error status — is returned as a value, so a
+ *  caller can tell "the server said no to this payload" from "we're offline".
+ *  The sale sync needs that split: the first dead-letters a sale, the second
+ *  must never. */
+export type ApiResult<T> = { ok: true; status: number; data: T } | { ok: false; status: number; text: string };
+
+export async function apiPostResult<T>(path: string, body: unknown): Promise<ApiResult<T>> {
+  const res = await doFetch(path, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    return { ok: false, status: res.status, text: text || res.statusText };
+  }
+  return { ok: true, status: res.status, data: (await res.json()) as T };
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await doFetch(path, { headers: headers() });
   if (!res.ok) {

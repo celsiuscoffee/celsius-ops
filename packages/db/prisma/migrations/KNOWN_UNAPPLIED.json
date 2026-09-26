@@ -1,4 +1,5 @@
 {
   "_README": "Migrations knowingly NOT applied to the live schema. `npm run check:migrations` reports these instead of failing. Every entry needs a real reason and is meant to be temporary — resolve it by applying the migration or deleting the file. An entry whose migration IS applied is reported as stale so this list cannot quietly rot into a place real drift hides.",
-  "20260803_hr_performance_deduction_waivers": "Never applied. The feature shipped through hr_performance_overrides instead, and the only reference to this table in code is a comment in api/hr/allowances/route.ts — so nothing is broken by its absence. Owner decision pending 2026-09-15: apply the migration, or delete it."
+  "20260803_hr_performance_deduction_waivers": "Never applied. The feature shipped through hr_performance_overrides instead, and the only reference to this table in code is a comment in api/hr/allowances/route.ts — so nothing is broken by its absence. Owner decision pending 2026-09-15: apply the migration, or delete it.",
+  "20260926_revoke_anon_create_pos_sale": "Grants-only (REVOKE EXECUTE on create_pos_sale from anon/authenticated). Must be applied ONLY after the pos-native build that syncs sales via POST /api/pos/sales is on every till — an old till would dead-letter its sales against the revoked RPC. Owner applies (hard rule 6); remove this entry once applied."
 }
