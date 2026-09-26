@@ -81,11 +81,11 @@ export function identifyMember(
     // Lazy require so non-RN environments / tests that don't pull
     // Sentry stay clean. setUser is sync.
     const Sentry = require("@sentry/react-native") as typeof import("@sentry/react-native");
-    Sentry.setUser({
-      id:    memberId,
-      ...(traits.phone ? { phone: traits.phone } : {}),
-      ...(traits.name  ? { username: traits.name } : {}),
-    });
+    // Only the opaque member id. Phone and name are customer PII and have
+    // no business in an error tracker; the id is enough to find the member
+    // in the backoffice when an event needs a human. (Security review
+    // 2026-09-25 H15 — no beforeSend scrubs them on the native inits.)
+    Sentry.setUser({ id: memberId });
   } catch {
     /* noop */
   }
