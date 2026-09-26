@@ -16,7 +16,10 @@ import { supabase } from "./supabase";
  */
 
 const WINDOW_MS = 6 * 60 * 60 * 1000; // map the last 6h of table activity
-const SAFETY_REFRESH_MS = 60 * 1000;  // backstop refetch if a Realtime event is dropped
+// Backstop refetch if a Realtime event is dropped. Matches use-orders-panel's
+// 15s: table orders feed the serving-time alarm too, so a stale "done" here
+// kept the alarm blaring for an already-bussed table for up to a minute.
+const SAFETY_REFRESH_MS = 15 * 1000;
 // Drop dead orders so a cancelled/failed attempt doesn't linger on a table.
 const DEAD = new Set(["cancelled", "failed", "refunded", "voided"]);
 // Finished orders fall off the ACTIVE view too — once served/collected the
