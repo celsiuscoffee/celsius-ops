@@ -11,6 +11,42 @@ current month.
 
 ## Verified facts
 
+- 2026-09-25 — **Security QA Tier 4 (server-side leftovers) — PR on
+  `claude/security-tier4`.** Sibling of #1246 (Tier 1), #1247 (Tier 2),
+  #1248 (Tier 3), #1249 (native); each branches from main independently, so
+  every merge after the first will conflict on this file — keep every entry.
+  What it closes, all verified in code: (1) **SSRF** — `split-pop`, `extract`,
+  `pdf-splitter` and `ai-poster/generate` fetched any caller-supplied URL
+  server-side (metadata endpoint reachable, split-pop re-uploaded the
+  response to a public bucket); now gated by `lib/safe-fetch-url.ts` (https +
+  our Supabase/Cloudinary hosts only, 400 otherwise). (2) **PostgREST `.or()`
+  grammar injection** in `pickup/customers`, `pickup/members`
+  (`?search=x,id.not.is.null` returned every member), `hr/schedules/{candidates,grid}`
+  and `payroll/annual-forms` — `lib/postgrest-safe.ts`. (3) `requireAuth`
+  (cookie path used by loyalty routes) now applies the same live-account
+  check as `getSession()`, so a deactivated user's 7-day cookie dies at the
+  next request. (4) The six `ops/audit-*` routes used `@celsius/auth`
+  getSession (audience-agnostic, no live check) — swapped to `@/lib/auth`;
+  template create/update/delete now need `ops:audit` module permission
+  (DELETE had no auth at all). Safe because staff-native talks to
+  `/api/audits/*` in the staff app, not these. (5) HR document uploads
+  (`employee-documents`, `loe-import/commit`) stored any file type with the
+  client's extension — now PDF/image only, 10 MB cap, extension from MIME
+  (`lib/hr/document-upload.ts`); a rejected LoE file is logged and the
+  employee is still created. (6) `cron/loyalty-pushes` accepted a spoofable
+  `x-vercel-cron` header or `?secret=` in the URL — now the shared fail-closed
+  `checkCronAuth`. **Vercel's cron scheduler sends the Bearer header, so the
+  schedule keeps working; anyone triggering it by hand must use the header.**
+  (7) **Reward double-spend**: a customer could open several pending
+  checkouts on one wallet voucher / catalog reward and pay each; both
+  customer checkout routes now flip older pending orders on the same reward
+  to `failed` before inserting (`apps/order/src/lib/checkout/reward-supersede.ts`).
+  Residual, by design: an already-open payment page for a superseded order
+  can still pay it, and reconcile-pending honours a gateway "paid" on a
+  failed row — the consume paths remain the last gate.
+  Verified before push: vitest 1240 pass (+9 new), tsc backoffice + order
+  clean, eslint clean on changed files (one pre-existing warning in
+  `checkout/initiate`).
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
@@ -2847,6 +2883,25 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-25 — **Security QA series: five PRs open, all draft, all green,
+  none merged — owner decides order.** #1246 Tier 1 (auth gates, POS PIN
+  limits, `supabase/migrations/112_revoke_anon_security_definer_rpc.sql`
+  — owner applies), #1247 Tier 2 (checkout hardening), #1248 Tier 3
+  (finance ledger + payroll; approve per commit), #1249 native (OTA — merge
+  only when able to watch the OTA runs), Tier 4 (this branch). Still on the
+  list from the QA report (`scratchpad` report of 2026-09-25, now gone with
+  the session — regenerate from the PR bodies): finance-2 (inbox
+  double-approve atomic claim, reverseTransaction concurrency guard,
+  salary-accrual ORDER BY, basic-salary override → statutory_stale, weekly
+  payroll uniqueness); CI hardening (`needs: ci` + `npm ci` on the OTA
+  workflows, `permissions:` blocks, SHA-pin `android-actions/setup-android`,
+  drop the dead branch trigger, bump `next` for the DoS advisory); RLS SQL
+  for the 9 tables the advisor lists as RLS-disabled (owner applies);
+  `create_pos_sale` anon revoke needs the POS sale sync moved behind the POS
+  API first. Owner-side, unchanged: confirm the three fail-open Vercel flags
+  (`STRICT_CUSTOMER_AUTH`, `STAFF_AUTH_ENFORCE`, `POS_AUTH_ENFORCE`) are set
+  in production — the Vercel env listing 403s from here.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the

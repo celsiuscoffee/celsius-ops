@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
-import { getSession } from "@celsius/auth";
+import { getSession } from "@/lib/auth";
 
 // GET — distinct job roles in use across the org. Powers the Job Role
 // dropdown when building a STAFF audit template. We pull live from

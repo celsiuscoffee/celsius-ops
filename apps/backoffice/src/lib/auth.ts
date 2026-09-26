@@ -220,6 +220,13 @@ export async function requireAuth(request: NextRequest): Promise<
   try {
     const { payload } = await jwtVerify(token, SECRET, { audience: AUDIENCE });
     const user = payload as unknown as SessionUser;
+    // Same live-account tightening as getSession(): a deactivated or deleted
+    // user keeps a valid 7-day cookie otherwise.
+    const live = await liveAccountState(user.id);
+    if (live === null || !live.active) {
+      return { user: null, error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+    }
+    if (live.role && live.role !== user.role) user.role = live.role;
     return { user, error: null };
   } catch {
     return {

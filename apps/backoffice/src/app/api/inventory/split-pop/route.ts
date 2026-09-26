@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromHeaders } from "@/lib/auth";
 import { splitPdfFromUrl, getPdfPageCount } from "@/lib/inventory/pdf-splitter";
+import { assertAllowedFetchUrl, DisallowedFetchUrlError } from "@/lib/safe-fetch-url";
 
 // GET /api/inventory/split-pop?url=<pdf_url>
 // Returns page count of a PDF
@@ -10,6 +11,8 @@ export async function GET(req: NextRequest) {
 
   const url = req.nextUrl.searchParams.get("url");
   if (!url) return NextResponse.json({ error: "url is required" }, { status: 400 });
+  // SSRF guard: only our storage hosts may be fetched server-side.
+  try { assertAllowedFetchUrl(url); } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }); }
 
   try {
     const pageCount = await getPdfPageCount(url);
@@ -32,6 +35,7 @@ export async function POST(req: NextRequest) {
   try {
     const { url, page } = await req.json();
     if (!url) return NextResponse.json({ error: "url is required" }, { status: 400 });
+    try { assertAllowedFetchUrl(String(url)); } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 400 }); }
 
     const baseName = `pop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -67,6 +71,7 @@ export async function POST(req: NextRequest) {
     const urls = await splitPdfFromUrl(url, baseName);
     return NextResponse.json({ urls, pageCount: urls.length });
   } catch (err) {
+    if (err instanceof DisallowedFetchUrlError) return NextResponse.json({ error: err.message }, { status: 400 });
     const msg = err instanceof Error ? err.message : "Failed to split PDF";
     return NextResponse.json({ error: msg }, { status: 500 });
   }

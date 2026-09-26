@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@celsius/auth";
+import { getSession, hasModulePermission } from "@/lib/auth";
 
 // GET — list all audit templates
 export async function GET() {
@@ -28,6 +28,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(session, "ops:audit", prisma))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const body = await req.json();
   const { name, description, roleType, auditTarget, jobRoleFilter, sections } = body;
