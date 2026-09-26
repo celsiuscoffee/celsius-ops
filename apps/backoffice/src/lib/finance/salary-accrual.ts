@@ -70,6 +70,10 @@ export async function accrueSalaryControls(opts: { commit?: boolean } = {}): Pro
       .select("account_code, debit, credit, fin_transactions!inner(company_id, txn_date, status)")
       .in("account_code", CONTROL_ACCOUNTS)
       .eq("fin_transactions.status", "posted")
+      // .range() without ORDER BY is not a stable page walk: Postgres may hand
+      // back overlapping or missing rows between pages, which silently
+      // over- or under-states the control-account delta being accrued.
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw new Error(error.message);
     for (const r of (data ?? []) as unknown as Row[]) {
