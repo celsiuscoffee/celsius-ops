@@ -1,13 +1,15 @@
 // Background sync for buffered sales. Pushes each completed sale to the cloud
-// via the atomic, idempotent create_pos_sale RPC, then fires its deferred
-// loyalty completion. Runs immediately after every sale (online-first), plus on
+// through POST /api/pos/sales (which runs the atomic, idempotent
+// create_pos_sale RPC with the service role — the till no longer calls the RPC
+// with the anon key, see the route's header), then fires its deferred loyalty
+// completion. Runs immediately after every sale (online-first), plus on
 // app-foreground and a slow interval so an outage drains on reconnect.
 
 import { AppState } from "react-native";
-import { supabase } from "./supabase";
+import { apiPostResult } from "./api";
 import { posOrderComplete } from "./loyalty";
 import { listPending, removePending, bumpAttempts, quarantine, type PendingSale } from "./offline-queue";
-import { markOnline, markOffline, withTimeout } from "./connectivity";
+import { markOnline, markOffline } from "./connectivity";
 
 let flushing = false;
 let started = false;
@@ -24,20 +26,21 @@ function orderIdOf(e: PendingSale): string | undefined {
 /** The outcome of trying to sync one buffered sale:
  *  - "ok":       it's in the cloud now (or already was) → removed from the queue
  *  - "network":  the call didn't reach the server → we're offline, retry later
- *  - "rejected": the server reached us but rejected the payload → don't let it
+ *  - "retry":    the server answered but not about THIS sale (no/expired POS
+ *                session → 401, or a 5xx) → stop the drain, retry later, and
+ *                never count it toward dead-lettering
+ *  - "rejected": the server rejected the payload (400/422) → don't let it
  *                block the rest of the queue. */
-type SyncResult = "ok" | "network" | "rejected";
+type SyncResult = "ok" | "network" | "retry" | "rejected";
 
 async function syncOne(entry: PendingSale): Promise<SyncResult> {
   const orderId = orderIdOf(entry);
   if (!orderId) return "ok"; // malformed → treat as done so it's skipped
 
-  let res: { error?: unknown };
+  let res: Awaited<ReturnType<typeof apiPostResult<unknown>>>;
   try {
-    res = (await withTimeout(
-      Promise.resolve(supabase.rpc("create_pos_sale", { p: entry.payload })),
-      8000,
-    )) as { error?: unknown };
+    // doFetch has its own 8s timeout and drives the online/offline flag.
+    res = await apiPostResult("/api/pos/sales", entry.payload);
   } catch {
     // Transport failure / timeout → the call never landed. We're offline; leave
     // the sale buffered and stop the drain so it retries on the next tick.
@@ -45,14 +48,14 @@ async function syncOne(entry: PendingSale): Promise<SyncResult> {
     return "network";
   }
 
-  // The RPC reached the server (so we're online). A populated .error means the
-  // DB rejected THIS payload specifically — a per-sale problem, not an outage.
-  if (res.error) {
-    markOnline();
-    return "rejected";
-  }
-
+  // The server answered, so we're online. Only a 4xx that is about this
+  // payload (400 malformed, 422 DB rejected) is a per-sale problem; an auth
+  // failure or server error must not burn the sale's attempts.
   markOnline();
+  if (!res.ok) {
+    if (res.status === 400 || res.status === 422) return "rejected";
+    return "retry";
+  }
 
   // The order is now durably in pos_orders → fire the deferred loyalty
   // earn/burn + tier re-eval + mystery drop. Server-idempotent (keyed on the
@@ -70,7 +73,7 @@ async function syncOne(entry: PendingSale): Promise<SyncResult> {
   return "ok";
 }
 
-/** Drain the buffer. Stops at the first NETWORK failure (we're offline) and
+/** Drain the buffer. Stops at the first NETWORK or auth/server failure and
  *  retries on the next tick. A server-REJECTED sale is skipped (and
  *  dead-lettered after a few tries) so it can never jam the sales behind it.
  *  Re-entrancy-guarded. */
@@ -81,7 +84,7 @@ export async function flushPending(): Promise<void> {
     const list = await listPending();
     for (const entry of list) {
       const r = await syncOne(entry);
-      if (r === "network") break; // offline → stop; the rest will also fail
+      if (r === "network" || r === "retry") break; // offline / not signed in → stop; the rest will also fail
       if (r === "rejected") {
         const id = orderIdOf(entry);
         if (id) {
