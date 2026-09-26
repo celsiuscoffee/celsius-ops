@@ -35,6 +35,50 @@ current month.
   tree now. `npm audit` still lists high transitive advisories
   (postcss, sharp, ws, js-yaml, browserslist, prisma config…) — dev-time or
   not reachable from request input; left for a dependency-update pass.
+- 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
+  EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
+  (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
+  created 00:28:23Z → customer's bank debited **RM45.65 at 00:28:27Z**
+  (ref `2609260828270828`, "CELSIUS COFFEE SDN BHD 02", owner-supplied
+  screenshot) → **flipped to `failed`/`rm_expired` at 00:29:14Z**, 47s
+  AFTER the money left. This is the "paid but failed" class — materially
+  worse than the Aug 20–21 stuck-order incidents, where no money moved.
+  **Where the problem sits — two layers:** (1) RM (root cause): a checkout
+  minted 51 seconds earlier cannot legitimately have EXPIRED; their Query
+  Payment Checkout returned a terminal-and-wrong answer, the same
+  per-transaction unreliability as 2026-08-20 but now destructive instead
+  of merely slow. (2) OURS (the amplifier, and the fixable part):
+  `reconcile-pending` sweeps pending orders **from 45s old** and
+  `reconcileRmOrder` honours FAILED/CANCELLED/EXPIRED **immediately, with
+  no age floor and no corroboration** (`reconcile.ts:150`) — one wrong
+  answer permanently kills the order. Worse, **nothing ever re-checked a
+  failed order**: `reconcile-failed` (the purpose-built paid-but-failed
+  auditor, written after the C-9782 incident) existed but was **NOT on the
+  cron schedule**, so a mistaken fail stayed dead and the customer stayed
+  charged until a human noticed. `expire-orders` has a 10-min guard before
+  it even asks RM; the 45s path has none.
+  **Fix shipped (branch `claude/failed-payments-spyyu1`, draft PR):**
+  `reconcile-failed` gains a `?minutes=` narrow window (own dependency-free
+  `window.ts` + unit tests — the root vitest `@` alias points at
+  backoffice, so a test importing route.ts cannot load) and is now
+  **scheduled `*/5 * * * *` with `?minutes=180&apply=true`**. Auto-apply is
+  safe in the NARROW window for the opposite reason dry-run is right in the
+  wide one: within hours nobody has refunded or re-rung anything
+  out-of-band, so "the gateway says paid" is just the truth arriving late,
+  and `markRmOrderPaid` already accepts failed → paid (money received
+  always wins) — it settles, prints the docket and earns points. Every
+  paid-but-failed find also raises a Sentry issue (fingerprinted per
+  order), whether or not it auto-healed. **Deliberately NOT changed:** the
+  fast fail on EXPIRED stays, because killing it would leave every genuine
+  abandon spinning on "Confirming payment" for 10 min and break the July
+  retry-button UX; the cure is the ≤5-min self-heal, not a slower fail.
+  **Still open:** RM escalation with this checkout id (their status API
+  returning EXPIRED for a paid FPX checkout is the root cause and only they
+  can fix it); and C-7272 itself needs the sweep to run (or a manual
+  `?minutes=180&apply=true`) before the 180-min window lapses at ~03:28Z.
+  Watch also for a **double charge at table 8**: RM86.40 attempted FPX
+  08:35 (pending, unconfirmed) then GrabPay 08:40 (settled,
+  `260926004029300417534131`) — if the customer's bank shows both, refund one.
 
 - 2026-09-15 — **The confirmed-and-paid August run was deleted; its per-employee
   lines are gone, and the replacement is RM862.45 LOWER.** Timeline from
