@@ -11,6 +11,18 @@ current month.
 
 ## Verified facts
 
+- 2026-09-26 — **`build (order)` in CI can fail on a Google Fonts fetch flake,
+  not on your diff.** PR #1258 run 4291 died with `Module not found: Can't
+  resolve '@vercel/turbopack-next/internal/font/google/font'` /
+  "next/font/google queries have exactly one entry", traced to
+  `apps/order/src/app/layout.tsx:2` (`Space_Grotesk` from `next/font/google`).
+  `next build` fetches Google Fonts at build time and CI has no `.next/cache`,
+  so a network hiccup fails the job. Re-run on the next commit (4292) was green
+  with no code change, and the 7 surrounding runs on other branches all built
+  the same `layout.tsx`. Before chasing a font error in a build log, re-run
+  first. Permanent fix if it recurs: vendor Space Grotesk via `next/font/local`
+  like Peachi already is (`apps/order/src/fonts/`).
+
 - 2026-09-26 — **The QR checkout had NO duplicate-payment guard: 86 tables
   were charged twice in 90 days, RM1,685.70 overcharged.** Owner escalated
   with a staff note ("double payment") for Shah Alam table 15. Reconstruction:
