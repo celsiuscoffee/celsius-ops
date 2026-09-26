@@ -31,6 +31,15 @@ export function createSupabaseAdmin(
   if (!url) {
     return null as unknown as SupabaseClient;
   }
+  if (!serviceKey) {
+    // An "admin" client built on the anon key silently runs every server
+    // route under RLS as `anon`: reads come back empty, writes 42501, and
+    // nothing says why. Say why. (Not thrown: preview deploys without the
+    // key must still boot.)
+    console.error(
+      "[supabase] createSupabaseAdmin called without SUPABASE_SERVICE_ROLE_KEY — falling back to the anon key; server routes will run under RLS as anon.",
+    );
+  }
   return createClient(url, serviceKey || anonKeyFallback || "", {
     auth: { persistSession: false },
   });

@@ -2,21 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { verifyPin, hashPin } from "@celsius/auth";
 import { signStaffToken } from "@/lib/staff-token";
+import { checkRateLimit, safeEqual } from "@celsius/shared";
 
-const attempts = new Map<string, { count: number; resetAt: number }>();
-
-function checkRateLimit(storeId: string): boolean {
-  const now = Date.now();
-  const key = storeId;
-  const entry = attempts.get(key);
-  if (!entry || entry.resetAt < now) {
-    attempts.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 });
-    return true;
-  }
-  if (entry.count >= 10) return false;
-  entry.count++;
-  return true;
-}
+// Brute-force budget for a 4–6 digit PIN. Shared Upstash counter (one bucket
+// across every lambda, unlike the old per-process Map that reset on each cold
+// start and multiplied by the number of warm instances), keyed BOTH on the
+// outlet and on the caller IP: the outlet key stops a distributed guess at one
+// till's PIN, the IP key stops one box cycling through outlets.
+const PIN_WINDOW_MS = 15 * 60 * 1000;
+const PIN_MAX_PER_STORE = 10;
+const PIN_MAX_PER_IP = 20;
 
 /**
  * POST /api/staff/auth
@@ -37,7 +32,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing storeId or pin" }, { status: 400 });
     }
 
-    if (!checkRateLimit(storeId)) {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const [byStore, byIp] = await Promise.all([
+      checkRateLimit(`staff-pin:store:${storeId}`, PIN_MAX_PER_STORE, PIN_WINDOW_MS),
+      checkRateLimit(`staff-pin:ip:${ip}`, PIN_MAX_PER_IP, PIN_WINDOW_MS),
+    ]);
+    if (byStore.limited || byIp.limited) {
       return NextResponse.json({ error: "Too many attempts. Try again in 15 minutes." }, { status: 429 });
     }
 
@@ -97,7 +97,6 @@ export async function POST(request: NextRequest) {
                 const hashed = await hashPin(pin);
                 await supabase.from("User").update({ pin: hashed }).eq("id", user.id);
               }
-              attempts.delete(storeId);
               return NextResponse.json({
                 ok:        true,
                 storeId,
@@ -116,28 +115,10 @@ export async function POST(request: NextRequest) {
       console.error("[staff-auth] backoffice lookup failed:", msg.slice(0, 200));
     }
 
-    // ── 2. Supabase staff_members (legacy) ────────────────────────────────
-    const { data: members, error: membersError } = await supabase
-      .from("staff_members")
-      .select("id, name")
-      .eq("pin", pin)
-      .eq("is_active", true)
-      .contains("outlet_ids", [storeId])
-      .or("app_access.cs.{kds},app_access.cs.{staff_app}");
-
-    if (!membersError && members && members.length > 0) {
-      const member = members[0] as { id: string; name: string };
-      attempts.delete(storeId);
-      return NextResponse.json({
-        ok:        true,
-        storeId,
-        storeName,
-        staffName: member.name,
-        staffId:   member.id,
-        source:    "legacy",
-        token:     signStaffToken({ storeId, staffId: member.id, staffName: member.name }),
-      });
-    }
+    // (The former step 2, a plaintext-PIN lookup against `staff_members`, is
+    // gone: that table does not exist in production — verified 2026-09-26 —
+    // so the query errored on every call and the route fell straight through
+    // to step 3.)
 
     // ── 3. Fallback: Outlet.staffPin (backward compat) ─────────
     // Read from the underlying table directly; the outlet_settings view
@@ -153,11 +134,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "PIN not configured for this outlet" }, { status: 403 });
     }
 
-    if (pin !== expected) {
+    if (!safeEqual(pin, expected)) {
       return NextResponse.json({ error: "Incorrect PIN" }, { status: 401 });
     }
 
-    attempts.delete(storeId);
+    // A shared plaintext outlet PIN is the weakest login on the estate (3
+    // outlets still carry one, 2026-09-26). Logged so its use can be watched
+    // down to zero and the column dropped; the per-user bcrypt path above is
+    // the target for every till.
+    console.warn(`[staff-auth] outlet ${storeId} signed in with the shared Outlet.staffPin fallback`);
     return NextResponse.json({
       ok:        true,
       storeId,
