@@ -21,6 +21,7 @@
 
 import { SignJWT, jwtVerify } from "jose";
 import type { NextRequest } from "next/server";
+import { safeEqual } from "@celsius/shared";
 
 export const PARTNER_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days (mirrors Grab)
 const ISSUER = "celsius-pos";
@@ -63,7 +64,9 @@ export function partnerCredsMatch(clientId: unknown, clientSecret: unknown): boo
   if (typeof clientId !== "string" || typeof clientSecret !== "string") return false;
   const id = clientId.trim();
   const secret = clientSecret.trim();
-  return partnerPairs().some((p) => p.id === id && p.secret === secret);
+  // Both halves compared in constant time so neither the id nor the secret
+  // leaks a matching-prefix timing signal.
+  return partnerPairs().some((p) => safeEqual(p.id, id) && safeEqual(p.secret, secret));
 }
 
 export function partnerConfigured(): boolean {

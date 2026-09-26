@@ -5,6 +5,8 @@ import * as Sentry from "@sentry/nextjs";
 import Stripe from "stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
+import { applyOrderV2Hooks } from "@/lib/loyalty/v2";
+import { notifyOrderPreparing } from "@/lib/push/templates";
 import { checkCronAuth } from "@celsius/shared";
 import { queryCheckoutStatus } from "@/lib/revenue-monster/client";
 import { markRmOrderPaid, markRmOrderFailed } from "@/lib/revenue-monster/order-status";
@@ -33,6 +35,9 @@ type OrderLite = {
   reward_id: string | null;
   payment_method: string | null;
   payment_checkout_id: string | null;
+  wallet_voucher_id: string | null;
+  customer_phone: string | null;
+  created_at: string;
 };
 
 const RM_METHODS = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card"]);
@@ -88,7 +93,7 @@ async function runReconcile(): Promise<NextResponse> {
   // skipped in the loop.
   const { data: pending, error } = await supabase
     .from("orders")
-    .select("id, order_number, status, store_id, loyalty_id, loyalty_points_earned, reward_id, payment_method, payment_checkout_id")
+    .select("id, order_number, status, store_id, loyalty_id, loyalty_points_earned, reward_id, payment_method, payment_checkout_id, wallet_voucher_id, customer_phone, created_at")
     .in("status", ["pending", "failed"])
     .lt("created_at", olderThan)
     .gt("created_at", youngerThan);
@@ -173,7 +178,26 @@ async function runReconcile(): Promise<NextResponse> {
             if (order.reward_id) {
               await deductLoyaltyPoints(order.loyalty_id, order.reward_id, order.store_id);
             }
+            // Same v2 hooks the Stripe webhook runs on the normal path: consume
+            // the wallet voucher, advance missions, mystery drop, referral. A
+            // rescued order skipped all of these, so its voucher stayed
+            // `active` and re-usable at the next checkout (2026-09-25 QA, M8).
+            // Each hook is idempotent on the order id.
+            await applyOrderV2Hooks({
+              memberId: order.loyalty_id,
+              orderId: order.id,
+              outletId: order.store_id,
+              orderCreatedAt: order.created_at ?? new Date().toISOString(),
+              walletVoucherId: order.wallet_voucher_id,
+            });
           }
+          // The customer paid and heard nothing: the webhook that would have
+          // sent "Brewing now" was the thing that went missing.
+          await notifyOrderPreparing({
+            orderId: order.id,
+            orderNumber: order.order_number,
+            customerPhone: order.customer_phone,
+          }).catch((e) => console.warn("[push] order_preparing reconcile-pending", e));
           result.advanced += 1;
         }
       } else if (

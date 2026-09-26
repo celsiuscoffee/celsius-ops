@@ -27,6 +27,7 @@ export type { OutletId } from "./outlets";
 export { checkRateLimit, RATE_LIMITS } from "./rate-limit";
 export type { RateLimitConfig } from "./rate-limit";
 export { checkCronAuth } from "./cron-auth";
+export { safeEqual } from "./safe-equal";
 export type { CronAuthResult } from "./cron-auth";
 export { checkCsrf } from "./csrf";
 export type { CsrfOptions } from "./csrf";
