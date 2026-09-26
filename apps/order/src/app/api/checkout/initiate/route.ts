@@ -16,10 +16,12 @@ import { getOutletSst } from "@/lib/outlet-sst";
 import { fetchValidTableLabels } from "@/lib/table-layout";
 import { resolveOrderReward } from "@celsius/shared";
 import { reconcileNonStackTier } from "@/lib/loyalty/non-stack-tier";
-
-function generateOrderNumber(): string {
-  return `C-${Date.now().toString(36).slice(-4).toUpperCase()}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`;
-}
+import {
+  bindLoyaltyToSession,
+  insertOrderWithRetry,
+  modifierPriceMap,
+  serverModifierDeltaSen,
+} from "@/lib/checkout/guards";
 
 /**
  * POST /api/checkout/initiate
@@ -46,8 +48,8 @@ export async function POST(request: NextRequest) {
       rewardId,
       rewardName,
       rewardPointsCost,
-      loyaltyPhone,
-      loyaltyId,
+      loyaltyPhone: loyaltyPhoneInput,
+      loyaltyId: loyaltyIdInput,
       notes,
       orderType,
       tableNumber,
@@ -56,6 +58,16 @@ export async function POST(request: NextRequest) {
     if (!items?.length || !selectedStore || !paymentMethod) {
       return NextResponse.json({ error: "Invalid order data" }, { status: 400 });
     }
+
+    // Loyalty fields are bound to the customer session (see lib/checkout/guards).
+    const bound = await bindLoyaltyToSession(request, getSupabaseAdmin(), {
+      loyaltyId: loyaltyIdInput,
+      loyaltyPhone: loyaltyPhoneInput,
+      rewardId,
+    });
+    if (!bound.ok) return bound.response;
+    const loyaltyId = bound.loyaltyId;
+    const loyaltyPhone = bound.loyaltyPhone;
 
     // Web/PWA is QR-table ONLY. Every order from this route must carry a
     // dine-in table number. A missing/blank table means the table-QR context
@@ -200,7 +212,7 @@ export async function POST(request: NextRequest) {
     const productIds = typedItems.map((item) => item.product?.id ?? item.product_id).filter(Boolean) as string[];
     const { data: dbProducts, error: productsError } = await supabase
       .from("products")
-      .select("id, price")
+      .select("id, price, modifiers")
       .in("id", productIds);
 
     if (productsError || !dbProducts || dbProducts.length === 0) {
@@ -208,6 +220,7 @@ export async function POST(request: NextRequest) {
     }
 
     const priceMap = new Map(dbProducts.map((p: { id: string; price: number }) => [p.id, p.price]));
+    const modMap = new Map(dbProducts.map((p: { id: string; modifiers?: unknown }) => [p.id, modifierPriceMap(p.modifiers)]));
     let serverSubtotalSen = 0;
     for (const item of typedItems) {
       const pid = item.product?.id ?? item.product_id;
@@ -216,11 +229,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `Product ${pid} not found` }, { status: 400 });
       }
       // dbPrice is in RM (e.g. 12.90), convert to sen and multiply by quantity.
-      // SECURITY: clamp modifier deltas to >=0 so a crafted negative priceDelta
-      // can't deflate the server-recomputed subtotal.
-      const modifierDeltaSen = (item.modifiers?.selections ?? []).reduce(
-        (sum, s) => sum + Math.max(0, Math.round((s.priceDelta ?? 0) * 100)), 0
-      );
+      // Modifier upcharges are priced from the product row, never the client.
+      const modifierDeltaSen = serverModifierDeltaSen(modMap.get(pid!) ?? new Map(), item.modifiers);
       const unitPriceSen = Math.round(dbPrice * 100) + modifierDeltaSen;
       serverSubtotalSen += unitPriceSen * item.quantity;
     }
@@ -252,12 +262,7 @@ export async function POST(request: NextRequest) {
     if (serverSubtotalSen <= 0) {
       return NextResponse.json({ error: "Invalid order amounts" }, { status: 400 });
     }
-    if (minOrderRm > 0 && total < minOrderRm) {
-      return NextResponse.json(
-        { error: `Minimum order is RM${minOrderRm.toFixed(2)}` },
-        { status: 400 },
-      );
-    }
+    void total; // client figure — the minimum-order check uses the server total below
 
     // ── Server-side voucher validation (LEGACY `vouchers` table only) ──────
     // A wallet voucher (issued_rewards) is NOT a legacy voucher — it arrives
@@ -430,7 +435,6 @@ export async function POST(request: NextRequest) {
       : null;
 
     // ── Compute totals server-side ─────────────────────────────────────────
-    const orderNumber          = generateOrderNumber();
     const subtotalSen          = serverSubtotalSen;
     // SECURITY: ignore the legacy client `discountSen` (no first-party client
     // sends it; 0 orders have ever used it). Server-authoritative discounts
@@ -441,6 +445,12 @@ export async function POST(request: NextRequest) {
       0,
       subtotalSen - voucherDiscountSen - rewardDiscountSenAmt - fodDiscountSen - promoDiscountSen
     );
+    if (minOrderRm > 0 && afterDiscount / 100 < minOrderRm) {
+      return NextResponse.json(
+        { error: `Minimum order is RM${minOrderRm.toFixed(2)}` },
+        { status: 400 },
+      );
+    }
     const sstSen               = sstEnabled ? Math.round(afterDiscount * sstRate) : 0;
     const totalSen             = afterDiscount + sstSen;
     // Base points = pointsPerRm × RM of after-discount subtotal. Then
@@ -455,10 +465,7 @@ export async function POST(request: NextRequest) {
       ? "wallet"
       : paymentMethod;
 
-    const { data, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        order_number:           orderNumber,
+    const { data, error: orderError } = await insertOrderWithRetry(supabase, {
         store_id:               selectedStore.id,
         status:                 "pending",
         payment_method:         storedPaymentMethod,
@@ -494,9 +501,7 @@ export async function POST(request: NextRequest) {
         order_type:             "dine_in",          // guard above guarantees this
         table_number:           tableNo,
         source:                 "web_qr",            // origin attribution (see migration add_orders_source)
-      })
-      .select()
-      .single();
+      });
 
     if (orderError || !data) {
       console.error("Order insert error:", orderError);

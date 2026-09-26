@@ -108,7 +108,7 @@ export function HeroInfoCard() {
         // length IS the affordable count. Summed in so the web "Rewards" KPI =
         // wallet vouchers + claimables + affordable catalogue, matching native.
         phone
-          ? fetch(`/api/loyalty/rewards?phone=${encodeURIComponent(phone)}`).then((r) =>
+          ? fetch(`/api/loyalty/rewards?phone=${encodeURIComponent(phone)}`, auth).then((r) =>
               r.ok ? r.json() : null,
             )
           : Promise.resolve(null),

@@ -34,8 +34,12 @@ function isReviewerPhone(normalizedPhone: string): boolean {
 /**
  * Normalize phone number for consistent storage.
  * Strips spaces, dashes, and converts to 60XXXXXXXXX format.
+ *
+ * Exported so the OTP rate limiters key on the SAME form the otp_codes row
+ * is keyed on. Keying the limiter on the raw string let "+60…", "0…" and
+ * "60 1 2…" each open a fresh bucket against one code.
  */
-function normalizePhone(phone: string): string {
+export function normalizePhone(phone: string): string {
   let cleaned = phone.replace(/[\s\-()]/g, '');
   if (cleaned.startsWith('+60')) return cleaned.slice(1); // +60 → 60
   if (cleaned.startsWith('60')) return cleaned;

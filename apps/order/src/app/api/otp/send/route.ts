@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendOTP } from '@/lib/otp';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { normalizePhone } from "@celsius/shared/src/otp";
 import { supabaseAdmin } from '@/lib/supabase';
 
 // Match every common stored shape — "+60123456789", "60123456789",
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit by phone number
-    const rateCheck = await checkRateLimit(phone, RATE_LIMITS.OTP_SEND);
+    const rateCheck = await checkRateLimit(normalizePhone(phone), RATE_LIMITS.OTP_SEND);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { success: false, error: `Too many OTP requests. Try again in ${Math.ceil((rateCheck.retryAfter || 300) / 60)} minutes.` },

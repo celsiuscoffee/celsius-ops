@@ -29,6 +29,10 @@ function fakeDb(tables: Record<string, Handler>): SupabaseClient {
           q.limit = n;
           return builder;
         },
+        or(expr: string) {
+          q.filters["$or"] = expr;
+          return builder;
+        },
         in(col: string, vals: unknown[]) {
           q.filters[col] = vals;
           return Promise.resolve({ data: handler(q), error: null });
@@ -283,7 +287,9 @@ describe("resolveOrderReward — wallet vouchers", () => {
     expect(r).toMatchObject({ ok: true, discountSen: SUBTOTAL });
   });
 
-  it("no memberId → wallet path is skipped entirely (straight to catalog)", async () => {
+  it("no memberId → wallet path is skipped AND the catalog reward is refused", async () => {
+    // Security review 2026-09-25: a memberless request used to receive the
+    // catalog discount with no points check and nothing to deduct later.
     const db = fakeDb({
       voucher_templates: () => ({
         id: "t9",
@@ -302,7 +308,7 @@ describe("resolveOrderReward — wallet vouchers", () => {
       items,
       subtotalSen: SUBTOTAL,
     });
-    expect(r).toMatchObject({ ok: true, kind: "catalog", discountSen: 500 });
+    expect(r).toEqual({ ok: false, error: "Sign in to redeem rewards" });
   });
 });
 
@@ -400,6 +406,31 @@ describe("resolveOrderReward — catalog rewards", () => {
       subtotalSen: SUBTOTAL,
     });
     expect(ok).toMatchObject({ ok: true });
+  });
+
+  it("auto-issued reward (Welcome BOGO, birthday) needs an active wallet voucher", async () => {
+    // 0-point auto_issue templates used to resolve for any member; the
+    // entitlement check only ran post-payment and could only log.
+    const refused = await resolveOrderReward({
+      supabase: catalogDb({ template: catalogTemplate({ auto_issue: true, points_cost: 0 }) }),
+      memberId: "m1",
+      rewardId: "r-flat5",
+      items,
+      subtotalSen: SUBTOTAL,
+    });
+    expect(refused).toEqual({ ok: false, error: "This reward needs a voucher in your wallet" });
+
+    const held = await resolveOrderReward({
+      supabase: catalogDb({
+        template: catalogTemplate({ auto_issue: true, points_cost: 0 }),
+        heldVoucher: { id: "iv1" },
+      }),
+      memberId: "m1",
+      rewardId: "r-flat5",
+      items,
+      subtotalSen: SUBTOTAL,
+    });
+    expect(held).toMatchObject({ ok: true, kind: "catalog", pointsCost: 0, discountSen: 500 });
   });
 
   it("min order failure formats the RM amount for the customer", async () => {
