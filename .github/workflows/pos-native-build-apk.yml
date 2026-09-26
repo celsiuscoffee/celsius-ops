@@ -18,6 +18,9 @@ name: Build POS-native APK
 # it installs straight over the existing app and OTA resumes on the chosen
 # channel. No EXPO_TOKEN / secrets required.
 
+permissions:
+  contents: read
+
 on:
   # Manual dispatch with a channel picker (when the Actions:write permission is
   # available).
@@ -32,12 +35,11 @@ on:
           - production
           - preview
           - development
-  # …and kickable WITHOUT dispatch permission by bumping the marker file on the
-  # working branch or main (an ordinary branch push). Channel defaults to
+  # …and kickable WITHOUT dispatch permission by bumping the marker file on
+  # main (an ordinary branch push). Channel defaults to
   # production in that path. Path-scoped so only an intentional bump builds.
   push:
     branches:
-      - "claude/awesome-davinci-CvikE"
       - "main"
     paths:
       - "apps/pos-native/.apk-build-trigger"
@@ -66,7 +68,7 @@ jobs:
 
       # Provides cmdline-tools + auto-accepts licenses so gradle/AGP can fetch
       # any missing SDK platform / NDK on demand.
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
 
       - name: Pre-install SDK packages (match the local build)
         run: |

@@ -11,6 +11,31 @@ current month.
 
 ## Verified facts
 
+- 2026-09-26 — **Security QA CI hardening — PR on `claude/security-ci`.**
+  Seventh sibling of #1246–#1251; branches from main independently, so this
+  file conflicts on every merge after the first — keep every entry. What it
+  changes, all in `.github/workflows` + the three Next.js `package.json`s:
+  (1) every workflow now declares `permissions: contents: read` — the default
+  GITHUB_TOKEN was read/write on the repo for a job that only needs to
+  check out and call Expo; (2) the OTA workflows fire on push to main
+  independently of CI, so a merge whose typecheck fails still shipped its
+  bundle to every till / phone — each now runs `npx tsc --noEmit` in the app
+  before `eas update` (the same gate the ota-release skill requires); (3)
+  `pos-native-ota` and `pickup-native-ota` used `npm install`, i.e. a
+  possibly different transitive tree than the committed lockfile — now
+  `npm ci`, which CI already proves works for both lockfiles; (4) the only
+  third-party action, `android-actions/setup-android@v3`, is SHA-pinned to
+  v3.2.2 (`9fc6c4e9…`); GitHub-owned `actions/*` stay on tags; (5) the dead
+  `claude/awesome-davinci-CvikE` branch trigger is gone from the APK build;
+  (6) `next` 16.2.x → **16.3.6** in order / backoffice / staff for the
+  critical "Denial of Service with Server Components" advisory (vulnerable
+  range ends at 16.3.2). `next` is also pinned once at the workspace root
+  (`devDependencies`) because `packages/{auth,shared}` peer-depend on it and
+  npm kept a second, hoisted 16.2.2 copy for them otherwise — one version
+  tree now. `npm audit` still lists high transitive advisories
+  (postcss, sharp, ws, js-yaml, browserslist, prisma config…) — dev-time or
+  not reachable from request input; left for a dependency-update pass.
+
 - 2026-09-15 — **The confirmed-and-paid August run was deleted; its per-employee
   lines are gone, and the replacement is RM862.45 LOWER.** Timeline from
   `ActivityLog` (all UTC, today): 05:32:02 `payroll.confirm` monthly 8/2026 —
@@ -2802,6 +2827,20 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-26 — **Security QA series: seven PRs open, all draft, none merged —
+  owner decides order.** #1246 Tier 1 (owner applies
+  `supabase/migrations/112_…sql`), #1247 Tier 2, #1248 Tier 3 (approve per
+  commit), #1249 native (OTA — watch the runs), #1250 Tier 4, #1251 finance-2
+  (approve per commit), CI hardening (this branch — it changes the OTA
+  workflows, so merge it BEFORE the next native merge if you want the
+  typecheck gate on that release). Still open from the 2026-09-25 QA report:
+  RLS SQL for the 9 tables the Supabase advisor lists as RLS-disabled (owner
+  applies); `create_pos_sale` anon revoke (needs the POS sale sync behind the
+  POS API first); salary accrual never reverses an over-accrual; UTC fallback
+  dates on reversals/bills; a dependency-update pass for the remaining high
+  npm advisories. Owner-side, unchanged: confirm `STRICT_CUSTOMER_AUTH`,
+  `STAFF_AUTH_ENFORCE`, `POS_AUTH_ENFORCE` are set in Vercel production.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the
