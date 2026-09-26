@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { createPayment, queryCheckoutStatus } from "@/lib/revenue-monster/client";
+import { createPayment } from "@/lib/revenue-monster/client";
+import { ipay88CheckoutId, queryOrderCheckout } from "@/lib/payments/checkout-query";
+import { providerForMethod } from "@/lib/payments/routing";
+import { isIpay88Ready } from "@/lib/ipay88/client";
 import { markRmOrderPaid } from "@/lib/revenue-monster/order-status";
 import type { OrderRow } from "@/lib/supabase/types";
 
@@ -49,11 +52,15 @@ export async function POST(request: NextRequest) {
         { status: 409 },
       );
     }
-    // Still pending/failed, but a prior checkout may have already succeeded at RM
-    // with its confirmation dropped. Ask RM before charging again.
+    // Still pending/failed, but a prior checkout may have already succeeded
+    // (at RM or iPay88) with its confirmation dropped. Ask before charging again.
     if (order.payment_checkout_id) {
       try {
-        const prev = await queryCheckoutStatus(order.payment_checkout_id);
+        const prev = await queryOrderCheckout({
+          payment_checkout_id: order.payment_checkout_id,
+          store_id: order.store_id,
+          total: order.total,
+        });
         if (prev.status === "SUCCESS") {
           const settled = await markRmOrderPaid({ orderId: order.id }, prev.transactionId);
           return NextResponse.json(
@@ -66,7 +73,7 @@ export async function POST(request: NextRequest) {
           );
         }
       } catch {
-        /* RM query failed — fall through and let the customer try a fresh checkout */
+        /* gateway query failed — fall through and let the customer try a fresh checkout */
       }
     }
     // .trim() guards against accidental trailing newlines in the
@@ -74,6 +81,23 @@ export async function POST(request: NextRequest) {
     // would contain a \n and RM rejects with "The notifyUrl format
     // is invalid".
     const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3001").trim();
+
+    // iPay88-routed method: point the order at iPay88 and hand back our
+    // hand-off page, which auto-posts the signed request to iPay88's hosted
+    // page. Same response shape as RM, so released native builds (which call
+    // this for every "revenue_monster" method) pay through iPay88 unchanged.
+    if ((await providerForMethod(paymentMethod)) === "ipay88") {
+      if (!isIpay88Ready(paymentMethod, order.store_id)) {
+        return NextResponse.json({ error: "This payment method isn't available right now" }, { status: 503 });
+      }
+      await supabase
+        .from("orders")
+        .update({ payment_checkout_id: ipay88CheckoutId(order.order_number) } as Record<string, unknown>)
+        .eq("id", order.id);
+      const isApp = typeof redirectUrlOverride === "string" && redirectUrlOverride.startsWith("celsiuscoffee://");
+      const qs = new URLSearchParams({ orderId: order.id, method: paymentMethod, return: isApp ? "app" : "web" });
+      return NextResponse.json({ paymentUrl: `${baseUrl}/api/payments/ipay88/pay?${qs.toString()}` });
+    }
 
     const { paymentUrl, checkoutId } = await createPayment({
       orderId:       order.id,

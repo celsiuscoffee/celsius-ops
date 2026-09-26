@@ -11,6 +11,51 @@ current month.
 
 ## Verified facts
 
+- 2026-09-24 — **iPay88 (ADAPTIS hosted) gateway built, OFF by default.**
+  Owner wants iPay88 to replace BOTH Stripe and Revenue Monster (lower fees,
+  better settlement), Apple Pay first. Live routing at build time: every
+  enabled method on `revenue_monster` (card/fpx/tng/boost/grabpay), apple_pay
+  + google_pay + shopeepay DISABLED. Design facts worth keeping:
+  (1) **The iPay88 Confluence (ndes-my / ipay88.atlassian.net) is blocked by
+  this environment's egress proxy**; so are glama.ai and most PDF mirrors.
+  raw.githubusercontent.com and registry.npmjs.org are reachable — the spec
+  was reconstructed from karyamedia/ipay88 (HMAC-SHA512, 2025 update) and
+  cchitsiang/ipay88. Unconfirmed details are env-configurable, not hardcoded.
+  (2) **The official `adaptis-payment-gateway` RN SDK (NTT Data, 2026-09) is
+  eGHL underneath and takes the merchant `Password` client-side** — do not
+  adopt it; the secret would ship in the app bundle.
+  (3) **Installed pickup-native builds treat any provider other than
+  "revenue_monster" as Stripe.** gateway-config therefore reports iPay88
+  methods as `provider: "revenue_monster"` (+ `gateway: "ipay88"`), and
+  `/api/payments/create` dispatches server-side — so every installed app pays
+  via iPay88 with no app update. EXCEPT Apple/Google Pay: WebKit disables
+  Apple Pay in a WKWebView that injects scripts (RmCheckoutModal does), so
+  those two need the OTA that opens them in `WebBrowser.openAuthSessionAsync`.
+  (4) Provider marker: `orders.payment_checkout_id = "ipay88:<order_number>"`
+  (no schema change); RefNo = order_number. Every RM-query caller now goes
+  through `lib/payments/checkout-query.ts#queryOrderCheckout`.
+  (5) Revenue Monster settles per outlet into 3 separate Sdn Bhds — iPay88
+  needs the same (`IPAY88_MERCHANTS` per-store JSON), or all sales land in
+  one company.
+  (5b) **Production MerchantCodes received 2026-09-25** (NTT DATA email):
+  shah-alam = MM26330009 (Celsius Coffee Sdn Bhd), conezion = MM26330007,
+  tamarind = MM26330008 — built into `OUTLET_MERCHANT_CODES` in
+  `lib/ipay88/client.ts`. The secret MerchantKeys are STILL NOT in hand; they go
+  in Vercel as `IPAY88_MERCHANTS={"shah-alam":{"key":"…"},…}`.
+  (6) NTT DATA (iPay88) confirmed by email 2026-09-11 that **every payment
+  request must carry a PaymentId** — no iPay88 method picker fallback. So
+  PaymentIds are env-only, no defaults, and a method without one is hidden
+  (`isIpay88Ready`). iPay88's legal name is now **NTT DATA eCommerce
+  Solutions Sdn. Bhd.**; its only lines in our bank so far are the two
+  RM1,620 setup-fee DEBITS on 2026-09-10 (quotes QT-202609/0002 Tamarind,
+  /0003 SA). `CashCategory.IPAY88` **APPLIED to live 2026-09-24** (owner
+  approved; `supabase/migrations/111`), unused. **Owner then said: wire the
+  payment method first, don't change finance yet** — so the finance code
+  (classifier rule, GL contra 1000-02, IPAY88 in cash-in/sales recon, close
+  prep, cashflow, settlement forecast + tests) was pulled back out of PR #1245.
+  It is intact in commit `eec28bf`; restore with
+  `git checkout eec28bf -- apps/backoffice/src/lib/finance` when the owner
+  asks, ideally after the first real iPay88 payout shows its bank wording.
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
@@ -2847,6 +2892,22 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-24 — **iPay88 gateway PR (branch `claude/wonderful-lamport-563xvr`)
+  is a draft awaiting the owner.** Before ANY method is switched to iPay88:
+  (a) someone with access checks the four iPay88 spec pages against
+  `apps/order/src/lib/ipay88/client.ts` (signature strings, entry/requery
+  URLs, requery GET + Amount format, RefNo reuse after a failed attempt);
+  (b) iPay88 sandbox creds + `IPAY88_PAYMENT_IDS` (EVERY method — none default) set in the
+  Vercel `celsius-pickup-app` project; (c) sandbox test of every method, web
+  + iOS + Android; (d) one-outlet live test incl. settlement landing in the
+  right company's bank. Apple/Google Pay only after the pickup-native OTA has
+  propagated. Not built yet: refunds (iPay88 Refund API — search results say
+  it signs MerchantCode BEFORE MerchantKey with plain SHA-256, unverified),
+  finance handling of iPay88 payouts (built, parked in `eec28bf` — see above;
+  per-transaction payout sync still needs iPay88's settlement report format),
+  dropping
+  STRIPE_SECRET_KEY from the order app's required env once Stripe is retired.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the

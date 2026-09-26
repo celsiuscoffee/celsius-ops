@@ -23,6 +23,12 @@ export type SecurityHeadersOptions = {
   extraConnectSrc?: string[];
   /** Extra hosts to allow in img-src. */
   extraImgSrc?: string[];
+  /**
+   * Extra hosts forms may submit to (form-action). Only for pages whose job
+   * is to post to a third party, e.g. the payment hand-off page that
+   * auto-submits a signed request to a hosted payment gateway.
+   */
+  extraFormAction?: string[];
   /** When true, the response is from /api/* — apply Cache-Control: no-store. */
   isApi?: boolean;
 };
@@ -94,7 +100,7 @@ export function buildCsp(opts: SecurityHeadersOptions = {}): string {
     `frame-src ${BASE_FRAME_SRC.join(" ")}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
-    "form-action 'self'",
+    ["form-action 'self'", ...(opts.extraFormAction ?? [])].join(" "),
     "object-src 'none'",
   ].join("; ");
 }

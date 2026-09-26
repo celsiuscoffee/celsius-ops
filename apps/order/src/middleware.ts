@@ -32,6 +32,22 @@ async function isValidAdminToken(token: string): Promise<boolean> {
   return diff === 0;
 }
 
+// Where the iPay88 hand-off form may post: iPay88's production and sandbox
+// hosts, plus whatever IPAY88_PAYMENT_URL points at (e.g. an ADAPTIS host).
+function ipay88FormHosts(): string[] {
+  const hosts = ["https://payment.ipay88.com.my", "https://sandbox.ipay88.com.my"];
+  const configured = (process.env.IPAY88_PAYMENT_URL ?? "").trim();
+  if (configured) {
+    try {
+      const origin = new URL(configured).origin;
+      if (!hosts.includes(origin)) hosts.push(origin);
+    } catch {
+      /* invalid URL — the pay route will fail loudly on it */
+    }
+  }
+  return hosts;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
@@ -60,9 +76,12 @@ export async function middleware(request: NextRequest) {
   // Apply headers on every return path. Previously the privileged-API
   // guard short-circuited via plain NextResponse.next() and shipped
   // no CSP / no-store on the bulk of /api/* responses.
+  // The iPay88 hand-off page auto-submits a signed form to iPay88's hosted
+  // page, so it alone may post forms off-site.
+  const extraFormAction = pathname === "/api/payments/ipay88/pay" ? ipay88FormHosts() : undefined;
   const buildResponse = (inner: () => NextResponse): NextResponse => {
     const r = inner();
-    applySecurityHeaders(r, { isApi });
+    applySecurityHeaders(r, { isApi, extraFormAction });
     return r;
   };
 
