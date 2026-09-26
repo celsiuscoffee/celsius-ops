@@ -47,10 +47,37 @@ current month.
   review:** `onClick={placeOrder}` passes React's event as arg 0, which would
   have arrived as a truthy `allowDuplicate` and silently disabled the whole
   guard — must be `onClick={() => placeOrder()}`.
-  **Owner actions:** refund the 86 (start with Shah Alam t15 26/09, RM34.70
-  → Nazierun Natasha Binti Nor Anizam, CIMB 7628245033, 012-3108756); and
-  the root enabler is still RM's dead webhooks — every second of that
-  45-90s window is when customers re-pay.
+  **CONFIDENCE — do NOT blanket-refund (added after the owner asked "how do
+  we know it is not double purchase"): we mostly CANNOT prove same-payer.**
+  Only **13% of QR dine-in orders carry any customer identity** (311/2,388
+  in 30d), and **0 of the 86 clusters have loyalty identity on both legs**,
+  so "two friends ordered the same RM13.90 latte" is genuinely
+  indistinguishable in our data. The 86 / RM1,685.70 is an UPPER BOUND of
+  suspicion, not a confirmed refund list. Graded in the CSV by behavioural
+  signal (a failed attempt interleaved = the panic-retry signature; or
+  <=2 min apart AND a different payment method = someone switching method
+  after an apparent failure): **HIGH 27 (RM512.40), MEDIUM 44 (RM922.30),
+  LOW 15 (RM251.00)**. Refund HIGH, check MEDIUM against complaints, hold
+  LOW unless a customer asks.
+  **HOW WE KNOW A PAYMENT SUCCEEDED (asked same session) — reliability
+  order:** (1) our merchant bank feed: RM settles daily as
+  `SETTLEMENT <yyyymmdd> REVENUE MONSTER SDN PB ECP PAYMENT`, category
+  `REVENUE_MONSTER`, 67 lines / RM51,144.76 in 30d — money actually
+  received, but a daily aggregate, 1-2 days lagged; (2) RM's merchant
+  portal, per-transaction but manual; (3) the customer's own bank app (what
+  staff should accept at the table); (4) our `orders.status` — LAST, because
+  it is derived from RM's checkout query, which has now lied in both
+  directions (EXPIRED on a paid order, PENDING for 2h on another).
+  **GAP: `RmPayout` / `RmPayoutLine` are EMPTY (0 rows)** though
+  `sync-rm-payouts` is scheduled daily at 21:00 — the per-transaction
+  settlement feed that would let us answer "did THIS payment succeed"
+  automatically, and identify the payer instrument (the one datum that
+  would prove same-payer for the 86), has never populated. Fixing that sync
+  is the highest-value next step for both questions.
+  **Owner actions:** refund the HIGH 27 (start with Shah Alam t15 26/09,
+  RM34.70 → Nazierun Natasha Binti Nor Anizam, CIMB 7628245033,
+  012-3108756); and the root enabler is still RM's dead webhooks — every
+  second of that 45-90s window is when customers re-pay.
 
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
