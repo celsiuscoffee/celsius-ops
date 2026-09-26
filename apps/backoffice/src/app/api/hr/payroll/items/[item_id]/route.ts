@@ -181,8 +181,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ it
   patch.total_gross = newGross;
   patch.total_deductions = newDeductions;
   patch.net_pay = newNet;
+  // A gross change (basic, OT, allowance) leaves EPF/SOCSO/EIS/PCB computed
+  // on the OLD gross. Flag the line statutory_stale — the same flag the
+  // adjustments route sets and the confirm gate blocks on — unless the
+  // operator supplied the statutory figures themselves in this same call.
+  const prevDetails = (item.computation_details as Record<string, unknown> | null) || {};
+  const grossChanged = Math.abs(Number(item.total_gross || 0) - newGross) > 0.005;
+  const statutoryTouched = (["epf_employee", "socso_employee", "eis_employee", "pcb_tax"] as const)
+    .some((k) => body[k] !== undefined);
   patch.computation_details = {
-    ...(item.computation_details as Record<string, unknown> || {}),
+    ...prevDetails,
+    statutory_stale: grossChanged && !statutoryTouched ? true : prevDetails.statutory_stale || false,
     manual_overrides: overrides,
     last_override_note: body.note || null,
     last_override_at: now,
