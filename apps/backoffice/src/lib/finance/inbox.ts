@@ -6,6 +6,8 @@ import { getFinanceClient } from "./supabase";
 import { postJournal } from "./ledger";
 import type { JournalLineInput } from "./types";
 import { logAgentMessage } from "@celsius/agents/src/messages";
+// Fallback dates are MYT calendar days: UTC would land 00:00–08:00 postings on yesterday.
+import { todayMyt } from "@/lib/inventory/myt-date";
 
 export type InboxAction =
   | { kind: "approve" }                                                    // accept agent's proposed action
@@ -226,7 +228,7 @@ async function resolveClaimedException(
 
   const result = await postJournal({
     companyId,
-    txnDate: proposal.bill.billDate ?? new Date().toISOString().slice(0, 10),
+    txnDate: proposal.bill.billDate ?? todayMyt(),
     description: `Bill: ${proposal.supplierName ?? "supplier"}${
       proposal.bill.billNumber ? ` #${proposal.bill.billNumber}` : ""
     } (resolved from inbox)`,

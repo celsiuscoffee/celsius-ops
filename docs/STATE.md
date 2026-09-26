@@ -11,6 +11,20 @@ current month.
 
 ## Verified facts
 
+- 2026-09-26 — **Salary-control accrual now reconciles both ways.**
+  `lib/finance/salary-accrual.ts` computes, per company × month × control,
+  required = max(0, debits − credits) EXCLUDING its own journals, minus what it
+  has itself posted (agent_version `salary-accrual-*`, top-ups and
+  corrections); a positive diff tops up as before, a negative diff posts a
+  correction (Dr control / Cr expense). Own journals are excluded from
+  `required` so a real HR accrual is never reversed. Pure planner
+  `planSalaryAccruals` + `salary-accrual.test.ts`. The cron
+  (`bukku-feed-sync`) commits automatically, so corrections go live on merge —
+  owner should eyeball `GET /api/finance/salary-accrual` (dry run) once after
+  merge. Also: fallback dates in `ledger.ts` reverseTransaction, `agents/ap.ts`
+  bill posting and `inbox.ts` approve now use `todayMyt()` (MYT calendar day)
+  instead of UTC, which put 00:00–08:00 postings on the previous day.
+
 - 2026-09-26 — **Security QA finance-2 (concurrency + payroll integrity) — PR on
   `claude/security-finance2`.** Sixth sibling of #1246–#1250; branches from
   main independently, so `docs/STATE.md` conflicts on every merge after the

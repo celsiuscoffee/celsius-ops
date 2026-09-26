@@ -10,6 +10,8 @@ import type {
   PostJournalResult,
   JournalLineInput,
 } from "./types";
+// Fallback dates are MYT calendar days: UTC would land 00:00–08:00 postings on yesterday.
+import { todayMyt } from "@/lib/inventory/myt-date";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -150,7 +152,7 @@ export async function reverseTransaction(
 
   const result = await postJournal({
     companyId: original.company_id as string,
-    txnDate: opts.date ?? new Date().toISOString().slice(0, 10),
+    txnDate: opts.date ?? todayMyt(),
     description: `Reversal of ${originalId}: ${opts.reason}`,
     txnType: "reversal",
     outletId: original.outlet_id,
