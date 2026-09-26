@@ -130,7 +130,41 @@ export async function postApAccrual(
 
   const already = await existingId("ap_accrual", accrualDate);
   if (already) {
-    return { ...base, accrualTxnId: already, reversalTxnId: await existingId("ap_accrual_reversal", reversalDate), skipped: "already accrued" };
+    let reversalId = await existingId("ap_accrual_reversal", reversalDate);
+    if (!reversalId && !opts.dryRun) {
+      // The accrual posted but its reversal never did (typically: the next
+      // period was already closed when this first ran, and the trigger
+      // refused it). Until the reversal exists the expense is counted twice —
+      // once accrued, once cash-basis when the bank pays. Post the missing
+      // leg from the ORIGINAL accrual's lines so it offsets exactly what was
+      // booked, not whatever "open payables" resolves to today.
+      const { data: accrLines } = await client
+        .from("fin_journal_lines")
+        .select("account_code, outlet_id, debit, credit")
+        .eq("transaction_id", already);
+      if (accrLines && accrLines.length) {
+        const r = await postJournal({
+          companyId,
+          txnDate: reversalDate,
+          description: `AP accrual reversal ${period} (posted late — missing at first run)`,
+          txnType: "ap_accrual_reversal",
+          outletId: null,
+          sourceDocId: null,
+          agent: "close",
+          agentVersion: AP_ACCRUAL_VERSION,
+          confidence: 1.0,
+          lines: accrLines.map((l) => ({
+            accountCode: l.account_code as string,
+            outletId: (l.outlet_id as string | null) ?? null,
+            debit: Number(l.credit),
+            credit: Number(l.debit),
+            memo: `Reverse AP accrual ${period}`,
+          })),
+        });
+        reversalId = r.transactionId;
+      }
+    }
+    return { ...base, accrualTxnId: already, reversalTxnId: reversalId, skipped: "already accrued" };
   }
   if (opts.dryRun) return { ...base, accrued: accr.total, skipped: "dry-run" };
 
