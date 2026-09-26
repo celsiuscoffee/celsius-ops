@@ -316,13 +316,17 @@ export default function Register() {
     return [...pickup, ...grab, ...counter, ...tables];
   }, [kdsOrders, tableSlots]);
   // Orders past the 15-min serving target → drives the alarm sound + the popup.
-  const overdueOrders = useServingAlarm(servingAlarmItems);
+  const { overdue: overdueOrders, silence: silenceAlarm } = useServingAlarm(servingAlarmItems);
   const [overdueAck, setOverdueAck] = useState(false);
-  const prevOverdueCount = useRef(0);
+  // Track overdue IDS (not count) — if one order is served while another goes
+  // overdue in the same tick the count is unchanged, but the new order must
+  // still re-pop the popup (it also re-rings the alarm — keep them in step).
+  const prevOverdueIds = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (overdueOrders.length > prevOverdueCount.current) setOverdueAck(false); // a new order went overdue → re-pop
-    if (overdueOrders.length === 0) setOverdueAck(false);                      // all cleared → reset
-    prevOverdueCount.current = overdueOrders.length;
+    const hasNew = overdueOrders.some((o) => !prevOverdueIds.current.has(o.id));
+    if (hasNew) setOverdueAck(false);                     // a new order went overdue → re-pop
+    if (overdueOrders.length === 0) setOverdueAck(false); // all cleared → reset
+    prevOverdueIds.current = new Set(overdueOrders.map((o) => o.id));
   }, [overdueOrders]);
   // Only over the main register (not while the orders panel is already open).
   const showOverduePopup = overdueOrders.length > 0 && !overdueAck && hub === null;
@@ -2229,7 +2233,7 @@ export default function Register() {
           target (pickup not Ready / table not Done), paired with the alarm
           sound. Auto-clears as orders are actioned; "Open Live Orders" jumps
           to the panel to act on them. */}
-      <Modal visible={showOverduePopup} transparent animationType="fade" onRequestClose={() => setOverdueAck(true)}>
+      <Modal visible={showOverduePopup} transparent animationType="fade" onRequestClose={() => { setOverdueAck(true); silenceAlarm(); }}>
         <View style={{ flex: 1, backgroundColor: "rgba(22,8,0,0.92)" }} className="items-center justify-center px-12">
           <View className="w-full max-w-3xl rounded-3xl p-8" style={{ backgroundColor: "#2A1206", borderWidth: 2, borderColor: "#C2452D" }}>
             <View className="flex-row items-center gap-3 mb-1">
@@ -2268,8 +2272,8 @@ export default function Register() {
               })}
             </ScrollView>
             <View className="flex-row gap-3">
-              <Pressable onPress={() => { Haptics.selectionAsync(); setOverdueAck(true); }} className="flex-1 items-center justify-center rounded-2xl py-4 border border-cream/15 active:opacity-60">
-                <Text className="text-cream/70 text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Dismiss</Text>
+              <Pressable onPress={() => { Haptics.selectionAsync(); setOverdueAck(true); silenceAlarm(); }} className="flex-1 items-center justify-center rounded-2xl py-4 border border-cream/15 active:opacity-60">
+                <Text className="text-cream/70 text-base" style={{ fontFamily: "SpaceGrotesk_600SemiBold" }}>Silence</Text>
               </Pressable>
               <Pressable onPress={() => { Haptics.selectionAsync(); openOverdueHub(); }} className="flex-1 items-center justify-center rounded-2xl py-4 active:opacity-80" style={{ backgroundColor: "#C2452D" }}>
                 <Text className="text-cream text-base" style={{ fontFamily: "SpaceGrotesk_700Bold" }}>Open Live Orders</Text>
