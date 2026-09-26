@@ -19,7 +19,7 @@ current month.
   10:46:34, settled, docket 10:47:31), with C-ETHC92 (card 10:45:25) and
   C-FJ9C94 (tng 10:45:59) failing in between. The second attempt began at
   10:45:25 — **6 seconds BEFORE the first one confirmed.**
-  **Mechanism (ours, not RM''s this time):** settle takes 45-90s because RM
+  **Mechanism (ours, not RM's this time):** settle takes 45-90s because RM
   webhooks never fire (1 of 480 settled <10s, Aug audit), so the customer
   watches "Confirming payment", two interleaved attempts show FAILED, they
   conclude it did not work and pay again. Nothing anywhere stopped them:
@@ -40,16 +40,16 @@ current month.
   flight: C-7272 was debited at +4s while RM still said nothing); return 409
   + the existing order instead of charging. NOT a hard block — the client
   shows "this table just paid RM X, view that order / charge me again" and
-  `allowDuplicate` carries the customer''s yes, so a genuine second round
+  `allowDuplicate` carries the customer's yes, so a genuine second round
   still works. Twin-selection logic lives in a dependency-free
   `duplicate-guard.ts` with unit tests (the root vitest `@` alias resolves to
   backoffice, so a test reaching route.ts cannot load). **Gotcha caught in
-  review:** `onClick={placeOrder}` passes React''s event as arg 0, which would
+  review:** `onClick={placeOrder}` passes React's event as arg 0, which would
   have arrived as a truthy `allowDuplicate` and silently disabled the whole
   guard — must be `onClick={() => placeOrder()}`.
   **Owner actions:** refund the 86 (start with Shah Alam t15 26/09, RM34.70
   → Nazierun Natasha Binti Nor Anizam, CIMB 7628245033, 012-3108756); and
-  the root enabler is still RM''s dead webhooks — every second of that
+  the root enabler is still RM's dead webhooks — every second of that
   45-90s window is when customers re-pay.
 
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
