@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { isGrabConfigured, markOrderReady } from "@/lib/grab";
+import { getPosUser } from "@/lib/pos-auth";
 
 /**
  * POST /api/pos/order-status
@@ -54,6 +55,7 @@ function missingServingCol(err: { code?: string; message?: string } | null): boo
 }
 
 export async function POST(req: NextRequest) {
+  if (!(await getPosUser(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const supabase = getSupabase();
   try {
     const { source, id, status } = await req.json();

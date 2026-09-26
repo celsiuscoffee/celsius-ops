@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 import { syncItemAvailabilityToGrab } from "@/lib/grab-availability";
+import { getPosUser } from "@/lib/pos-auth";
 
 // The push retries through Grab's "retry after N seconds" throttle, so give the
 // request room to finish rather than being cut off mid-retry.
@@ -33,6 +34,7 @@ export const maxDuration = 60;
  *         is_available: boolean, reason?: string }
  */
 export async function POST(req: NextRequest) {
+  if (!(await getPosUser(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   let body: {
     outlet_id?: string;
     product_id?: string;

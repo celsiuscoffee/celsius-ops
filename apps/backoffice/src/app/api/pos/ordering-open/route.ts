@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
+import { getPosUser } from "@/lib/pos-auth";
 
 /**
  * POS "stop / resume online ordering" switch — lets a cashier pause QR table
@@ -65,6 +66,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/pos/ordering-open — body: { outlet_id, is_open }
 export async function POST(req: NextRequest) {
+  if (!(await getPosUser(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   let body: { outlet_id?: string; is_open?: boolean };
   try {
     body = await req.json();

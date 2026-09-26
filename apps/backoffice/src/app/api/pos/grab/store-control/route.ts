@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getStoreStatus, pauseStore } from "@/lib/grab";
+import { getPosUser } from "@/lib/pos-auth";
 
 let cached: SupabaseClient | null = null;
 function db(): SupabaseClient {
@@ -41,6 +42,7 @@ async function resolveMerchant(outletId: string): Promise<string | null> {
 }
 
 export async function GET(req: NextRequest) {
+  if (!(await getPosUser(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const outletId = (req.nextUrl.searchParams.get("outlet_id") ?? "").trim();
   if (!outletId) return NextResponse.json({ error: "outlet_id required" }, { status: 400 });
   if (!grabReady()) return NextResponse.json({ configured: false });
@@ -66,6 +68,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (!(await getPosUser(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   let body: { outlet_id?: string; pause?: boolean; duration?: number } = {};
   try {
     body = await req.json();

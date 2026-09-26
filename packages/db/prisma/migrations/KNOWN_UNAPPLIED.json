@@ -1,4 +1,5 @@
 {
   "_README": "Migrations knowingly NOT applied to the live schema. `npm run check:migrations` reports these instead of failing. Every entry needs a real reason and is meant to be temporary — resolve it by applying the migration or deleting the file. An entry whose migration IS applied is reported as stale so this list cannot quietly rot into a place real drift hides.",
-  "20260803_hr_performance_deduction_waivers": "Never applied. The feature shipped through hr_performance_overrides instead, and the only reference to this table in code is a comment in api/hr/allowances/route.ts — so nothing is broken by its absence. Owner decision pending 2026-09-15: apply the migration, or delete it."
+  "20260803_hr_performance_deduction_waivers": "Never applied. The feature shipped through hr_performance_overrides instead, and the only reference to this table in code is a comment in api/hr/allowances/route.ts — so nothing is broken by its absence. Owner decision pending 2026-09-15: apply the migration, or delete it.",
+  "20260925_revoke_anon_security_definer_rpc": "Grants-only change (REVOKE EXECUTE on 10 SECURITY DEFINER functions from anon/authenticated). Waiting on owner approval to apply to production (hard rule 6 — touches loyalty points + GL functions). Remove this entry once applied."
 }

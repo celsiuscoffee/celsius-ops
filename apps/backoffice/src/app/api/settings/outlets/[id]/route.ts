@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
-import { getUserFromHeaders } from "@/lib/auth";
+import { getUserFromHeaders, hasModulePermission } from "@/lib/auth";
 
 // Fields that affect the auto-hours cron config
 const HOURS_FIELDS = ["openTime", "closeTime", "daysOpen", "pickupStoreId"] as const;
@@ -9,6 +9,9 @@ const HOURS_FIELDS = ["openTime", "closeTime", "daysOpen", "pickupStoreId"] as c
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(caller, "settings:outlets", prisma))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
   const body = await req.json();
@@ -105,6 +108,9 @@ async function syncOutletHours(outlet: {
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(caller, "settings:outlets", prisma))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
 

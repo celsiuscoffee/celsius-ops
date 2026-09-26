@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { isGrabConfigured, editOrder, type EditOrderItem } from "@/lib/grab";
+import { getPosUser } from "@/lib/pos-auth";
 
 /**
  * POST /api/pos/grab/order-edit
@@ -34,6 +35,7 @@ function getSupabase(): SupabaseClient {
 type StoredItem = { grab_item_id: string | null; quantity: number | null };
 
 export async function POST(req: NextRequest) {
+  if (!(await getPosUser(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isGrabConfigured()) {
     return NextResponse.json({ error: "Grab not configured" }, { status: 400 });
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
-import { requireAuth, getUserFromHeaders } from "@/lib/auth";
+import { requireAuth, getUserFromHeaders, hasModulePermission } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 const BRAND_ID = "brand-celsius";
 
@@ -27,6 +28,9 @@ export async function POST(
 ) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
+  if (!(await hasModulePermission(auth.user, "loyalty:manual-grant", prisma))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const caller = await getUserFromHeaders(request.headers);
   const callerLabel = caller?.name ?? caller?.id ?? "admin";
