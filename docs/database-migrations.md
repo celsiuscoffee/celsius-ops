@@ -46,8 +46,12 @@ npm run check:migrations -- --json
 ```
 
 Needs `DIRECT_URL` (or `DATABASE_URL`). It reads every migration in
-`packages/db/prisma/migrations/`, works out what each one would create, and asks
-the live database whether it is there.
+`packages/db/prisma/migrations/` **and** `supabase/migrations/`, works out what
+each one would create, and asks the live database whether it is there. Supabase
+migrations are reported as `supabase/<file>.sql`; use that name in
+`KNOWN_UNAPPLIED.json` if one is knowingly unapplied. (Verified 2026-09-26: all
+164 objects the 113 supabase files promise are present in production, so adding
+the directory introduced no new drift.)
 
 **Why this exists.** CI's `migration-guard` proves a `.sql` FILE exists beside a
 `schema.prisma` change. It cannot know whether the SQL was ever RUN — these are
