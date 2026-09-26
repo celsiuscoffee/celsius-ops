@@ -38,6 +38,8 @@ export const CONTRA_ACCOUNT: Record<string, string> = {
   OTHER_MARKETING: "6503",
   KOL: "6503-03",
   MARKETPLACE_FEE: "6519", // Grab/FP commission = merchant fees
+  // ── hiring ──
+  RECRUITMENT: "6502-05",  // job boards (Indeed) — Employee Benefits, not marketing
   // ── operating expenses ──
   RENT: "6504",
   UTILITIES: "6505",

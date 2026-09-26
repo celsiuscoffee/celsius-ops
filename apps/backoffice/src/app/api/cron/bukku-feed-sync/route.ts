@@ -13,7 +13,7 @@
 // backlog over a few runs.
 
 import { NextRequest, NextResponse } from "next/server";
-import { syncBukkuFeedLedger } from "@/lib/finance/bukku-feed-sync";
+import { syncBukkuFeedLedger, checkFeedStaleness } from "@/lib/finance/bukku-feed-sync";
 import { applyApMatches } from "@/lib/finance/ap-match";
 import { applyVerifiedReview } from "@/lib/finance/agents/ap-verifier";
 import { createWagePaymentSlips } from "@/lib/finance/payment-slips";
@@ -52,7 +52,24 @@ export async function GET(req: NextRequest) {
   // 1. ingest the bank feed (must run first — the rest acts on its output)
   await step("feed", async () => {
     const { accounts } = await syncBukkuFeedLedger({ commit: true });
-    return { accounts: accounts.length, newLines: accounts.reduce((s, a) => s + a.newLines, 0) };
+    // Surface skips, don't just count successes — an UNLINKED Bukku feed used
+    // to vanish from this result entirely (Conezion 2644, seven days unnoticed).
+    const skipped = accounts.filter((a) => a.skipped)
+      .map((a) => `${a.subdomain}/${a.accountTail || "?"}: ${a.skipped}`);
+    return {
+      accounts: accounts.length,
+      newLines: accounts.reduce((s, a) => s + a.newLines, 0),
+      ...(skipped.length ? { skipped } : {}),
+    };
+  });
+  // 1b. Staleness guard — an account can go quiet WITHOUT an error (Bukku keeps
+  //     answering, just with nothing new). Reported relative to the newest line
+  //     across all accounts, so weekends and bank holidays move everyone
+  //     together and raise nothing.
+  await step("feedStaleness", async () => {
+    const stale = await checkFeedStaleness(2);
+    if (stale.length) console.error("[finance-loop:feedStaleness] accounts behind:", stale);
+    return { stale };
   });
   // 2. reconcile supplier outflows → invoices (rules tier, then LLM verifier
   //    tier). RECONCILE-ONLY: the Telegram proof-of-payment flow is the primary

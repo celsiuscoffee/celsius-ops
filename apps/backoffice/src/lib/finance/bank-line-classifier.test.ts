@@ -7,6 +7,37 @@ const dr = (description: string, amount = 100) =>
   classifyBankLine({ description, amount, direction: "DR" });
 
 describe("bank-line-classifier", () => {
+  it("books Indeed job-board spend as RECRUITMENT, not ad spend", () => {
+    // DIGITAL_ADS is deduped out of bank opex against the ads module, which is
+    // Google-only — the Indeed tables are empty, so booking Indeed there would
+    // erase the cost from the P&L entirely.
+    expect(dr("Shah Alam AMMAR BIN SHAHRIN * indeed 15/8/26").category).toBe("RECRUITMENT");
+    expect(dr("Shah Alam AMMAR BIN SHAHRIN * indeed 2/7/26").category).toBe("RECRUITMENT");
+    expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN Indeed Hiring").category).toBe("RECRUITMENT");
+    expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN Claim Indeed").category).toBe("RECRUITMENT");
+    // Some reimbursements carry only the Indeed invoice number
+    expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN SGI26-00052664 Celsius Coffee Tamar").category).toBe("RECRUITMENT");
+    expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN SGI26-00081124 Celsius Coffee Shah").category).toBe("RECRUITMENT");
+    // A supplier reference of a different shape must not be swept in
+    expect(dr("Putrajaya ARIFF IZHAM BIN ABD* SPWMS202608048").category).not.toBe("RECRUITMENT");
+  });
+
+  it("books the director's ad reimbursements as DIGITAL_ADS whatever the spelling", () => {
+    // Real Jul/Aug-2026 narrations. None contain "ads claim", so the older rule
+    // dropped them into OTHER_OUTFLOW — RM18,575 in August alone.
+    expect(dr("Shah Alam AMMAR BIN SHAHRIN * Marketing 0726").category).toBe("DIGITAL_ADS");
+    expect(dr("Tamarind AMMAR BIN SHAHRIN * Marketing 0626").category).toBe("DIGITAL_ADS");
+    expect(dr("Putrajaya AMMAR BIN SHAHRIN * Ads Clam Jun26").category).toBe("DIGITAL_ADS");
+    // Older spellings keep working
+    expect(dr("Celsius Coffee PutraAMMAR BIN SHAHRIN * Ads claim May").category).toBe("DIGITAL_ADS");
+    // A genuine director drawing is NOT an ad claim
+    expect(dr("TRANSFER FR A/C AMMAR BIN SHAHRIN ADTD").category).toBe("DIRECTORS_ALLOWANCE");
+    // Suppliers with "Marketing" in their NAME must stay out of DIGITAL_ADS —
+    // this is why the rule is scoped to the director instead of sweeping the word.
+    expect(dr("PUTRAJAYA BEST MARKETING & DI* IY-741245").category).not.toBe("DIGITAL_ADS");
+    expect(dr("Shah Alam PXL MARKETING SDN BHD* INV-2231").category).not.toBe("DIGITAL_ADS");
+  });
+
   it("maps sales inflows to their channel", () => {
     expect(cr("TRANSFER TO A/C JOHN DOE DUITNOW QR-").category).toBe("QR");
     expect(cr("DR/CARD SALES M/N 2612988 D 5").category).toBe("CARD");
@@ -60,6 +91,42 @@ describe("bank-line-classifier", () => {
     expect(classifyBankLine({ description: "Celsius Coffee TamarCOLLECTIVE PROJECT *IV-1234", amount: 100, direction: "DR", accountKey: "CELSIUS COFFEE TAMARIND SDN. BHD. (9345)" }).isInterCo).toBe(false);
   });
 
+  it("reads the abbreviated Aug-2026 payroll narration as salary, not OTHER_OUTFLOW", () => {
+    // Maybank switched "Salary Jun26" -> "Sal Jul26" and added "Add OT Jul26".
+    // The old /\bSALARY\b/ rule missed every one of them and the whole Jul-26
+    // payroll landed in fallback_other.
+    expect(dr("Conezion FIRDAUS BIN NAJIB * Sal Jul26").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("CELSIUS COFFEE HQ ADAM KELVIN * SAL JUL26").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("Putrajaya CELSIUS COFFEE SDN.* Sal Jul26 2/2").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("Conejion AHMAD RAZLEY HIDAYA* Add OT Jul26").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("SHAH ALAM SHAIRULEEN BINTI JE* ADD OT JUL26").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("Tamarind CELSIUS COFFEE SDN.* OT Jul26").category).toBe("EMPLOYEE_SALARY");
+    // Ariff's pay line must beat raw_ariff_adhoc, which grabbed it as RAW_MATERIALS
+    expect(dr("Celsius Coffee HQ ARIFF IZHAM BIN ABD* Sal Jul26").category).toBe("EMPLOYEE_SALARY");
+    // the older spellings keep working
+    expect(dr("Celsius Coffee HQ ARIFF IZHAM BIN ABD* Salary Jun26").category).toBe("EMPLOYEE_SALARY");
+    expect(dr("CELSIUS COFFEE SDN.* Salary 1/1").category).toBe("EMPLOYEE_SALARY");
+    // and the CR twin (outlet funding the central run) stays inter-co
+    expect(cr("CELSIUS COFFEE CONE* Sal Jul26 1/2").category).toBe("EMPLOYEE_SALARY");
+    expect(cr("CELSIUS COFFEE CONE* Sal Jul26 1/2").isInterCo).toBe(true);
+  });
+
+  it("reads the abbreviated management-fee narration", () => {
+    // "Mngmt Fee" -> "Mgmt Fee 1/2" / bare "mgmt 1/4"
+    expect(dr("Tamarind CELSIUS COFFEE SDN.* Mgmt Fee 1/2").category).toBe("MANAGEMENT_FEE");
+    expect(dr("Tamarind CELSIUS COFFEE SDN.* Mgmt fee 2/2").category).toBe("MANAGEMENT_FEE");
+    expect(dr("Putrajaya CELSIUS COFFEE SDN.* mgmt 1/4").category).toBe("MANAGEMENT_FEE");
+    expect(dr("TRANSFER FR A/C CELSIUS COFFEE SDN. Mngmt Fee").category).toBe("MANAGEMENT_FEE");
+  });
+
+  it("does not read SAL/OT as payroll without a pay period after them", () => {
+    // the short forms are anchored on "Jul26" / "1/2" so they cannot swallow
+    // unrelated vendor lines or references
+    expect(dr("TRANSFER FR A/C SAL SUPPLIES SDN BHD INV-9").category).not.toBe("EMPLOYEE_SALARY");
+    expect(dr("SHAH ALAM MUHAMAD SYAFIQ AIMA* L0131401202300").category).not.toBe("EMPLOYEE_SALARY");
+    expect(dr("TRANSFER FR A/C PARKING LOT 12/34 rental").category).not.toBe("EMPLOYEE_SALARY");
+  });
+
   it("classifies the reclassified OTHER_OUTFLOW vendors", () => {
     expect(dr("TRANSFER FR A/C COUNTRY BREAD BAKER INV-001").category).toBe("RAW_MATERIALS");
     expect(dr("TRANSFER FR A/C BEARD BROTHERS MEAT INV250").category).toBe("RAW_MATERIALS");
@@ -84,6 +151,20 @@ describe("bank-line-classifier", () => {
     // Existing prefixes keep working
     expect(dr("TAMARIND SQUARE CHE QASEH QAZRINA B* PT WEEK 23/26").outletCode).toBe("CC003");
     expect(dr("Conezion Putrajaya NURHAN DANIAL BIN S* PT Week 23/26").outletCode).toBe("CC001");
+  });
+
+  it("catches the abbreviated PT week narration that started 2026-08-21", () => {
+    // Maybank dropped "Week" mid-August; these four lines (RM882) fell into
+    // OTHER_OUTFLOW and understated August part-timer wages.
+    expect(dr("Shah Alam FARAH NABILAH BINTI* Pt W33 26").category).toBe("PARTIMER");
+    expect(dr("Shah Alam MOHAMED DANISH HYQA* Pt w33 26").category).toBe("PARTIMER");
+    expect(dr("Tamarind MUHAMAD FARHAN IKHM* PT W33/26").category).toBe("PARTIMER");
+    expect(dr("Conezion MUHAMAD FARHAN IKHM* PT W33/26").outletCode).toBe("CC001");
+    // Older spellings keep working
+    expect(dr("Tamarind Square MUHAMMAD ADIB BIN Z* PT Week 33/26").category).toBe("PARTIMER");
+    expect(dr("SHAH ALAM AIMI NADHIRA BINTI* PARTIMER JUL").category).toBe("PARTIMER");
+    // A bare "PT" with no week number must not swallow unrelated lines
+    expect(dr("Shah Alam PT SUMBER REZEKI* INV-88213").category).not.toBe("PARTIMER");
   });
 
   it("maps statutory + known opex vendors", () => {
