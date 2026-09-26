@@ -30,6 +30,9 @@ name: pickup-native OTA
 # build uses, so the OTA bundle's config always matches the installed app — no
 # risk of shipping a divergent Supabase URL/key to live customers.
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -49,7 +52,15 @@ jobs:
         with:
           node-version: 20
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        # npm ci: install exactly the committed package-lock.json. `npm install`
+        # could resolve a different transitive tree than local dev / CI and
+        # ship it straight to every device.
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck before publishing
+        # The OTA workflow runs on push to main independently of CI, so a merge
+        # whose typecheck fails would still ship its bundle to every device.
+        # Same gate the ota-release skill requires before a release.
+        run: npx tsc --noEmit
       - name: Publish OTA update (production channel)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
