@@ -3,13 +3,15 @@ export const dynamic = "force-dynamic";
 // expire-orders: batch, and stop issuing work before the deadline.
 export const maxDuration = 60;
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import Stripe from "stripe";
+import * as Sentry from "@sentry/nextjs";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { checkCronAuth } from "@celsius/shared";
 import { queryCheckoutStatus } from "@/lib/revenue-monster/client";
 import { markRmOrderPaid } from "@/lib/revenue-monster/order-status";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
+import { resolveWindow } from "./window";
 
 /**
  * Audit/backfill sweep for the "paid but failed" class of incident
@@ -18,17 +20,30 @@ import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
  * gateway while the order showed "failed".
  *
  * This endpoint asks the gateway about every failed order in the window
- * and reports the ones that were actually PAID. It is NOT on a cron
- * schedule — it's an operator tool for incident QA:
+ * and reports the ones that were actually PAID.
  *
  *   GET /api/cron/reconcile-failed?days=30             → dry-run report
  *   GET /api/cron/reconcile-failed?days=30&apply=true  → settle them too
+ *   GET /api/cron/reconcile-failed?minutes=180&apply=true → the cron
  *
- * Dry-run is the default on purpose: a historical paid-but-failed order
- * may have been handled out-of-band (refunded at the portal, re-rung on
- * POS), so settling it blindly could double-fulfil. Review the dry-run
- * list, refund or settle each case deliberately, then use apply=true
- * only if every remaining row should be honoured as paid.
+ * Dry-run is the default on purpose for the WIDE (?days=) window: a
+ * historical paid-but-failed order may have been handled out-of-band
+ * (refunded at the portal, re-rung on POS), so settling it blindly could
+ * double-fulfil. Review the dry-run list, refund or settle each case
+ * deliberately, then use apply=true only if every remaining row should be
+ * honoured as paid.
+ *
+ * The NARROW (?minutes=) window runs on a cron with apply=true, and that
+ * is safe for the opposite reason: within a few hours nobody has had time
+ * to refund or re-ring anything out-of-band, so "the gateway says this was
+ * paid" is simply the truth arriving late. This is the automated cure for
+ * the 2026-09-26 incident (C-7272): RM answered EXPIRED 51s after checkout
+ * on an order the customer's bank had ALREADY debited (RM45.65 at +4s), so
+ * reconcile-pending correctly-by-its-own-rules flipped a PAID order to
+ * failed — and nothing ever re-asked, because this route was operator-only.
+ * markRmOrderPaid accepts failed → paid (money received always wins), so a
+ * sweep every few minutes turns a wrong terminal answer into a self-healing
+ * one: the order settles, the docket prints, points are earned.
  *
  * apply=true settles through the same paths the live flows use
  * (markRmOrderPaid / the Stripe-succeeded update + loyalty earn), so
@@ -75,11 +90,11 @@ export async function GET(request: NextRequest) {
   if (!cronAuth.ok) return NextResponse.json({ error: cronAuth.error }, { status: cronAuth.status });
 
   const params = request.nextUrl.searchParams;
-  const days   = Math.min(Math.max(Number(params.get("days") ?? 30) || 30, 1), 90);
+  const { windowMs, label } = resolveWindow(params.get("minutes"), params.get("days"));
   const apply  = params.get("apply") === "true";
 
   const supabase = getSupabaseAdmin();
-  const since    = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const since    = new Date(Date.now() - windowMs).toISOString();
 
   const { data, error } = await supabase
     .from("orders")
@@ -200,9 +215,28 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // A paid-but-failed order is money already taken from a customer whose
+  // food was never made — always worth an alert, whether or not we just
+  // healed it. Fingerprinted per order so repeat sweeps fold into one issue.
+  for (const p of paidButFailed) {
+    const amount = `RM${(p.totalSen / 100).toFixed(2)}`;
+    Sentry.withScope((scope) => {
+      scope.setLevel(p.applied ? "warning" : "error");
+      scope.setFingerprint(["paid-but-failed-order", p.orderNumber]);
+      scope.setTag("store_id", p.storeId);
+      scope.setContext("order", { ...p });
+      Sentry.captureMessage(
+        p.applied
+          ? `[paid-but-failed] ${p.orderNumber} (${p.storeId}) ${amount} was charged but had been marked failed — AUTO-SETTLED, docket should print now`
+          : `[paid-but-failed] ${p.orderNumber} (${p.storeId}) ${amount} was charged but is still marked failed — settle or refund it deliberately`,
+      );
+    });
+  }
+  if (paidButFailed.length > 0) after(() => Sentry.flush(2000));
+
   return NextResponse.json({
     mode: apply ? "apply" : "dry-run",
-    windowDays: days,
+    window: label,
     failedOrdersInWindow: orders.length,
     checked,
     deferred,
