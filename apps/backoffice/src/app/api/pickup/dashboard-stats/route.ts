@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 import { requireAuth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 // GET /api/pickup/dashboard-stats?section=loyalty|inventory
 //
@@ -52,30 +53,41 @@ export async function GET(request: NextRequest) {
     }
 
     if (section === "inventory") {
-      const [ingR, lvlR, parR] = await Promise.all([
-        supabase.from("ingredients").select("id,name,unit").eq("is_active", true),
-        supabase.from("stock_levels").select("ingredient_id,quantity"),
-        supabase.from("ingredient_outlet_settings").select("ingredient_id,par_level"),
+      // The inventory model lives in Prisma (Product / StockBalance /
+      // ParLevel). This branch used to read `ingredients`, `stock_levels`
+      // and `ingredient_outlet_settings` through Supabase — tables that do
+      // not exist in this database — so the tab always 500'd. Aggregate
+      // across outlets: a product is out of stock when it has no quantity
+      // anywhere, and low when its total sits under its combined par.
+      const [products, balances, pars] = await Promise.all([
+        prisma.product.findMany({
+          where: { isActive: true, itemType: "INGREDIENT" },
+          select: { id: true, name: true, baseUom: true },
+          orderBy: { name: "asc" },
+        }),
+        prisma.stockBalance.groupBy({
+          by: ["productId"],
+          _sum: { quantity: true },
+        }),
+        prisma.parLevel.groupBy({
+          by: ["productId"],
+          _sum: { parLevel: true },
+        }),
       ]);
-      const ing = (ingR.data ?? []) as Array<{ id: string; name: string; unit: string }>;
-      const lvlMap = Object.fromEntries(
-        ((lvlR.data ?? []) as Array<{ ingredient_id: string; quantity: number }>).map((l) => [l.ingredient_id, l.quantity]),
-      );
-      const parMap = Object.fromEntries(
-        ((parR.data ?? []) as Array<{ ingredient_id: string; par_level: number }>).map((s) => [s.ingredient_id, s.par_level]),
-      );
-      const lowItems = ing
+      const qtyMap = new Map(balances.map((b) => [b.productId, Number(b._sum.quantity ?? 0)]));
+      const parMap = new Map(pars.map((p) => [p.productId, Number(p._sum.parLevel ?? 0)]));
+      const lowItems = products
         .filter((i) => {
-          const qty = lvlMap[i.id] ?? 0;
-          const par = parMap[i.id] ?? 0;
+          const qty = qtyMap.get(i.id) ?? 0;
+          const par = parMap.get(i.id) ?? 0;
           return qty > 0 && par > 0 && qty < par;
         })
-        .map((i) => ({ name: i.name, qty: lvlMap[i.id] ?? 0, unit: i.unit }))
+        .map((i) => ({ name: i.name, qty: qtyMap.get(i.id) ?? 0, unit: i.baseUom }))
         .slice(0, 5);
       return NextResponse.json({
-        total: ing.length,
+        total: products.length,
         lowStock: lowItems.length,
-        outStock: ing.filter((i) => (lvlMap[i.id] ?? 0) === 0).length,
+        outStock: products.filter((i) => (qtyMap.get(i.id) ?? 0) === 0).length,
         lowItems,
       });
     }
