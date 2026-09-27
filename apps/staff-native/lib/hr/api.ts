@@ -304,29 +304,8 @@ export type SkillsResponse = {
   }[];
 };
 
-export type SkillsCoachInsights = {
-  summary: string;
-  strengths: string[];
-  focus_areas: string[];
-  coaching_actions: string[];
-  needs_more_data: boolean;
-};
-
-export type SkillsCoachResponse = {
-  insights: SkillsCoachInsights | null;
-  generated_at: string | null;
-  model: string | null;
-  cached: boolean;
-  audit_count: number;
-  reason?: "no_audits" | "insufficient_data";
-};
-
 export function fetchMySkills(userId: string) {
   return api<SkillsResponse>(`/api/audits/staff/${userId}`);
-}
-
-export function fetchMySkillsCoach(userId: string) {
-  return api<SkillsCoachResponse>(`/api/audits/staff/${userId}/coach`);
 }
 
 // ── Reviews attributed during my shifts ───

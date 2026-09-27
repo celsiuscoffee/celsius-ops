@@ -10,7 +10,6 @@ import {
 import {
   ChevronDown,
   ChevronUp,
-  Sparkles,
   Target,
   TrendingDown,
   TrendingUp,
@@ -20,10 +19,8 @@ import { PageHeader } from "../../../components/PageHeader";
 import { useStaff } from "../../../lib/store";
 import {
   fetchMySkills,
-  fetchMySkillsCoach,
   type SkillsAuditEntry,
   type SkillsAuditItem,
-  type SkillsCoachInsights,
   type SkillsResponse,
 } from "../../../lib/hr/api";
 
@@ -31,23 +28,16 @@ export default function MySkills() {
   const session = useStaff((s) => s.session);
   const userId = session?.userId;
   const [data, setData] = useState<SkillsResponse | null>(null);
-  const [coach, setCoach] = useState<SkillsCoachInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
     try {
-      const [d, c] = await Promise.all([
-        fetchMySkills(userId).catch(
-          () => ({ auditee: null, templates: [] }) as SkillsResponse,
-        ),
-        fetchMySkillsCoach(userId)
-          .then((r) => r.insights)
-          .catch(() => null),
-      ]);
+      const d = await fetchMySkills(userId).catch(
+        () => ({ auditee: null, templates: [] }) as SkillsResponse,
+      );
       setData(d);
-      setCoach(c);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -95,58 +85,6 @@ export default function MySkills() {
       }
       showsVerticalScrollIndicator={false}
     >
-      {coach && !coach.needs_more_data ? (
-        <View className="rounded-3xl border border-primary/30 bg-primary-50/30 p-4">
-          <View className="flex-row items-center gap-1.5">
-            <View className="h-6 w-6 items-center justify-center rounded-full bg-primary/15">
-              <Sparkles color="#A2492C" size={12} />
-            </View>
-            <Text className="text-base font-body-semi text-espresso">
-              Coach insights
-            </Text>
-          </View>
-          <Text className="mt-2 text-sm font-body text-espresso">
-            {coach.summary}
-          </Text>
-          {coach.strengths.length > 0 ? (
-            <View className="mt-3">
-              <Text className="text-[10px] font-body-bold uppercase tracking-wide text-success">
-                Doing well
-              </Text>
-              {coach.strengths.map((s, i) => (
-                <Text key={i} className="text-xs font-body text-espresso">
-                  • {s}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-          {coach.focus_areas.length > 0 ? (
-            <View className="mt-3">
-              <Text className="text-[10px] font-body-bold uppercase tracking-wide text-danger">
-                Focus on
-              </Text>
-              {coach.focus_areas.map((s, i) => (
-                <Text key={i} className="text-xs font-body text-espresso">
-                  • {s}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-          {coach.coaching_actions.length > 0 ? (
-            <View className="mt-3">
-              <Text className="text-[10px] font-body-bold uppercase tracking-wide text-primary">
-                This week
-              </Text>
-              {coach.coaching_actions.map((s, i) => (
-                <Text key={i} className="text-xs font-body text-espresso">
-                  • {s}
-                </Text>
-              ))}
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-
       {templates.map(({ template, audits }) => {
         const latest = audits[audits.length - 1];
         const first = audits[0];

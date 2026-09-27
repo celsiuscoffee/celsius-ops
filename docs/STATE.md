@@ -11,6 +11,17 @@ current month.
 
 ## Verified facts
 
+- 2026-09-27 — **staff-native: dead AI-coach call removed (branch
+  `claude/security-native-2`; merging = OTA to manager phones).** The owner
+  removed the staff AI coach on 2026-09-12 (route, agent and My Skills card in
+  `apps/staff`) but `staff-native` kept calling
+  `GET /api/audits/staff/:id/coach` on every My Skills load — a guaranteed 404
+  per screen open, hidden by the card's catch. Removed `fetchMySkillsCoach`,
+  the `SkillsCoach*` types, the coach state and the "Coach insights" card;
+  `fetchMySkills` and the audit history rendering are untouched. No native
+  module or config change, so OTA-safe (ota-release skill applies to the
+  merge).
+
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
