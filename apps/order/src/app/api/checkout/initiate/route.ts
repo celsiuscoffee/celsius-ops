@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { pickDuplicateTwin, type TwinRow } from "./duplicate-guard";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireMinAppVersion } from "@/lib/min-app-version";
 import { createPayment } from "@/lib/revenue-monster/client";
@@ -51,6 +52,9 @@ export async function POST(request: NextRequest) {
       notes,
       orderType,
       tableNumber,
+      // Set by the client only after the customer has seen the
+      // duplicate-payment prompt and chosen "place another anyway".
+      allowDuplicate,
     } = body;
 
     if (!items?.length || !selectedStore || !paymentMethod) {
@@ -449,6 +453,59 @@ export async function POST(request: NextRequest) {
     const basePoints           = loyaltyId ? Math.floor((afterDiscount / 100) * pointsPerRm) : 0;
     const tierMul              = loyaltyId ? await getTierMultiplier(loyaltyId) : 1;
     const pointsToEarn         = Math.round(basePoints * tierMul);
+
+    // ── Duplicate-payment guard ────────────────────────────────────────────
+    // 2026-09-26 (Shah Alam table 15): the SAME RM34.70 order was placed four
+    // times in 2m13s and charged TWICE — TNG at 10:44:21 settled, but because
+    // RM's webhooks never fire we only confirm by polling ~45-90s later, so
+    // the customer sat on "Confirming payment", assumed it had failed (two
+    // interleaved attempts did fail) and paid again by FPX at 10:46:34. Both
+    // were recorded correctly, so nothing downstream could detect it: 35 such
+    // pairs in 30 days, all web_qr, roughly one a day, money quietly owed back.
+    //
+    // Nothing anywhere stopped a table from paying the same amount twice, so
+    // stop it here, at the only choke point every QR payment passes through.
+    // NOT a hard block: two friends at one table legitimately order the same
+    // RM13.90 latte, so this returns 409 with the existing order and the
+    // client asks the customer; `allowDuplicate` is their "yes, charge me
+    // again". Scoped tight (same store+table+total, 5 minutes) so it only
+    // catches the panic-retry shape and never a genuine second round.
+    if (!allowDuplicate) {
+      const dupSince = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { data: dupRows } = await supabase
+        .from("orders")
+        .select("id, order_number, status, total, payment_method, payment_checkout_id, created_at")
+        .eq("store_id", selectedStore.id)
+        .eq("table_number", tableNo)
+        .eq("total", totalSen)
+        .gt("created_at", dupSince)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      const twin = pickDuplicateTwin(dupRows as TwinRow[] | null);
+
+      if (twin) {
+        const settled = twin.status !== "pending";
+        console.warn(
+          `[checkout] duplicate guard: ${selectedStore.id} table ${tableNo} RM${(totalSen / 100).toFixed(2)} — existing ${twin.order_number} is ${twin.status}`,
+        );
+        return NextResponse.json(
+          {
+            error: settled
+              ? "This table has already paid for an identical order."
+              : "A payment for an identical order is still being confirmed.",
+            duplicate: true,
+            settled,
+            existingOrderId:     twin.id,
+            existingOrderNumber: twin.order_number,
+            existingStatus:      twin.status,
+            existingCreatedAt:   twin.created_at,
+            totalSen,
+          },
+          { status: 409 },
+        );
+      }
+    }
 
     // ── Create order ───────────────────────────────────────────────────────
     const storedPaymentMethod = (paymentMethod === "apple_pay" || paymentMethod === "google_pay")
