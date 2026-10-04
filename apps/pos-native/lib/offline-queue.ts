@@ -137,6 +137,45 @@ export async function listDeadLetter(): Promise<PendingSale[]> {
   }
 }
 
+// One-shot recovery of sales dead-lettered by the 2026-10-03 create_pos_sale
+// outage (an order-number renumber loop timed out every upload from Putrajaya).
+// The server is fixed (migration 111), so every held sale can now land. This
+// moves each dead-lettered sale back into the live queue with a fresh attempt
+// count, ONCE per till (flag below). Safe on every till:
+//   - create_pos_sale is idempotent on order id, so a sale that already reached
+//     the cloud is a no-op, never a duplicate;
+//   - a sale the server still rejects simply returns to the dead-letter after
+//     the usual attempts;
+//   - the dead-letter copy is kept, so nothing is ever deleted by this step.
+// The sale keeps its original created_at and shift, so it lands on the day it
+// was rung up. The server assigns a fresh order number on collision.
+const REQUEUE_FLAG = "pos.offline.deadletter.requeued.2026-10-04";
+
+export async function requeueDeadLetterOnce(): Promise<number> {
+  try {
+    if (await AsyncStorage.getItem(REQUEUE_FLAG)) return 0;
+    const dead = await listDeadLetter();
+    let moved = 0;
+    if (dead.length > 0) {
+      const list = await readAll();
+      const queued = new Set(list.map(orderIdOf).filter(Boolean));
+      for (const e of dead) {
+        const id = orderIdOf(e);
+        if (!id || queued.has(id)) continue;
+        list.push({ ...e, attempts: 0 });
+        queued.add(id);
+        moved += 1;
+      }
+      if (moved > 0) await writeAll(list);
+    }
+    await AsyncStorage.setItem(REQUEUE_FLAG, new Date().toISOString());
+    return moved;
+  } catch {
+    // Storage hiccup: leave the flag unset so the next launch tries again.
+    return 0;
+  }
+}
+
 export async function pendingCount(): Promise<number> {
   const n = (await readAll()).length;
   emit(n);
