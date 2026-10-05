@@ -18,6 +18,9 @@ name: staff-native OTA
 # server-side EAS environment variables the production build uses, so the OTA
 # bundle's config always matches the installed app.
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -42,6 +45,11 @@ jobs:
         # below still runs from apps/staff-native (working-directory).
         working-directory: .
         run: npm ci --no-audit --no-fund
+      - name: Typecheck before publishing
+        # The OTA workflow runs on push to main independently of CI, so a merge
+        # whose typecheck fails would still ship its bundle to every device.
+        # Same gate the ota-release skill requires before a release.
+        run: npx tsc --noEmit
       - name: Publish OTA update (production channel)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
