@@ -70,29 +70,36 @@ async function ensureOpenShift(
 }
 
 async function nextOrderNumber(outletId: string): Promise<string> {
-  // Take the highest SEQUENTIAL number, ignoring offline time-coded numbers
-  // (CC-XX-<base36>, e.g. "0NOUN"/"A86RD"). Reading only the single newest row
-  // broke when that row was an offline order: parseInt("0NOUN") -> 0 reset the
-  // sequence to CC-XX-0001, which already exists -> UNIQUE collision -> the sale
-  // jammed the offline queue. Sequential numbers grow monotonically with time,
-  // so the newest row whose tail is all-digits carries the max. (The server
-  // also regenerates on any collision, so this is belt-and-suspenders.)
+  // Take the highest SEQUENTIAL number from THIS TILL'S OWN numbering
+  // (CC-<code>-NNNN), ignoring everything else that shares the outlet:
+  //  - offline time-coded numbers (CC-XX-<base36>, e.g. "0NOUN"/"A86RD"):
+  //    parseInt("0NOUN") -> 0 once reset the sequence to CC-XX-0001;
+  //  - GrabFood orders (GF-942, GF-654-RUMHDA). On 2026-10-03 a Grab order
+  //    whose number ended in digits ("GF-942") was read as the sequence, so
+  //    every Putrajaya sale was numbered CC-CON-0943, which already existed.
+  // Sequential numbers grow monotonically with time, so the newest own-prefix
+  // row whose tail is all digits carries the max. (The server also
+  // regenerates on any collision, so this is belt-and-suspenders.)
+  const code = OUTLET_CODE[outletId] ?? "CC";
+  const prefix = `CC-${code}-`;
   const { data } = await supabase
     .from("pos_orders")
     .select("order_number")
     .eq("outlet_id", outletId)
+    .like("order_number", `${prefix}%`)
     .order("created_at", { ascending: false })
     .limit(40);
   let seq = 0;
   for (const row of data ?? []) {
-    const tail = ((row.order_number as string | null) ?? "").split("-").pop() ?? "";
+    const num = (row.order_number as string | null) ?? "";
+    if (!num.startsWith(prefix)) continue;
+    const tail = num.slice(prefix.length);
     if (/^\d+$/.test(tail)) {
       seq = parseInt(tail, 10);
-      break; // newest all-numeric number = current max sequence
+      break; // newest all-numeric own number = current max sequence
     }
   }
-  const code = OUTLET_CODE[outletId] ?? "CC";
-  return `CC-${code}-${String(seq + 1).padStart(4, "0")}`;
+  return `${prefix}${String(seq + 1).padStart(4, "0")}`;
 }
 
 export type SaleParams = {
