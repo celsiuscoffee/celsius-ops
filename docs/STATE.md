@@ -11,6 +11,19 @@ current month.
 
 ## Verified facts
 
+- 2026-09-26 — **RLS-disabled public tables: 9 remain, migration written, NOT
+  applied.** Prod query (`pg_class.relrowsecurity=false`, schema public):
+  SystemReport, ads_campaign_creative, consignment_sales,
+  mission_order_applications, plus five one-off backup snapshots
+  (celebration_overlap_removed_20260831, member_brands_ghost_archive_20260803,
+  members_ghost_archive_20260803, poster_state_before_merdeka_20260831,
+  splash_posters_merdeka_restore_20260830). All server-only (Prisma or
+  service-role); the two members_* archives hold member phone/name and were
+  anon-readable. Deny-all enable in
+  `packages/db/prisma/migrations/20260926_enable_rls_remaining_tables` (mirror
+  `supabase/migrations/113_…`), branch `claude/security-rls`. Owner applies; the
+  five snapshot tables are also candidates for DROP once confirmed unneeded.
+
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
@@ -2847,6 +2860,14 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-26 — **RLS PR (`claude/security-rls`) open as draft.** Owner: apply
+  `supabase/migrations/113_enable_rls_remaining_tables.sql`, re-run
+  get_advisors (expect rls_disabled_in_public → 0), then delete the
+  KNOWN_UNAPPLIED entry. Remaining QA items after this: `create_pos_sale`
+  anon revoke (needs POS sale sync behind POS API), salary-accrual
+  over-accrual reversal, UTC fallback dates, npm high-advisory update pass,
+  extend `check-migrations.mjs` to supabase/migrations.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the
