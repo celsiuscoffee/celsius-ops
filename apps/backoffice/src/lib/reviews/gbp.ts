@@ -382,6 +382,52 @@ export async function updateLocationCategories(
   }
 }
 
+/** The location's current phone numbers, as Google holds them. */
+export async function getLocationPhones(
+  locationName: string,
+): Promise<{ primaryPhone: string | null; additionalPhones: string[] }> {
+  const token = await getAccessToken();
+  const res = await fetch(`${GBP_INFO_BASE}/${locationName}?readMask=phoneNumbers`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GBP location phones error ${res.status}: ${body}`);
+  }
+  const data = await res.json();
+  return {
+    primaryPhone: data.phoneNumbers?.primaryPhone ?? null,
+    additionalPhones: data.phoneNumbers?.additionalPhones ?? [],
+  };
+}
+
+/**
+ * Set the location's primary phone. updateMask=phoneNumbers swaps the WHOLE
+ * object, so the caller passes the additionalPhones to keep — read them with
+ * getLocationPhones first; this function never decides what to preserve.
+ */
+export async function updateLocationPhone(
+  locationName: string,
+  primaryPhone: string,
+  additionalPhones: string[],
+): Promise<void> {
+  const token = await getAccessToken();
+  const res = await fetch(`${GBP_INFO_BASE}/${locationName}?updateMask=phoneNumbers`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      phoneNumbers: {
+        primaryPhone,
+        ...(additionalPhones.length ? { additionalPhones } : {}),
+      },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`GBP phone update error ${res.status}: ${body}`);
+  }
+}
+
 // The relevance-bearing profile fields — what Google reads to decide which
 // keywords this location is a match for. Input to the keyword relevance audit.
 export type GbpLocationProfile = {
