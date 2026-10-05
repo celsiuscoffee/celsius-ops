@@ -76,13 +76,22 @@ export async function GET(req: NextRequest) {
       // Existing, non-reversed AR journal for this outlet/day (if any).
       const { data: existing } = await client
         .from("fin_transactions")
-        .select("id, amount, source_doc_id")
+        .select("id, amount, source_doc_id, status")
         .eq("outlet_id", o.id)
         .eq("txn_date", date)
         .eq("txn_type", "ar_invoice")
         .eq("posted_by_agent", "ar")
         .neq("status", "reversed")
         .maybeSingle();
+
+      // A DRAFT is a low-confidence day the AR agent held for the inbox — its
+      // lines never reached the ledger. reverseTransaction() would post a live
+      // offset for them (Dr revenue / Cr debtor) and the day would net to
+      // native minus draft: revenue understated. Leave it to the inbox.
+      if (existing && existing.status === "draft") {
+        results.push({ date, outlet: o.name, action: "skip", reason: "draft AR journal awaiting inbox review — resolve or dismiss it before backfilling this day" });
+        continue;
+      }
 
       // Is it already native (a prior backfill)? Then there's nothing to do.
       let existingSource: string | null = null;

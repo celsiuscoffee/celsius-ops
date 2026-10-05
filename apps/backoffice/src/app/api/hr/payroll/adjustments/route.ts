@@ -136,18 +136,23 @@ export async function POST(req: NextRequest) {
     .single();
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
 
-  // Bump run-level totals — sum of all items in the run.
+  // Bump run-level totals — gross / deductions / net are re-summed from the
+  // items. total_employer_cost is deliberately NOT: the calculator builds it
+  // from EPF + SOCSO + EIS + HRDF employer, and HRDF has no per-item column,
+  // so re-summing here silently deleted the HRDF levy from the run header on
+  // every adjustment (the same bug items/[item_id] documents, RM635 on July
+  // 2026). An allowance / other-deduction adjustment changes no employer
+  // statutory component, so the stored header value is left as is.
   const { data: allItems } = await hrSupabaseAdmin
     .from("hr_payroll_items")
-    .select("total_gross, total_deductions, net_pay, epf_employer, socso_employer, eis_employer")
+    .select("total_gross, total_deductions, net_pay")
     .eq("payroll_run_id", run_id);
 
-  let totalGross = 0, totalDeduct = 0, totalNet = 0, totalEmployerCost = 0;
+  let totalGross = 0, totalDeduct = 0, totalNet = 0;
   for (const it of allItems || []) {
     totalGross += Number(it.total_gross || 0);
     totalDeduct += Number(it.total_deductions || 0);
     totalNet += Number(it.net_pay || 0);
-    totalEmployerCost += Number(it.epf_employer || 0) + Number(it.socso_employer || 0) + Number(it.eis_employer || 0);
   }
 
   await hrSupabaseAdmin
@@ -156,7 +161,6 @@ export async function POST(req: NextRequest) {
       total_gross: Math.round(totalGross * 100) / 100,
       total_deductions: Math.round(totalDeduct * 100) / 100,
       total_net: Math.round(totalNet * 100) / 100,
-      total_employer_cost: Math.round(totalEmployerCost * 100) / 100,
       updated_at: new Date().toISOString(),
     })
     .eq("id", run_id);

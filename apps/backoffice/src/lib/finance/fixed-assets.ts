@@ -222,6 +222,7 @@ export type DepreciationRunCompany = {
   byAsset: { id: string; name: string; accountCode: string; amount: number }[];
   alreadyPosted: boolean;
   transactionId: string | null; // set when posted (new or pre-existing)
+  note?: string;                // why nothing was posted, when it isn't the usual "same month already ran"
 };
 
 // Post ONE balanced journal per company for the month's depreciation:
@@ -272,6 +273,24 @@ export async function runDepreciation(input: {
 
     if (existing) {
       companies.push({ companyId, total: g.total, byAsset: g.byAsset, alreadyPosted: true, transactionId: existing.id as string });
+      continue;
+    }
+    // The annual poster (depreciation.ts, run by the December close) books the
+    // whole year in one journal dated 31 Dec with no posting_key. If that
+    // journal exists, every month of the year is already charged — a monthly
+    // journal on top would double-book 6512.
+    const year = input.yearMonth.slice(0, 4);
+    const { data: annualRows } = await client
+      .from("fin_transactions")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("txn_type", "depreciation")
+      .eq("status", "posted")
+      .eq("txn_date", `${year}-12-31`)
+      .is("posting_key", null)
+      .limit(1);
+    if (annualRows?.[0]) {
+      companies.push({ companyId, total: g.total, byAsset: g.byAsset, alreadyPosted: true, transactionId: annualRows[0].id as string, note: `annual ${year} depreciation journal already covers ${input.yearMonth}` });
       continue;
     }
     if (!input.commit) {

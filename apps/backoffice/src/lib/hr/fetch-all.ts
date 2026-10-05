@@ -15,7 +15,9 @@
  *
  * Pass a builder that applies the filters; this walks it in pages until a
  * short page proves the end. A silently-truncated payroll input is worse than
- * a slow one.
+ * a slow one — which is also why a page ERROR throws instead of returning
+ * what was read so far: a transient PostgREST failure on page 2 of the
+ * attendance read used to hand payroll a plausible-looking partial month.
  */
 const PAGE = 1000;
 
@@ -36,7 +38,11 @@ export async function fetchAllRows<T>(
     // by it (as a tiebreak after any ordering the builder already applied)
     // makes pagination deterministic.
     const { data, error } = await build().order("id", { ascending: true }).range(from, from + PAGE - 1);
-    if (error || !data) break;
+    if (error) {
+      const msg = typeof error === "object" && error && "message" in error ? String((error as { message?: unknown }).message) : String(error);
+      throw new Error(`fetchAllRows: page starting at row ${from} failed: ${msg}`);
+    }
+    if (!data) break;
     out.push(...data);
     if (data.length < PAGE) break;
     // Runaway guard: 100k rows is far past any real month and means a filter

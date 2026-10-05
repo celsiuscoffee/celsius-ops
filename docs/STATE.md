@@ -11,6 +11,35 @@ current month.
 
 ## Verified facts
 
+- 2026-09-25 — **Security Tier 3 (finance ledger + payroll header) shipped on
+  `claude/security-tier3`**, third PR from the same review (Tier 1 #1246,
+  Tier 2 #1247). Facts that shaped it: the 096 guards only protect
+  posted/reversed rows in closed periods, so deleting a stranded DRAFT
+  header + lines is trigger-safe — `postJournal` now does that when the
+  draft→posted flip is rejected (before, the draft kept its `posting_key`
+  and satisfied every "already posted" guard forever, i.e. the day's revenue
+  silently never posted). The AR agent's low-confidence drafts have an inbox
+  path (`inbox.ts:59-68`), so `finance-eod-backfill` now SKIPS a draft day
+  with a reason instead of reversing it as if posted. Depreciation is annual
+  by owner policy (close agent, Dec close) but a monthly poster
+  (`fixed-assets.ts runDepreciation`, `/api/finance/fixed-assets/run-depreciation`,
+  OWNER/ADMIN, no UI link found) exists too; neither knew about the other.
+  Now each refuses when the other has posted for that year (monthly journals
+  are identified by `posting_key IS NOT NULL`, the annual one by
+  `txn_date = YYYY-12-31 AND posting_key IS NULL`) — nothing is reversed
+  automatically; the owner picks the basis. `fetchAllRows` now THROWS on a
+  failed page (was: return the rows so far — a deliberate choice in #1188,
+  reversed because a partial month reads as a complete one to payroll);
+  the existing test was updated to say so. `hr/payroll/adjustments` no longer
+  re-sums `total_employer_cost` (it dropped HRDF, the bug `items/[item_id]`
+  already documents). `postApAccrual` posts a missing reversal leg from the
+  ORIGINAL accrual's lines when the accrual exists without one. Vitest
+  519/519 finance+hr, tsc clean. **Still open from the finance review:**
+  exception-inbox approve is check-then-act (double submit → two AP bill
+  journals), `reverseTransaction` unguarded against concurrent calls,
+  `salary-accrual.ts` paginates without ORDER BY, basic-salary override
+  doesn't set `statutory_stale`, weekly payroll compute has no uniqueness
+  guard, reversal/bill fallback dates are UTC.
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
@@ -2847,6 +2876,20 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-25 — **Three security PRs open: Tier 1 (#1246), Tier 2 (#1247),
+  Tier 3 (`claude/security-tier3`, finance — hard rule 6: owner reviews each
+  commit); iPay88 #1245 still draft, waiting on merchant keys.** All three
+  security branches append to this file — expect STATE.md conflicts on the
+  second and third merges; keep every entry. Owner actions: apply
+  `supabase/migrations/112_revoke_anon_security_definer_rpc.sql` (Tier 1),
+  confirm `STRICT_CUSTOMER_AUTH` / `STAFF_AUTH_ENFORCE` / `POS_AUTH_ENFORCE`
+  in Vercel, and decide the depreciation basis per company-year if any
+  monthly journals exist (Tier 3 makes the posters refuse, it does not
+  reverse). Next code: the native fixes that ship OTA (POS discount-gate role
+  case `register.tsx:3683`, Sentry PII scrub in pickup-native; use the
+  `ota-release` skill), then reward reservation at order create, then the
+  remaining finance items listed in the 2026-09-25 verified-facts entry.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the

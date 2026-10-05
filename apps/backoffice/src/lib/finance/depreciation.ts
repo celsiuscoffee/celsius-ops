@@ -104,6 +104,15 @@ export async function postAnnualDepreciation(companyId: string, year: number, op
 
   const { data: existing } = await client.from("fin_transactions").select("id").eq("company_id", companyId).eq("txn_type", "depreciation").eq("txn_date", txnDate).limit(1);
   if (existing && existing.length) return { posted: 0, transactionId: existing[0].id as string, skipped: "already posted" };
+  // The monthly poster (fixed-assets.ts runDepreciation) charges the same
+  // 6512 / 1550-xx accounts one month at a time under a posting_key. If any
+  // month of this year was booked that way, an annual charge on top would
+  // double-book the year. Refuse and say so; the owner decides which basis
+  // the year stays on.
+  const { data: monthly } = await client.from("fin_transactions").select("id, txn_date").eq("company_id", companyId).eq("txn_type", "depreciation").eq("status", "posted").not("posting_key", "is", null).gte("txn_date", `${year}-01-01`).lte("txn_date", txnDate).order("txn_date").limit(1);
+  if (monthly && monthly.length) {
+    return { posted: 0, transactionId: null, skipped: `monthly depreciation journal(s) already posted for ${year} (first: ${monthly[0].txn_date}) — reverse them before posting the annual charge, or leave ${year} on the monthly basis` };
+  }
 
   const { data: assets } = await client.from("fin_fixed_assets").select("id,account_code,outlet_id,description,cost,useful_life_months,accumulated_dep,residual,status,acquired_date").eq("company_id", companyId).eq("status", "active");
   const lines: JournalLineInput[] = [];
