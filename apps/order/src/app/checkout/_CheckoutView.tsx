@@ -29,6 +29,7 @@ type Persisted = {
     outletName?: string | null;
     phone?: string | null;
     loyaltyId?: string | null;
+    sessionToken?: string | null;
     appliedReward?: AppliedReward | null;
     orderType?: "pickup" | "dine_in" | null;
     tableNumber?: string | null;
@@ -414,7 +415,11 @@ export function CheckoutView() {
     try {
       const res = await fetch("/api/checkout/initiate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // Loyalty fields are bound to the customer session server-side.
+          ...(state?.sessionToken ? { Authorization: `Bearer ${state.sessionToken}` } : {}),
+        },
         body: JSON.stringify({
           items: cart.map((i) => ({
             product:   { id: i.productId, name: i.name },

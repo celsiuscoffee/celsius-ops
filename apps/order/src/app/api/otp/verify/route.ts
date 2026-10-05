@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { verifyOTP } from '@/lib/otp';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { normalizePhone } from "@celsius/shared/src/otp";
 import { signCustomerSession } from '@/lib/customer-jwt';
 import { findOrCreateMember } from '@/lib/loyalty/member-direct';
 import { ensureNewMemberRewards } from '@/lib/loyalty/welcome';
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Rate limit by phone number
-    const rateCheck = await checkRateLimit(phone, RATE_LIMITS.OTP_VERIFY);
+    const rateCheck = await checkRateLimit(normalizePhone(phone), RATE_LIMITS.OTP_VERIFY);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { success: false, error: `Too many verification attempts. Try again in ${Math.ceil((rateCheck.retryAfter || 300) / 60)} minutes.` },

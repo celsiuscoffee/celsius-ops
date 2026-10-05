@@ -11,6 +11,31 @@ current month.
 
 ## Verified facts
 
+- 2026-09-25 — **Security Tier 2 (order-app checkout hardening) shipped on
+  `claude/security-tier2`**, from the same review as Tier 1 (`claude/security-tier1`,
+  PR #1246). Facts that shaped it: the customer Bearer token only exists since
+  #1188 (2026-08-30), TTL 30 days, no refresh, and the native app has no 401
+  handling on `/api/orders` — so binding loyalty fields to the session turns
+  a stale-token loyalty order into a clear 401 ("sign in again … or remove
+  the reward"), not a silent points drop; that trade was taken deliberately.
+  The web QR checkout (`_CheckoutView.tsx`) sent NO Bearer on
+  `/api/checkout/initiate` before this — added. `orders.order_number` is
+  UNIQUE for all time and `/api/orders` used `C-` + 4 random digits: 1,545
+  in use → ~15% of native creates were failing 500 (now `C-` + base36 ms +
+  2 digits with retry-on-23505, same scheme the QR path already used).
+  `products.modifiers` shape is `[{ id, options: [{ id, priceDelta(RM) }] }]`;
+  a known `optionId` is now priced from the row, an unknown one falls back
+  to the client value clamped ≥ 0. Shared resolver `resolveCatalogReward`
+  now refuses a memberless request and an `auto_issue` reward without an
+  active wallet voucher (the old post-payment gate could only log). OTP
+  limiters key on `normalizePhone(phone)` (exported from
+  `packages/shared/src/otp.ts`). `GET /api/loyalty/rewards?phone=` answers
+  as anonymous unless the session phone matches. Vitest 1238/1238.
+  **Still open after Tier 2:** reward/voucher double-spend across concurrent
+  pending orders (nothing reserves at create; `markVoucherUsed` is
+  post-payment), `order_items.unit_price` still written from the client
+  `totalPrice`, FOD still trusts the client `source`, and the three
+  fail-open env flags remain unverified in Vercel.
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
@@ -2847,6 +2872,18 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-25 — **Two security PRs open: Tier 1 (#1246, `claude/security-tier1`)
+  and Tier 2 (`claude/security-tier2`, order-app checkout); iPay88 #1245 still
+  draft, waiting on merchant keys.** Both security branches append to this
+  file — expect a STATE.md conflict on the second merge; keep both entries.
+  Owner actions: apply `supabase/migrations/112_revoke_anon_security_definer_rpc.sql`
+  (Tier 1) and confirm `STRICT_CUSTOMER_AUTH` / `STAFF_AUTH_ENFORCE` /
+  `POS_AUTH_ENFORCE` in Vercel. Next code: Tier 3 finance (depreciation
+  double-post, backfill draft reversal, `postJournal` stranded drafts,
+  `fetchAllRows` swallowing errors — owner-gated, hard rule 6), then the
+  native fixes that ship OTA (POS discount-gate role case, Sentry PII scrub;
+  `ota-release` skill), then reward reservation at order create.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the

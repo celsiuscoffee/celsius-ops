@@ -96,7 +96,16 @@ export function RewardsView() {
 
   useEffect(() => {
     if (!phone) return;
-    fetch(`/api/loyalty/rewards?phone=${encodeURIComponent(phone)}`)
+    let token: string | null = null;
+    try {
+      const raw = window.localStorage.getItem("celsius-pickup");
+      if (raw) token = (JSON.parse(raw) as { state?: { sessionToken?: string | null } }).state?.sessionToken ?? null;
+    } catch {
+      /* ignore */
+    }
+    fetch(`/api/loyalty/rewards?phone=${encodeURIComponent(phone)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
       .then((r) => r.json())
       .then((data) => setRewards((data?.rewards ?? []) as Reward[]))
       .catch(() => setRewards([]));
