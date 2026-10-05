@@ -24,6 +24,13 @@ import { createRequire } from "node:module";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS = join(ROOT, "packages/db/prisma/migrations");
+// SQL-managed tables (hr_*, fin_*, pos_*, agent_*, …) live outside Prisma and
+// their migrations are numbered files here, mirrored into MIGRATIONS only
+// sometimes. Checking one directory left the other as exactly the blind spot
+// this script exists to close (2026-09-25 QA, M16). Both are read; the
+// verdict logic is shared. A migration present in both (a mirror pair) is
+// simply checked twice against the same catalog.
+const SUPABASE_MIGRATIONS = join(ROOT, "supabase/migrations");
 const JSON_OUT = process.argv.includes("--json");
 
 // The parser is TypeScript shared with the unit tests; strip its types rather
@@ -100,12 +107,21 @@ if (!existsSync(MIGRATIONS)) {
 
 // Parse every migration, then let the shared (unit-tested) rule decide which
 // absences are explained by a later drop — see supersedeCheck.
+// Names: a Prisma-style migration is its directory (20260915_attendance_…), a
+// supabase one is `supabase/<file>` (supabase/075_enable_rls_….sql) so the two
+// never collide and KNOWN_UNAPPLIED.json can name either.
 const parsed = [];
 for (const dir of readdirSync(MIGRATIONS).sort()) {
   const file = join(MIGRATIONS, dir, "migration.sql");
   if (!existsSync(file)) continue;
   const sql = readFileSync(file, "utf8");
   parsed.push({ name: dir, expected: expectedObjects(sql), dropped: droppedObjects(sql) });
+}
+if (existsSync(SUPABASE_MIGRATIONS)) {
+  for (const f of readdirSync(SUPABASE_MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
+    const sql = readFileSync(join(SUPABASE_MIGRATIONS, f), "utf8");
+    parsed.push({ name: `supabase/${f}`, expected: expectedObjects(sql), dropped: droppedObjects(sql) });
+  }
 }
 
 const isSuperseded = supersedeCheck(parsed);

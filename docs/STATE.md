@@ -11,6 +11,13 @@ current month.
 
 ## Verified facts
 
+- 2026-09-26 — **`check:migrations` now covers `supabase/migrations/` too**
+  (branch `claude/security-migration-check`). Names are `supabase/<file>.sql`.
+  Verified against prod before extending: every verifiable object in the 113
+  supabase files (35 tables, 73 columns, 52 indexes, 4 constraints) exists, so
+  the check stays green; 54 of those files are RLS/function/data-only and
+  report as "not verifiable", as before.
+
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
