@@ -6,6 +6,8 @@ import { getFinanceClient } from "./supabase";
 import { postJournal } from "./ledger";
 import type { JournalLineInput } from "./types";
 import { logAgentMessage } from "@celsius/agents/src/messages";
+// Fallback dates are MYT calendar days: UTC would land 00:00–08:00 postings on yesterday.
+import { todayMyt } from "@/lib/inventory/myt-date";
 
 export type InboxAction =
   | { kind: "approve" }                                                    // accept agent's proposed action
@@ -17,6 +19,17 @@ export type InboxResolveResult =
   | { kind: "dismissed" }
   | { kind: "noop"; reason: string };
 
+type FinanceClient = ReturnType<typeof getFinanceClient>;
+
+async function fetchException(client: FinanceClient, exceptionId: string) {
+  return client
+    .from("fin_exceptions")
+    .select("id, company_id, type, related_type, related_id, agent, reason, proposed_action, status")
+    .eq("id", exceptionId)
+    .single();
+}
+type ExceptionRow = NonNullable<Awaited<ReturnType<typeof fetchException>>["data"]>;
+
 export async function resolveException(
   exceptionId: string,
   userId: string,
@@ -25,16 +38,54 @@ export async function resolveException(
   // Actor = the resolving user; rides as the x-fin-actor header (migration 095).
   const client = getFinanceClient(userId);
 
-  const { data: exc, error } = await client
-    .from("fin_exceptions")
-    .select("id, company_id, type, related_type, related_id, agent, reason, proposed_action, status")
-    .eq("id", exceptionId)
-    .single();
+  const { data: exc, error } = await fetchException(client, exceptionId);
   if (error || !exc) throw new Error(`Exception not found: ${exceptionId}`);
   if (exc.status !== "open") {
     return { kind: "noop", reason: `Exception already ${exc.status}` };
   }
 
+  // Atomic claim. The read above is check-then-act: two Approve clicks (or a
+  // retried request) both saw `open` and both posted the AP bill journal. A
+  // single conditional UPDATE lets exactly one caller through; the loser gets
+  // a noop instead of a second journal. resolved_by doubles as the claim
+  // marker — it is null on every open exception — and is set for real, or
+  // cleared, by the outcome below.
+  const { data: claimed, error: claimErr } = await client
+    .from("fin_exceptions")
+    .update({ resolved_by: userId, resolved_at: new Date().toISOString() })
+    .eq("id", exceptionId)
+    .eq("status", "open")
+    .is("resolved_by", null)
+    .select("id");
+  if (claimErr) throw claimErr;
+  if (!claimed || claimed.length === 0) {
+    return { kind: "noop", reason: "Exception is already being resolved by another request" };
+  }
+  const releaseClaim = async () => {
+    await client
+      .from("fin_exceptions")
+      .update({ resolved_by: null, resolved_at: null })
+      .eq("id", exceptionId)
+      .eq("status", "open");
+  };
+
+  try {
+    const result = await resolveClaimedException(client, exc, exceptionId, userId, action);
+    if (result.kind === "noop") await releaseClaim(); // nothing happened — let the next caller try
+    return result;
+  } catch (err) {
+    await releaseClaim();
+    throw err;
+  }
+}
+
+async function resolveClaimedException(
+  client: FinanceClient,
+  exc: ExceptionRow,
+  exceptionId: string,
+  userId: string,
+  action: InboxAction
+): Promise<InboxResolveResult> {
   if (action.kind === "dismiss") {
     await client
       .from("fin_exceptions")
@@ -177,7 +228,7 @@ export async function resolveException(
 
   const result = await postJournal({
     companyId,
-    txnDate: proposal.bill.billDate ?? new Date().toISOString().slice(0, 10),
+    txnDate: proposal.bill.billDate ?? todayMyt(),
     description: `Bill: ${proposal.supplierName ?? "supplier"}${
       proposal.bill.billNumber ? ` #${proposal.bill.billNumber}` : ""
     } (resolved from inbox)`,

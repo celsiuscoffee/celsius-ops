@@ -11,6 +11,50 @@ current month.
 
 ## Verified facts
 
+- 2026-09-26 — **Salary-control accrual now reconciles both ways.**
+  `lib/finance/salary-accrual.ts` computes, per company × month × control,
+  required = max(0, debits − credits) EXCLUDING its own journals, minus what it
+  has itself posted (agent_version `salary-accrual-*`, top-ups and
+  corrections); a positive diff tops up as before, a negative diff posts a
+  correction (Dr control / Cr expense). Own journals are excluded from
+  `required` so a real HR accrual is never reversed. Pure planner
+  `planSalaryAccruals` + `salary-accrual.test.ts`. The cron
+  (`bukku-feed-sync`) commits automatically, so corrections go live on merge —
+  owner should eyeball `GET /api/finance/salary-accrual` (dry run) once after
+  merge. Also: fallback dates in `ledger.ts` reverseTransaction, `agents/ap.ts`
+  bill posting and `inbox.ts` approve now use `todayMyt()` (MYT calendar day)
+  instead of UTC, which put 00:00–08:00 postings on the previous day.
+
+- 2026-09-26 — **Security QA finance-2 (concurrency + payroll integrity) — PR on
+  `claude/security-finance2`.** Sixth sibling of #1246–#1250; branches from
+  main independently, so `docs/STATE.md` conflicts on every merge after the
+  first — keep every entry. Hard rule 6: touches the ledger and payroll, one
+  commit per fix. (1) **Inbox double-approve**: `resolveException` was
+  check-then-act (`status === "open"` read, then post) so two Approve clicks
+  posted the AP bill journal twice; now an atomic conditional UPDATE on
+  `fin_exceptions` (`status='open' AND resolved_by IS NULL`) claims the row,
+  the loser gets a noop, and a noop/throw from the resolver releases the
+  claim. Verified in prod before choosing `resolved_by` as the marker: no
+  open exception has it set. (2) **`reverseTransaction` concurrency**: two
+  concurrent calls both passed the `status === "reversed"` read and both
+  posted an offset; the flip to `reversed` is now conditional
+  (`.neq("status","reversed")`) and the loser deletes its own just-posted
+  offset (open period; 096 guards allow it) and throws. (3)
+  `salary-accrual.ts` paginated `fin_journal_lines` with `.range()` and no
+  ORDER BY — pages could overlap or skip rows; now `.order("id")`. The
+  separate design gap (negative deltas ignored, so an over-accrual is never
+  reversed) is untouched and still open. (4) The payroll **item override
+  route** (`items/[item_id]`) never set `statutory_stale` when it moved
+  gross (basic, OT, allowance), so the confirm gate that blocks on that
+  flag let a line through with EPF/SOCSO/PCB computed on the old gross; it
+  now sets the flag unless the same call also supplied the statutory
+  figures. (5) **Weekly payroll uniqueness needs no code**: prod already has
+  `hr_payroll_runs_weekly_period_key` — a UNIQUE partial index on
+  `(period_start) WHERE cycle_type='weekly'` — plus
+  `hr_payroll_runs_period_month_period_year_key` for monthly; a concurrent
+  second compute fails on 23505 ("Failed to create payroll run"), which is
+  the right outcome. No duplicate weekly runs exist. Verified before push:
+  vitest 1237 pass (+6 new), tsc backoffice clean, eslint clean.
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
@@ -2847,6 +2891,24 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-09-26 — **Security QA series: six PRs open, all draft, all green,
+  none merged — owner decides order.** #1246 Tier 1 (auth gates, POS PIN
+  limits, `supabase/migrations/112_revoke_anon_security_definer_rpc.sql` —
+  owner applies), #1247 Tier 2 (checkout hardening), #1248 Tier 3 (finance
+  ledger + payroll; approve per commit), #1249 native (OTA — merge only when
+  able to watch the OTA runs), #1250 Tier 4 (SSRF, PostgREST injection,
+  uploads, cron auth, reward double-spend), finance-2 (this branch; approve
+  per commit). Still on the list from the 2026-09-25 QA report: CI hardening
+  (`needs: ci` + `npm ci` on the OTA workflows, `permissions:` blocks,
+  SHA-pin `android-actions/setup-android`, drop the dead branch trigger, bump
+  `next` for the DoS advisory); RLS SQL for the 9 tables the Supabase
+  advisor lists as RLS-disabled (owner applies); `create_pos_sale` anon
+  revoke needs the POS sale sync moved behind the POS API first; salary
+  accrual never reverses an over-accrual; reversal/bill fallback dates use
+  UTC. Owner-side, unchanged: confirm the three fail-open Vercel flags
+  (`STRICT_CUSTOMER_AUTH`, `STAFF_AUTH_ENFORCE`, `POS_AUTH_ENFORCE`) are set
+  in production — the Vercel env listing 403s from here.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the

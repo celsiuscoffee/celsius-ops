@@ -10,6 +10,8 @@ import type {
   PostJournalResult,
   JournalLineInput,
 } from "./types";
+// Fallback dates are MYT calendar days: UTC would land 00:00–08:00 postings on yesterday.
+import { todayMyt } from "@/lib/inventory/myt-date";
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -150,7 +152,7 @@ export async function reverseTransaction(
 
   const result = await postJournal({
     companyId: original.company_id as string,
-    txnDate: opts.date ?? new Date().toISOString().slice(0, 10),
+    txnDate: opts.date ?? todayMyt(),
     description: `Reversal of ${originalId}: ${opts.reason}`,
     txnType: "reversal",
     outletId: original.outlet_id,
@@ -161,13 +163,27 @@ export async function reverseTransaction(
     lines: reversedLines,
   });
 
-  await client
+  // Conditional flip: only the caller whose UPDATE actually moves the row off
+  // its non-reversed status owns the reversal. Two concurrent reverse calls
+  // both passed the `status === "reversed"` read above and both posted an
+  // offset; the second one now sees zero rows updated and removes its own
+  // journal again (a just-posted row in an open period — the 096 guards only
+  // protect posted/reversed rows in closed periods).
+  const { data: flipped, error: flipErr } = await client
     .from("fin_transactions")
     // posting_key freed: the reversed row is no longer the live instance of
     // its identity, and the unique index (066) must let a corrected re-post
     // claim the same key (EOD reverse-and-repost backfill flow).
     .update({ status: "reversed", reversed_by_id: result.transactionId, posting_key: null })
-    .eq("id", originalId);
+    .eq("id", originalId)
+    .neq("status", "reversed")
+    .select("id");
+  if (flipErr) throw flipErr;
+  if (!flipped || flipped.length === 0) {
+    await client.from("fin_journal_lines").delete().eq("transaction_id", result.transactionId);
+    await client.from("fin_transactions").delete().eq("id", result.transactionId);
+    throw new Error("Transaction already reversed");
+  }
 
   return result;
 }

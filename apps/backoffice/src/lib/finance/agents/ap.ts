@@ -26,6 +26,8 @@ import { parseSupplierDoc, type ParsedBill } from "../parsers/supplier-doc";
 import { resolveCompanyFromOutlet, getDefaultCompanyId } from "../companies";
 import type { JournalLineInput } from "../types";
 import { logAgentMessage } from "@celsius/agents/src/messages";
+// Fallback dates are MYT calendar days: UTC would land 00:00–08:00 postings on yesterday.
+import { todayMyt } from "@/lib/inventory/myt-date";
 
 export const AP_AGENT_VERSION = "ap-v1";
 
@@ -249,7 +251,7 @@ export async function ingestSupplierDoc(input: ApIngestInput): Promise<ApIngestR
 
   const journal = await postJournal({
     companyId,
-    txnDate: parsed.billDate ?? new Date().toISOString().slice(0, 10),
+    txnDate: parsed.billDate ?? todayMyt(),
     description: `Bill: ${supplier.name}${parsed.billNumber ? ` #${parsed.billNumber}` : ""}`,
     txnType: "ap_bill",
     outletId: outletId ?? null,
