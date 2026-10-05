@@ -256,7 +256,10 @@ export default function OrderStatus() {
   // screen heal into preparing without the customer re-ordering.
   useEffect(() => {
     if (!id || !data || (data.status !== "pending" && data.status !== "failed")) return;
-    const rmMethods = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card"]);
+    // apple_pay / google_pay: hosted-checkout (iPay88) wallet orders. A
+    // Stripe-routed wallet order polling here is harmless — the server
+    // answers "not_rm" and leaves it to the Stripe paths.
+    const rmMethods = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card", "apple_pay", "google_pay"]);
     if (!data.payment_method || !rmMethods.has(data.payment_method)) return;
     let cancelled = false;
     const poll = async () => {

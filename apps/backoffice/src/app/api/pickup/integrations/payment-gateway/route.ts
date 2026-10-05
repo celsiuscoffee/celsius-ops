@@ -22,6 +22,9 @@ export async function POST(req: NextRequest) {
 
   const { method_id, enabled, provider } = await req.json();
   if (!method_id) return NextResponse.json({ error: "method_id required" }, { status: 400 });
+  if (provider !== undefined && !["stripe", "revenue_monster", "ipay88"].includes(provider)) {
+    return NextResponse.json({ error: "unknown provider" }, { status: 400 });
+  }
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (enabled !== undefined) update.enabled = enabled;

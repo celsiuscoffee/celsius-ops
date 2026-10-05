@@ -10,6 +10,7 @@ import {
   StatusBar,
 } from "react-native";
 import { WebView } from "react-native-webview";
+import * as WebBrowser from "expo-web-browser";
 import type { WebViewNavigation } from "react-native-webview";
 import { X, RefreshCw } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -44,6 +45,15 @@ interface Props {
 }
 
 const RETURN_SCHEME = "celsiuscoffee://rm-return";
+
+// Methods whose hosted page must run in the OS browser session instead of
+// our WebView. Apple Pay on the web is disabled by WebKit inside a
+// WKWebView that injects scripts (we do — VIEWPORT_CLAMP_JS), and Google Pay
+// isn't supported in an Android WebView; both work in the system session
+// (SFSafariViewController-backed / Chrome Custom Tab). Only reached when the
+// method is routed to a hosted gateway (iPay88) — Stripe-routed wallets use
+// the native Stripe sheet and never open this modal.
+const SYSTEM_BROWSER_METHODS = new Set(["apple_pay", "google_pay"]);
 
 // Inject when the customer picks "Card" so RM's consolidated hosted
 // picker (e-Wallets / Cards / Online Banking) doesn't force a second
@@ -150,6 +160,25 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, method
     if (typeof window === "undefined") return;
     window.location.href = url;
   }, [visible, url]);
+  // Wallet methods: hand the URL to the OS auth session and resolve the
+  // modal's promise from its result. The session closes itself when the
+  // gateway redirects to RETURN_SCHEME ("success" — status still comes from
+  // the server-side poll, as with the WebView path) or when the customer
+  // taps Cancel/Done. The ref guards against a second open on re-render.
+  const useSystemBrowser = Platform.OS !== "web" && !!methodId && SYSTEM_BROWSER_METHODS.has(methodId);
+  const systemSessionUrlRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!visible || !url || !useSystemBrowser) {
+      if (!visible) systemSessionUrlRef.current = null;
+      return;
+    }
+    if (systemSessionUrlRef.current === url) return;
+    systemSessionUrlRef.current = url;
+    WebBrowser.openAuthSessionAsync(url, RETURN_SCHEME)
+      .then((r) => (r.type === "success" ? onSuccess() : onCancel()))
+      .catch(() => onCancel());
+  }, [visible, url, useSystemBrowser, onSuccess, onCancel]);
+
   // useSafeAreaInsets reads from a hook-level context that does propagate
   // into Modal portals — <SafeAreaView edges={["top"]}> often returns 0
   // here on iOS because the modal opens in a separate UIWindow without
@@ -197,7 +226,7 @@ export function RmCheckoutModal({ visible, url, methodLabel, amountLabel, method
   // platform" inside a Modal that has no working close affordance once
   // the WebView fails). The useEffect already kicked the browser onto
   // the hosted payment URL.
-  if (Platform.OS === "web") return null;
+  if (Platform.OS === "web" || useSystemBrowser) return null;
 
   return (
     <Modal
