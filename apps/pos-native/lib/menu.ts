@@ -160,7 +160,9 @@ export async function fetchCategories(): Promise<Category[]> {
     return cats;
   } catch (e) {
     const cached = await AsyncStorage.getItem(MENU_CACHE_CATEGORIES).catch(() => null);
-    if (cached) return JSON.parse(cached) as Category[];
+    if (cached) {
+      try { return JSON.parse(cached) as Category[]; } catch { /* corrupt cache — fall through to the network error */ }
+    }
     throw e;
   }
 }
@@ -172,7 +174,9 @@ export async function fetchProducts(storeId?: string | null): Promise<Product[]>
     return products;
   } catch (e) {
     const cached = await AsyncStorage.getItem(MENU_CACHE_PRODUCTS).catch(() => null);
-    if (cached) return JSON.parse(cached) as Product[];
+    if (cached) {
+      try { return JSON.parse(cached) as Product[]; } catch { /* corrupt cache — fall through to the network error */ }
+    }
     throw e;
   }
 }
