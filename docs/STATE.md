@@ -11,6 +11,21 @@ current month.
 
 ## Verified facts
 
+- 2026-09-26 — **Root `npm audit fix --package-lock-only` applied (branch
+  `claude/security-deps`).** `npm audit fix` itself crashes on this workspace
+  (npm ERR_INVALID_ARG_TYPE), the lockfile-only mode works. Root advisories
+  63 → 33 (high 22 → 7, critical 2 → 1); 146 transitive bumps, no package.json
+  change; `npm ci`, 1237 tests, all five typechecks and three lints green.
+  Left as-is on purpose: `apps/pos-native` + `apps/pickup-native` lockfiles
+  (their remaining high/criticals are Expo/EAS build-chain only — tar,
+  shell-quote, undici, ws in dev-middleware — and `npm audit fix` there
+  rewrote 1,150 lockfile lines and broke pos-native's typecheck; not worth
+  touching an OTA'd bundle for); `postcss` chain needs Expo 57 (new APK, owner
+  decision); `xlsx` has no fix (used by two inventory exports + the bank
+  statement parser — replacing it with exceljs is a follow-up); `prisma`
+  ≥6.12 advisory is the dev CLI only. The remaining root `next` critical is
+  `apps/staff`'s exact pin `16.2.2`, fixed in #1253.
+
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
