@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { OutletStatus } from "@prisma/client";
-import { getUserFromHeaders } from "@/lib/auth";
+import { getUserFromHeaders, hasModulePermission } from "@/lib/auth";
 import { sortOutlets } from "@/lib/outlet-order";
 
 export async function GET(req: NextRequest) {
@@ -57,6 +57,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const caller = await getUserFromHeaders(req.headers);
   if (!caller) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await hasModulePermission(caller, "settings:outlets", prisma))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const body = await req.json();
   const { name, code, type, phone, address, city, state, companyName, regNo } = body;

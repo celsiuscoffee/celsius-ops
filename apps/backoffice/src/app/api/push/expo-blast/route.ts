@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth, hasModulePermission } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 
 // POST /api/push/expo-blast
@@ -8,6 +9,9 @@ import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
+  if (!(await hasModulePermission(auth.user, "loyalty:campaigns", prisma))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   try {
     const { title, body, data } = await request.json() as {

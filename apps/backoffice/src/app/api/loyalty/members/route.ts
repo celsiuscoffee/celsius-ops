@@ -464,6 +464,10 @@ export async function DELETE(request: NextRequest) {
   try {
     const auth = await requireAuth(request);
     if (auth.error) return auth.error;
+    // Destructive: wipes the member and every reward/redemption/points row.
+    if (auth.user.role !== 'OWNER' && auth.user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const id = request.nextUrl.searchParams.get('id');
     if (!id) {

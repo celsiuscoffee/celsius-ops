@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { createToken, verifyPin, hashPin, sessionOutletId, COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/pos-auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const INV_SUPABASE_URL = process.env.LEGACY_INVENTORY_SUPABASE_URL || "";
 const INV_ANON_KEY = process.env.LEGACY_INVENTORY_SUPABASE_ANON_KEY || "";
@@ -188,6 +189,16 @@ async function findActiveUsersWithPin(outletId?: string) {
 }
 
 export async function POST(req: NextRequest) {
+  // Online brute-force guard: 10 attempts / 5 min per IP, same as the staff
+  // app's /api/auth/pin. The till itself only ever sends one PIN per login.
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const { limited, retryAfterMs } = await checkRateLimit(`pos-pin:${ip}`, 10, 300_000);
+  if (limited) {
+    return NextResponse.json(
+      { error: "Too many PIN attempts. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) } },
+    );
+  }
   try {
     const body = await req.json();
     const { pin, outletId } = body;
