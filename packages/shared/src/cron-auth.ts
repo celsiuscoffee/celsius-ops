@@ -8,6 +8,8 @@
 // fail-open: a misconfigured environment turned every cron into a
 // public endpoint.
 
+import { safeEqual } from "./safe-equal";
+
 export type CronAuthResult =
   | { ok: true }
   | { ok: false; status: number; error: string };
@@ -26,7 +28,7 @@ export function checkCronAuth(headers: Headers): CronAuthResult {
     return { ok: false, status: 500, error: "CRON_SECRET not configured" };
   }
   const auth = headers.get("authorization") ?? "";
-  if (auth !== `Bearer ${secret}`) {
+  if (!safeEqual(auth, `Bearer ${secret}`)) {
     return { ok: false, status: 401, error: "Unauthorized" };
   }
   return { ok: true };

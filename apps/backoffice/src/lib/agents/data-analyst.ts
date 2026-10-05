@@ -24,7 +24,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const SQL_MODEL = "claude-sonnet-4-6";
 const EXPLAIN_MODEL = "claude-haiku-4-5";
-const MAX_ROWS = 200;
+import { MAX_ROWS, validateReadOnly } from "./sql-guard";
 const TIMEOUT_MS = 8000;
 
 // ── Schema catalog ───────────────────────────────────────────────────────────
@@ -135,18 +135,9 @@ Q: Who clocked in late today?
 const EXPLAIN_SYSTEM = `You explain query results to the owner of Celsius Coffee in plain English on Telegram. Rules: lead with the headline number/answer, then only the detail that matters. Malaysian Ringgit (RM), MYT. Be concise (a few short lines, use simple bullets for lists). Round money to 2 dp with thousands separators. If the rows are empty, say plainly that there was nothing for that query. Never invent numbers not in the rows. Do not restate the SQL.`;
 
 // ── Safe read-only execution ─────────────────────────────────────────────────
-const DISALLOWED = /\b(insert|update|delete|drop|alter|truncate|create|grant|revoke|vacuum|reindex|copy|merge|call|lock)\b/i;
-
-export function validateReadOnly(raw: string): { ok: true; sql: string } | { ok: false; reason: string } {
-  let sql = raw.trim().replace(/;+\s*$/, "");
-  if (!sql) return { ok: false, reason: "empty query" };
-  if (sql.includes(";")) return { ok: false, reason: "only a single statement is allowed" };
-  const head = sql.replace(/^\s*(--[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*/, "").trimStart();
-  if (!/^(select|with)\b/i.test(head)) return { ok: false, reason: "only SELECT / WITH queries are allowed" };
-  if (DISALLOWED.test(sql)) return { ok: false, reason: "query contains a disallowed keyword" };
-  if (!/\blimit\s+\d+/i.test(sql)) sql = `${sql}\nLIMIT ${MAX_ROWS}`;
-  return { ok: true, sql };
-}
+// The gate itself lives in ./sql-guard (pure, unit-tested) and is shared with
+// the Telegram intelligence agent. Re-exported so existing imports keep working.
+export { validateReadOnly };
 
 export async function runReadOnlySql(sql: string): Promise<{ rows: unknown[]; truncated: boolean }> {
   const rows = (await prisma.$transaction(

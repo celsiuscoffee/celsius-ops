@@ -11,6 +11,8 @@ import { checkCronAuth } from "@celsius/shared";
 import { queryCheckoutStatus } from "@/lib/revenue-monster/client";
 import { markRmOrderPaid } from "@/lib/revenue-monster/order-status";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
+import { applyOrderV2Hooks } from "@/lib/loyalty/v2";
+import { notifyOrderPreparing } from "@/lib/push/templates";
 import { resolveWindow } from "./window";
 
 /**
@@ -62,6 +64,7 @@ type FailedOrder = {
   loyalty_id: string | null;
   loyalty_points_earned: number | null;
   reward_id: string | null;
+  wallet_voucher_id: string | null;
   customer_phone: string | null;
   created_at: string;
 };
@@ -98,7 +101,7 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("orders")
-    .select("id, order_number, store_id, status, total, payment_method, payment_checkout_id, payment_failure_reason, loyalty_id, loyalty_points_earned, reward_id, customer_phone, created_at")
+    .select("id, order_number, store_id, status, total, payment_method, payment_checkout_id, payment_failure_reason, loyalty_id, loyalty_points_earned, reward_id, wallet_voucher_id, customer_phone, created_at")
     .eq("status", "failed")
     .gt("created_at", since)
     .order("created_at", { ascending: false })
@@ -181,6 +184,23 @@ export async function GET(request: NextRequest) {
         if (order.reward_id) {
           await deductLoyaltyPoints(order.loyalty_id, order.reward_id, order.store_id);
         }
+        // v2 hooks (wallet voucher consumed, missions, mystery drop, referral)
+        // — the normal webhook path runs these; a rescued order used to skip
+        // them and leave its voucher re-usable (2026-09-25 QA, M8). Idempotent.
+        await applyOrderV2Hooks({
+          memberId: order.loyalty_id,
+          orderId: order.id,
+          outletId: order.store_id,
+          orderCreatedAt: order.created_at,
+          walletVoucherId: order.wallet_voucher_id,
+        });
+      }
+      if (applied) {
+        await notifyOrderPreparing({
+          orderId: order.id,
+          orderNumber: order.order_number,
+          customerPhone: order.customer_phone,
+        }).catch((e) => console.warn("[push] order_preparing reconcile-failed", e));
       }
     }
     paidButFailed.push({

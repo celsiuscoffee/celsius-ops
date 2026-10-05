@@ -11,6 +11,31 @@ current month.
 
 ## Verified facts
 
+- 2026-09-26 — **Security Tier 5 (branch `claude/security-tier5`, server-only).**
+  (1) `safeEqual` in `packages/shared` (pure JS, Edge-safe) now backs every
+  secret compare: cron Bearer (`checkCronAuth`, 64 crons), Telegram pulse
+  webhook token, Grab partner client id/secret. (2) Model-authored SQL from the
+  data-analyst AND the Telegram intelligence agent goes through
+  `lib/agents/sql-guard.ts`: single SELECT, write keywords, credential-column
+  deny-list (`passwordHash`, `pin`, `staffPin`, otp, secret, token…), public
+  schema only, checked with comments and string literals stripped; 6 tests.
+  (3) Order-app `POST /api/staff/auth` uses the shared Upstash limiter keyed
+  on outlet AND IP (10 / 20 per 15 min) instead of a per-lambda Map, compares
+  the outlet PIN in constant time, and logs every use of the shared
+  `Outlet.staffPin` fallback (3 outlets still carry one). (4) Stripe-rescued
+  orders in `cron/reconcile-pending` and `cron/reconcile-failed` now run
+  `applyOrderV2Hooks` (wallet voucher consumed, missions, mystery, referral)
+  and send the "Brewing now" push, like the webhook path. (5)
+  `createSupabaseAdmin` logs an error when it falls back to the anon key.
+  **Prod facts found on the way:** `vouchers` and `staff_members` tables do
+  NOT exist — the legacy voucher gate in both checkout routes always 400s on a
+  legacy `voucherId` and the `staff_members` PIN path always errored (removed;
+  voucher path left, dead but harmless, housekeeping candidate along with the
+  orphan `increment_voucher_count` function). Reviewer phone 60111111111 has
+  no member row. The pos-native ESC/POS encoder already maps every byte
+  outside 0x20–0x7E to `?`, so the "control bytes in order notes" Low is not
+  reproducible.
+
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):

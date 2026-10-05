@@ -5,6 +5,7 @@ import { answerPulseCallback, pulseChatId, pulseOwnerUserId, sendPulse, sendPuls
 import { resolvePrompt, findPromptByMessageId } from "@celsius/agents/src/ask-owner";
 import { writeApMatch, type ApMatch } from "@/lib/finance/ap-match";
 import { runIntelligence } from "@/lib/agents/intelligence";
+import { safeEqual } from "@celsius/shared";
 
 export const dynamic = "force-dynamic";
 // Longer than the default 30s: a data question can take two LLM round-trips
@@ -137,7 +138,7 @@ export async function POST(req: NextRequest) {
   // Gate 1: shared secret set at registration time.
   const secret = process.env.CELSIUS_PULSE_WEBHOOK_SECRET;
   const provided = req.headers.get("x-telegram-bot-api-secret-token");
-  if (!secret || provided !== secret) {
+  if (!secret || !safeEqual(provided, secret)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
