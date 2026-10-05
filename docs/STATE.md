@@ -2893,6 +2893,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Resume pointer
 
+- 2026-10-05 — **15 PRs (#1245–1261 excl. #1252, #1258) on hourly monitoring;
+  all green, all draft, main baseline unchanged at b1aa44728a1df738e16373da7e5511e3d64db75e.**
+  Security review tranches from 2026-09-25; 17 CI checks per PR all passing.
+  **Status:** #1253 now mergeable (was blocker for #1257); #1257 now clean;
+  #1255 reported dirty by GitHub but local test merge succeeds (likely
+  cache issue — monitor). All 14 others clean. **Dependency:** #1253 must
+  merge before #1257 can proceed — then merge main into #1257 branch and run
+  `npm install --package-lock-only`. Next hourly check-in 2026-10-05 17:21:00Z;
+  silent re-arm pattern (monitor, act if red, reschedule if no changes).
+  **Owner decisions still pending:** environment variables (POS_AUTH_ENFORCE,
+  STAFF_AUTH_ENFORCE, STRICT_CUSTOMER_AUTH); database migrations 112, 113, 114
+  (owner to apply); iPay88 Vercel keys; M17/Expo 57/xlsx/legacy vouchers/
+  cleartext/unused deps. Keep STATE.md entries across merges (all PRs touch
+  it). Do not merge #1248 or #1251 without owner approval. Do not merge native
+  apps (#1249, #1261) without ota-release skill review — OTA deploy to
+  production devices on next app launch.
+
 - 2026-09-24 — **iPay88 gateway PR (branch `claude/wonderful-lamport-563xvr`)
   is a draft awaiting the owner.** Before ANY method is switched to iPay88:
   (a) someone with access checks the four iPay88 spec pages against
