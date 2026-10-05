@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@celsius/auth";
+import { getSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 

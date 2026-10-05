@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { assertAllowedFetchUrl } from "@/lib/safe-fetch-url";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireAuth } from "@/lib/auth";
 
@@ -196,6 +197,7 @@ Return STRICT JSON only — no prose, no markdown fences:
 async function fetchImageAsBase64(
   url: string,
 ): Promise<{ data: string; mediaType: "image/jpeg" | "image/png" | "image/webp" }> {
+  assertAllowedFetchUrl(url); // SSRF guard — storage hosts only
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
   const ct = (res.headers.get("content-type") || "").toLowerCase();

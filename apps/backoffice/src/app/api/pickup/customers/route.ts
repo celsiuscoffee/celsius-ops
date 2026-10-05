@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sanitizeIlikeTerm } from "@/lib/postgrest-safe";
 import { getSupabaseAdmin } from "@/lib/pickup/supabase";
 import { requireAuth } from "@/lib/auth";
 
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     .range(from, to);
 
   if (search) {
-    query = query.or(`phone.ilike.%${search}%,name.ilike.%${search}%`);
+    query = query.or(`phone.ilike.%${sanitizeIlikeTerm(search)}%,name.ilike.%${sanitizeIlikeTerm(search)}%`);
   }
 
   const { data: members, count, error } = await query;

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkHrDocumentFile } from "@/lib/hr/document-upload";
 import { createClient } from "@supabase/supabase-js";
 import { getSession } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
@@ -105,15 +106,18 @@ export async function POST(req: NextRequest) {
   const supabase = storageClient();
   await ensureBucket(supabase);
 
+  const fileCheck = checkHrDocumentFile(file);
+  if (!fileCheck.ok) return NextResponse.json({ error: fileCheck.error }, { status: 400 });
+
   const buffer = Buffer.from(await file.arrayBuffer());
-  const ext = (file.name.split(".").pop() || "bin").toLowerCase();
+  const ext = fileCheck.ext;
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const storagePath = `${userId}/${docType}/${stamp}.${ext}`;
 
   const { error: upErr } = await supabase.storage
     .from(BUCKET)
     .upload(storagePath, buffer, {
-      contentType: file.type || "application/octet-stream",
+      contentType: fileCheck.contentType,
       upsert: false,
     });
   if (upErr) {

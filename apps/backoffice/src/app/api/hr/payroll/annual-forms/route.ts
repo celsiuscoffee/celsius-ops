@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
   // Weekly (part-timer) runs carry period_start/end and no period_year, so
   // filtering on period_year alone dropped every PT wage from EA / Form E /
   // CP8D. Match either the monthly year or a weekly period inside the year.
+  if (!/^\d{4}$/.test(String(year))) return NextResponse.json({ error: "Invalid year" }, { status: 400 });
   const { data: runs } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
     .select("id")
