@@ -11,6 +11,24 @@ current month.
 
 ## Verified facts
 
+- 2026-09-27 — **Security QA Tier 6 (branch `claude/security-tier6`, server-only
+  hygiene; closes the last non-native Lows from the 2026-09-25 QA).** (1)
+  `GET /api/pickup/dashboard-stats?section=inventory` read `ingredients`,
+  `stock_levels` and `ingredient_outlet_settings` through Supabase — none of
+  those tables exist, so the backoffice Pickup → Inventory tab has 500'd since
+  the reads moved server-side. Rewritten on Prisma (`Product` INGREDIENT rows,
+  `StockBalance` and `ParLevel` summed across outlets): out = no quantity
+  anywhere, low = total under combined par. (2) `.gitignore` now covers
+  `.env.production`, `.env.development`, `.env.test` and `.env.*.local` (only
+  `.env` / `.env.local` were ignored). (3) Dropped the inert
+  `getUserFromHeaders` import in `apps/staff` `api/orders`. **Left as owner
+  decisions, unchanged:** staff-app middleware fails OPEN without
+  `JWT_SECRET` by design (handlers still 401); `usesCleartextTraffic: true` in
+  `pos-native/app.json` is native config (needs a new APK, not OTA); the six
+  unused `apps/staff` deps touch `package-lock.json` and would collide with
+  #1253/#1257. The dead staff-native coach call is on its own branch
+  (`claude/security-native-2`) because merging it is an OTA to manager phones.
+
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):

@@ -1,6 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserFromHeaders } from "@/lib/auth";
 import { checkModuleAccess } from "@/lib/check-module-access";
 import { logActivity } from "@/lib/activity-log";
 import { guardOrderLinePrices } from "@/lib/po-price-guard";
