@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { hrSupabaseAdmin } from "@/lib/hr/supabase";
-import { hashPin } from "@celsius/auth";
-import { pinInUse } from "@/lib/hr/pin-policy";
-import { applyStaffPreset } from "@/lib/staff-access-presets";
-import { seedLeaveBalancesForHire } from "@/lib/hr/leave-seed";
+import { HireError, hireEmployee, ROLES } from "@/lib/hr/hire";
 
 export const dynamic = "force-dynamic";
 
-// POST /api/hr/employees/create — create a new User + hr_employee_profiles row in one call
+const STATUS_FOR: Record<HireError["code"], number> = {
+  invalid: 400,
+  duplicate: 409,
+  pin_taken: 409,
+};
+
+// POST /api/hr/employees/create — create a new User + hr_employee_profiles row
+// in one call. All the provisioning lives in lib/hr/hire, shared with the LoE
+// import and the HR agent, so the three cannot drift apart again.
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !["OWNER", "ADMIN"].includes(session.role)) {
@@ -21,7 +24,8 @@ export async function POST(req: NextRequest) {
     name, fullName, phone, email, role, outletId,
     position, employment_type, join_date, basic_salary, hourly_rate,
     ic_number, date_of_birth, gender, pin,
-    performance_allowance_amount,
+    performance_allowance_amount, attendance_allowance_amount,
+    epf_number, bankName, bankAccountNumber, bankAccountName,
   } = body;
 
   if (!name || !role) {
@@ -30,116 +34,49 @@ export async function POST(req: NextRequest) {
   // Privilege-escalation guard (2026-09-03 QA): this route took `role` from
   // the body unchecked, so an ADMIN could create an OWNER account and log in
   // as it. The OWNER role is OWNER-only to grant, same as [id]/access.
-  if (!["STAFF", "MANAGER", "ADMIN", "OWNER"].includes(role)) {
+  if (!ROLES.includes(role)) {
     return NextResponse.json({ error: `Invalid role: ${String(role)}` }, { status: 400 });
   }
   if (role === "OWNER" && session.role !== "OWNER") {
     return NextResponse.json({ error: "Only an OWNER can create an OWNER account" }, { status: 403 });
   }
-  // PIN-only logins share one namespace across every backoffice-capable user
-  // (api/auth/pin tries each hash), so a PIN must be 6 digits like the staff
-  // app requires and must not collide with anyone else's.
-  if (pin != null && pin !== "") {
-    if (!/^\d{6}$/.test(String(pin))) {
-      return NextResponse.json({ error: "PIN must be exactly 6 digits" }, { status: 400 });
-    }
-    if (await pinInUse(String(pin))) {
-      return NextResponse.json({ error: "That PIN is already used by another account — choose a different one" }, { status: 409 });
-    }
-  }
-
-  // Phone is optional now — contract staff / HR-only records don't need one.
-  // Only check uniqueness when a phone was provided.
-  const phoneValue = (phone || "").trim() || null;
-  if (phoneValue) {
-    const existing = await prisma.user.findUnique({ where: { phone: phoneValue } });
-    if (existing) {
-      return NextResponse.json({ error: `Phone ${phoneValue} is already registered` }, { status: 409 });
-    }
-  }
 
   try {
-    const user = await prisma.user.create({
-      data: {
-        name,
-        fullName: fullName || null,
-        phone: phoneValue,
-        email: email || null,
-        role,
-        outletId: outletId || null,
-        status: "ACTIVE",
-        // Provision staff-app access from the position's preset instead of an
-        // empty footprint, so new hires can see their tabs on day one.
-        ...applyStaffPreset({ appAccess: [], moduleAccess: {} }, position),
-        pin: pin ? await hashPin(pin) : null,
-      },
-      select: { id: true, name: true, role: true, outletId: true },
+    const { userId } = await hireEmployee({
+      name,
+      fullName,
+      phone,
+      email,
+      role,
+      outletId,
+      position,
+      employmentType: employment_type,
+      joinDate: join_date,
+      basicSalary: basic_salary,
+      hourlyRate: hourly_rate,
+      performanceAllowance: performance_allowance_amount,
+      attendanceAllowance: attendance_allowance_amount,
+      icNumber: ic_number,
+      dateOfBirth: date_of_birth,
+      gender,
+      epfNumber: epf_number,
+      bankName,
+      bankAccountNumber,
+      bankAccountName,
+      pin,
+      createdBy: session.id,
     });
 
-    // Create matching hr_employee_profiles row
-    const { error: profileError } = await hrSupabaseAdmin
-      .from("hr_employee_profiles")
-      .insert({
-        user_id: user.id,
-        position: position || null,
-        employment_type: employment_type || "full_time",
-        join_date: join_date || new Date().toISOString().slice(0, 10),
-        basic_salary: basic_salary ? Number(basic_salary) : 0,
-        hourly_rate: hourly_rate ? Number(hourly_rate) : null,
-        ic_number: ic_number || null,
-        date_of_birth: date_of_birth || null,
-        gender: gender || null,
-        nationality: "Malaysian",
-        performance_allowance_amount: performance_allowance_amount != null ? Number(performance_allowance_amount) : null,
-      });
-
-    if (profileError) {
-      console.error("[create-employee] profile error:", profileError.message);
-      // Roll back the User row so we don't leave an orphaned login record.
-      // Mirrors the /api/hr/loe-import/commit behaviour.
-      await prisma.user.delete({ where: { id: user.id } }).catch(() => null);
-      return NextResponse.json(
-        { error: `Profile insert failed: ${profileError.message}` },
-        { status: 500 },
-      );
-    }
-
-    // FT hires start with join-year leave balances (pro-rated AL + flat
-    // sick) so the staff app's Leave screen works from day one. Best-effort —
-    // a seeding failure must not fail the hire.
-    try {
-      await seedLeaveBalancesForHire(
-        prisma,
-        user.id,
-        join_date || new Date().toISOString().slice(0, 10),
-        employment_type || "full_time",
-      );
-    } catch (err) {
-      console.error("[create-employee] leave seed failed:", err instanceof Error ? err.message : err);
-    }
-
-    // Backfill initial salary/job history rows
-    await hrSupabaseAdmin.from("hr_salary_history").insert({
-      user_id: user.id,
-      effective_date: join_date || new Date().toISOString().slice(0, 10),
-      salary_type: employment_type === "part_time" ? "hourly" : "monthly",
-      amount: employment_type === "part_time" ? Number(hourly_rate || 0) : Number(basic_salary || 0),
-      comment: "Initial salary on hire",
-      created_by: session.id,
-    });
-    await hrSupabaseAdmin.from("hr_job_history").insert({
-      user_id: user.id,
-      effective_date: join_date || new Date().toISOString().slice(0, 10),
-      job_title: position || role,
-      outlet_id: outletId || null,
-      employment_type: employment_type || "full_time",
-      note: "Initial hire",
-      created_by: session.id,
-    });
-
-    return NextResponse.json({ user }, { status: 201 });
+    return NextResponse.json(
+      { user: { id: userId, name, role, outletId: outletId || null } },
+      { status: 201 },
+    );
   } catch (err) {
+    if (err instanceof HireError) {
+      return NextResponse.json({ error: err.message }, { status: STATUS_FOR[err.code] });
+    }
     const message = err instanceof Error ? err.message : "Failed to create employee";
+    console.error("[create-employee]", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

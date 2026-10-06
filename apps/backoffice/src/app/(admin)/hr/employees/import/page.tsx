@@ -1,11 +1,12 @@
 "use client";
 
 import { useFetch } from "@/lib/use-fetch";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, Upload, Loader2, Sparkles, CheckCircle2, AlertTriangle, Trash2,
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 
 type ParsedRecord = {
@@ -27,18 +28,52 @@ type ParsedRecord = {
   error?: string;
 };
 
-type EditableRecord = ParsedRecord & {
+// Payroll identifiers a Letter of Employment never prints. They used to be
+// filled in afterwards, one employee page at a time — which is how staff
+// reached their first payroll with no EPF number and no bank account, both of
+// which the KWSP and payment files then silently skip over.
+type PayrollDetails = {
+  epfNumber: string | null;
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  bankAccountName: string | null;
+  pin: string | null;
+};
+
+type EditableRecord = ParsedRecord & PayrollDetails & {
   role: "STAFF" | "MANAGER" | "ADMIN" | "OWNER";
   outletId: string | null;
   skip: boolean;
+  expanded: boolean;
 };
 
 type CommitResult = {
   fileName: string;
   status: "created" | "skipped" | "error";
   userId?: string;
+  warning?: string;
   error?: string;
 };
+
+const MY_BANKS = [
+  "Maybank", "CIMB Bank Berhad", "Public Bank", "RHB Bank", "Bank Islam",
+  "AmBank", "Hong Leong Bank", "Bank Rakyat", "BSN", "Affin Bank",
+  "Alliance Bank", "OCBC Bank", "UOB", "HSBC", "Standard Chartered",
+  "Agrobank", "Bank Muamalat", "Maybank Islamic Berhad",
+];
+
+/** How many of the three that are never prefilled have been entered. */
+const filledDetails = (r: PayrollDetails): number =>
+  [r.epfNumber, r.bankAccountNumber, r.pin].filter((v) => v && v.trim() !== "").length;
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
 
 type Outlet = { id: string; name: string; code: string };
 
@@ -87,6 +122,15 @@ export default function LoeImportPage() {
         role: "STAFF",
         outletId: resolveOutletId(r.outletName),
         skip: !!r.error,
+        expanded: false,
+        epfNumber: null,
+        bankName: null,
+        bankAccountNumber: null,
+        // Payments are made to the account HOLDER, and the weekly preflight
+        // blocks a run when that name does not match the employee's. Default
+        // it to the legal name so the common case is right.
+        bankAccountName: r.fullName,
+        pin: null,
       }));
       setRecords(editable);
     } finally {
@@ -124,6 +168,19 @@ export default function LoeImportPage() {
       alert("Nothing to commit — every row is skipped.");
       return;
     }
+    // A PIN is a login. Catch a malformed or repeated one here rather than
+    // part-way through the batch, when some rows have already been created.
+    const badPin = toCommit.find((r) => r.pin && !/^\d{6}$/.test(r.pin));
+    if (badPin) {
+      alert(`${badPin.name}: PIN must be exactly 6 digits.`);
+      return;
+    }
+    const pins = toCommit.map((r) => r.pin).filter(Boolean) as string[];
+    const repeated = pins.find((p, i) => pins.indexOf(p) !== i);
+    if (repeated) {
+      alert("Two rows share the same PIN — PINs are one namespace, so they would log in as each other.");
+      return;
+    }
     setCommitting(true);
     try {
       const fd = new FormData();
@@ -150,6 +207,11 @@ export default function LoeImportPage() {
           email: r.email,
           icNumber: r.icNumber,
           notes: r.notes,
+          epfNumber: r.epfNumber,
+          bankName: r.bankName,
+          bankAccountNumber: r.bankAccountNumber,
+          bankAccountName: r.bankAccountName,
+          pin: r.pin,
         }))
         .filter((x) => x !== null);
       fd.append("records", JSON.stringify(payload));
@@ -280,13 +342,15 @@ export default function LoeImportPage() {
                   <th className="px-2 py-2 text-right">Basic</th>
                   <th className="px-2 py-2 text-right">Hr/rate</th>
                   <th className="px-2 py-2 text-right">Perf</th>
+                  <th className="px-2 py-2 text-left">Payroll</th>
                   <th className="px-2 py-2 text-left">Skip</th>
                   <th className="px-2 py-2 text-left">⌫</th>
                 </tr>
               </thead>
               <tbody>
                 {records.map((r, i) => (
-                  <tr key={i} className={`border-t ${r.skip ? "bg-muted/20 opacity-60" : ""}`}>
+                  <Fragment key={i}>
+                  <tr className={`border-t ${r.skip ? "bg-muted/20 opacity-60" : ""}`}>
                     <td className="px-2 py-2 max-w-[180px]">
                       <div className="truncate font-medium">{r.fileName}</div>
                       <span className={`mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${confidenceColor(r.confidence)}`}>
@@ -323,13 +387,84 @@ export default function LoeImportPage() {
                     <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-20 rounded border bg-background px-1 py-1 text-right" value={r.basicSalary ?? ""} onChange={(e) => updateField(i, "basicSalary", e.target.value ? Number(e.target.value) : null)} /></td>
                     <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-16 rounded border bg-background px-1 py-1 text-right" value={r.hourlyRate ?? ""} onChange={(e) => updateField(i, "hourlyRate", e.target.value ? Number(e.target.value) : null)} /></td>
                     <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-16 rounded border bg-background px-1 py-1 text-right" value={r.performanceAllowance ?? ""} onChange={(e) => updateField(i, "performanceAllowance", e.target.value ? Number(e.target.value) : null)} /></td>
+                    <td className="px-2 py-2">
+                      <button
+                        onClick={() => updateField(i, "expanded", !r.expanded)}
+                        className="inline-flex items-center gap-1 rounded border px-1.5 py-1 hover:bg-muted"
+                        title="EPF, bank and PIN — not printed on the letter"
+                      >
+                        {r.expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                        {filledDetails(r) > 0
+                          ? <span className="font-semibold text-emerald-700">{filledDetails(r)}/3</span>
+                          : <span className="text-muted-foreground">add</span>}
+                      </button>
+                    </td>
                     <td className="px-2 py-2"><input type="checkbox" checked={r.skip} onChange={(e) => updateField(i, "skip", e.target.checked)} /></td>
                     <td className="px-2 py-2"><button onClick={() => removeRow(i)} className="rounded p-1 text-red-600 hover:bg-red-50"><Trash2 className="h-3 w-3" /></button></td>
                   </tr>
+                  {r.expanded && (
+                    <tr className={r.skip ? "bg-muted/20 opacity-60" : "bg-muted/10"}>
+                      <td colSpan={14} className="px-4 py-3">
+                        <div className="flex flex-wrap items-end gap-3">
+                          <Field label="EPF no.">
+                            <input
+                              className="w-32 rounded border bg-background px-2 py-1"
+                              value={r.epfNumber ?? ""}
+                              onChange={(e) => updateField(i, "epfNumber", e.target.value || null)}
+                            />
+                          </Field>
+                          <Field label="Bank">
+                            <input
+                              list="my-banks"
+                              className="w-44 rounded border bg-background px-2 py-1"
+                              value={r.bankName ?? ""}
+                              onChange={(e) => updateField(i, "bankName", e.target.value || null)}
+                            />
+                          </Field>
+                          <Field label="Account no.">
+                            <input
+                              inputMode="numeric"
+                              className="w-40 rounded border bg-background px-2 py-1"
+                              value={r.bankAccountNumber ?? ""}
+                              onChange={(e) => updateField(i, "bankAccountNumber", e.target.value || null)}
+                            />
+                          </Field>
+                          <Field label="Account holder">
+                            <input
+                              className="w-56 rounded border bg-background px-2 py-1"
+                              value={r.bankAccountName ?? ""}
+                              onChange={(e) => updateField(i, "bankAccountName", e.target.value || null)}
+                            />
+                          </Field>
+                          <Field label="Staff-app PIN">
+                            <input
+                              inputMode="numeric"
+                              maxLength={6}
+                              placeholder="6 digits"
+                              className="w-24 rounded border bg-background px-2 py-1"
+                              value={r.pin ?? ""}
+                              onChange={(e) => updateField(i, "pin", e.target.value.replace(/\D/g, "") || null)}
+                            />
+                          </Field>
+                        </div>
+                        <p className="mt-2 text-[10px] text-muted-foreground">
+                          None of these appear on a Letter of Employment. Leave them blank and the
+                          employee is still created — but payroll will warn on the missing EPF
+                          number, the payment file will skip them without a bank account, and they
+                          cannot sign in to the staff app until a PIN is set.
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
           </div>
+
+          <datalist id="my-banks">
+            {MY_BANKS.map((b) => <option key={b} value={b} />)}
+          </datalist>
 
           <div className="flex items-center justify-end gap-2">
             <button
@@ -372,6 +507,9 @@ export default function LoeImportPage() {
                 </span>
                 <span className="font-medium">{r.fileName}</span>
                 {r.error && <span className="text-xs text-muted-foreground">— {r.error}</span>}
+                {/* Created, but the letter never reached storage. Worth saying:
+                    the employee looks fine and the document is simply absent. */}
+                {r.warning && <span className="text-xs text-amber-700">— {r.warning}</span>}
                 {r.userId && (
                   <Link href={`/hr/employees/${r.userId}`} className="ml-auto text-xs text-terracotta hover:underline">
                     Open profile →

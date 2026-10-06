@@ -20,9 +20,8 @@ import { Prisma } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { hashPin } from "@celsius/auth";
-import { applyStaffPreset } from "@/lib/staff-access-presets";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
-import { seedLeaveBalancesForHire } from "@/lib/hr/leave-seed";
+import { digitsOnly, hireEmployee, icDerive, stationsFor } from "@/lib/hr/hire";
 
 export type ActionType =
   | "create_staff"
@@ -65,7 +64,6 @@ export interface StaffTarget {
   employmentType: string | null;
 }
 
-const digitsOnly = (s: string) => s.replace(/[^0-9]/g, "");
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const mytToday = () => new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
 
@@ -268,31 +266,10 @@ const isoOrToday = (v: unknown) => {
   return s;
 };
 
-// DOB + gender from a Malaysian IC (century rule YY≤26 → 20YY; last digit odd=M).
-export function icDerive(icRaw: string): { dob: string | null; gender: string | null } {
-  const ic = digitsOnly(icRaw);
-  if (ic.length !== 12) return { dob: null, gender: null };
-  const yy = Number(ic.slice(0, 2));
-  const y = yy <= 26 ? 2000 + yy : 1900 + yy;
-  const m = Number(ic.slice(2, 4));
-  const d = Number(ic.slice(4, 6));
-  const date = new Date(Date.UTC(y, m - 1, d));
-  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) {
-    return { dob: null, gender: null };
-  }
-  return { dob: date.toISOString().slice(0, 10), gender: Number(ic[11]) % 2 === 1 ? "M" : "F" };
-}
-
-export function stationsFor(position: string): string[] {
-  const p = position.toLowerCase();
-  const boh = p.includes("kitchen") || p.includes("chef") || p.includes("boh");
-  const foh = p.includes("barista") || p.includes("cashier") || (!boh && !p.includes("lead"));
-  const out: string[] = [];
-  if (foh) out.push("foh");
-  if (boh) out.push("boh");
-  if (p.includes("lead") || p.includes("supervisor")) out.push("lead");
-  return out.length ? out : ["foh"];
-}
+// Both live in lib/hr/hire now — the one place that provisions an employee.
+// Re-exported because this module's callers and tests have always imported
+// them from here.
+export { icDerive, stationsFor };
 
 async function execCreateStaff(p: Record<string, unknown>): Promise<string> {
   const name = str(p.name);
@@ -304,92 +281,45 @@ async function execCreateStaff(p: Record<string, unknown>): Promise<string> {
   const outlet = await resolveOutlet(outletName);
   if (!outlet) throw new Error(`no outlet matching "${outletName}"`);
 
-  const phone = str(p.phone) || null;
-  const email = str(p.email) || null;
-  const ic = str(p.ic) || null;
-
-  // Dedup gate — the person may already exist (Absah lesson). Overriding
-  // requires the human to change identifiers, not the agent to force through.
-  const dupes = await prisma.$queryRaw<Array<{ name: string; status: string }>>`
-    SELECT u.name, u.status::text FROM "User" u
-    LEFT JOIN hr_employee_profiles pr ON pr.user_id = u.id
-    WHERE (${phone}::text IS NOT NULL AND regexp_replace(coalesce(u.phone,''),'[^0-9]','','g') = ${digitsOnly(phone ?? "")} AND coalesce(u.phone,'') <> '')
-       OR (${email}::text IS NOT NULL AND u.email = ${email})
-       OR (${ic}::text IS NOT NULL AND regexp_replace(coalesce(pr.ic_number,''),'[^0-9]','','g') = ${digitsOnly(ic ?? "")})
-    LIMIT 3
-  `;
-  if (dupes.length > 0) {
-    throw new Error(`possible existing record: ${dupes.map((d) => `${d.name} (${d.status})`).join(", ")} — update that record instead of creating a duplicate`);
-  }
-
   const hourlyRate = num(p.hourlyRate);
   const basicSalary = num(p.basicSalary);
-  if (employmentType === "part_time" && hourlyRate === null) throw new Error("part_time needs hourlyRate");
-  if (employmentType === "full_time" && basicSalary === null) throw new Error("full_time needs basicSalary");
-
   const joinDate = isoOrToday(p.joinDate);
-  const { dob, gender } = ic ? icDerive(ic) : { dob: null, gender: null };
-  const stations = stationsFor(position);
-  const access = applyStaffPreset({ appAccess: [], moduleAccess: {} }, position);
-  const pinHash = str(p.pin) ? await hashPin(str(p.pin)) : null;
-  const bankName = str(p.bankName) || null;
+  const hasPin = !!str(p.pin);
   const bankAcc = str(p.bankAccountNumber) ? digitsOnly(str(p.bankAccountNumber)) : null;
-  const managerId = str(p.managerUserId) || null;
-  const perfAllow = num(p.performanceAllowance);
-  const attAllow = num(p.attendanceAllowance);
 
-  const createdRes = await prisma.$transaction(async (tx) => {
-    const created = await tx.user.create({
-      data: {
-        name,
-        fullName: str(p.fullName) || null,
-        phone,
-        email,
-        role: "STAFF",
-        outletId: outlet.id,
-        status: "ACTIVE",
-        appAccess: access.appAccess,
-        moduleAccess: access.moduleAccess as Prisma.InputJsonValue,
-        pin: pinHash,
-        bankName,
-        bankAccountNumber: bankAcc,
-        bankAccountName: str(p.bankAccountName) || str(p.fullName) || null,
-      },
-      select: { id: true },
-    });
-    await tx.$executeRaw`
-      INSERT INTO hr_employee_profiles
-        (user_id, position, employment_type, join_date, basic_salary, hourly_rate,
-         performance_allowance_amount, attendance_allowance_amount,
-         epf_number, ic_number, date_of_birth, gender, nationality, epf_category,
-         payroll_cadence, statutory_applicable, stations, manager_user_id, notes, created_at, updated_at)
-      VALUES
-        (${created.id}, ${position}, ${employmentType}, ${joinDate}::date,
-         ${employmentType === "full_time" ? basicSalary : 0}, ${employmentType === "part_time" ? hourlyRate : null},
-         ${perfAllow}, ${attAllow},
-         ${str(p.epf) || null}, ${ic}, ${dob}::date, ${gender}, 'Malaysian', 'A',
-         'MONTHLY', false, ${stations}::text[], ${managerId},
-         ${str(p.notes) || null}, now(), now())
-    `;
-    await tx.$executeRaw`
-      INSERT INTO hr_salary_history (user_id, effective_date, salary_type, amount, comment, created_at)
-      VALUES (${created.id}, ${joinDate}::date,
-              ${employmentType === "part_time" ? "hourly" : "monthly"},
-              ${employmentType === "part_time" ? hourlyRate : basicSalary},
-              'Initial salary on hire (HR agent)', now())
-    `;
-    await tx.$executeRaw`
-      INSERT INTO hr_job_history (user_id, effective_date, job_title, outlet_id, manager_user_id, employment_type, note, created_at)
-      VALUES (${created.id}, ${joinDate}::date, ${position}, ${outlet.id}, ${managerId}, ${employmentType}, 'Initial hire (HR agent)', now())
-    `;
-    // FT hires start with join-year leave balances (pro-rated AL + flat sick)
-    // so the staff app's Leave screen works from day one.
-    const seeded = await seedLeaveBalancesForHire(tx, created.id, joinDate, employmentType);
-    return { id: created.id, seeded };
+  // Provisioning — the dedup gate (Absah lesson: overriding requires the
+  // human to change identifiers, not the agent to force through), the access
+  // preset, the audit rows and the leave seed — all live in lib/hr/hire,
+  // shared with the backoffice form and the LoE import.
+  const hired = await hireEmployee({
+    name,
+    fullName: str(p.fullName) || null,
+    phone: str(p.phone) || null,
+    email: str(p.email) || null,
+    role: "STAFF",
+    outletId: outlet.id,
+    position,
+    employmentType,
+    joinDate,
+    basicSalary,
+    hourlyRate,
+    performanceAllowance: num(p.performanceAllowance),
+    attendanceAllowance: num(p.attendanceAllowance),
+    icNumber: str(p.ic) || null,
+    epfNumber: str(p.epf) || null,
+    bankName: str(p.bankName) || null,
+    bankAccountNumber: str(p.bankAccountNumber) || null,
+    bankAccountName: str(p.bankAccountName) || null,
+    managerUserId: str(p.managerUserId) || null,
+    pin: str(p.pin) || null,
+    notes: str(p.notes) || null,
+    salaryComment: "Initial salary on hire (HR agent)",
+    jobNote: "Initial hire (HR agent)",
   });
 
-  return `✅ ${name} created — ${position} (${employmentType === "part_time" ? `PT RM${hourlyRate}/hr` : `FT RM${basicSalary}/mo`}) at ${outlet.name}, join ${joinDate}${pinHash ? ", PIN set" : ""}${bankAcc ? ", bank on file" : ", bank still needed"}${createdRes.seeded ? `, ${createdRes.seeded}` : ""} (id ${createdRes.id.slice(0, 8)})`;
+  return `✅ ${name} created — ${position} (${employmentType === "part_time" ? `PT RM${hourlyRate}/hr` : `FT RM${basicSalary}/mo`}) at ${outlet.name}, join ${joinDate}${hasPin ? ", PIN set" : ""}${bankAcc ? ", bank on file" : ", bank still needed"}${hired.leaveSeeded ? `, ${hired.leaveSeeded}` : ""} (id ${hired.userId.slice(0, 8)})`;
 }
+
 
 const UPDATABLE_USER_FIELDS = ["email", "phone", "bankName", "bankAccountNumber", "bankAccountName"] as const;
 const UPDATABLE_PROFILE_FIELDS = [
