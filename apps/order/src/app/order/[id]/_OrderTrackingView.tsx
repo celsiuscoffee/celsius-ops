@@ -324,19 +324,19 @@ export function OrderTrackingView({
               <XCircle size={20} color="#B91C1C" />
               <div>
                 <p className="font-peachi font-bold text-sm text-red-800">
-                  {order.status === "failed" ? "Payment failed" : "Cancelled"}
+                  {order.status === "failed" ? "Payment not confirmed" : "Cancelled"}
                 </p>
                 <p className="text-[12px] text-red-700 mt-0.5">
                   {order.status !== "failed"
                     ? "This order was cancelled."
                     : canRetryPayment
-                    ? "No charge was made. Your order is saved — try the payment again below."
+                    ? "Your order is saved. Check your banking app before paying again — if the money already left your account, do not pay twice."
                     : "Place the order again to retry."}
                 </p>
                 {order.status === "failed" && RM_METHODS.has(order.payment_method) ? (
                   <p className="text-[12px] text-red-700 mt-1">
-                    Just paid? Hang tight — we re-check with the bank automatically
-                    and this page will update.
+                    Already charged? Keep this page open — we re-check with the bank
+                    automatically and it will update on its own.
                   </p>
                 ) : null}
               </div>

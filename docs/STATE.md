@@ -11,6 +11,86 @@ current month.
 
 ## Verified facts
 
+- 2026-09-26 — **`build (order)` in CI can fail on a Google Fonts fetch flake,
+  not on your diff.** PR #1258 run 4291 died with `Module not found: Can't
+  resolve '@vercel/turbopack-next/internal/font/google/font'` /
+  "next/font/google queries have exactly one entry", traced to
+  `apps/order/src/app/layout.tsx:2` (`Space_Grotesk` from `next/font/google`).
+  `next build` fetches Google Fonts at build time and CI has no `.next/cache`,
+  so a network hiccup fails the job. Re-run on the next commit (4292) was green
+  with no code change, and the 7 surrounding runs on other branches all built
+  the same `layout.tsx`. Before chasing a font error in a build log, re-run
+  first. Permanent fix if it recurs: vendor Space Grotesk via `next/font/local`
+  like Peachi already is (`apps/order/src/fonts/`).
+
+- 2026-09-26 — **The QR checkout had NO duplicate-payment guard: 86 tables
+  were charged twice in 90 days, RM1,685.70 overcharged.** Owner escalated
+  with a staff note ("double payment") for Shah Alam table 15. Reconstruction:
+  the same RM34.70 order was placed FOUR times in 2m13s and **paid twice** —
+  C-DFFK97 (tng 10:44:21, settled, docket 10:45:31) and C-GANO49 (fpx
+  10:46:34, settled, docket 10:47:31), with C-ETHC92 (card 10:45:25) and
+  C-FJ9C94 (tng 10:45:59) failing in between. The second attempt began at
+  10:45:25 — **6 seconds BEFORE the first one confirmed.**
+  **Mechanism (ours, not RM's this time):** settle takes 45-90s because RM
+  webhooks never fire (1 of 480 settled <10s, Aug audit), so the customer
+  watches "Confirming payment", two interleaved attempts show FAILED, they
+  conclude it did not work and pay again. Nothing anywhere stopped them:
+  every "place order" minted a NEW order + NEW checkout + NEW charge, and
+  because both payments are recorded correctly nothing downstream could
+  ever detect it. Distinct from the C-7272 class (paid-but-marked-failed,
+  fixed by #1252) — that heals a wrong record; this is two correct records.
+  **Scale (90d, cluster analysis = same store+table+total, gaps <10 min,
+  both settled):** 86 incidents / RM1,685.70 — Shah Alam 43 (RM957.30),
+  Putrajaya 29 (RM508.00), Tamarind 14 (RM220.40); 41 within 2 min
+  (near-certain), 17 over 5 min (verify before refunding — two friends CAN
+  order the same RM13.90 latte). ALL 86 are web_qr→web_qr; the native app
+  path (/api/orders) has none. Full list w/ order numbers + refs + known
+  contacts: `docs/double-charges-2026-09-26.csv`.
+  **Fix (this branch):** duplicate guard in `/api/checkout/initiate` — before
+  minting a charge, look for a same store+table+total order from the last 5
+  min that is either settled or pending ON A LIVE CHECKOUT (money can be in
+  flight: C-7272 was debited at +4s while RM still said nothing); return 409
+  + the existing order instead of charging. NOT a hard block — the client
+  shows "this table just paid RM X, view that order / charge me again" and
+  `allowDuplicate` carries the customer's yes, so a genuine second round
+  still works. Twin-selection logic lives in a dependency-free
+  `duplicate-guard.ts` with unit tests (the root vitest `@` alias resolves to
+  backoffice, so a test reaching route.ts cannot load). **Gotcha caught in
+  review:** `onClick={placeOrder}` passes React's event as arg 0, which would
+  have arrived as a truthy `allowDuplicate` and silently disabled the whole
+  guard — must be `onClick={() => placeOrder()}`.
+  **CONFIDENCE — do NOT blanket-refund (added after the owner asked "how do
+  we know it is not double purchase"): we mostly CANNOT prove same-payer.**
+  Only **13% of QR dine-in orders carry any customer identity** (311/2,388
+  in 30d), and **0 of the 86 clusters have loyalty identity on both legs**,
+  so "two friends ordered the same RM13.90 latte" is genuinely
+  indistinguishable in our data. The 86 / RM1,685.70 is an UPPER BOUND of
+  suspicion, not a confirmed refund list. Graded in the CSV by behavioural
+  signal (a failed attempt interleaved = the panic-retry signature; or
+  <=2 min apart AND a different payment method = someone switching method
+  after an apparent failure): **HIGH 27 (RM512.40), MEDIUM 44 (RM922.30),
+  LOW 15 (RM251.00)**. Refund HIGH, check MEDIUM against complaints, hold
+  LOW unless a customer asks.
+  **HOW WE KNOW A PAYMENT SUCCEEDED (asked same session) — reliability
+  order:** (1) our merchant bank feed: RM settles daily as
+  `SETTLEMENT <yyyymmdd> REVENUE MONSTER SDN PB ECP PAYMENT`, category
+  `REVENUE_MONSTER`, 67 lines / RM51,144.76 in 30d — money actually
+  received, but a daily aggregate, 1-2 days lagged; (2) RM's merchant
+  portal, per-transaction but manual; (3) the customer's own bank app (what
+  staff should accept at the table); (4) our `orders.status` — LAST, because
+  it is derived from RM's checkout query, which has now lied in both
+  directions (EXPIRED on a paid order, PENDING for 2h on another).
+  **GAP: `RmPayout` / `RmPayoutLine` are EMPTY (0 rows)** though
+  `sync-rm-payouts` is scheduled daily at 21:00 — the per-transaction
+  settlement feed that would let us answer "did THIS payment succeed"
+  automatically, and identify the payer instrument (the one datum that
+  would prove same-payer for the 86), has never populated. Fixing that sync
+  is the highest-value next step for both questions.
+  **Owner actions:** refund the HIGH 27 (start with Shah Alam t15 26/09,
+  RM34.70 → Nazierun Natasha Binti Nor Anizam, CIMB 7628245033,
+  012-3108756); and the root enabler is still RM's dead webhooks — every
+  second of that 45-90s window is when customers re-pay.
+
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
