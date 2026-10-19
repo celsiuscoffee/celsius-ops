@@ -116,7 +116,17 @@ export type LinkResult = {
 // Link unmatched supplier cash-out to the invoice whose number appears in the
 // bank description, when that resolves to exactly ONE invoice of the right
 // amount (± RM1) and entity. Sets BankStatementLine.apInvoiceId (the link) —
-// it does NOT change invoice status, so already-paid bills are just linked.
+// it does NOT change invoice status.
+//
+// PAID INVOICES ONLY, and that restriction is load-bearing. This linker exists
+// to source already-settled cash-out for the P&L, but it stamps apInvoiceId
+// without apMatchedAt and without touching the invoice. ap-match then skips the
+// line forever (its candidate filter ignores anything already carrying a link),
+// so an OPEN invoice caught here could never be auto-settled: the money left the
+// bank and the bill stayed unpaid, silently, with no event or rejection logged.
+// Rich Products 282411058M (RM1,262.40, 28 Aug 2026) is the case that surfaced
+// it — the daily cron reaches a line at T+2 days, ahead of ap-match. Open
+// invoices are ap-match's job; leave them alone.
 export async function linkCashOutByInvoiceNumber(from: string, to: string, opts: { dryRun?: boolean } = {}): Promise<LinkResult> {
   const dryRun = opts.dryRun ?? true;
   const start = new Date(`${from}T00:00:00+08:00`);
@@ -138,6 +148,7 @@ export async function linkCashOutByInvoiceNumber(from: string, to: string, opts:
     FROM "Invoice" i
     JOIN fin_outlet_companies fc ON fc.outlet_id = i."outletId"
     WHERE i."invoiceNumber" IS NOT NULL AND length(i."invoiceNumber") >= 4
+      AND i.status = 'PAID'
   `);
   const byCompany = new Map<string, typeof invoices>();
   for (const inv of invoices) {

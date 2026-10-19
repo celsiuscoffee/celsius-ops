@@ -37,6 +37,15 @@ export type FeedSyncAccountResult = {
   skipped?: string;
 };
 
+// A result row for an account we never got as far as syncing. Keeps every skip
+// reason in the same shape the digest already renders.
+function emptyResult(subdomain: string): FeedSyncAccountResult {
+  return {
+    subdomain, accountTail: "", accountName: null, anchorDate: null, anchorBalance: null,
+    newLines: 0, latestDate: null, endingBalance: null, statements: 0, committed: false,
+  };
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
@@ -281,13 +290,92 @@ export async function syncBukkuFeedLedger(opts: { commit?: boolean } = {}): Prom
       });
       continue;
     }
+    // A feed that Bukku has UNLINKED (the Maybank connection lapsed and needs
+    // re-authorising in the Bukku UI) used to `continue` silently: no result
+    // row, no error, nothing in the digest. The Conezion account (2644) stopped
+    // ingesting on 2026-08-31 and nobody knew for seven days, while every
+    // finance view quietly dropped a third of the group. Record the skip so an
+    // unlinked feed is as visible as a thrown error.
+    if (feeds.length === 0) {
+      results.push({ ...emptyResult(creds.subdomain), skipped: "no bank feeds returned" });
+      continue;
+    }
     for (const feed of feeds) {
-      if (!feed.is_linked) continue;
+      if (!feed.is_linked) {
+        for (const fa of feed.accounts ?? []) {
+          results.push({
+            ...emptyResult(creds.subdomain),
+            accountTail: (fa.ext_number || "").replace(/\D/g, "").slice(-4),
+            skipped: "feed UNLINKED in Bukku — re-authorise the bank connection",
+          });
+        }
+        if ((feed.accounts ?? []).length === 0) {
+          results.push({ ...emptyResult(creds.subdomain), skipped: "feed UNLINKED in Bukku (no accounts listed)" });
+        }
+        continue;
+      }
       for (const fa of feed.accounts ?? []) {
-        if (!fa.linked_account_id) continue;
+        if (!fa.linked_account_id) {
+          results.push({
+            ...emptyResult(creds.subdomain),
+            accountTail: (fa.ext_number || "").replace(/\D/g, "").slice(-4),
+            skipped: "feed account not mapped to a Bukku ledger account",
+          });
+          continue;
+        }
         results.push(await syncAccount(creds, feed.id, fa.linked_account_id, fa.ext_number, admin.id, commit));
       }
     }
   }
   return { commit, accounts: results };
+}
+
+
+// Staleness guard. The unlinked-feed skip above makes a BROKEN feed visible in
+// the run result, but a feed can also go quiet without ever reporting an error
+// — Bukku keeps answering, just with nothing new. Either way the symptom is the
+// same: an account that was ingesting stops advancing, and every cashflow view
+// silently drops it. Conezion (2644) went seven days before anyone noticed.
+//
+// Compares each account's newest feed line against the newest line ANY account
+// has, so a quiet weekend or a bank holiday moves the whole set together and
+// raises nothing. Only an account falling behind its peers is reported.
+export type FeedStaleness = {
+  accountName: string;
+  latestLine: string;   // YYYY-MM-DD
+  daysBehind: number;
+};
+
+export async function checkFeedStaleness(toleranceDays = 2): Promise<FeedStaleness[]> {
+  const rows = await prisma.bankStatementLine.groupBy({
+    by: ["statementId"],
+    _max: { txnDate: true },
+  });
+  if (rows.length === 0) return [];
+
+  const statements = await prisma.bankStatement.findMany({
+    where: { id: { in: rows.map((r) => r.statementId) } },
+    select: { id: true, accountName: true },
+  });
+  const nameById = new Map(statements.map((s) => [s.id, s.accountName ?? "(unnamed)"]));
+
+  // Newest line per ACCOUNT (an account has many monthly statements).
+  const latestByAccount = new Map<string, Date>();
+  for (const r of rows) {
+    const name = nameById.get(r.statementId);
+    const d = r._max.txnDate;
+    if (!name || !d) continue;
+    const cur = latestByAccount.get(name);
+    if (!cur || d > cur) latestByAccount.set(name, d);
+  }
+
+  const newest = [...latestByAccount.values()].reduce((a, b) => (b > a ? b : a));
+  const out: FeedStaleness[] = [];
+  for (const [accountName, latest] of latestByAccount) {
+    const daysBehind = Math.round((newest.getTime() - latest.getTime()) / 86_400_000);
+    if (daysBehind > toleranceDays) {
+      out.push({ accountName, latestLine: latest.toISOString().slice(0, 10), daysBehind });
+    }
+  }
+  return out.sort((a, b) => b.daysBehind - a.daysBehind);
 }

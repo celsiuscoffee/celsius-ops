@@ -80,6 +80,32 @@ type Rule = {
   isInterCo?: boolean;
 };
 
+// Payroll / management-fee narration, both spellings.
+//
+// Maybank abbreviated the payroll suffix from Aug-2026: "Salary Jun26" became
+// "Sal Jul26", overtime top-ups arrive as "Add OT Jul26" / "OT Jul26", and
+// "Mngmt Fee" became "Mgmt Fee" / "mgmt 1/4". The old /\bSALARY\b/ and
+// /\bMNGMT\s*FEE\b/ rules matched none of it, so the entire Jul-26 payroll fell
+// through to fallback_other — RM53k of staff pay booked as OTHER_OUTFLOW and
+// Ariff Izham's line grabbed by raw_ariff_adhoc as RAW_MATERIALS.
+//
+// "SAL" and "OT" are short enough to collide with unrelated tokens, so both are
+// anchored on what always follows them in a payroll narration: the pay period,
+// written either as a month-year ("Jul26") or as a split marker ("1/2"). "SALARY"
+// stays matchable on its own — it is unambiguous, and older lines carry
+// "Salary 1/1" with no month.
+const PAY_PERIOD = String.raw`(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s*\d{2}\b|\d+\s*/\s*\d+`;
+const SALARY_RE = new RegExp(String.raw`\bSALARY\b|\bSAL\.?\s+(?:${PAY_PERIOD})`, "i");
+const OVERTIME_RE = new RegExp(String.raw`\b(?:ADD\s+)?OT\s+(?:${PAY_PERIOD})`, "i");
+const MGMT_FEE_RE = /\b(?:MANAGEMENT|MNGMT|MGMT)\s*FEE\b|\bMGMT\b/i;
+const PARTIMER_RE = /\bPARTIMER\b|\bPT\s*WEEK\b|\bPT\s*W\s*\d{1,2}\b/i;
+const AMMAR_ADS_CLAIM_RE = /AMMAR\s+BIN\s+SHAHRIN[\s\S]*\b(?:ADS?|MARKETING)\b/i;
+// Indeed bills from Singapore; the invoice number is the only marker on some
+// reimbursements (2026-04-22: SGI26-00052664 and SGI26-00081124, RM1,500.87,
+// which landed in OTHER_OUTFLOW and RAW_MATERIALS respectively — the latter
+// inflating food cost). Shape-anchored so it cannot collide with a supplier ref.
+const INDEED_CLAIM_RE = /\bINDEED\b|\bSGI\d{2}-\d{6,}\b/i;
+
 // Inflow rules
 //
 // InterCo policy: a transfer whose COUNTERPARTY is another Celsius entity is
@@ -109,8 +135,9 @@ const INFLOW_RULES: Rule[] = [
   // Like the outflow side, the prefix is just routing; the suffix tells
   // us why money came in.
   { name: "in_loan_repayment",     match: /\bLOAN\b/i,                               direction: "CR", category: "LOAN" as CashCategory },
-  { name: "in_management_fee",     match: /\bMANAGEMENT\s*FEE|\bMNGMT\s*FEE\b/i,     direction: "CR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
-  { name: "in_salary_return",      match: /\bSALARY\b/i,                             direction: "CR", category: "EMPLOYEE_SALARY" as CashCategory, isInterCo: true },
+  { name: "in_management_fee",     match: MGMT_FEE_RE,                               direction: "CR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
+  { name: "in_salary_return",      match: SALARY_RE,                                 direction: "CR", category: "EMPLOYEE_SALARY" as CashCategory, isInterCo: true },
+  { name: "in_overtime_return",    match: OVERTIME_RE,                               direction: "CR", category: "EMPLOYEE_SALARY" as CashCategory, isInterCo: true },
   { name: "in_stat_pay_return",    match: /\b(STAT\s*PAY|STATUTORY)\b/i,             direction: "CR", category: "STATUTORY_PAYMENT" as CashCategory, isInterCo: true },
   { name: "in_inventory_return",   match: /\bINVENTORY\b/i,                          direction: "CR", category: "RAW_MATERIALS" as CashCategory, isInterCo: true },
   { name: "in_capital_injection",  match: /\bCAPITAL\s*(INJECTION|TRANSFER)\b/i,     direction: "CR", category: "CAPITAL" as CashCategory },
@@ -151,7 +178,7 @@ const OUTFLOW_RULES: Rule[] = [
   // True InterCo — management fees, asset transfers, capital injections
   // between Celsius entities. These genuinely net to zero across
   // consolidation. Match by purpose verb, not entity name.
-  { name: "interco_management_fee", match: /\bMANAGEMENT\s*FEE\b|\bMNGMT\s*FEE\b/i, direction: "DR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
+  { name: "interco_management_fee", match: MGMT_FEE_RE, direction: "DR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
   { name: "interco_asset_transfer", match: /\bASSET\s*TRANSFER\b/i, direction: "DR", category: "INTERCO_INVESTMENTS" as CashCategory, isInterCo: true },
   { name: "interco_capital",        match: /\bCAPITAL\s*(INJECTION|TRANSFER)\b/i, direction: "DR", category: "CAPITAL" as CashCategory, isInterCo: true },
   { name: "interco_return_mngmt",   match: /\bRETURN\s*MNGMT\b|\bRETURN\s*MANAGEMENT\b/i, direction: "DR", category: "MANAGEMENT_FEE" as CashCategory, isInterCo: true },
@@ -168,6 +195,26 @@ const OUTFLOW_RULES: Rule[] = [
   // come before purpose_staff_claim (/CLAIM/), software_saas (/GOOGLE/) and
   // directors_ammar (/AMMAR BIN SHAHRIN/), which would otherwise grab them.
   { name: "marketing_ads_claim",      match: /\bGOOGLE\s*ADS\b|\bADS?\s*CLAIMS?\b|\bCLAIMS?\s*ADS?\b/i, direction: "DR", category: "DIGITAL_ADS" as CashCategory },
+  // Same reimbursement, narrated without the word "ads". From 2026-07 the
+  // director's ad claims read "Ads Clam Jun26" (typo), then "Marketing 0726"
+  // and "indeed 15/8/26" — none of which marketing_ads_claim catches, so
+  // RM6,567 (Jul) and the whole RM18,575 August run fell to OTHER_OUTFLOW and
+  // understated ads while overstating opex. (Indeed is split off above — it is
+  // recruitment, not customer marketing, and has no dedupe source.)
+  // Scoped to the director's name ON PURPOSE: the note below rules out a
+  // generic /MARKETING/ sweep because "BEST Marketing & Distribution" and
+  // friends are goods suppliers. Requiring both the payee AND the purpose
+  // token keeps those out while catching every spelling of his claim.
+  // Job-board spend (Indeed) is hiring cost, not advertising. It must NOT land
+  // in DIGITAL_ADS — that category is deduped out of bank opex (pnl-sourced.ts
+  // BANK_DIGITAL_ADS) on the assumption the ads module already booked the
+  // spend, but that module is Google-only and indeed_ads_invoice /
+  // indeed_ads_metric_daily are both EMPTY, so the bank line is the only record
+  // this cost has. RM13,922.43 across 11 claims since Jan-2025, always claimed
+  // back through the director; RM4,165.92 in Aug-2026, the largest month.
+  // MUST precede marketing_ammar_claim, which would otherwise take it.
+  { name: "recruitment_indeed",       match: INDEED_CLAIM_RE,                         direction: "DR", category: "RECRUITMENT" as CashCategory },
+  { name: "marketing_ammar_claim",    match: AMMAR_ADS_CLAIM_RE,                      direction: "DR", category: "DIGITAL_ADS" as CashCategory },
   { name: "purpose_stat_pay",         match: /\b(STAT\s*PAY|STATUTORY)\b/i,           direction: "DR", category: "STATUTORY_PAYMENT" as CashCategory },
   { name: "purpose_inventory",        match: /\bINVENTORY\b/i,                        direction: "DR", category: "RAW_MATERIALS" as CashCategory },
   { name: "purpose_digital_ads",      match: /\bDIGITAL\s*ADS?\b/i,                   direction: "DR", category: "DIGITAL_ADS" as CashCategory },
@@ -253,11 +300,15 @@ const OUTFLOW_RULES: Rule[] = [
   // Marketplace fees — GrabFood / FP commissions
   { name: "marketplace_grab_fee",        match: /\bGRABFOOD\s*COMMISSION\b/i, direction: "DR", category: "MARKETPLACE_FEE" as CashCategory },
 
-  // Partimer payouts — descriptions usually contain "PT Week" or "Partimer"
-  { name: "partimer",       match: /\bPT\s*WEEK\b|\bPARTIMER\b/i, direction: "DR", category: "PARTIMER" as CashCategory },
+  // Partimer payouts — narrations vary: "Partimer", "PT Week 33/26", and the
+  // abbreviated "PT W33/26" / "Pt w33 26" that started appearing 2026-08-21.
+  { name: "partimer",       match: PARTIMER_RE,                      direction: "DR", category: "PARTIMER" as CashCategory },
 
-  // Employee Salary — descriptions like "Salary Nov", "SCC_11/25", direct salary transfers
-  { name: "salary_explicit",match: /\bSALARY\b/i,                  direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
+  // Employee Salary — descriptions like "Salary Nov", "Sal Jul26", "SCC_11/25",
+  // direct salary transfers. MUST stay ahead of raw_ariff_adhoc (Ariff Izham
+  // fronts ad-hoc buys, but his own pay line is salary) and vendor_sdn_bhd.
+  { name: "salary_explicit",match: SALARY_RE,                      direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
+  { name: "salary_overtime",match: OVERTIME_RE,                    direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
   { name: "salary_scc",     match: /\bSCC[_ ]\d+\/\d+\b/i,         direction: "DR", category: "EMPLOYEE_SALARY" as CashCategory },
 
   // Director account — ONLY a genuine drawing / amount-due-to-director is a
