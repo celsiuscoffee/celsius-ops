@@ -175,6 +175,31 @@ type AppState = {
   signOutReset: () => void;
 };
 
+/** AsyncStorage wrapper whose writes never reject. zustand's persist
+ *  middleware fires setItem on every set() without awaiting or
+ *  catching it, so a failed write (e.g. NSPOSIXErrorDomain 28 "No
+ *  space left on device" — Sentry CELSIUS-PICKUP-NATIVE-5) escapes as
+ *  an unhandled promise rejection. Persistence is best-effort here:
+ *  on a full disk the in-memory store still works for the session,
+ *  the state just won't survive a relaunch. */
+const safeAsyncStorage = {
+  getItem: (name: string) => AsyncStorage.getItem(name),
+  setItem: async (name: string, value: string) => {
+    try {
+      await AsyncStorage.setItem(name, value);
+    } catch (err) {
+      console.warn("persist setItem failed:", err);
+    }
+  },
+  removeItem: async (name: string) => {
+    try {
+      await AsyncStorage.removeItem(name);
+    } catch (err) {
+      console.warn("persist removeItem failed:", err);
+    }
+  },
+};
+
 export const useApp = create<AppState>()(
   persist(
     (set) => ({
@@ -308,7 +333,7 @@ export const useApp = create<AppState>()(
         }
         return persisted as AppState;
       },
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => safeAsyncStorage),
       partialize: (s) => ({
         outletId: s.outletId,
         outletName: s.outletName,
