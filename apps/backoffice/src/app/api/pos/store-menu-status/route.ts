@@ -67,7 +67,13 @@ export async function GET(request: NextRequest) {
   if (auth.error) return auth.error;
   const user = auth.user;
 
-  const isAdmin = user.role === "OWNER" || user.role === "ADMIN";
+  // Admins — and company-wide managers with no home outlet — see every active
+  // outlet (this board's whole promise is "across all outlets"). A null
+  // outletId means "not pinned to a store", the same convention the sales
+  // dashboard / command board use to treat a manager as company-wide; without
+  // this, such a manager hits the `o.id === null` filter below and gets a bogus
+  // "No outlet" 400. Outlet-scoped users still see only their own outlet.
+  const seesAllOutlets = user.role === "OWNER" || user.role === "ADMIN" || !user.outletId;
 
   const outlets = await prisma.outlet.findMany({
     where: { status: "ACTIVE" },
@@ -83,7 +89,7 @@ export async function GET(request: NextRequest) {
     },
     orderBy: { name: "asc" },
   });
-  const scoped = isAdmin ? outlets : outlets.filter((o) => o.id === user.outletId);
+  const scoped = seesAllOutlets ? outlets : outlets.filter((o) => o.id === user.outletId);
   if (scoped.length === 0) {
     return NextResponse.json({ error: "No outlet" }, { status: 400 });
   }
