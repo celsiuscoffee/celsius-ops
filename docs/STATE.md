@@ -11,6 +11,30 @@ current month.
 
 ## Verified facts
 
+- 2026-10-20 — **October sales drop: Google Ads stopped serving on 5 Oct.**
+  Till lens (`unified_sales` excl. consignment), fleet: avg RM65.6k/wk
+  (7 Sep–4 Oct) → RM53.9k/wk (5–18 Oct), −18%. Last year Sep→Oct was ~−2%,
+  so this is not seasonal. Prices are unchanged (top-12 POS items flat),
+  AOV is roughly flat; the loss is in **transaction count**, mostly **new
+  customers** (loyalty phones seen for the first time: ~545/wk → 357/wk).
+  `ads_metric_daily`: ~RM200/day, ~21k impressions/day through 4 Oct;
+  RM114 on 5 Oct; **zero rows since** — while `metrics-daily` sync runs
+  status OK daily (rows_inserted 0) and all 3 live campaigns read status 2
+  (ENABLED) with budgets intact. Ads are enabled but Google is not serving
+  them: an account-level hold (billing or policy) is the likely cause.
+  **Not confirmed — check the Google Ads UI billing/policy page.**
+  `ads_payment` rows for Jun (Shah Alam) and Sep were only marked paid on
+  19 Oct, but those are internal card reimbursements, not Google's ledger.
+  Ads autopilot can't see this: its rollback guard watches budgets, not
+  zero delivery.
+  Separate: **Putrajaya 9 Oct ~14:00 → 10 Oct**: RM1,029 + RM870 vs
+  ~RM4k/day normal, across POS, QR and Grab, while 6–7 staff clocked in.
+  Cause unknown (Sentry token expired this session). Ask the outlet.
+  Also seen: Google review counts fell between 1 and 15 Oct (Putrajaya
+  1465→1344, Tamarind 489→415; rating unchanged). Zero SMS/push/campaign
+  sends since 24 Aug. QR `rm_expired` failures ~15% of orders (an
+  existing problem, not new).
+
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
