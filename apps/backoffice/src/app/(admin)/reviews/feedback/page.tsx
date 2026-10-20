@@ -288,7 +288,11 @@ export default function FeedbackManagementPage() {
                 {c.status === "approved" && (
                   <div className="mt-3 space-y-2">
                     <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">
-                      Reply posted. Recovery code <span className="font-mono font-semibold">{c.recoveryCode}</span> — waiting for the customer to claim their voucher.
+                      {c.recoveryCode ? (
+                        <>Reply posted. Recovery code <span className="font-mono font-semibold">{c.recoveryCode}</span> — waiting for the customer to claim their voucher.</>
+                      ) : (
+                        <>Reply posted with our contact number. When the customer gets in touch, compensate them below.</>
+                      )}
                     </div>
                     {compForm ? (
                       <div className="rounded-lg border border-border p-2">
