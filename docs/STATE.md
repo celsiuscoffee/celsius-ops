@@ -2762,6 +2762,14 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
 
 ## Lessons learned
 
+- 2026-10-20 — **Never route review requests by rating, and never put an offer
+  in a public review reply.** Both are explicit Google review-policy
+  violations ("review gating" and incentivised reviews) and got the listings'
+  reviews restricted. Asking every customer for a review is fine (receipt QR,
+  table QR); choosing WHO gets asked based on how happy they are is not.
+  Making good on a complaint is fine — do it privately after they contact us,
+  never as a code or link in the reply.
+
 - 2026-09-11 — **PT weekly pay is NOT hours × rate — check the roster before
   quoting a figure.** `payroll-calculator-weekly` pays the PAID WINDOW (clocked
   ∩ rostered shift), less the roster's own `break_minutes`, floored to 30-minute
@@ -2847,6 +2855,32 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-10-20 — **Google restricted our reviews for policy violations; root
+  causes removed in code, owner must clean up + appeal.** Two causes found:
+  (1) **Review gating** — the QR page `/review/[outletId]` sent 4-5★ raters
+  straight to Google and 1-3★ to a private form. Now every rating gets the same
+  two options (Google / private), threshold UI removed. (2) **Free coffee
+  linked from public replies** — approved negative-review replies carried a
+  `/recover/<code>` link to a "Claim my free coffee" page. New replies now
+  append a neutral contact line (`lib/reviews/reply-offer.ts`,
+  `REVIEW_CONTACT_PHONE` env, default +60 11-3750 6488); managers compensate
+  offline via the case. After merge + deploy, owner: (a) dry-run
+  `/api/reviews/reply-cleanup`, then `?apply=1` to rewrite the old replies;
+  fix any `manual` rows by hand; (b) only then submit the appeal from the
+  restriction notice in Business Profile. Verify next session: cleanup dry-run
+  returns `toRewrite: 0`, and record the appeal outcome here.
+
+- 2026-09-17 — **GBP phone change built, waiting on merge + owner's two clicks.**
+  Owner wants the Google Business Profile primary phone set to
+  **+60 11-3750 6488 on all four connected outlets**. Shipped
+  `/api/reviews/gbp-phone` (same dry-run/`?apply=1` pattern as gbp-relink /
+  gbp-categories; ADMIN session or cron secret; additionalPhones preserved
+  because the phoneNumbers updateMask swaps the whole object) plus
+  `getLocationPhones`/`updateLocationPhone` in `lib/reviews/gbp.ts`. After the
+  PR merges + deploys, the owner hits the dry-run URL to eyeball current
+  numbers, then re-runs with `&apply=1`. Verify next session: dry-run shows the
+  numbers changed, and the next weekly digest still reads all four outlets.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the

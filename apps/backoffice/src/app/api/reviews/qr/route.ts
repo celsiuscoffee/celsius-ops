@@ -22,7 +22,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     url: reviewUrl,
     outletName: outlet?.name ?? "Unknown",
-    ratingThreshold: settings?.ratingThreshold ?? 4,
     googleReviewUrl: settings?.googleReviewUrl ?? null,
     hasGoogleUrl: !!settings?.googleReviewUrl,
   });

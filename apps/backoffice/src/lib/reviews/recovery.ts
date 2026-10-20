@@ -1,10 +1,10 @@
 /**
  * Service-recovery helpers for the negative-review case manager.
  *
- * A negative review's approved reply carries a single-use recovery code. The
- * customer enters it on the public form, which captures their phone into
- * loyalty and issues a voucher TAGGED to the originating review (source_ref_id
- * = caseId), so every free item traces back to a specific approved complaint.
+ * Replies no longer carry recovery codes (Google review policy); the manager
+ * compensates offline via the case. Codes already issued can still be claimed
+ * on the public form, which captures the phone into loyalty and issues a
+ * voucher TAGGED to the originating review (source_ref_id = caseId).
  */
 import { supabaseAdmin } from "@/lib/loyalty/supabase";
 import { issueReward } from "@/lib/loyalty/loop-engine";
@@ -14,18 +14,6 @@ const BRAND = "brand-celsius";
 
 // Free Coffee — low-COGS, margin-safe (voucher_templates).
 export const RECOVERY_VOUCHER_TEMPLATE = "206b5fbf-c12a-44e5-ad30-85a9e8a81439";
-
-// No ambiguous chars (0/O/1/I/L) so a customer can read it off a plain-text
-// Google reply and type it without confusion.
-const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-
-export function genRecoveryCode(len = 6): string {
-  let out = "";
-  for (let i = 0; i < len; i++) {
-    out += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
-  }
-  return out;
-}
 
 function phoneVariants(phone: string): string[] {
   const d = phone.replace(/\D/g, "");

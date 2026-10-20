@@ -6,7 +6,6 @@ import {
   Copy,
   Check,
   QrCode,
-  Star,
   ExternalLink,
   Loader2,
   Download,
@@ -43,7 +42,6 @@ type FeedbackField = {
 type QrData = {
   url: string;
   outletName: string;
-  ratingThreshold: number;
   googleReviewUrl: string | null;
   hasGoogleUrl: boolean;
 };
@@ -63,7 +61,6 @@ export default function ReviewSettingsPage() {
   const [googleReviewUrl, setGoogleReviewUrl] = useState("");
   const [gbpAccountId, setGbpAccountId] = useState("");
   const [gbpLocationName, setGbpLocationName] = useState("");
-  const [ratingThreshold, setRatingThreshold] = useState(4);
   const [heading, setHeading] = useState("");
   const [description, setDescription] = useState("");
   const [feedbackFields, setFeedbackFields] = useState<FeedbackField[]>([]);
@@ -99,7 +96,6 @@ export default function ReviewSettingsPage() {
       setGoogleReviewUrl(settings.googleReviewUrl ?? "");
       setGbpAccountId(settings.gbpAccountId ?? "");
       setGbpLocationName(settings.gbpLocationName ?? "");
-      setRatingThreshold(settings.ratingThreshold);
       setHeading(settings.heading ?? "");
       setDescription(settings.description ?? "");
       setFeedbackFields(settings.feedbackFields ?? []);
@@ -118,7 +114,6 @@ export default function ReviewSettingsPage() {
           googleReviewUrl: googleReviewUrl || null,
           gbpAccountId: gbpAccountId || null,
           gbpLocationName: gbpLocationName || null,
-          ratingThreshold,
           heading: heading || null,
           description: description || null,
           feedbackFields,
@@ -225,7 +220,7 @@ export default function ReviewSettingsPage() {
               <div className="rounded-xl border border-border bg-white p-5">
                 <h3 className="font-semibold text-sm">Google Review URL</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Paste your Google Maps review link. Customers with high ratings will be redirected here.
+                  Paste your Google Maps review link. Every customer who scans the QR is offered it, whatever their rating.
                 </p>
                 <input
                   value={googleReviewUrl}
@@ -254,31 +249,6 @@ export default function ReviewSettingsPage() {
                     placeholder="Location name (e.g. locations/789)"
                     className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
                   />
-                </div>
-              </div>
-
-              {/* Rating threshold */}
-              <div className="rounded-xl border border-border bg-white p-5">
-                <h3 className="font-semibold text-sm">Rating Threshold</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Customers who rate this number of stars or higher will be redirected to Google Reviews.
-                  Lower ratings are captured as internal feedback.
-                </p>
-                <div className="mt-3 flex items-center gap-3">
-                  {[3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      onClick={() => setRatingThreshold(n)}
-                      className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium border transition-colors ${
-                        ratingThreshold === n
-                          ? "border-terracotta bg-terracotta/10 text-terracotta"
-                          : "border-border bg-white text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      <Star className={`h-4 w-4 ${ratingThreshold === n ? "fill-terracotta text-terracotta" : ""}`} />
-                      {n}+ stars
-                    </button>
-                  ))}
                 </div>
               </div>
 
@@ -334,7 +304,7 @@ export default function ReviewSettingsPage() {
                 <h3 className="font-semibold text-sm">Your Review QR Code</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Print this QR code and place it at your outlet. Customers scan it, rate their experience,
-                  and get redirected based on their rating.
+                  and choose whether to post on Google or message the team privately.
                 </p>
 
                 {qrData?.url && (
@@ -399,17 +369,13 @@ export default function ReviewSettingsPage() {
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">{ratingThreshold}+</div>
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">3</div>
                     <div>
-                      <p className="text-sm font-medium">High rating → Google Review</p>
-                      <p className="text-xs text-muted-foreground">Redirected to your Google review page to leave a public review</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">&lt;{ratingThreshold}</div>
-                    <div>
-                      <p className="text-sm font-medium">Low rating → Internal feedback</p>
-                      <p className="text-xs text-muted-foreground">Shows a feedback form. Saved privately for your team to review</p>
+                      <p className="text-sm font-medium">Chooses Google or private feedback</p>
+                      <p className="text-xs text-muted-foreground">
+                        Both options are shown to every customer, whatever their rating. Sending only happy
+                        customers to Google is review gating, which Google prohibits.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -419,8 +385,8 @@ export default function ReviewSettingsPage() {
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <p className="text-sm font-medium text-amber-800">Google Review URL not set</p>
                   <p className="mt-1 text-xs text-amber-600">
-                    Go to the &quot;Review settings&quot; tab to add your Google Review URL. Without it, high-rating
-                    customers won&apos;t be redirected.
+                    Go to the &quot;Review settings&quot; tab to add your Google Review URL. Without it, customers
+                    only see the private feedback form.
                   </p>
                 </div>
               )}
