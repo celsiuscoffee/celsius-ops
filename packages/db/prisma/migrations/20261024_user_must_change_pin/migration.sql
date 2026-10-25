@@ -19,6 +19,11 @@
 -- Enforcement is server-side, in apps/staff middleware, covering BOTH pages
 -- and /api/* — a flag the client is merely asked to honour would be bypassed
 -- by a stale JS bundle or a native build that never shipped the screen.
+--
+-- Applied to production 2026-10-25 on the owner's approval, BEFORE this PR
+-- merges. That order matters: apps/staff reads the column on the login path,
+-- so code first would throw "column does not exist" on every staff sign-in.
+-- Verified after applying: 91 User rows, 0 with the flag set.
 
 ALTER TABLE "User"
   ADD COLUMN IF NOT EXISTS "mustChangePin" BOOLEAN NOT NULL DEFAULT false;
