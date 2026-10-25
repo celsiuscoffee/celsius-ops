@@ -72,6 +72,8 @@ export async function POST(req: NextRequest) {
         // empty footprint, so new hires can see their tabs on day one.
         ...applyStaffPreset({ appAccess: [], moduleAccess: {} }, position),
         pin: pin ? await hashPin(pin) : null,
+        // A PIN chosen by HR is a handover value, not the employee's own.
+        mustChangePin: pin ? true : false,
       },
       select: { id: true, name: true, role: true, outletId: true },
     });

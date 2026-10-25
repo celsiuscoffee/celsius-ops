@@ -132,6 +132,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         return NextResponse.json({ error: `PIN already used by ${dupName} at this outlet` }, { status: 409 });
       }
       data.pin = await hashPin(body.pin);
+      data.mustChangePin = true;
     } else {
       data.pin = null;
     }
