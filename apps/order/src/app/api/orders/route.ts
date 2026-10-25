@@ -19,6 +19,7 @@ import { requireCustomerSession } from "@/lib/customer-jwt";
 import { attributeOrderToCampaign } from "@/lib/push/attribution";
 import { attributeOrderToPoster } from "@/lib/poster/attribution";
 import { getOutletSst } from "@/lib/outlet-sst";
+import { insertWithUniqueOrderNumber } from "@/lib/order-number";
 
 function normalisePhoneForLookup(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -57,10 +58,6 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
-}
-
-function generateOrderNumber(): string {
-  return `C-${String(Math.floor(Math.random() * 9999)).padStart(4, "0")}`;
 }
 
 // Catalog reward resolution + validation + discount now live in
@@ -354,8 +351,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const orderNumber        = generateOrderNumber();
-
     // ── Server-authoritative subtotal ───────────────────────────────────────
     // SECURITY: never trust the client `total` for the charged amount. Look up
     // each product's real price from the DB and recompute base × qty, adding
@@ -613,7 +608,7 @@ export async function POST(request: NextRequest) {
     const tierMul      = loyaltyId ? await getTierMultiplier(loyaltyId) : 1;
     const pointsToEarn = Math.round(basePoints * tierMul);
 
-    const { data, error: orderError } = await supabase
+    const { data, error: orderError } = await insertWithUniqueOrderNumber((orderNumber) => supabase
       .from("orders")
       .insert({
         order_number:           orderNumber,
@@ -647,7 +642,7 @@ export async function POST(request: NextRequest) {
         source:                 orderSource,    // origin attribution (app vs web)
       } as Record<string, unknown>)
       .select()
-      .single();
+      .single());
 
     if (orderError || !data) {
       console.error("Order insert error:", orderError);
