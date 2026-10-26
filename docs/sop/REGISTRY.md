@@ -42,7 +42,7 @@ is reserved so wrapping is stable).
 |---|---|---|---|---|---|---|
 | CC-HR-001 | [New Hire Onboarding](celsius/HR/CC-HR-001-new-hire-onboarding.md) | Procedure | Head of Operations | PUBLISHED | 1.0 | 2027-08-31 |
 | CC-HR-002 | [HR Document Process Map](celsius/HR/CC-HR-002-hr-document-process-map.md) | Procedure | Head of Operations | DRAFT | 0.1 | — |
-| CC-HR-003 | Letter of Offer | Form | Managing Director | PLANNED | — | — |
+| CC-HR-003 | [Letter of Offer](celsius/HR/CC-HR-003-letter-of-offer.md) | Form | Managing Director | DRAFT | 0.1 | — |
 | CC-HR-004 | Employment Contract — Full-Time | Form | Managing Director | PLANNED | — | — |
 | CC-HR-005 | Employment Contract — Part-Time | Form | Managing Director | PLANNED | — | — |
 | CC-HR-006 | Engagement Terms — Casual | Form | Managing Director | PLANNED | — | — |
@@ -51,6 +51,7 @@ is reserved so wrapping is stable).
 | CC-HR-009 | Onboarding Pack | Form | Head of Operations | PLANNED | — | — |
 | CC-HR-010 | Employment Letter Series (CC-L00 – CC-L24) | Form | Head of Operations | PLANNED | — | — |
 | CC-HR-011 | Discipline & Domestic Inquiry | Procedure | Managing Director | PLANNED | — | — |
+| CC-HR-012 | [Salary Bands & Pay Review](celsius/HR/CC-HR-012-salary-bands-and-pay-review.md) | Policy | Managing Director | DRAFT | 0.1 | — |
 
 *The HR instrument suite (CC-HR-002 – CC-HR-011) adopts the framework of the
 Gosamē GSM document suite, renumbered to the CC- scheme (CC-GOV-001 §5.1).
