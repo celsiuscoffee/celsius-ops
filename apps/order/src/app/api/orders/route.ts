@@ -19,13 +19,7 @@ import { requireCustomerSession } from "@/lib/customer-jwt";
 import { attributeOrderToCampaign } from "@/lib/push/attribution";
 import { attributeOrderToPoster } from "@/lib/poster/attribution";
 import { getOutletSst } from "@/lib/outlet-sst";
-
-function normalisePhoneForLookup(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("60")) return `+${digits}`;
-  if (digits.startsWith("0")) return `+6${digits}`;
-  return `+60${digits}`;
-}
+import { canonicalPhone } from "@/lib/phone";
 
 // GET /api/orders?phone=+60123456789 — fetch orders by customer phone.
 // Hardened: returns the caller's full order history (totals, items,
@@ -35,7 +29,7 @@ function normalisePhoneForLookup(phone: string): string {
 export async function GET(request: NextRequest) {
   const rawPhone = request.nextUrl.searchParams.get("phone");
   if (!rawPhone) return NextResponse.json({ error: "Missing phone" }, { status: 400 });
-  const phone = normalisePhoneForLookup(rawPhone);
+  const phone = canonicalPhone(rawPhone);
 
   const guard = requireCustomerSession(request);
   if (guard.error) return guard.error as unknown as NextResponse;
@@ -102,7 +96,7 @@ export async function POST(request: NextRequest) {
       rewardId: rewardIdInput,
       rewardName: rewardNameInput,
       walletVoucherId: walletVoucherIdInput,
-      loyaltyPhone,
+      loyaltyPhone: rawLoyaltyPhone,
       loyaltyId,
       clientSupportsSkipPayment,
       pickupAt: pickupAtInput,
@@ -110,6 +104,14 @@ export async function POST(request: NextRequest) {
       tableNumber: tableNumberInput,
       source: sourceInput,
     } = body;
+    // Canonical "+60…" for every downstream use of the phone: what we store
+    // in customer_phone/loyalty_phone and any lookup keyed on it. Stored raw,
+    // a number captured as "0…" was invisible to the Orders tab, which looks
+    // customers up under "+60…" — they saw "No orders yet" for paid orders.
+    const loyaltyPhone =
+      typeof rawLoyaltyPhone === "string" && rawLoyaltyPhone.trim()
+        ? canonicalPhone(rawLoyaltyPhone)
+        : null;
     // Origin attribution — the client sends where the order was placed,
     // derived from Platform.OS (native iOS/Android app vs the web PWA). We
     // allowlist server-side and default unknown/absent to "web" so the value

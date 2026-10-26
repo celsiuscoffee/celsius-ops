@@ -8,6 +8,7 @@
 // member created by either surface is indistinguishable in the DB.
 
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { phoneVariants, canonicalPhone as canonicaliseInsertPhone } from "@/lib/phone";
 
 const BRAND_ID = (process.env.LOYALTY_BRAND_ID ?? "brand-celsius").trim();
 
@@ -21,32 +22,6 @@ export type MemberRow = {
   total_points_earned: number;
   total_visits: number;
 };
-
-/** Phone variants — covers the three common Malaysian formats so a
- *  signup with "+60123456789" finds the existing "0123456789" row
- *  instead of creating a duplicate. Same logic the backoffice uses. */
-function phoneVariants(phone: string): string[] {
-  const d = phone.replace(/\D/g, "");
-  const variants: string[] = [phone];
-  if (d.startsWith("60")) {
-    variants.push(`+${d}`, d, `0${d.slice(2)}`);
-  } else if (d.startsWith("0")) {
-    variants.push(`+6${d}`, `6${d}`, d);
-  } else {
-    variants.push(`+60${d}`, `60${d}`, `0${d}`);
-  }
-  return [...new Set(variants)];
-}
-
-/** Canonical form we INSERT under when creating fresh rows. Pickup
- *  signups always come in as +60xxx (OTP send normalises before
- *  delivery), so we standardise here too. */
-function canonicaliseInsertPhone(phone: string): string {
-  const d = phone.replace(/\D/g, "");
-  if (d.startsWith("60")) return `+${d}`;
-  if (d.startsWith("0")) return `+6${d}`;
-  return `+60${d}`;
-}
 
 /** Find by any phone-variant, otherwise create a fresh members +
  *  member_brands row pair. Returns the canonical member shape used

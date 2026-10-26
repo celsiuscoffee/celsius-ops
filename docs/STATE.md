@@ -11,6 +11,68 @@ current month.
 
 ## Verified facts
 
+- 2026-10-26 — **THE "APP REVERTS TO THE OLD BUILD" REPORTS WERE NEVER AN
+  OLD BUILD. The screenshot is the CURRENT code saying the customer has zero
+  orders.** `pickup-native/app/orders.tsx` renders four branches: signed-out
+  → "Sign in…"; loading → spinner; **`data.length === 0` → "No orders yet /
+  Once you place your first order… / Browse menu" with NO tabs**; ≥1 order →
+  "In progress / Past orders" tabs. The no-tabs empty state is visually
+  identical to the pre-tabs build, so the July and August sessions (incl. the
+  Aug 21 STATE entries) diagnosed it as an OTA regression. **The OTA runtime
+  mismatch found in August was real** (publishes did reach zero phones;
+  verified from logs) **but it never caused this symptom**, which is why no
+  OTA, runtime or store-build fix ever stopped the reports.
+  **Real root cause — asymmetric phone matching.** App order writes
+  (`/api/orders`, `/api/checkout/initiate`) stored `customer_phone` /
+  `loyalty_phone` exactly as the client sent it; the Orders tab
+  (`/api/loyalty/orders`) normalised its lookup to `+60…` and did an exact
+  `.eq`. Customers whose app held their number as `0…` wrote `0…` and searched
+  `+60…`. **Measured in prod:** 68 orders stored `0…` (67 from app_ios /
+  app_android, latest 22 Oct); **37 customers affected, 36 saw "No orders
+  yet" for orders they had paid for**. Loyalty/rewards still worked for them
+  because `member-direct.ts` already looked up members under every phone form
+  via `phoneVariants()` — the orders route was the odd one out.
+  **Second consequence (privacy):** `/api/members/delete` anonymised orders
+  matching only `[member.phone, "60…", "+60…"]`, so a deleted account's
+  name/phone/email stayed on its `0…` orders.
+  **Third, independent defect:** `/api/loyalty/orders` turned DB errors and
+  exceptions into `200 {orders: []}`. The app polls every 5s, so one transient
+  DB error REPLACED a real list with "No orders yet" (a genuine flip-flop
+  path; no such errors in the last 24h of logs, older logs out of retention).
+  **Fix (branch `claude/build-reversion-issue-b0ow08`, draft PR):** new
+  `apps/order/src/lib/phone.ts` (`canonicalPhone`, `phoneVariants` — moved
+  verbatim from member-direct, which now imports them); orders history looks
+  up `.in("customer_phone", phoneVariants(phone))` and compares the session
+  phone canonically; both write paths canonicalise `loyaltyPhone` once after
+  reading the body (so the inactive first-order-discount lookup and the stored
+  value always agree); members/delete scrubs every phone variant; DB errors →
+  500, with the two web consumers (`_OrdersView`, `_ActiveOrderTracker`) now
+  guarding for a real array (a 500 body would otherwise crash
+  `orders.filter`). **All server-side (`apps/order`, Vercel) — reaches every
+  customer on deploy with no OTA, no store build and no app update.**
+  **Verified against prod data** with the exact post-fix query: customers
+  seeing "No orders yet" 36 → 0; their visible orders 1 → 68.
+  **Proposed, NOT run (owner approval — prod data write):** canonicalise the
+  legacy rows so other exact-match consumers (recent-items, GET /api/orders)
+  also see them —
+  `update orders set customer_phone='+6'||customer_phone where customer_phone ~ '^0[0-9]+$';` (68)
+  `update orders set loyalty_phone='+6'||loyalty_phone where loyalty_phone ~ '^0[0-9]+$';` (68)
+  `update orders set loyalty_phone='+'||loyalty_phone where loyalty_phone ~ '^60[0-9]+$';` (7).
+  **Noise, not cause:** Vercel's `[env] order: MISSING (required): JWT_SECRET`
+  (153× / 95 users on /api/loyalty/orders since 16 Jun) is `checkEnvAtBoot`
+  printing once per cold start — it never throws in prod, and the route reads
+  `CUSTOMER_JWT_SECRET` first. Worth tidying; not this bug.
+  **Also found 2026-10-26:** GitHub Actions cannot schedule jobs — a dispatched
+  pickup-native OTA failed twice in ~2s with no runner assigned and no logs
+  (workflow YAML valid; last green CI 5 Oct). Likely an Actions spending limit;
+  owner to check Billing → Actions. Blocks CI, every OTA and cloud builds.
+  The pickup-native 1.0.4 store build (staged 21 Aug) was confirmed NEVER
+  submitted — still worth shipping for fresh installs, but it was not the
+  cause of these reports.
+  **Lesson: before chasing a "regression", find the code that renders the
+  reported screen. One grep for "No orders yet" would have shown in July that
+  the current build renders it.**
+
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):

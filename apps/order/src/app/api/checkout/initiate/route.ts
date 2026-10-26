@@ -16,6 +16,7 @@ import { getOutletSst } from "@/lib/outlet-sst";
 import { fetchValidTableLabels } from "@/lib/table-layout";
 import { resolveOrderReward } from "@celsius/shared";
 import { reconcileNonStackTier } from "@/lib/loyalty/non-stack-tier";
+import { canonicalPhone } from "@/lib/phone";
 
 function generateOrderNumber(): string {
   return `C-${Date.now().toString(36).slice(-4).toUpperCase()}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`;
@@ -46,12 +47,20 @@ export async function POST(request: NextRequest) {
       rewardId,
       rewardName,
       rewardPointsCost,
-      loyaltyPhone,
+      loyaltyPhone: rawLoyaltyPhone,
       loyaltyId,
       notes,
       orderType,
       tableNumber,
     } = body;
+    // Canonical "+60…" for every downstream use of the phone: what we store
+    // in customer_phone/loyalty_phone and any lookup keyed on it. Stored raw,
+    // a number captured as "0…" was invisible to the Orders tab, which looks
+    // customers up under "+60…" — they saw "No orders yet" for paid orders.
+    const loyaltyPhone =
+      typeof rawLoyaltyPhone === "string" && rawLoyaltyPhone.trim()
+        ? canonicalPhone(rawLoyaltyPhone)
+        : null;
 
     if (!items?.length || !selectedStore || !paymentMethod) {
       return NextResponse.json({ error: "Invalid order data" }, { status: 400 });

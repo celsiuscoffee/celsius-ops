@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireCustomerSession } from "@/lib/customer-jwt";
+import { canonicalPhone, phoneVariants } from "@/lib/phone";
 
 // GET /api/loyalty/orders?phone=+60xxx&limit=20
 // Returns the customer's most recent orders, with line items, for the
@@ -10,13 +11,6 @@ import { requireCustomerSession } from "@/lib/customer-jwt";
 // Response: { orders: [{ id, order_number, status, total, created_at,
 //   payment_method, store_id, items: [{ product_id, product_name,
 //   quantity, item_total, modifiers }] }] }
-
-function normalisePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("60")) return `+${digits}`;
-  if (digits.startsWith("0")) return `+6${digits}`;
-  return `+60${digits}`;
-}
 
 export async function GET(request: NextRequest) {
   const phoneParam = request.nextUrl.searchParams.get("phone");
@@ -30,14 +24,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = getSupabaseAdmin();
-    const phone = normalisePhone(phoneParam);
+    const phone = canonicalPhone(phoneParam);
 
     // When STRICT_CUSTOMER_AUTH is on, require a Bearer token whose
     // signed phone matches the queried phone. Off by default so the
     // PWA keeps working until it also sends the token.
     const guard = requireCustomerSession(request);
     if (guard.error) return guard.error as unknown as NextResponse;
-    if (guard.session && guard.session.phone !== phone) {
+    if (guard.session && canonicalPhone(guard.session.phone) !== phone) {
       return NextResponse.json(
         { error: "Session does not match phone" },
         { status: 403 }
@@ -50,13 +44,20 @@ export async function GET(request: NextRequest) {
         "id, order_number, status, total, created_at, payment_method, store_id, " +
           "order_items(product_id, product_name, quantity, item_total, modifiers, unit_price)"
       )
-      .eq("customer_phone", phone)
+      // Every stored form, not just the canonical one: app orders written
+      // before canonicalisation hold "0…", and an exact "+60…" match hid
+      // them from the customers who placed them ("No orders yet").
+      .in("customer_phone", phoneVariants(phone))
       .order("created_at", { ascending: false })
       .limit(limit);
 
     if (error) {
+      // NOT {orders: []}: a 200 with an empty list is indistinguishable from
+      // "this customer has never ordered", and the app polls every 5s, so one
+      // transient DB error replaced a real list with "No orders yet". A 5xx
+      // lets every client keep what it last showed.
       console.error("orders history query error:", error);
-      return NextResponse.json({ orders: [] });
+      return NextResponse.json({ error: "Could not load order history" }, { status: 500 });
     }
 
     // Resolve store_id → outlet name once for the whole batch. The
@@ -98,6 +99,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ orders });
   } catch (err) {
     console.error("orders history route error:", err);
-    return NextResponse.json({ orders: [] });
+    return NextResponse.json({ error: "Could not load order history" }, { status: 500 });
   }
 }

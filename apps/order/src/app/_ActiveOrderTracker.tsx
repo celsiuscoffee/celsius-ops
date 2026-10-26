@@ -53,8 +53,11 @@ export function ActiveOrderTracker() {
           `/api/loyalty/orders?phone=${encodeURIComponent(phone!)}&limit=5`,
           { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
         );
+        // Keep the last known banner through a failed poll rather than
+        // treating the failure as "no active order".
+        if (!res.ok) return;
         const data = await res.json();
-        const list = (data?.orders ?? data ?? []) as Order[];
+        const list = (Array.isArray(data?.orders) ? data.orders : Array.isArray(data) ? data : []) as Order[];
         const inflight = list.find((o) => ACTIVE.has((o.status ?? "").toLowerCase()));
         setOrder(inflight ?? null);
       } catch {

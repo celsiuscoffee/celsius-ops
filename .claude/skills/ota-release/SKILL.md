@@ -54,6 +54,16 @@ native change, rebuild and reinstall before relying on OTA again.
 
 ### The "old bundle reappears" regression — and why it came back (2026-08-21)
 
+> **Correction (2026-10-26) — read first.** The *screenshot* that drove this
+> section (Orders tab showing "No orders yet / Browse menu" with no tabs) was
+> **never an old bundle**. It is the CURRENT `orders.tsx` rendering its
+> zero-orders branch, which looks identical to the pre-tabs build. Its cause
+> was server-side phone-format matching in `apps/order` (see `docs/STATE.md`,
+> 2026-10-26). The OTA runtime mismatch below was real and is correctly fixed,
+> but it did not cause that symptom. **Before treating any "old version"
+> report as an OTA problem, grep for the exact on-screen text and confirm the
+> current code cannot render it.**
+
 Symptom: an old app version resurfaces on customer devices on its own;
 reinstalling seems to fix it, then it comes back.
 
@@ -185,3 +195,11 @@ the sections above._
   published to `e4e2beee…`/`dbe20143…`, which is precisely the fingerprint of the
   1.0.3 tree — confirming the publish targeted the CURRENT source rather than
   anything installed.
+
+- 2026-10-26 — **Identify the rendered screen before blaming delivery.** Three
+  sessions (Jul, Aug, Oct) treated "the app shows the old Orders screen" as an
+  OTA/runtime/store-build problem. One `grep "No orders yet"` shows the current
+  build renders that exact screen whenever the order list is empty. The real
+  cause was `apps/order` writing phones raw (`0…`) while looking them up as
+  `+60…` — a server fix that needed no OTA at all. Delivery bugs and display
+  bugs can produce the same screenshot; prove which one you have first.
