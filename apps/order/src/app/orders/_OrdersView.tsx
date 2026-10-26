@@ -99,11 +99,16 @@ export function OrdersView() {
     fetch(`/api/loyalty/orders?phone=${encodeURIComponent(p)}&limit=20`, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     })
-      .then((r) => r.json())
-      .then((data) => {
-        setOrders((data?.orders ?? data ?? []) as Order[]);
+      .then(async (r) => {
+        const data = await r.json().catch(() => null);
+        // Only an actual array is an order list. A failed load must surface
+        // as an error, never as "you have no orders" (and an error body
+        // object would crash orders.filter below).
+        const list = Array.isArray(data?.orders) ? data.orders : Array.isArray(data) ? data : null;
+        if (!r.ok || !list) throw new Error(data?.error ?? `HTTP ${r.status}`);
+        setOrders(list as Order[]);
       })
-      .catch((err) => setError(String(err)));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
   }, []);
 
   const filtered = orders

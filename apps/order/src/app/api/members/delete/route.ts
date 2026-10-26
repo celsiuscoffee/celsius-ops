@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { readCustomerSession } from "@/lib/customer-jwt";
+import { phoneVariants } from "@/lib/phone";
 
 /**
  * POST /api/members/delete
@@ -110,9 +111,12 @@ export async function POST(request: NextRequest) {
 
     // Anonymise the customer phone on prior orders. The orders row
     // itself is retained (financial / accounting requirement) but
-    // every link back to a real person is severed. Hits both
-    // canonical phone shapes the API may have written.
-    const phoneShapes = [member.phone, normalizedPhone, "+" + normalizedPhone];
+    // every link back to a real person is severed. Must hit EVERY
+    // shape the number may have been stored in: order writes were not
+    // canonicalised until 2026-10, so 68 rows hold "0…" — which the old
+    // ["+60…", "60…"] list missed, leaving name/phone/email attached to
+    // the orders of customers who had deleted their account.
+    const phoneShapes = [...new Set([...phoneVariants(member.phone), ...phoneVariants(phone)])];
     for (const p of phoneShapes) {
       await supabaseAdmin
         .from("orders")
