@@ -3691,3 +3691,23 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   3. Do NOT keep cutting ads looking for cash that is not there; if the ad
      saving is to be proven at all it needs another month or a holdout.
   The 2026-07-30 pointer below still applies EXCEPT its item 2, now withdrawn.
+
+- 2026-10-27 — **NTT Data payment gateway integration completed and merged.**
+  Added as a new payment provider alongside Stripe, Revenue Monster, and iPay88.
+  Each of the three Celsius Coffee locations (Shah Alam, Conezion, Tamarind)
+  has its own merchant API key (`A43o3PgA4V`, `9PGYL7OoVg`, `1laPVe4zde`
+  respectively). All payment methods (card, FPX, TNG, Boost, ShopeePay, DuitNow)
+  route through NTT Data when configured. Implementation includes:
+  - Created `apps/order/src/lib/ntt-data/client.ts` with payment request,
+    status query, and webhook signature verification functions.
+  - Updated `apps/order/src/lib/payments/gateway-methods.ts` to support
+    `ntt_data` as a GatewayProvider type.
+  - Updated `apps/order/src/app/api/checkout/initiate/route.ts` to route
+    NTT Data payment methods through the new client.
+  - Added NTT Data configuration to `.env.example` with merchant map.
+  - Migration `20260924_cashcategory_ipay88` (added IPAY88 enum value) already
+    applied to production 2026-09-24.
+  **PR #1245** (branch `claude/wonderful-lamport-563xvr`) with all changes pushed.
+  CI checks passing. **Next steps:** set `NTT_DATA_API_KEY` in Vercel environment,
+  configure webhook handler for NTT Data callbacks at `/api/payments/webhook` or
+  similar, test payment flow for each location.
