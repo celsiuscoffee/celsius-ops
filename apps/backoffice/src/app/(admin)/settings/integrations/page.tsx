@@ -53,11 +53,12 @@ const STORE_NAMES: Record<string, string> = {
   nilai: "Nilai",
 };
 
-type Provider = "stripe" | "revenue_monster";
+type Provider = "stripe" | "revenue_monster" | "ipay88";
 
 const PROVIDERS: { id: Provider; label: string; dot: string }[] = [
   { id: "stripe", label: "Stripe", dot: "bg-[#635BFF]" },
   { id: "revenue_monster", label: "Revenue Monster", dot: "bg-blue-600" },
+  { id: "ipay88", label: "iPay88", dot: "bg-amber-500" },
 ];
 
 /* Brand marks lucide-react doesn't ship (native wallet sheets). */
@@ -96,15 +97,19 @@ const METHOD_DEFS: MethodDef[] = [
   // platform wallet sheets). Keep this list in sync with apps/order's
   // /api/payments/gateway-config DEFAULT_METHODS + the pickup-native
   // checkout METHOD_LABELS.
-  { id: "card",       name: "Credit / Debit Card", Icon: CreditCard,  tint: "text-slate-600",   bg: "bg-slate-100",  providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
-  { id: "fpx",        name: "FPX Online Banking",  Icon: Landmark,    tint: "text-blue-700",    bg: "bg-blue-50",    providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
-  { id: "tng",        name: "TNG eWallet",         Icon: Smartphone,  tint: "text-sky-600",     bg: "bg-sky-50",     providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
-  { id: "boost",      name: "Boost",               Icon: Zap,         tint: "text-rose-500",    bg: "bg-rose-50",    providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
-  { id: "shopeepay",  name: "ShopeePay",           Icon: ShoppingBag, tint: "text-orange-600",  bg: "bg-orange-50",  providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
-  { id: "grabpay",    name: "GrabPay",             Icon: Wallet,      tint: "text-emerald-600", bg: "bg-emerald-50", providers: ["stripe", "revenue_monster"], defaultProvider: "stripe" },
-  { id: "duitnow",    name: "DuitNow QR",          Icon: QrCode,      tint: "text-red-600",     bg: "bg-red-50",     providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
-  { id: "apple_pay",  name: "Apple Pay",           Icon: AppleMark,   tint: "text-gray-900",    bg: "bg-gray-100",   providers: ["stripe"],                     defaultProvider: "stripe" },
-  { id: "google_pay", name: "Google Pay",          Icon: GoogleMark,  tint: "",                 bg: "bg-gray-100",   providers: ["stripe"],                     defaultProvider: "stripe" },
+  // iPay88 (ADAPTIS hosted page) can take every method; switching a method
+  // to it applies on the next checkout — web and all installed app builds.
+  // Apple Pay / Google Pay via iPay88 need the pickup-native build that opens
+  // them in the system browser (see RmCheckoutModal) before being switched.
+  { id: "card",       name: "Credit / Debit Card", Icon: CreditCard,  tint: "text-slate-600",   bg: "bg-slate-100",  providers: ["revenue_monster", "stripe", "ipay88"], defaultProvider: "revenue_monster" },
+  { id: "fpx",        name: "FPX Online Banking",  Icon: Landmark,    tint: "text-blue-700",    bg: "bg-blue-50",    providers: ["revenue_monster", "stripe", "ipay88"], defaultProvider: "revenue_monster" },
+  { id: "tng",        name: "TNG eWallet",         Icon: Smartphone,  tint: "text-sky-600",     bg: "bg-sky-50",     providers: ["revenue_monster", "ipay88"],            defaultProvider: "revenue_monster" },
+  { id: "boost",      name: "Boost",               Icon: Zap,         tint: "text-rose-500",    bg: "bg-rose-50",    providers: ["revenue_monster", "ipay88"],            defaultProvider: "revenue_monster" },
+  { id: "shopeepay",  name: "ShopeePay",           Icon: ShoppingBag, tint: "text-orange-600",  bg: "bg-orange-50",  providers: ["revenue_monster", "ipay88"],            defaultProvider: "revenue_monster" },
+  { id: "grabpay",    name: "GrabPay",             Icon: Wallet,      tint: "text-emerald-600", bg: "bg-emerald-50", providers: ["stripe", "revenue_monster", "ipay88"], defaultProvider: "stripe" },
+  { id: "duitnow",    name: "DuitNow QR",          Icon: QrCode,      tint: "text-red-600",     bg: "bg-red-50",     providers: ["revenue_monster", "ipay88"],            defaultProvider: "revenue_monster" },
+  { id: "apple_pay",  name: "Apple Pay",           Icon: AppleMark,   tint: "text-gray-900",    bg: "bg-gray-100",   providers: ["stripe", "ipay88"],                     defaultProvider: "stripe" },
+  { id: "google_pay", name: "Google Pay",          Icon: GoogleMark,  tint: "",                 bg: "bg-gray-100",   providers: ["stripe", "ipay88"],                     defaultProvider: "stripe" },
 ];
 
 /* ─── Helpers ───────────────────────────────────────────────────────────── */

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireMinAppVersion } from "@/lib/min-app-version";
 import { createPayment } from "@/lib/revenue-monster/client";
-import { createNttDataPayment } from "@/lib/ntt-data/client";
 import { earnLoyaltyPoints, deductLoyaltyPoints, getTierMultiplier } from "@/lib/loyalty/points";
 import { applyOrderV2Hooks } from "@/lib/loyalty/v2";
 import {
@@ -12,17 +11,13 @@ import {
   type CartLine,
 } from "@/lib/loyalty/promotions";
 import type { OrderRow } from "@/lib/supabase/types";
-import { defaultMethodSets } from "@/lib/payments/gateway-methods";
+import { methodSets, type GatewayMethod } from "@/lib/payments/gateway-methods";
+import { ipay88CheckoutId } from "@/lib/payments/checkout-query";
+import { isIpay88Ready } from "@/lib/ipay88/client";
 import { getOutletSst } from "@/lib/outlet-sst";
 import { fetchValidTableLabels } from "@/lib/table-layout";
 import { resolveOrderReward } from "@celsius/shared";
 import { reconcileNonStackTier } from "@/lib/loyalty/non-stack-tier";
-
-// Payment method routing based on provider
-const methodSets = defaultMethodSets();
-const STRIPE_METHODS = methodSets.stripe;
-const RM_METHODS = methodSets.rm;
-const NTT_DATA_METHODS = methodSets.ntt_data;
 
 function generateOrderNumber(): string {
   return `C-${Date.now().toString(36).slice(-4).toUpperCase()}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`;
@@ -167,21 +162,11 @@ export async function POST(request: NextRequest) {
       .from("payment_gateway_config")
       .select("method_id, enabled, provider");
 
-    let STRIPE_METHODS: Set<string>;
-    let RM_METHODS:     Set<string>;
-
-    if (pgRows && pgRows.length > 0) {
-      STRIPE_METHODS = new Set(
-        pgRows.filter((r) => r.enabled && r.provider === "stripe").map((r) => r.method_id as string)
-      );
-      RM_METHODS = new Set(
-        pgRows.filter((r) => r.enabled && r.provider === "revenue_monster").map((r) => r.method_id as string)
-      );
-    } else {
-      const defaults = defaultMethodSets();
-      STRIPE_METHODS = defaults.stripe;
-      RM_METHODS     = defaults.rm;
-    }
+    const {
+      stripe: STRIPE_METHODS,
+      rm: RM_METHODS,
+      ipay88: IPAY88_METHODS,
+    } = methodSets(pgRows as GatewayMethod[] | null);
 
     // Per-method routing is now authoritative: whatever provider the
     // backoffice picked for each method_id is what we use. The earlier
@@ -190,7 +175,7 @@ export async function POST(request: NextRequest) {
     // wallets, FPX, and GrabPay — they always went to Stripe regardless.
     // Keep no provider override; trust the DB.
 
-    if (!STRIPE_METHODS.has(paymentMethod) && !RM_METHODS.has(paymentMethod)) {
+    if (!STRIPE_METHODS.has(paymentMethod) && !RM_METHODS.has(paymentMethod) && !IPAY88_METHODS.has(paymentMethod)) {
       return NextResponse.json({ error: "Payment method not available" }, { status: 400 });
     }
 
@@ -458,9 +443,13 @@ export async function POST(request: NextRequest) {
     const pointsToEarn         = Math.round(basePoints * tierMul);
 
     // ── Create order ───────────────────────────────────────────────────────
-    const storedPaymentMethod = (paymentMethod === "apple_pay" || paymentMethod === "google_pay")
-      ? "wallet"
-      : paymentMethod;
+    // Stripe wallet payments are stored as "wallet" (Stripe.js picks the
+    // wallet on the client); iPay88 keeps the real method so retries and the
+    // PaymentId mapping know which option to open.
+    const storedPaymentMethod =
+      (paymentMethod === "apple_pay" || paymentMethod === "google_pay") && !IPAY88_METHODS.has(paymentMethod)
+        ? "wallet"
+        : paymentMethod;
 
     const { data, error: orderError } = await supabase
       .from("orders")
@@ -658,53 +647,32 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ── NTT Data Payment ───────────────────────────────────────────────────
-    // Routes to NTT Data for merchant-specific payment processing.
-    // Each Celsius location has its own merchant ID for independent settlement.
-    if (NTT_DATA_METHODS.has(paymentMethod)) {
+    // ── iPay88 (any method routed to it in /pickup/settings) ───────────────
+    // Mark the order as iPay88-routed (payment_checkout_id = "ipay88:<RefNo>",
+    // RefNo = order_number) and send the browser to our hand-off page, which
+    // auto-posts the signed request to iPay88's hosted page. The result comes
+    // back signed to /api/payments/ipay88/callback/web and .../webhook.
+    if (IPAY88_METHODS.has(paymentMethod)) {
       const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL ?? "https://order.celsiuscoffee.com").trim();
-      try {
-        const result = await createNttDataPayment(
-          order.store_id,
-          {
-            amount: totalSen,
-            currency: "MYR",
-            orderId: order.id,
-            description: `Celsius Coffee Order ${order.order_number}`,
-            customerEmail: undefined,
-            customerPhone: loyaltyPhone ?? undefined,
-            returnUrl: `${baseUrl}/order/${order.id}?payment=done`,
-            notificationUrl: `${baseUrl}/api/payments/webhook`,
-          }
-        );
-
-        if (!result.success || !result.transactionId) {
-          await supabase.from("orders").update({ status: "failed" } as Record<string, unknown>).eq("id", order.id);
-          return NextResponse.json({ error: result.error ?? "NTT Data payment failed" }, { status: 502 });
-        }
-
-        await supabase
-          .from("orders")
-          .update({ payment_checkout_id: result.transactionId } as Record<string, unknown>)
-          .eq("id", order.id);
-
-        return NextResponse.json({
-          orderId:     order.id,
-          orderNumber: order.order_number,
-          totalSen,
-          paymentType: result.paymentUrl ? "redirect" : "direct",
-          paymentUrl: result.paymentUrl || result.redirectUrl,
-          transactionId: result.transactionId,
-        });
-      } catch (nttErr) {
+      if (!isIpay88Ready(paymentMethod, order.store_id)) {
         await supabase.from("orders").update({ status: "failed" } as Record<string, unknown>).eq("id", order.id);
-        const msg = nttErr instanceof Error ? nttErr.message : "NTT Data payment error";
-        console.error("NTT Data payment error:", msg);
-        return NextResponse.json({ error: msg }, { status: 502 });
+        return NextResponse.json({ error: "This payment method isn't available right now" }, { status: 503 });
       }
+      await supabase
+        .from("orders")
+        .update({ payment_checkout_id: ipay88CheckoutId(order.order_number) } as Record<string, unknown>)
+        .eq("id", order.id);
+      const qs = new URLSearchParams({ orderId: order.id, method: paymentMethod, return: "web" });
+      return NextResponse.json({
+        orderId:     order.id,
+        orderNumber: order.order_number,
+        totalSen,
+        paymentType: "redirect",
+        paymentUrl:  `${baseUrl}/api/payments/ipay88/pay?${qs.toString()}`,
+      });
     }
 
-    // ── Revenue Monster (fallback for legacy methods) ─────────────────────────────────
+    // ── Revenue Monster (card / FPX / TNG / Boost / ShopeePay) ─────────────
     // Sends the customer to RM's hosted page (card / FPX) or a wallet deep
     // link (TNG / Boost / ShopeePay). createPayment returns BOTH the URL and
     // the RM checkoutId, so we MUST destructure — the previous code assigned
