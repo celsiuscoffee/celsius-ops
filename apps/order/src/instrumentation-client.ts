@@ -20,6 +20,14 @@ if (dsn) {
     replaysSessionSampleRate: 0.0,
     replaysOnErrorSampleRate: process.env.NODE_ENV === "production" ? 1.0 : 0.0,
     // The default integrations cover global error / unhandled rejection.
+    //
+    // Crypto-wallet browser extensions (MetaMask and friends) inject
+    // window.ethereum into every page and throw inside their own injected
+    // script on sites that never touch it. One wallet-carrying visitor
+    // opened a separate Sentry issue per route (CELSIUS-OPS-9N et al.),
+    // so drop anything referencing the injected object — none of our code
+    // reads window.ethereum.
+    ignoreErrors: [/window\.ethereum/],
   });
 }
 
