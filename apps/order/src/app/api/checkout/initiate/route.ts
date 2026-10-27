@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { requireMinAppVersion } from "@/lib/min-app-version";
 import { createPayment } from "@/lib/revenue-monster/client";
+import { createNttDataPayment } from "@/lib/ntt-data/client";
 import { earnLoyaltyPoints, deductLoyaltyPoints, getTierMultiplier } from "@/lib/loyalty/points";
 import { applyOrderV2Hooks } from "@/lib/loyalty/v2";
 import {
@@ -16,6 +17,12 @@ import { getOutletSst } from "@/lib/outlet-sst";
 import { fetchValidTableLabels } from "@/lib/table-layout";
 import { resolveOrderReward } from "@celsius/shared";
 import { reconcileNonStackTier } from "@/lib/loyalty/non-stack-tier";
+
+// Payment method routing based on provider
+const methodSets = defaultMethodSets();
+const STRIPE_METHODS = methodSets.stripe;
+const RM_METHODS = methodSets.rm;
+const NTT_DATA_METHODS = methodSets.ntt_data;
 
 function generateOrderNumber(): string {
   return `C-${Date.now().toString(36).slice(-4).toUpperCase()}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`;
@@ -651,7 +658,53 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ── Revenue Monster (card / FPX / TNG / Boost / ShopeePay) ─────────────
+    // ── NTT Data Payment ───────────────────────────────────────────────────
+    // Routes to NTT Data for merchant-specific payment processing.
+    // Each Celsius location has its own merchant ID for independent settlement.
+    if (NTT_DATA_METHODS.has(paymentMethod)) {
+      const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL ?? "https://order.celsiuscoffee.com").trim();
+      try {
+        const result = await createNttDataPayment(
+          order.store_id,
+          {
+            amount: totalSen,
+            currency: "MYR",
+            orderId: order.id,
+            description: `Celsius Coffee Order ${order.order_number}`,
+            customerEmail: undefined,
+            customerPhone: loyaltyPhone ?? undefined,
+            returnUrl: `${baseUrl}/order/${order.id}?payment=done`,
+            notificationUrl: `${baseUrl}/api/payments/webhook`,
+          }
+        );
+
+        if (!result.success || !result.transactionId) {
+          await supabase.from("orders").update({ status: "failed" } as Record<string, unknown>).eq("id", order.id);
+          return NextResponse.json({ error: result.error ?? "NTT Data payment failed" }, { status: 502 });
+        }
+
+        await supabase
+          .from("orders")
+          .update({ payment_checkout_id: result.transactionId } as Record<string, unknown>)
+          .eq("id", order.id);
+
+        return NextResponse.json({
+          orderId:     order.id,
+          orderNumber: order.order_number,
+          totalSen,
+          paymentType: result.paymentUrl ? "redirect" : "direct",
+          paymentUrl: result.paymentUrl || result.redirectUrl,
+          transactionId: result.transactionId,
+        });
+      } catch (nttErr) {
+        await supabase.from("orders").update({ status: "failed" } as Record<string, unknown>).eq("id", order.id);
+        const msg = nttErr instanceof Error ? nttErr.message : "NTT Data payment error";
+        console.error("NTT Data payment error:", msg);
+        return NextResponse.json({ error: msg }, { status: 502 });
+      }
+    }
+
+    // ── Revenue Monster (fallback for legacy methods) ─────────────────────────────────
     // Sends the customer to RM's hosted page (card / FPX) or a wallet deep
     // link (TNG / Boost / ShopeePay). createPayment returns BOTH the URL and
     // the RM checkoutId, so we MUST destructure — the previous code assigned
