@@ -1,6 +1,8 @@
 // NTT Data payment gateway client for Celsius Coffee
 // Supports three merchant locations with independent API keys
 
+import { createHmac } from "crypto";
+
 // Per-outlet NTT Data merchant keys. Each Celsius location has its own
 // merchant ID for NTT Data, enabling independent transaction routing
 // and settlement to the correct entity's bank account.
@@ -144,7 +146,7 @@ export async function queryNttDataPaymentStatus(
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
-      throw new Error(`NTT Data status query failed: ${response.status}`);
+      throw new Error(`NTT Data status query failed: ${response.status} ${errorText.slice(0, 200)}`);
     }
 
     const data = (await response.json()) as {
@@ -173,9 +175,7 @@ export function verifyNttDataWebhookSignature(
   signature: string,
   secret: string
 ): boolean {
-  const crypto = require("crypto");
-  const expectedSignature = crypto
-    .createHmac("sha256", secret)
+  const expectedSignature = createHmac("sha256", secret)
     .update(payload)
     .digest("hex");
 
