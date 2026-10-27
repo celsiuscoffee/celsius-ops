@@ -3,6 +3,8 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { queryCheckoutStatus, queryTransaction } from "./client";
 import { markRmOrderPaid, markRmOrderFailed } from "./order-status";
 import { notifyOrderPreparing } from "@/lib/push/templates";
+import { isIpay88Checkout } from "@/lib/payments/checkout-query";
+import { reconcileIpay88Order } from "@/lib/ipay88/settle";
 
 /**
  * Single source of truth for settling a Revenue Monster order.
@@ -27,6 +29,7 @@ import { notifyOrderPreparing } from "@/lib/push/templates";
 export type ReconcileSource =
   | "db"            // already settled before we queried
   | "rm"            // RM gave an authoritative answer
+  | "ipay88"        // iPay88-routed order — settled via reconcileIpay88Order
   | "no_checkout_id"// pre-poll / non-RM order with nothing to query
   | "not_rm"        // payment method isn't RM-routed
   | "not_found"     // no such order
@@ -88,7 +91,17 @@ export async function reconcileRmOrder(
     if (row.status !== "pending" && row.status !== "failed") {
       return { status: row.status, source: "db" };
     }
-    if (row.payment_method && !RM_METHODS.has(row.payment_method)) {
+    // iPay88-routed order (payment_checkout_id "ipay88:<RefNo>"): every
+    // trigger that lands here — the order page's ?payment=done, the poll —
+    // settles it against iPay88 instead. The one exception is an RM webhook
+    // naming a transaction: the customer may have paid an EARLIER RM checkout
+    // before the order was re-routed, so verify that below as usual.
+    const ipay88Routed = isIpay88Checkout(row.payment_checkout_id);
+    if (ipay88Routed && !target.transactionId) {
+      const r = await reconcileIpay88Order({ orderId: row.id });
+      return { status: r.status, source: r.source === "error" ? "error" : "ipay88" };
+    }
+    if (!ipay88Routed && row.payment_method && !RM_METHODS.has(row.payment_method)) {
       return { status: row.status, source: "not_rm" };
     }
 
@@ -108,7 +121,7 @@ export async function reconcileRmOrder(
       return { status: paid?.scheduled ? "paid" : "preparing", source: "rm", rmStatus: "SUCCESS" };
     };
 
-    const rm = row.payment_checkout_id
+    const rm = row.payment_checkout_id && !ipay88Routed
       ? await queryCheckoutStatus(row.payment_checkout_id)
       : null;
     if (rm?.status === "SUCCESS") return settle(rm.transactionId);
@@ -143,6 +156,10 @@ export async function reconcileRmOrder(
       }
     }
 
+    if (!rm && ipay88Routed) {
+      const r = await reconcileIpay88Order({ orderId: row.id });
+      return { status: r.status, source: r.source === "error" ? "error" : "ipay88" };
+    }
     if (!rm) {
       return { status: row.status === "failed" ? "failed" : "pending", source: "no_checkout_id" };
     }
