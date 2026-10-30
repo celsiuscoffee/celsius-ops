@@ -5,6 +5,7 @@ import { adjustStockByPackages } from "@/lib/stock";
 import { guardReceiptPackages } from "@/lib/inventory/receipt-guard";
 import { guardOrderLinePrices } from "@/lib/inventory/po-price-guard";
 import { assertNoDuplicateInvoice } from "@/lib/inventory/invoice-dedupe";
+import { supersedePlaceholders } from "@/lib/inventory/supersede-placeholders";
 import type { InvoiceFlag } from "@/lib/inventory/flag-detector";
 import type { Prisma, ResolvedReceiptPackage } from "@celsius/db";
 
@@ -402,6 +403,19 @@ export async function POST(req: NextRequest) {
       }
       if (!invoice) throw new Error("Failed to generate unique invoice number after 5 attempts");
 
+      // 2b. The bill for goods already received: retire the GRNI placeholder(s)
+      //     it replaces, or the goods are counted twice (drafts wait for submit).
+      const superseded = invoiceStatus === "PENDING"
+        ? await supersedePlaceholders(tx, {
+            id: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            supplierId: supplierId || null,
+            outletId,
+            amount: totalAmount,
+            issueDate: invoice.issueDate,
+          })
+        : [];
+
       // 3. Optional receiving for QuickUpload with items
       let receiving = null as { id: string } | null;
       if (willCreateReceiving) {
@@ -441,7 +455,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      return { order, invoice, receiving };
+      return { order, invoice, receiving, superseded };
     }, { timeout: 20_000 });
 
     return NextResponse.json(
@@ -449,6 +463,7 @@ export async function POST(req: NextRequest) {
         order: { id: result.order.id, orderNumber: result.order.orderNumber },
         ...(result.receiving ? { receiving: { id: result.receiving.id } } : {}),
         invoice: { id: result.invoice.id, invoiceNumber: result.invoice.invoiceNumber },
+        ...(result.superseded.length ? { supersededPlaceholders: result.superseded } : {}),
         ...(priceWarnings.length ? { warnings: priceWarnings } : {}),
       },
       { status: 201 },
