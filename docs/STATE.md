@@ -11,6 +11,20 @@ current month.
 
 ## Verified facts
 
+- 2026-10-30 — **Dividend basis, final Q3 + restated Q1/Q2 (owner decisions).**
+  Q2 was paid off the backoffice sourced P&L (`/finance/reports` pnl, Conezion
+  Apr–Jun net RM54,901.04 → RM11,666.48; that report has no stock movement, no
+  card/QR fees, Google-only ads). Q1 was paid off the accountant sheet with an
+  uncounted RM48,112 closing stock. Q3 decided: Sunmi tills (RM2,262 Con, RM2,257
+  Tam, Sep staff claims) capitalised; Gosame Bukit Tunku RM1,500 (25 Jul, into
+  2644) = payment for assets bought from Conezion → other income. **Q3: Conezion
+  RM7,060.35 (RM706.03/unit), Mikofee RM2,239.76.** Q1–Q3 supported vs paid:
+  Conezion 18,418 vs 21,859 (≈RM3,441 over); Tamarind 4,344 vs 3,748 (≈RM596
+  under). Offset decision still with the owner. Page:
+  https://claude.ai/artifact/DqTh7mWkK228vXLn1VSYxX. HQ floaters (Syafiq Aiman,
+  Adam Kelvin, Adam Ariff) clock in at outlets but are paid by HQ with no
+  recharge since Q2 — owner to decide outlet vs management-fee.
+
 - 2026-10-30 — **Transfer records repaired; Q3 dividends set on the delivery
   pack (owner decision).** 112 `StockTransferItem` lines saved without a unit got
   `productPackageId` = the pack the sending outlet usually receives that product
