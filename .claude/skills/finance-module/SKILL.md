@@ -132,3 +132,16 @@ into the sections above._
   at draw time otherwise. Money in the PDF body is printed WITHOUT the "RM "
   prefix (the header states the currency once, as Xero/Bukku do) but the KPI
   tiles keep it.
+
+- 2026-10-30 — **The bank feed can freeze silently while the cron stays
+  "healthy".** `/api/cron/bukku-feed-sync` heartbeats and posts the GL every
+  run, so `/agents` looked fine while no new `BankStatementLine` landed for
+  weeks (Conezion from 2026-09-09, the other two from 2026-10-13, Bukku itself
+  synced to 10-29). An uncaught throw inside one account's `syncAccount`
+  aborted every account after it, and the step's result was only returned in
+  the HTTP body. Now: per-account try/catch, 429/5xx retries in `bukkuFetch`,
+  and `feedProblems()` logs a `finance_gl_post` escalation on any sync error
+  or a ledger >3 days stale. **Check freshness with `max(BankStatementLine.
+  txnDate)` per account, never with the agent heartbeat.** Each run re-pulls
+  everything since the last PDF anchor (31 May at the time), so upload the
+  month-end Maybank PDFs to keep the pull small.
