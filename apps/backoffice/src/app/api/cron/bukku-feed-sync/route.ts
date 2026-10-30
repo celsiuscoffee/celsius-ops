@@ -51,7 +51,9 @@ export async function GET(req: NextRequest) {
 
   // 1. ingest the bank feed (must run first — the rest acts on its output)
   await step("feed", async () => {
-    const { accounts } = await syncBukkuFeedLedger({ commit: true });
+    // 180s of the 300s maxDuration: leaves room for the escalation write and
+    // the downstream steps even when one account is slow.
+    const { accounts } = await syncBukkuFeedLedger({ commit: true, budgetMs: 180_000 });
     // The feed froze for weeks with nothing anywhere saying so — surface
     // per-account errors and staleness on the /agents feed every run.
     const problems = feedProblems(accounts, new Date().toISOString().slice(0, 10));
