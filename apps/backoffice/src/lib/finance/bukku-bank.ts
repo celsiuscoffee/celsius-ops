@@ -253,6 +253,20 @@ export function mapRawFeedToLines(lines: BukkuRawFeedLine[]): BukkuBankLineDraft
 
 // ── Networked client ──────────────────────────────────────────────────────
 
+const BUKKU_MAX_RETRIES = 3;
+
+export function isRetryableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+// Honour Retry-After (seconds) when Bukku sends it, else back off 1s/2s/4s.
+// Capped at 10s so three retries stay well inside the cron's 300s budget.
+export function retryDelayMs(attempt: number, retryAfter: string | null): number {
+  const secs = Number(retryAfter);
+  const ms = retryAfter && Number.isFinite(secs) && secs >= 0 ? secs * 1000 : 1000 * 2 ** attempt;
+  return Math.min(ms, 10_000);
+}
+
 async function bukkuFetch<T>(
   creds: BukkuCreds,
   path: string,
@@ -262,15 +276,23 @@ async function bukkuFetch<T>(
   for (const [k, v] of Object.entries(query)) {
     if (v !== undefined) url.searchParams.set(k, String(v));
   }
-  const res = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${creds.token}`,
-      "Company-Subdomain": creds.subdomain,
-      Accept: "application/json",
-    },
-    // Always hit the network — this is a sync job, never cache.
-    cache: "no-store",
-  });
+  // The feed sync pages through months of lines every run, so a rate limit or
+  // a brief Bukku outage mid-page is routine — retry those instead of failing
+  // the whole account.
+  let res: Response;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${creds.token}`,
+        "Company-Subdomain": creds.subdomain,
+        Accept: "application/json",
+      },
+      // Always hit the network — this is a sync job, never cache.
+      cache: "no-store",
+    });
+    if (!isRetryableStatus(res.status) || attempt >= BUKKU_MAX_RETRIES) break;
+    await new Promise((r) => setTimeout(r, retryDelayMs(attempt, res.headers.get("retry-after"))));
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`Bukku ${path} → HTTP ${res.status} ${body.slice(0, 300)}`);

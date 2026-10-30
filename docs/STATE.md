@@ -31,6 +31,12 @@ current month.
   at RM965, PPE cost 274k vs accountant 482k). Stock counts: 30 Jun was a
   DAILY 82-item count (no full opening anchor); 30 Sep monthly count values
   ~RM28.8k with 93/257 items uncosted.
+- 2026-10-30 — **Bank feed fix shipped (same PR):** per-account isolation +
+  Bukku retries + stale/error escalation in the feed cron. Root error not
+  confirmed (no Vercel log access) — after deploy, read the first
+  `finance_gl_post` escalation in `agent_actions` (or confirm
+  `max(BankStatementLine.txnDate)` advances for 2644). Human action: upload
+  Jun–Sep Maybank PDFs for all 3 accounts to re-anchor the pull.
 
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272

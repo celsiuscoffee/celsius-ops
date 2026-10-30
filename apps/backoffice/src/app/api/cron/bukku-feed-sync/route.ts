@@ -13,14 +13,14 @@
 // backlog over a few runs.
 
 import { NextRequest, NextResponse } from "next/server";
-import { syncBukkuFeedLedger } from "@/lib/finance/bukku-feed-sync";
+import { syncBukkuFeedLedger, feedProblems } from "@/lib/finance/bukku-feed-sync";
 import { applyApMatches } from "@/lib/finance/ap-match";
 import { applyVerifiedReview } from "@/lib/finance/agents/ap-verifier";
 import { createWagePaymentSlips } from "@/lib/finance/payment-slips";
 import { postBankLinesToGl } from "@/lib/finance/gl-posting";
 import { accrueSalaryControls } from "@/lib/finance/salary-accrual";
 import { checkCronAuth } from "@celsius/shared";
-import { touchAgentRun } from "@celsius/agents/src/substrate";
+import { touchAgentRun, logAgentAction } from "@celsius/agents/src/substrate";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -52,7 +52,19 @@ export async function GET(req: NextRequest) {
   // 1. ingest the bank feed (must run first — the rest acts on its output)
   await step("feed", async () => {
     const { accounts } = await syncBukkuFeedLedger({ commit: true });
-    return { accounts: accounts.length, newLines: accounts.reduce((s, a) => s + a.newLines, 0) };
+    // The feed froze for weeks with nothing anywhere saying so — surface
+    // per-account errors and staleness on the /agents feed every run.
+    const problems = feedProblems(accounts, new Date().toISOString().slice(0, 10));
+    if (problems.length > 0) {
+      console.error("[finance-loop:feed] problems", problems);
+      await logAgentAction({
+        agentKey: "finance_gl_post",
+        kind: "escalation",
+        summary: `Bank feed: ${problems.map((p) => `${p.account} — ${p.problem}`).join("; ")}`,
+        meta: { problems, accounts },
+      });
+    }
+    return { accounts: accounts.length, newLines: accounts.reduce((s, a) => s + a.newLines, 0), problems };
   });
   // 2. reconcile supplier outflows → invoices (rules tier, then LLM verifier
   //    tier). RECONCILE-ONLY: the Telegram proof-of-payment flow is the primary

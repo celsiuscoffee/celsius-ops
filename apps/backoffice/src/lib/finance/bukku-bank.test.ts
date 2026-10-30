@@ -3,6 +3,8 @@ import {
   mapMoneyToLines,
   mapTransferToLines,
   mapRawFeedToLines,
+  isRetryableStatus,
+  retryDelayMs,
   type BukkuMoneyTxn,
   type BukkuTransferTxn,
   type BukkuRawFeedLine,
@@ -128,5 +130,19 @@ describe("mapTransferToLines", () => {
     // Both sides share the source transaction id (idempotency).
     expect(dr.bukkuId).toBe(6);
     expect(cr.bukkuId).toBe(6);
+  });
+});
+
+describe("Bukku retry policy", () => {
+  it("retries rate limits and server errors only", () => {
+    expect([429, 500, 502, 503].every(isRetryableStatus)).toBe(true);
+    expect([400, 401, 404, 422].some(isRetryableStatus)).toBe(false);
+  });
+  it("honours Retry-After, else backs off exponentially, capped at 10s", () => {
+    expect(retryDelayMs(0, "2")).toBe(2000);
+    expect(retryDelayMs(0, null)).toBe(1000);
+    expect(retryDelayMs(2, null)).toBe(4000);
+    expect(retryDelayMs(0, "120")).toBe(10_000);
+    expect(retryDelayMs(1, "soon")).toBe(2000);
   });
 });

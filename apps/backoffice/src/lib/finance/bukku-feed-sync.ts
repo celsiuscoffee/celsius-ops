@@ -52,6 +52,27 @@ function monthEnd(m: string): Date {
   return new Date(Date.UTC(y, mo, 0));
 }
 
+// Accounts the cron should escalate: a sync/feed error, or a ledger whose
+// latest line is older than `staleDays`. Maybank posts daily, so a few days
+// with nothing new means the pull is broken even when no error is thrown.
+export function feedProblems(
+  accounts: FeedSyncAccountResult[],
+  today: string,
+  staleDays = 3,
+): { account: string; problem: string }[] {
+  const cutoff = new Date(Date.parse(today) - staleDays * 86_400_000).toISOString().slice(0, 10);
+  const out: { account: string; problem: string }[] = [];
+  for (const a of accounts) {
+    const account = a.accountName ?? `${a.subdomain} …${a.accountTail}`;
+    if (a.skipped?.startsWith("feed error") || a.skipped?.startsWith("sync error")) {
+      out.push({ account, problem: a.skipped });
+    } else if (a.latestDate && a.latestDate < cutoff) {
+      out.push({ account, problem: `stale: latest line ${a.latestDate}` });
+    }
+  }
+  return out;
+}
+
 // Normalized procurement supplier names for the classifier's vendor-registry
 // pass: onboarding a supplier is enough for their bank payments to classify as
 // RAW_MATERIALS — no classifier rule edit needed. Names are uppercased,
@@ -124,7 +145,15 @@ async function syncAccount(
     .sort((a, b) => a.txnDate.localeCompare(b.txnDate) || a.bukkuId - b.bukkuId);
 
   if (lines.length === 0) {
-    return { ...base, accountName, anchorDate: anchorYmd, anchorBalance: anchorBal, skipped: "already current" };
+    // Report how far the ledger actually reaches, so the cron can tell
+    // "nothing new today" from "nothing new for weeks".
+    const lastFeed = await prisma.bankStatement.findFirst({
+      where: { accountName, notes: FEED_NOTE },
+      orderBy: { periodEnd: "desc" },
+      select: { periodEnd: true },
+    });
+    const latestDate = lastFeed?.periodEnd ? ymd(lastFeed.periodEnd) : anchorYmd;
+    return { ...base, accountName, anchorDate: anchorYmd, anchorBalance: anchorBal, latestDate, skipped: "already current" };
   }
 
   // Group by month, reconstruct closings from the anchor.
@@ -285,7 +314,18 @@ export async function syncBukkuFeedLedger(opts: { commit?: boolean } = {}): Prom
       if (!feed.is_linked) continue;
       for (const fa of feed.accounts ?? []) {
         if (!fa.linked_account_id) continue;
-        results.push(await syncAccount(creds, feed.id, fa.linked_account_id, fa.ext_number, admin.id, commit));
+        // One account's failure must not starve the accounts after it — an
+        // uncaught throw here froze every feed from that point on.
+        try {
+          results.push(await syncAccount(creds, feed.id, fa.linked_account_id, fa.ext_number, admin.id, commit));
+        } catch (e) {
+          console.error(`[bukku-feed-sync] ${creds.subdomain} …${fa.ext_number}`, e);
+          results.push({
+            subdomain: creds.subdomain, accountTail: (fa.ext_number || "").replace(/\D/g, "").slice(-4),
+            accountName: null, anchorDate: null, anchorBalance: null, newLines: 0, latestDate: null,
+            endingBalance: null, statements: 0, committed: false, skipped: `sync error: ${(e as Error).message}`,
+          });
+        }
       }
     }
   }
