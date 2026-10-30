@@ -11,6 +11,22 @@ current month.
 
 ## Verified facts
 
+- 2026-10-30 — **Conezion Q3 COGS: transfers + stock counts are the swing,
+  not purchases.** Purchases are real (RM177,760 invoiced ≈ RM176,492 paid
+  from the 2644 account). (1) **Stock transfers** never reduce the sender's
+  COGS: the staff web form had NO package picker, so lines stored packs as
+  base units ("6ctn" milk = 6 ml) and none were ever received (all PENDING;
+  P&L counts RECEIVED/COMPLETED only). From the 2026-08-31 package guard on,
+  the form rejected multi-package items → staff stopped logging (0 lines in
+  Sept). Form fixed (package picker + "Mark received"); the ~105 historic
+  lines need a manager-confirmed unit — value swings RM4.1k (smallest pack)
+  to RM14.7k (usual delivery pack) for Putrajaya Q3 out. (2) **Stock-count
+  valuation** inflates via mis-set packages: Chocolate Mudslide / Burnt
+  Cheesecake "Slice" package = whole 12-slice cake at RM130; Biscoff Batik
+  "Box" (10) and Telur Omega "Pack" (10) counted in pieces. Unit-fixed
+  monthly counts: 12 Jul 11.1k (incomplete — core items zero), 31 Jul 18.8k,
+  31 Aug 18.5k, 30 Sep 19.9k → stock is flat. Q3 RPS dividend =
+  25% × (EBITDA − interest) × 85%: RM0 (cautious transfers) to RM1,770.71.
 - 2026-10-30 — **Conezion Q3-2026 accountant FS (Google Sheet "Conezion FS")
   vetted against prod.** Ties: sales RM356,860.03 = `unified_sales` Q3 for
   CC001 to the sen (pos_native 257,700.36 incl. Grabfood 26,990.60 + pickup

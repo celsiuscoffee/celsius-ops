@@ -13,11 +13,20 @@ type Transfer = {
   id: string;
   fromOutlet: string;
   toOutlet: string;
+  toOutletCode: string;
   status: string;
   transferredBy: string;
   notes: string | null;
   createdAt: string;
-  items: { id: string; product: string; sku: string; quantity: number }[];
+  items: { id: string; product: string; sku: string; package: string; quantity: number }[];
+};
+
+type Package = {
+  id: string;
+  name: string;
+  label: string | null;
+  conversion: number;
+  isDefault: boolean;
 };
 
 type Outlet = {
@@ -31,6 +40,7 @@ type Product = {
   name: string;
   sku: string;
   baseUom: string;
+  packages: Package[];
 };
 
 type UserSession = {
@@ -44,8 +54,14 @@ type TransferItem = {
   productId: string;
   productName: string;
   sku: string;
+  packages: Package[];
+  // Quantity is counted in this package ("6 cartons"). Without it the server
+  // can't convert to base UOM, and transfers were stored as 6 ml of milk.
+  productPackageId: string | null;
   quantity: number;
 };
+
+const packageLabel = (p: Package) => p.label || p.name;
 
 export default function TransferPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -110,11 +126,48 @@ export default function TransferPage() {
   );
 
   const addItem = (product: Product) => {
+    const packages = product.packages ?? [];
+    const preset = packages.find((p) => p.isDefault) ?? (packages.length === 1 ? packages[0] : undefined);
     setTransferItems((prev) => [
       ...prev,
-      { productId: product.id, productName: product.name, sku: product.sku, quantity: 1 },
+      {
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku,
+        packages,
+        productPackageId: preset?.id ?? null,
+        quantity: 1,
+      },
     ]);
     setProductSearch("");
+  };
+
+  const setItemPackage = (productId: string, productPackageId: string) => {
+    setTransferItems((prev) =>
+      prev.map((item) => (item.productId === productId ? { ...item, productPackageId } : item)),
+    );
+  };
+
+  // A product with packages must have one chosen; the API refuses otherwise.
+  const missingPackage = transferItems.some((i) => i.packages.length > 0 && !i.productPackageId);
+
+  const [receivingId, setReceivingId] = useState<string | null>(null);
+  const markReceived = async (t: Transfer) => {
+    setReceivingId(t.id);
+    try {
+      const res = await fetch(`/api/transfers/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "COMPLETED" }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        alert(body?.error ?? `Couldn't mark this transfer received (${res.status}).`);
+      }
+      await fetchTransfers(user?.outletId);
+    } finally {
+      setReceivingId(null);
+    }
   };
 
   const updateItemQty = (productId: string, delta: number) => {
@@ -143,7 +196,7 @@ export default function TransferPage() {
   };
 
   const handleSubmit = async () => {
-    if (!toOutletId || transferItems.length === 0 || !user) return;
+    if (!toOutletId || transferItems.length === 0 || missingPackage || !user) return;
 
     setSubmitting(true);
     setSubmitError(null);
@@ -158,6 +211,7 @@ export default function TransferPage() {
           notes: transferNotes || null,
           items: transferItems.map((i) => ({
             productId: i.productId,
+            productPackageId: i.productPackageId ?? undefined,
             quantity: i.quantity,
           })),
         }),
@@ -240,9 +294,25 @@ export default function TransferPage() {
                       <p className="mt-0.5 text-xs text-gray-500">
                         {t.items.length} item{t.items.length !== 1 ? "s" : ""} &middot; {formatDate(t.createdAt)} &middot; by {t.transferredBy}
                       </p>
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        {t.items.map((i) => `${i.quantity} ${i.package || "?"} ${i.product}`).join(", ")}
+                      </p>
                     </div>
                     <Badge className={`text-[10px] ${statusColor(t.status)}`}>{t.status.toLowerCase()}</Badge>
                   </div>
+                  {/* The receiving outlet confirms arrival; until then the
+                      stock sits in neither outlet's books. */}
+                  {t.status === "PENDING" && t.toOutletCode === userOutlet?.code && (
+                    <Button
+                      size="sm"
+                      className="mt-2 w-full bg-green-600 hover:bg-green-700"
+                      disabled={receivingId === t.id}
+                      onClick={() => markReceived(t)}
+                    >
+                      {receivingId === t.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                      Mark received
+                    </Button>
+                  )}
                 </Card>
               ))}
             </div>
@@ -311,7 +381,22 @@ export default function TransferPage() {
                   <div key={item.productId} className="flex items-center justify-between rounded-md border px-3 py-2">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm text-gray-900">{item.productName}</p>
-                      <p className="text-xs text-gray-400">{item.sku}</p>
+                      {item.packages.length > 1 ? (
+                        <select
+                          className={`mt-0.5 w-full rounded border px-1.5 py-0.5 text-xs ${item.productPackageId ? "text-gray-700" : "border-red-300 text-red-600"}`}
+                          value={item.productPackageId ?? ""}
+                          onChange={(e) => setItemPackage(item.productId, e.target.value)}
+                        >
+                          <option value="">Choose unit…</option>
+                          {item.packages.map((p) => (
+                            <option key={p.id} value={p.id}>{packageLabel(p)}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-xs text-gray-400">
+                          {item.packages[0] ? packageLabel(item.packages[0]) : item.sku}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
@@ -356,7 +441,7 @@ export default function TransferPage() {
             )}
             <Button
               className="w-full bg-terracotta hover:bg-terracotta-dark"
-              disabled={!toOutletId || transferItems.length === 0 || submitting}
+              disabled={!toOutletId || transferItems.length === 0 || missingPackage || submitting}
               onClick={handleSubmit}
             >
               {submitting ? (

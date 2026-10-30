@@ -309,3 +309,13 @@ stable ones into the sections above._
   reward_discount_amount` (≈ zero in practice; staff barely use the path).
   The web `orders.discount_amount` column is always 0 — its real parts are
   the promo/reward/first_order columns.
+
+- 2026-10-30 — **Before trusting a stock-count valuation, check package
+  semantics, not just coverage.** A package named "Slice"/"Piece" with
+  conversionFactor > 1 is a whole-unit price (Chocolate Mudslide: "Slice" =
+  12-slice cake at RM130 → 36 slices valued RM4,680). Pieces counted against
+  a Box/Pack package do the same (Biscoff Batik, Telur Omega). evaluateCount's
+  plausibility band (RM2k–60k) does not catch it. Also check transfers:
+  StockTransferItem with productPackageId NULL stores pack counts as base
+  units, and PENDING transfers never leave the sender's COGS.
+
