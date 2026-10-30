@@ -10,6 +10,7 @@ import { gateTelegramChat, resolveTelegramGate } from "@/lib/inventory/telegram-
 import { createShortLink } from "@/lib/shortlink";
 import { detectPaymentFlags, appendInvoiceFlags } from "@/lib/inventory/flag-detector";
 import { computeDepositAmount } from "@/lib/inventory/deposit";
+import { classifyPopLeg, BALANCE_ELIGIBLE_STATUSES, POP_AMOUNT_TOLERANCE } from "@/lib/inventory/pop-leg";
 import { sendProofOfPayment } from "@/lib/inventory/procurement-whatsapp";
 import { rescueNoMatch, judgeDuplicate } from "@/lib/inventory/agents/pop-verifier-run";
 import { runInternalAssistant, assistantEnabled } from "@/lib/ops-intake/assistant";
@@ -933,6 +934,52 @@ async function handlePop(chatId: number, msgId: number, photoUrl: string, pop: P
     });
   }
 
+  // 4b. Balance leg on a part-paid invoice.
+  //
+  // Steps 3 and 4 only ever compare the POP against the FULL amount or the
+  // DEPOSIT amount — never against what is actually still owed. So a balance
+  // payment has no arm to match on, and it fails in one of two ways depending
+  // on how the deposit was recorded: an invoice moved to DEPOSIT_PAID drops out
+  // of their status filter entirely, while one left at INITIATED stays in the
+  // pool but matches neither amount. Both dead-end on "No matching unpaid
+  // invoice found" with the invoice sitting there half-settled.
+  //
+  // That is not hypothetical: reconciling the payment channel on 2026-09-17
+  // found 16 Collective Project balance legs, RM16,380.30, unmatched between
+  // April and September — each exactly 90% of invoice face value. It is the
+  // only supplier on deposit terms (10% up front), so it absorbed the whole
+  // defect. Match on `amount - amountPaid`, not on either endpoint.
+  //
+  // Runs only after 3 and 4 come up empty, so a full- or deposit-amount match
+  // always wins. The status filter overlaps theirs, but `amountPaid > 0` plus
+  // the outstanding-amount test means this can only reach invoices they had no
+  // arm to match in the first place.
+  if (candidates.length === 0) {
+    const partPaid = await prisma.invoice.findMany({
+      where: {
+        status: { in: [...BALANCE_ELIGIBLE_STATUSES] },
+        // Money already recorded against the invoice is what marks it as
+        // awaiting a balance — not its status. The deposit leg arrives through
+        // more than one path and only the Telegram one sets DEPOSIT_PAID; the
+        // live part-paid rows carry INITIATED.
+        amountPaid: { gt: 0 },
+        // The balance can never exceed the invoice, so anything smaller than
+        // the POP is not a candidate. Keeps the in-memory filter bounded.
+        amount: { gte: amount },
+      },
+      include: invoiceInclude,
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+    candidates = partPaid
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy untyped DB row (ratchet: reduce, never add)
+      .filter((inv: any) => {
+        const outstanding = Number(inv.amount) - Number(inv.amountPaid ?? 0);
+        return outstanding > 0.01 && Math.abs(outstanding - amount) <= POP_AMOUNT_TOLERANCE;
+      })
+      .slice(0, 10);
+  }
+
   // 5. Narrow by recipient name/bank if multiple matches — check both supplier
   // and claimant (staff) records since the pool may contain either kind.
   if (candidates.length > 1 && (pop.recipientName || pop.recipientAccount)) {
@@ -1187,10 +1234,21 @@ async function resolvePop(
   const invoice = candidates[0] as any;
   const depositAmt = invoice.depositAmount != null ? Number(invoice.depositAmount) : null;
   const fullAmt = Number(invoice.amount);
-  const matchesDeposit = depositAmt != null && Math.abs(depositAmt - amount) <= 0.5;
-  const matchesFull = Math.abs(fullAmt - amount) <= 0.5;
-  // Prefer full-amount match when both could apply (safest default).
-  const isDepositMatch = !matchesFull && matchesDeposit;
+  // Which leg this POP settles — full, deposit, or the balance on a part-paid
+  // invoice. Full wins where both could apply; balance outranks a deposit
+  // reading so a second POP cannot be mistaken for re-paying the deposit.
+  // See lib/inventory/pop-leg.ts for the rules and their tests.
+  const paidSoFar = Number(invoice.amountPaid ?? 0);
+  const outstanding = fullAmt - paidSoFar;
+  const leg = classifyPopLeg({
+    popAmount: amount,
+    invoiceAmount: fullAmt,
+    depositAmount: depositAmt,
+    amountPaid: paidSoFar,
+    status: String(invoice.status),
+  });
+  const isDepositMatch = leg === "deposit";
+  const isBalanceMatch = leg === "balance";
 
   // Pre-flight: refuse to re-attach a paymentRef that's already on another
   // paid invoice (same bank payment recorded twice). Bails BEFORE renaming
@@ -1276,7 +1334,13 @@ async function resolvePop(
   }
 
   const result = await prisma.invoice.updateMany({
-    where: { id: invoice.id, status: { in: ["PENDING", "INITIATED", "OVERDUE"] } },
+    // Guard on the status we actually matched against, so a balance POP can
+    // settle a DEPOSIT_PAID invoice. Guarding on the open statuses alone made
+    // the write a silent no-op for that case.
+    where: {
+      id: invoice.id,
+      status: { in: isBalanceMatch ? [...BALANCE_ELIGIBLE_STATUSES] : ["PENDING", "INITIATED", "OVERDUE"] },
+    },
     data: isDepositMatch
       ? {
           status: "DEPOSIT_PAID",
@@ -1307,7 +1371,11 @@ async function resolvePop(
   // invoice, bank mismatch, tolerance-only match. Surfaces as flags in the UI
   // so finance can manually accept or reject.
   try {
-    const matchedAmount = isDepositMatch ? Number(invoice.depositAmount) : Number(invoice.amount);
+    const matchedAmount = isDepositMatch
+      ? Number(invoice.depositAmount)
+      : isBalanceMatch
+        ? outstanding
+        : Number(invoice.amount);
     const matchMethod: "exact" | "tolerance" = Math.abs(matchedAmount - amount) < 0.01 ? "exact" : "tolerance";
     const popFlags = await detectPaymentFlags({
       invoiceId: invoice.id,
@@ -1352,12 +1420,16 @@ async function resolvePop(
   const receiptLink = shortLink ? `\n🔗 ${shortLink}` : "";
   const balanceLine = isDepositMatch
     ? `\nBalance still owing: RM ${(fullAmt - amount).toFixed(2)}${depositDueDate ? ` (due ${depositDueDate.toISOString().slice(0, 10)})` : ""}`
-    : "";
+    : isBalanceMatch
+      ? `\nDeposit already paid: RM ${paidSoFar.toFixed(2)} — invoice now settled in full.`
+      : "";
   const statusLabel = isDepositMatch ? "DEPOSIT PAID" : "PAID";
-  const payType = isDepositMatch ? "Deposit" : "Payment";
+  const payType = isDepositMatch ? "Deposit" : isBalanceMatch ? "Balance" : "Payment";
+  const amountLabel = isDepositMatch ? "Deposit" : isBalanceMatch ? "Balance" : "Amount";
+  const ofTotal = isDepositMatch || isBalanceMatch ? ` / RM ${fullAmt.toFixed(2)} total` : "";
   await sendMessage(
     chatId,
-    `✅ <b>${payType} matched</b>\n\nInvoice: ${invoice.invoiceNumber}${poRef}${outletRef}\n${payeeLabel}\n${isDepositMatch ? `Deposit` : `Amount`}: RM ${amount.toFixed(2)}${isDepositMatch ? ` / RM ${fullAmt.toFixed(2)} total` : ""}${balanceLine}\nRef: ${pop.referenceNumber ?? "–"}\n\nMarked as <b>${statusLabel}</b>.\n📎 Uploaded to PO + Invoice${receiptLink}`,
+    `✅ <b>${payType} matched</b>\n\nInvoice: ${invoice.invoiceNumber}${poRef}${outletRef}\n${payeeLabel}\n${amountLabel}: RM ${amount.toFixed(2)}${ofTotal}${balanceLine}\nRef: ${pop.referenceNumber ?? "–"}\n\nMarked as <b>${statusLabel}</b>.\n📎 Uploaded to PO + Invoice${receiptLink}`,
     msgId,
   );
 
