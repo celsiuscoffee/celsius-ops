@@ -142,6 +142,11 @@ into the sections above._
   the HTTP body. Now: per-account try/catch, 429/5xx retries in `bukkuFetch`,
   and `feedProblems()` logs a `finance_gl_post` escalation on any sync error
   or a ledger >3 days stale. **Check freshness with `max(BankStatementLine.
-  txnDate)` per account, never with the agent heartbeat.** Each run re-pulls
-  everything since the last PDF anchor (31 May at the time), so upload the
-  month-end Maybank PDFs to keep the pull small.
+  txnDate)` per account, never with the agent heartbeat.**
+  **Real root cause (confirmed from Vercel logs the same day):** not Bukku —
+  each run rebuilt EVERY feed line since the last PDF anchor (31 May) inside
+  one `$transaction` (timeout 120s). Past ~3–5k lines per account the rewrite
+  outgrew it → Prisma `P2028 Transaction not found`, full rollback, then the
+  300s function limit. Fixed by `chooseFeedAnchor()`: resume from the last
+  complete feed month (7-day overlap); a newer PDF still re-anchors fully.
+  Any per-run rewrite must stay bounded — never let its size grow with time.

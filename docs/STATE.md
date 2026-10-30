@@ -31,7 +31,13 @@ current month.
   at RM965, PPE cost 274k vs accountant 482k). Stock counts: 30 Jun was a
   DAILY 82-item count (no full opening anchor); 30 Sep monthly count values
   ~RM28.8k with 93/257 items uncosted.
-- 2026-10-30 — **Bank feed fix shipped (same PR):** per-account isolation +
+- 2026-10-30 — **Bank feed ROOT CAUSE confirmed (Vercel logs, manual run
+  08:53Z):** Prisma `P2028` — the feed rebuild rewrote every line since the
+  31 May PDF anchor in one 120s transaction, which no longer fits; rollback →
+  300s timeout. Not Bukku. Follow-up PR resumes from the last complete feed
+  month (`chooseFeedAnchor`, 7-day overlap) + a 180s account budget. Verify
+  after deploy: all 3 accounts reach ~10-29 on the next run.
+- 2026-10-30 — **Bank feed fix shipped (#1271):** per-account isolation +
   Bukku retries + stale/error escalation in the feed cron. Root error not
   confirmed (no Vercel log access) — after deploy, read the first
   `finance_gl_post` escalation in `agent_actions` (or confirm
