@@ -11,6 +11,27 @@ current month.
 
 ## Verified facts
 
+- 2026-10-30 — **Conezion Q3-2026 accountant FS (Google Sheet "Conezion FS")
+  vetted against prod.** Ties: sales RM356,860.03 = `unified_sales` Q3 for
+  CC001 to the sen (pos_native 257,700.36 incl. Grabfood 26,990.60 + pickup
+  99,159.67; the sheet mislabels it all "Storehub"); RPS dividend 21,859.20 =
+  Q1 10,192.74 + Q2 11,666.48 (bank, 8 lines 27 Jul) = GL 4000; Gosame
+  RM1,500 inflow 25 Jul; payroll total within RM1.4k (hr_payroll_items CC001
+  Jul–Sep: gross 55,259.44, net 49,093.59, EE stat 6,165.85, ER stat
+  7,706.40 — the sheet books NET pay as salary + EE+ER as statutory).
+  **Gaps:** ingredient invoices Q3 = RM177,760 vs sheet COGS 163,566 — the
+  sheet is missing ~RM14k, matching Sept invoices still PENDING (RM20.4k);
+  sheet trade payables RM3,596.50 vs RM22.3k unpaid ingredient invoices.
+  TNB is paid ~3 months late (May bill paid 17 Aug), so Q3 electricity
+  17.4k is a normal accrual and Q1's 8.9k was the understated one.
+  **System gaps found:** Conezion bank feed stops at 2026-09-09 (other two
+  accounts current to 10-13); `fin_payroll_actuals` has nothing after
+  2026-06 (SLO breach); Conezion GL is not usable as a balance sheet
+  (1999 suspense RM58k, 3900 opening equity −271.6k, depreciation stops
+  at RM965, PPE cost 274k vs accountant 482k). Stock counts: 30 Jun was a
+  DAILY 82-item count (no full opening anchor); 30 Sep monthly count values
+  ~RM28.8k with 93/257 items uncosted.
+
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272
   (Putrajaya table 16, RM45.65, FPX, checkout `1790382506490474234`):
