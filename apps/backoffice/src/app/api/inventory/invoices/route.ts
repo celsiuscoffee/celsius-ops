@@ -6,6 +6,7 @@ import { detectCreationFlags, type InvoiceFlag } from "@/lib/inventory/flag-dete
 import { assertNoDuplicateInvoice } from "@/lib/inventory/invoice-dedupe";
 import { mytTodayRange } from "@/lib/inventory/myt-today";
 import { isPlaceholderNumber, mintPlaceholderNumber } from "@/lib/inventory/placeholder-number";
+import { supersedePlaceholders } from "@/lib/inventory/supersede-placeholders";
 import { syncInvoiceOverdue } from "@/lib/inventory/sync-invoice-overdue";
 import { evaluateInvoiceTiming, dueDateIsBelievable } from "@celsius/db";
 
@@ -540,7 +541,23 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(invoice, { status: 201 });
+    // A real supplier bill recorded on its own replaces the GRNI placeholder
+    // that receiving minted for the same goods. A minted number is not a bill.
+    const supersededPlaceholders = isPlaceholderNumber(invoice.invoiceNumber)
+      ? []
+      : await supersedePlaceholders(prisma, {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          supplierId: invoice.supplierId,
+          outletId: invoice.outletId,
+          amount: Number(invoice.amount),
+          issueDate: invoice.issueDate,
+        });
+
+    return NextResponse.json(
+      supersededPlaceholders.length ? { ...invoice, supersededPlaceholders } : invoice,
+      { status: 201 },
+    );
   } catch (err) {
     console.error("[invoices POST]", err);
     // Friendly handling for the (supplierId, invoiceNumber) unique constraint.

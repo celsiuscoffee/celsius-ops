@@ -11,6 +11,19 @@ current month.
 
 ## Verified facts
 
+- 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
+  PO send mints a placeholder bill; when the real bill is recorded via Quick
+  Upload (pay-and-claim) or the invoices page it lands on a NEW order and the
+  placeholder stayed PENDING, so the goods were counted twice (often once as
+  INGREDIENT, once as OTHER). Code fix: `lib/inventory/supersede-placeholders.ts`
+  zeroes + settles the matching placeholder(s) (same supplier+outlet, ±21d,
+  amount within max(RM2,0.5%), or a unique 2–3 placeholder sum), flag
+  SUPERSEDED_PLACEHOLDER keeps originalAmount. **Applied to prod 2026-10-30:**
+  21 placeholders zeroed (RM11,395.25; Conezion RM6,470.75): 19 duplicates +
+  2 on cancelled POs; reversible via flags->meta.originalAmount (source
+  cleanup-2026-10-30). Still open: placeholders on POs never received
+  (group RM37k at 30 Oct; Conezion Q3 RM9,349.56 unconfirmed after evidence
+  check) and placeholders on CANCELLED POs are not auto-zeroed on cancel.
 - 2026-10-30 — **Conezion Q3 COGS: transfers + stock counts are the swing,
   not purchases.** Purchases are real (RM177,760 invoiced ≈ RM176,492 paid
   from the 2644 account). (1) **Stock transfers** never reduce the sender's
