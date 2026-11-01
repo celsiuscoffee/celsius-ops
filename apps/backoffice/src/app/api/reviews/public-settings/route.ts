@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     outletName: outlet.name,
-    ratingThreshold: s?.ratingThreshold ?? 4,
     googleReviewUrl: s?.googleReviewUrl ?? null,
     heading: s?.heading ?? null,
     description: s?.description ?? null,

@@ -2,21 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromHeaders } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { replyToReview } from "@/lib/reviews/gbp";
-import { genRecoveryCode, compensateReviewCase, compensateInternalFeedback } from "@/lib/reviews/recovery";
+import { compensateReviewCase, compensateInternalFeedback } from "@/lib/reviews/recovery";
+import { REVIEW_CONTACT_LINE } from "@/lib/reviews/reply-offer";
 
 export const dynamic = "force-dynamic";
 
-// Base for the customer recovery link placed in the public reply. Defaults to
-// the backoffice domain; set RECOVERY_URL_BASE to a short vanity URL (e.g.
-// https://celsiuscoffee.com/sorry) once a redirect to /recover/<code> exists,
-// so the link is easy to type off a plain-text Google reply.
-const RECOVERY_URL_BASE =
-  process.env.RECOVERY_URL_BASE ||
-  `${process.env.NEXT_PUBLIC_APP_URL || "https://backoffice.celsiuscoffee.com"}/recover`;
-
 // POST /api/reviews/negatives/decide
 // Body: { id, action, reply?, phone?, name?, note? }
-//   approve     — post reply (+ recovery code CTA) to GBP, status → approved
+//   approve     — post reply (+ neutral contact line) to GBP, status → approved
 //   reject      — status → rejected, nothing posted
 //   compensate  — manager has the customer's phone offline: capture + voucher
 //   resolve     — close the case as made-whole
@@ -88,10 +81,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "GBP not connected for this outlet" }, { status: 400 });
     }
     const base = typeof reply === "string" && reply.trim() ? reply.trim() : draft.draftReply;
-    const code = genRecoveryCode();
-    // Deterministic recovery CTA — the link/code are appended in code, never by
-    // the LLM, so they can't be mangled. Google replies are plain text.
-    const finalReply = `${base}\n\nWe'd like to make this right. Please visit ${RECOVERY_URL_BASE}/${code} so we can reach you personally.`;
+    // No code/link/offer in the public reply (Google review policy) — the
+    // customer contacts us and the manager compensates via the case.
+    const finalReply = `${base}\n\n${REVIEW_CONTACT_LINE}`;
 
     try {
       await replyToReview(settings.gbpAccountId, settings.gbpLocationName, draft.reviewId, finalReply);
@@ -105,13 +97,11 @@ export async function POST(request: NextRequest) {
       data: {
         status: "approved",
         finalReply,
-        recoveryCode: code,
-        recoveryCodeAt: now,
         decidedBy,
         decidedAt: now,
       },
     });
-    return NextResponse.json({ id, status: "approved", posted: true, recoveryCode: code });
+    return NextResponse.json({ id, status: "approved", posted: true });
   }
 
   // ── compensate: manager captured the phone offline ──────────────────────
