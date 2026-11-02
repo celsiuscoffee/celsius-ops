@@ -6,6 +6,7 @@ import { hashPin } from "@celsius/auth";
 import { pinInUse } from "@/lib/hr/pin-policy";
 import { applyStaffPreset } from "@/lib/staff-access-presets";
 import { seedLeaveBalancesForHire } from "@/lib/hr/leave-seed";
+import { resolveTempPin, tempPinRefusal } from "@/lib/hr/temp-pin";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,24 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // No PIN typed: derive the handover PIN from the IC (owner 2026-10-24).
+  // Only when an IC is on hand — a record without one (HR-only, no login) is
+  // created PIN-less exactly as before, rather than being refused.
+  let effectivePin: string | null = pin ? String(pin) : null;
+  let derivedPin: string | null = null;
+  if (!effectivePin && ic_number) {
+    const resolved = await resolveTempPin(String(ic_number), pinInUse);
+    if (resolved.ok) {
+      effectivePin = resolved.pin;
+      derivedPin = resolved.pin;
+    } else if (resolved.reason !== "no_ic") {
+      // bad_ic / taken are worth stopping for: carrying on would create the
+      // hire with no way to sign in, and HR would not learn why until the
+      // employee tried. no_ic cannot happen here (ic_number is truthy).
+      return NextResponse.json({ error: tempPinRefusal(resolved.reason) }, { status: 409 });
+    }
+  }
+
   // Phone is optional now — contract staff / HR-only records don't need one.
   // Only check uniqueness when a phone was provided.
   const phoneValue = (phone || "").trim() || null;
@@ -71,7 +90,10 @@ export async function POST(req: NextRequest) {
         // Provision staff-app access from the position's preset instead of an
         // empty footprint, so new hires can see their tabs on day one.
         ...applyStaffPreset({ appAccess: [], moduleAccess: {} }, position),
-        pin: pin ? await hashPin(pin) : null,
+        pin: effectivePin ? await hashPin(effectivePin) : null,
+        // A PIN chosen by HR, or derived from the IC, is a handover value and
+        // not the employee's own — they must replace it at first sign-in.
+        mustChangePin: effectivePin ? true : false,
       },
       select: { id: true, name: true, role: true, outletId: true },
     });
@@ -137,7 +159,10 @@ export async function POST(req: NextRequest) {
       created_by: session.id,
     });
 
-    return NextResponse.json({ user }, { status: 201 });
+    // tempPin is returned ONLY when this route derived it, so HR can hand it
+    // over. A PIN they typed themselves is not echoed back — they already
+    // know it, and repeating it just puts it in another log.
+    return NextResponse.json({ user, tempPin: derivedPin }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create employee";
     return NextResponse.json({ error: message }, { status: 500 });

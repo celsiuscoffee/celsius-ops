@@ -142,6 +142,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         return NextResponse.json({ error: "That PIN is already used by another account — choose a different one" }, { status: 409 });
       }
       updateData.pin = await hashPin(String(body.pin));
+      // A manager resetting someone's PIN is a handover, same as a new hire.
+      updateData.mustChangePin = true;
     } else {
       return NextResponse.json({ error: "PIN must be exactly 6 digits" }, { status: 400 });
     }

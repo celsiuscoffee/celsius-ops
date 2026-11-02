@@ -134,6 +134,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `PIN already used by ${dupName} at this outlet` }, { status: 409 });
     }
     data.pin = await hashPin(pin);
+    data.mustChangePin = true;
   }
 
   const user = await prisma.user.create({ data: data as never });

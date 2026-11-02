@@ -118,7 +118,9 @@ export default function LoginPage() {
         return;
       }
       localStorage.setItem("staff_outlet_id", outletId);
-      window.location.href = next;
+      // A PIN HR issued is a handover value — send them straight to replacing
+      // it. Middleware enforces this too, so skipping here only costs a hop.
+      window.location.href = data.mustChangePin ? "/change-pin" : next;
     } catch { setError("Connection error. Please try again."); }
     finally { setLoading(false); }
   };

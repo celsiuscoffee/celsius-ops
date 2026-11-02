@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { createSession, getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hashPin, verifyPin } from "@celsius/auth";
 
@@ -45,8 +45,13 @@ export async function POST(req: NextRequest) {
   const hashed = await hashPin(newPin);
   await prisma.user.update({
     where: { id: session.id },
-    data: { pin: hashed, updatedAt: new Date() },
+    data: { pin: hashed, mustChangePin: false, updatedAt: new Date() },
   });
+
+  // The flag lives in the JWT, so clearing it in the database is not enough:
+  // without a fresh token the middleware would keep redirecting them back
+  // here forever, having just done what was asked.
+  await createSession({ ...session, mustChangePin: false });
 
   return NextResponse.json({ success: true });
 }

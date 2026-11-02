@@ -74,18 +74,26 @@ export async function POST(req: NextRequest) {
     ? await prisma.outlet.findUnique({ where: { id: finalOutletId }, select: { name: true } })
     : null;
 
+  // Same gate as the web login: a PIN somebody else chose must be replaced
+  // before anything else works. The native app reads this to open its
+  // change-PIN screen, and the middleware enforces it regardless of whether
+  // the installed bundle honours it.
+  const mustChangePin = u.mustChangePin === true;
+
   const sessionUser = {
     id: u.id,
     name: u.name,
     role: u.role,
     outletId: finalOutletId,
     outletName: selectedOutlet?.name ?? u.outlet?.name ?? null,
+    mustChangePin,
   };
 
   const token = await createToken(sessionUser);
 
   return NextResponse.json({
     token,
+    mustChangePin,
     user: {
       id: u.id,
       name: u.name,
@@ -93,6 +101,7 @@ export async function POST(req: NextRequest) {
       outletId: finalOutletId,
       outletName: sessionUser.outletName,
       moduleAccess: u.moduleAccess ?? {},
+      mustChangePin,
     },
   });
 }

@@ -31,6 +31,65 @@ async function isSessionTokenValid(token: string): Promise<boolean> {
   }
 }
 
+/**
+ * True when this session is carrying a PIN somebody else chose (HR issued it,
+ * or a manager reset it) that the holder has not replaced yet.
+ *
+ * Fails CLOSED-ish by returning false on an unreadable token: an unverifiable
+ * token is already handled as "not signed in" below, and treating it as
+ * must-change would redirect people into a screen they cannot authenticate to.
+ */
+async function mustChangePin(token: string): Promise<boolean> {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) return false;
+  try {
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
+    return payload.mustChangePin === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The only things reachable while a temp PIN is outstanding. Everything else —
+ * every page, and every /api/* route the native app calls — is refused until
+ * the PIN is replaced.
+ *
+ * A client-side redirect would not be enough: apps/staff-native talks to these
+ * same endpoints, and a build that predates the change-PIN screen, or a stale
+ * cached web bundle, would sail straight past a flag it never reads. The gate
+ * has to be here, where neither can skip it.
+ */
+const TEMP_PIN_ALLOWED = [
+  "/change-pin",            // the page they are sent to
+  "/api/auth/change-pin",   // the call that clears the flag
+  "/api/auth/logout",
+  "/api/auth/me",
+  "/login",
+  "/privacy",
+];
+
+/**
+ * Static and framework paths, never gated by anything. The temp-PIN gate and
+ * the signed-in redirect below share this list on purpose: if the gate caught
+ * /_next/* the change-PIN page would load with no JavaScript, stranding the
+ * very person it exists to unblock.
+ */
+function isPublicAsset(pathname: string): boolean {
+  return (
+    pathname === "/login" ||
+    pathname === "/privacy" ||
+    pathname.startsWith("/_next") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/icon.png" ||
+    pathname === "/apple-touch-icon.png" ||
+    pathname === "/sw.js" ||
+    pathname === "/manifest.json" ||
+    pathname.startsWith("/images/") ||
+    pathname.startsWith("/fonts/")
+  );
+}
+
 const ALLOWED_ORIGINS = [
   "staff.celsiuscoffee.com",
 ];
@@ -62,19 +121,33 @@ export async function middleware(request: NextRequest) {
     return r;
   };
 
-  if (
-    pathname === "/login" ||
-    pathname === "/privacy" ||
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico" ||
-    pathname === "/icon.png" ||
-    pathname === "/apple-touch-icon.png" ||
-    pathname === "/sw.js" ||
-    pathname === "/manifest.json" ||
-    pathname.startsWith("/images/") ||
-    pathname.startsWith("/fonts/")
-  ) {
+  // Temp-PIN gate. Deliberately BEFORE the /api/ bypass below: that bypass
+  // exists so route handlers can do their own auth, but a staffer holding a
+  // handover PIN must not reach any handler at all.
+  const sessionToken = request.cookies.get(COOKIE_NAME)?.value;
+  const bearer = (request.headers.get("authorization") ?? "").match(/^Bearer\s+(.+)$/i)?.[1];
+  const anyToken = sessionToken ?? bearer;
+  const gateable =
+    !isPublicAsset(pathname) &&
+    !TEMP_PIN_ALLOWED.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  if (anyToken && gateable) {
+    if (await mustChangePin(anyToken)) {
+      if (isApi) {
+        return buildResponse(() =>
+          NextResponse.json(
+            {
+              error: "Set your own PIN before continuing.",
+              code: "must_change_pin",
+            },
+            { status: 403 },
+          ),
+        );
+      }
+      return NextResponse.redirect(new URL("/change-pin", request.url));
+    }
+  }
+
+  if (isPublicAsset(pathname) || pathname.startsWith("/api/")) {
     return buildResponse(() => NextResponse.next());
   }
 

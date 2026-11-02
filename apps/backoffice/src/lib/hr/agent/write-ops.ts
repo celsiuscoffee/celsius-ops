@@ -400,11 +400,15 @@ const UPDATABLE_PROFILE_FIELDS = [
 async function execUpdateDetails(p: Record<string, unknown>): Promise<string> {
   const targetId = str(p.targetId);
   if (!targetId) throw new Error("targetId required");
-  const userData: Record<string, string> = {};
+  // boolean as well as string: setting a PIN also flips mustChangePin.
+  const userData: Record<string, string | boolean> = {};
   for (const f of UPDATABLE_USER_FIELDS) if (str(p[f])) userData[f] = f === "bankAccountNumber" ? digitsOnly(str(p[f])) : str(p[f]);
   const profilePairs: Array<[string, string]> = [];
   for (const f of UPDATABLE_PROFILE_FIELDS) if (str(p[f])) profilePairs.push([f, str(p[f])]);
-  if (str(p.pin)) userData.pin = await hashPin(str(p.pin));
+  if (str(p.pin)) {
+    userData.pin = await hashPin(str(p.pin));
+    userData.mustChangePin = true;
+  }
   if (Object.keys(userData).length === 0 && profilePairs.length === 0) throw new Error("nothing to update");
 
   await prisma.$transaction(async (tx) => {
@@ -578,7 +582,7 @@ async function execSetPin(p: Record<string, unknown>): Promise<string> {
   const pin = str(p.pin);
   if (!targetId) throw new Error("targetId required");
   if (!/^\d{4,6}$/.test(pin)) throw new Error("PIN must be 4-6 digits");
-  await prisma.user.update({ where: { id: targetId }, data: { pin: await hashPin(pin) } });
+  await prisma.user.update({ where: { id: targetId }, data: { pin: await hashPin(pin), mustChangePin: true } });
   return "✅ PIN updated (stored hashed)";
 }
 
