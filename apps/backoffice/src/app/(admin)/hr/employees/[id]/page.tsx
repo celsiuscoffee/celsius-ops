@@ -1248,6 +1248,18 @@ export default function EmployeeDetailPage() {
             <Field label="Bank">
               <select value={bank.bankName} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} className="input">
                 <option value="">— Select bank —</option>
+                {/* A stored name that isn't in MY_BANKS has no matching option, so
+                    the select falls back to the placeholder and the profile LOOKS
+                    like it has no bank — then saving anything on this screen writes
+                    that blank back and silently clears a payroll field. The bulk
+                    imports wrote banks' full legal names ("Maybank Islamic Berhad",
+                    "CIMB Bank Berhad") where this list holds short ones, so this is
+                    the normal state for those records, not an edge case. Keep the
+                    stored value visible and selected until someone deliberately
+                    picks another. */}
+                {bank.bankName && !MY_BANKS.includes(bank.bankName) && (
+                  <option value={bank.bankName}>{bank.bankName}</option>
+                )}
                 {MY_BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
               </select>
             </Field>
