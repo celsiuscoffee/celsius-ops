@@ -11,6 +11,42 @@ current month.
 
 ## Verified facts
 
+- 2026-10-30 — **Dividend basis, final Q3 + restated Q1/Q2 (owner decisions).**
+  Q2 was paid off the backoffice sourced P&L (`/finance/reports` pnl, Conezion
+  Apr–Jun net RM54,901.04 → RM11,666.48; that report has no stock movement, no
+  card/QR fees, Google-only ads). Q1 was paid off the accountant sheet with an
+  uncounted RM48,112 closing stock. Q3 decided: Sunmi tills (RM2,262 Con, RM2,257
+  Tam, Sep staff claims) capitalised; Gosame Bukit Tunku RM1,500 (25 Jul, into
+  2644) = payment for assets bought from Conezion → other income. **Q3: Conezion
+  RM7,060.35 (RM706.03/unit), Mikofee RM2,239.76.** Q1–Q3 supported vs paid:
+  Conezion 18,418 vs 21,859 (≈RM3,441 over); Tamarind 4,344 vs 3,748 (≈RM596
+  under). Offset decision still with the owner. Page:
+  https://claude.ai/artifact/DqTh7mWkK228vXLn1VSYxX. HQ floaters (Syafiq Aiman,
+  Adam Kelvin, Adam Ariff) clock in at outlets but are paid by HQ with no
+  recharge since Q2 — owner to decide outlet vs management-fee.
+
+- 2026-10-30 — **Transfer records repaired; Q3 dividends set on the delivery
+  pack (owner decision).** 112 `StockTransferItem` lines saved without a unit got
+  `productPackageId` = the pack the sending outlet usually receives that product
+  in (fallback: largest package); 97 transfers set COMPLETED with
+  `completedAt`/`receivedAt` = `createdAt` and a "Repaired 2026-10-30" note. One
+  transfer stays PENDING (Dried Orange Peel has no package). `StockBalance` was
+  not touched. Q3 dividends on that basis: **Conezion RM6,260.90 (RM626.09/unit),
+  Tamarind→Mikofee RM1,760.12.** Pages: Conezion https://claude.ai/artifact/JgkU3Yx6d5rPBaSGKbWSx2,
+  Tamarind https://claude.ai/artifact/Fi4L34sJWueEt2gzfi1MGt.
+
+- 2026-10-30 — **Q2 rebuilt on the same basis — Q2 dividends paid look high.**
+  Q2 (Apr–Jun) from unified_sales, INGREDIENT invoices (all PAID; placeholders
+  repeating a real bill removed: Con RM2,410, Tam RM1,941), Collective Project
+  RM2,815 moved in from Q3, completed transfers at delivery pack (Con net out
+  RM2,939, Tam net in RM5,391), hr_payroll_items, bank-feed categories by
+  expense month. Stock held flat (no usable 31 Mar count). Grab/card fees
+  estimated at Q3 rate. Result: Conezion EBITDA 35,507 → dividend RM7,511 vs
+  **RM11,666.48 paid**; Tamarind EBITDA 9,903 → RM2,104 vs **RM3,747.79 paid**.
+  No Q2 software bills found (Q3 ~RM3.9k/outlet). Side-by-side page:
+  https://claude.ai/artifact/DqTh7mWkK228vXLn1VSYxX. Ask the accountant for the
+  Q2 workings before Q3 is paid.
+
 - 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
   PO send mints a placeholder bill; when the real bill is recorded via Quick
   Upload (pay-and-claim) or the invoices page it lands on a NEW order and the
@@ -2909,6 +2945,14 @@ _Format: `YYYY-MM-DD — <symptom> — <evidence> — <hypothesis/fix> — <bloc
   windows is the error bar on the conclusion.
 
 ## Resume pointer
+
+- 2026-10-30 — **Q3 dividends await owner sign-off + accountant.** Open:
+  confirm the 15 Conezion (RM9,349.56) and 9 Tamarind (RM4,344.67) September
+  orders with no delivery/payment record; Tamarind interest/depreciation; the
+  Q2 over-payment question; cake/egg package fixes (Mudslide, Burnt
+  Cheesecake, Biscoff Batik, Telur Omega) need the owner's OK; Dried Orange
+  Peel needs a package so its transfer can complete; cancelling a PO still
+  doesn't retire its GRNI placeholder; Tamarind water bill 10039050 paid twice.
 
 - 2026-09-11 — **Three things waiting on a human, none of them code.**
   (1) **Confirm the August monthly run** before anyone recomputes it — see the
