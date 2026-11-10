@@ -11,6 +11,27 @@ current month.
 
 ## Verified facts
 
+- 2026-11-10 — **"Sales are bad" investigation: supply-side menu loss.**
+  Live `/api/menu/availability` at 23:32 MYT: **Tamarind 36 of 87 menu
+  items 86'd** (incl. every Nasi Lemak variant, Mee/Bihun Kari, all pastas,
+  Loaded Fries, Korean Crispy Chicken, croissants, fruit teas, Earl Grey,
+  Affogato), **Putrajaya 22/87** (fruit teas, croissants, NYC cookies, Roti
+  Bakar ×3, Egg Sando), Shah Alam 7/87 (cookies + croissants). 86s never
+  auto-reset — they stay until someone un-86s them. **Tamarind online
+  ordering was manually force-closed** (`app_settings.outlet_open_override =
+  {"tamarind":true}`, `is_open=false` seen at 14:23 MYT inside its 08:00–22:30
+  hours; the override only clears at 05:30 MYT). Source: POS "ordering-open"
+  toggle (`apps/backoffice/src/app/api/pos/ordering-open`). **Could not
+  measure the sales drop itself:** the Supabase connector only reaches
+  `gosame-db`, not Celsius prod (`kqdcdhpn…` → permission denied); Vercel
+  keeps 1 day of logs; Sentry token expired. Read access worked via
+  `mcp__Vercel__web_fetch_vercel_url` on order.celsiuscoffee.com (the sandbox
+  proxy blocks direct curl to it). **Security:** `PUT /api/settings`
+  (apps/order) has NO auth — the code comment says "protected by middleware"
+  but middleware only guards /api/push/*; CSRF is Origin-based, so a non-browser
+  client can write any `app_settings` key (outlet hours, open override).
+  Not exploited-tested.
+
 - 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
   PO send mints a placeholder bill; when the real bill is recorded via Quick
   Upload (pay-and-claim) or the invoices page it lands on a NEW order and the
