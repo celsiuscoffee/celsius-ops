@@ -11,6 +11,33 @@ current month.
 
 ## Verified facts
 
+- 2026-11-11 — **Sales drop investigated: step-down from w/c 5 Oct, sharp
+  break Fri 9 Oct.** `unified_sales` nett ~RM68k/wk (Aug–Sep) → ~RM52k/wk
+  (Oct 5 → Nov 8), −23%: txns −15%, AOV −7%. Broad — all 3 outlets and all
+  channels (pos −17%, pickup −24%, grab −18%); Fri/Sat peaks hit hardest
+  (RM10–12k → RM6–8k). Discounts/basket size did NOT rise. **Real money,
+  not capture:** pos_order_payments card ~31.5k→25k/wk ≈ GHL bank card
+  settlements; bank sales inflow (card+RM+QR+grab) ~62–65k → ~51–55k/wk.
+  Loss is almost all **loyalty-member** orders (~1,180 → ~950/wk);
+  non-member orders ~flat. Contributors found: (1) **Quarter tier reset
+  bug** — `evaluate_member_tier` (DB fn) on lock expiry re-qualifies on the
+  NEW quarter's spend (≈ RM0 on day 1), so on 1 Oct every Silver/Gold/Plat
+  was demoted to Member at their next visit: 62 of ~86 Sept tier-discount
+  users now Member (14 Gold, 47 Silver); Gold-5% orders 51/wk → ~4/wk,
+  Platinum 0. Should qualify on the quarter just ended. Direct cohort spend
+  only −RM600/wk, so a minor slice. (2) **Google review purge** —
+  ReviewDailySnapshot: Putrajaya 1466 → 1340 on 6 Oct, Tamarind 492 → 414
+  on 13 Oct (Shah Alam untouched); new reviews ~0 since. Timing matches the
+  9 Oct break; unconfirmed whether GBP shows a warning/rank penalty.
+  Shah Alam fell ~17% without a purge, so not the whole story. Ruled out:
+  promo/price/discount changes, cash (≈0, cashless), SMS (none since Jun).
+  **Bank anomaly:** GHL MID 6600032297 paid lumps RM12.5k (2 Nov), 30.4k
+  (6 Nov), 37.0k + 30.6k (10 Nov) vs ≤RM3k pieces before (monthly 30–40k
+  since Jul vs 60k+ H1) — looks like held settlements released; confirm
+  with GHL. Access: Celsius DB = Supabase `kqdcdhpnyuwrxqhbuyfl` via
+  Management API (token on the celsius-ops env); the Supabase MCP only
+  sees gosame-db.
+
 - 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
   PO send mints a placeholder bill; when the real bill is recorded via Quick
   Upload (pay-and-claim) or the invoices page it lands on a NEW order and the
