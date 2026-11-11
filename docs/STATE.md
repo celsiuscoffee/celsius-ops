@@ -33,7 +33,21 @@ current month.
   86s (see PR #1276):** distinct products sold/wk Putrajaya 83 → 62–72,
   Tamarind 80 → 65–67 from w/c 5–12 Oct (Shah Alam ~flat); croissants,
   fruit teas, Roti Bakar lose most — but core coffee (Black −61/wk, Latte
-  −59/wk) fell too, so fewer customers overall is the main driver. Ruled out:
+  −59/wk) fell too, so fewer customers overall is the main driver.
+  (4) **Google Ads served NOTHING 6–29 Oct** (biggest single lever found):
+  ads-daily sync (queries yesterday only) returned 0 metric rows AND 0
+  search-term rows every day 6–29 Oct with status OK; ~RM200/day until 5 Oct,
+  resumes 30 Oct (~RM350/day). Spend RM2.5–2.9k/wk in Sept → RM114 → 0 → 0.
+  The ads-autopilot never noticed: it "restored RM70/day" on 8 Oct and judged
+  the till "healthy" on 24 Oct while nothing served. Its own Sep 26 pause
+  probe measured till index 0.88 without ads (~12% of till ≈ RM7–8k/wk
+  fleet) — the right size for about half the drop. Cause of the dark period
+  unknown (Sept invoice RM5,965 paid 19 Oct; Aug paid 18 Sep with no outage)
+  — check Google Ads account history (billing/policy). Sales did NOT visibly
+  rebound in the 10 days after ads returned. Also NOT causes: prices (unit
+  prices flat), seasonality (Sep→Nov 2025 flat ~RM55–60k/wk), regular churn
+  (≥3-visit members return at 63% within 2wk, unchanged Aug→Oct). Aug–Sep
+  2026 (~RM68k/wk) ran well above 2025 (~RM57k). Ruled out:
   promo/price/discount changes, cash (≈0, cashless), SMS (none since Jun).
   **Bank anomaly:** GHL MID 6600032297 paid lumps RM12.5k (2 Nov), 30.4k
   (6 Nov), 37.0k + 30.6k (10 Nov) vs ≤RM3k pieces before (monthly 30–40k
