@@ -29,7 +29,11 @@ current month.
   ReviewDailySnapshot: Putrajaya 1466 → 1340 on 6 Oct, Tamarind 492 → 414
   on 13 Oct (Shah Alam untouched); new reviews ~0 since. Timing matches the
   9 Oct break; unconfirmed whether GBP shows a warning/rank penalty.
-  Shah Alam fell ~17% without a purge, so not the whole story. Ruled out:
+  Shah Alam fell ~17% without a purge, so not the whole story. (3) **Menu
+  86s (see PR #1276):** distinct products sold/wk Putrajaya 83 → 62–72,
+  Tamarind 80 → 65–67 from w/c 5–12 Oct (Shah Alam ~flat); croissants,
+  fruit teas, Roti Bakar lose most — but core coffee (Black −61/wk, Latte
+  −59/wk) fell too, so fewer customers overall is the main driver. Ruled out:
   promo/price/discount changes, cash (≈0, cashless), SMS (none since Jun).
   **Bank anomaly:** GHL MID 6600032297 paid lumps RM12.5k (2 Nov), 30.4k
   (6 Nov), 37.0k + 30.6k (10 Nov) vs ≤RM3k pieces before (monthly 30–40k
