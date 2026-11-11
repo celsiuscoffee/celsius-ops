@@ -52,7 +52,14 @@ current month.
   (5) **BOGO voucher blast expired:** loop runs on 30–31 Aug issued ~2,900
   "Buy 1 Free 1 Drink" (30-day validity); BOGO redemptions 141/104/88/68 per
   wk in Sept → 17/12/19/31/19 from w/c 5 Oct (issuance ~1,000/wk → ~430/wk);
-  "Free Drink (spend RM25)" stopped 18 Oct. Sept was partly a promo bump.
+  "Free Drink (spend RM25)" stopped 18 Oct. **RETRACTED as a cause:** the
+  loop engine's own holdouts show BOGO had ~zero incremental lift — Merdeka
+  blast (31 Aug, 2,900) conv 7.3% vs holdout 7.6%, RM2.19 vs RM2.49 per
+  recipient; Merdeka 3-arm test b1f1 12.5% vs holdout 12.9% (RM10-off and
+  15%-off arms were WORSE than holdout); product_launch 15.0% vs 17.5%. The
+  redemptions were mostly subsidised visits that would have happened anyway,
+  so their expiry does not explain the drop. Owner asked (11 Nov) to bring
+  BOGO back at the old volume; paused pending owner decision given this.
   (6) **Menu unavailability, quantified:** items OFF on 11 Nov sold
   ~RM7.9k/wk in Sept vs ~RM4.0k/wk last 2 wks (part is general decline);
   long-dead: Salted Egg Croissant (0 sales since ~1 Oct, all outlets),
