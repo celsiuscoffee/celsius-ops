@@ -70,7 +70,18 @@ current month.
   `outlet-tam/con/sa` in pos_orders. Also not causes: pickup payment
   failures (steady ~15%), points earn/redeem (normal). Underlying trend:
   consistent-source monthly avg Jun 72.8k → Jul 70.8k → Aug 69.5k → Sep 65.2k
-  → Oct/Nov 55.2k per wk — a slide began before October. Ruled out:
+  → Oct/Nov 55.2k per wk — a slide began before October.
+  (7) **4-week block compare (Jul20–Aug16 → Oct12–Nov08, 3 outlets, ex
+  consignment):** sales 278k→210k, tx 9,637→7,846, AOV 28.89→26.74.
+  Unique members 3,739→2,626 (−30%) but visits/member flat (1.57→1.61) and
+  block-to-block member retention flat (~22%); new member sign-ups
+  2,512→2,259→1,843→1,455 (−42%) — the loss is customer INFLOW, not
+  regulars churning. AOV drop = food: % till orders with food 45.4→40.7,
+  food RM/order 10.48→8.86, items/order 2.11→1.96; Tamarind AOV 25.0→23.0
+  and sales −25% in the last block (heaviest 86s). Member AOV 27.37→24.91;
+  Grab AOV 38.4→33.3. NOTE: unified_sales blocks before mid-Aug include
+  late-settling Nilai/IOI consignment — exclude it for like-for-like.
+  Ruled out:
   promo/price/discount changes, cash (≈0, cashless), SMS (none since Jun).
   **Bank anomaly:** GHL MID 6600032297 paid lumps RM12.5k (2 Nov), 30.4k
   (6 Nov), 37.0k + 30.6k (10 Nov) vs ≤RM3k pieces before (monthly 30–40k
