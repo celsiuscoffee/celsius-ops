@@ -11,6 +11,14 @@ current month.
 
 ## Verified facts
 
+- 2026-11-11 — **Back-office structure audit** (`docs/design/backoffice-structure.md`,
+  proposal only). 175 routes; nav.tsx registers 103 (86 visible, 17 hidden); ~60 pages
+  are not registered, and 26 of them sit under no registered prefix, so the client route
+  gate in `(admin)/layout.tsx` doesn't check them. No page-view data exists (ActivityLog
+  only logs actions), so start with Step 0a (view logging) before retiring anything.
+  Owner questions (CK transfers, which score stays, Growth vs Marketing, Inbox for
+  managers) are open in section 6 of that doc.
+
 - 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
   PO send mints a placeholder bill; when the real bill is recorded via Quick
   Upload (pay-and-claim) or the invoices page it lands on a NEW order and the
