@@ -1,6 +1,6 @@
 # Back-office structure: applying the "office structure" template to Celsius
 
-Status: **proposal, 2026-11-11.** Design only: no code, data or URLs change with this doc.
+Status: **2026-11-11. Step 1 (the menu shell) is built** (see section 2a). The rest is a proposal.
 Source: the Gosamē "Office structure: a template for the Celsius back office" note,
 checked here against what `apps/backoffice` really contains today
 (`src/lib/nav.tsx`, 175 `page.tsx` routes).
@@ -81,6 +81,44 @@ Run the business
 
 That makes **13 sidebar entries instead of ~85 links**. Every page below becomes a tab in
 its section.
+
+---
+
+## 2a. What was built first (Step 1), and the Celsius logic behind it
+
+The first build follows how Celsius runs, not the Gosamē template word for word:
+
+- **The back office is for HQ.** `lib/staff-access-presets.ts` gives crew, leads and outlet
+  managers the floor work (counts, wastage, receiving, transfers, checklists, claims) in the
+  staff apps. HOD, accountant, executive and director roles live in the back office. So the
+  back office is for reviewing and deciding, not for entering data.
+- **The team's own words stay:** HR, Procurement, Finance, Ops, "Purchase Orders" /
+  "PO List". "Orders" already means customer orders here, so the template's "Orders"
+  section stays **Procurement**.
+- **No CK section.** `OutletType.CENTRAL_KITCHEN` exists, but no code acts on it. Prep
+  Recipes sits under Menu → Recipes until the CK really runs transfers to outlets.
+- **Rewards is split by job:** Customers (members, reviews, reward history) and Marketing
+  (campaigns, reward channels, Google and Grab ads, local rank).
+
+What changed (`lib/nav.tsx`, `components/section-tabs.tsx`, `(admin)/layout.tsx`):
+
+| Before | After |
+|---|---|
+| 86 sidebar links in 9 expandable sections | **10 sidebar entries**: Sales · Customers · Marketing │ Menu · Stock · Procurement │ HR · Finance · Ops │ Agents |
+| Settings was a sidebar section | **⚙ Settings** in the sidebar footer |
+| Pages listed in the sidebar | **Tabs across the top of the page** (6 at most), with a lighter second row for related pages |
+| Two pages called "Reconciliation" | **Invoice Match** (Procurement) and **Bank Match** (Finance) |
+| Two pages called "Campaigns" | Campaigns (Marketing, the loops) and **Google Campaigns** |
+| Area Scorecard under Rewards | Under **Ops → Performance** (it scores outlets) |
+| AI Agents under Settings → System | Its own **Agents** entry |
+
+All 103 registered pages keep the same URL, permission (`moduleKey`) and hidden setting;
+this was checked mechanically before and after. HR keeps its own module tabs.
+`nav-structure.test.ts` keeps every section at 6 tabs or fewer and stops a page from being
+listed twice.
+
+**Follow-up:** the Staff & Access editor (`lib/modules.ts`, the grant cards) still groups
+permissions under the old section names. It works, but it should be regrouped to match.
 
 ---
 
@@ -226,7 +264,7 @@ The template's order, changed to reuse what Celsius already has. Each step is it
 | **0a** | **Page-view logging.** One `ActivityLog` row (`action: "view"`) per route change, written from `(admin)/layout.tsx`, plus a Settings → Usage page (views per page and per role, last 30 days) | Small | Without it, "Retire" is a guess. Let it run **2–4 weeks before retiring anything** |
 | **0b** | **Register the ~60 unregistered pages in `nav.tsx`** (as `hidden`, with the right `moduleKey`), so ⌘K finds them and the route gate covers them | Small | Most important for the 26 pages the client gate doesn't check. Check that each one's API checks permissions on the server too |
 | **0c** | **Rename the clashes:** Invoice match / Bank match, Google campaigns, and one "Dashboard" per section | Small | Labels only |
-| **1** | **Menu shell:** 13 sections, tab strips (generalise `hr/module-tabs.tsx` into a `SectionTabs` driven by `nav.tsx`), Settings behind the gear | Medium | Labels and grouping only. URLs, data and permissions (`moduleKey`) don't change |
+| **1** ✅ | **Menu shell** (built, see 2a): sections, tab strips (generalise `hr/module-tabs.tsx` into a `SectionTabs` driven by `nav.tsx`), Settings behind the gear | Medium | Labels and grouping only. URLs, data and permissions (`moduleKey`) don't change |
 | **2** | **Inbox** over the existing sources (see section 3) + a "Needs you" strip on Today and on each tab | Medium | Read-only first (links to the existing approval page); one-tap actions after that |
 | **3** | **One page per thing:** item (menu), ingredient, supplier, person, customer | Large | |
 | **4** | **Rebuild the jobs, riskiest first:** PO board + Invoice match → one score in Performance → one Attendance → Bank inbox / Close → Reviews → Standards | Large, several PRs | Payroll and payments need an owner's approval at each step (CLAUDE.md hard rule 6) |

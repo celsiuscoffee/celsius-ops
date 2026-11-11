@@ -18,6 +18,10 @@ current month.
   only logs actions), so start with Step 0a (view logging) before retiring anything.
   Owner questions (CK transfers, which score stays, Growth vs Marketing, Inbox for
   managers) are open in section 6 of that doc.
+  **Step 1 built (same PR):** sidebar = 10 sections + Settings gear; pages as tabs
+  (`components/section-tabs.tsx`, driven by nav.tsx subgroups). Follow-up: regroup the
+  Staff & Access grant cards (`lib/modules.ts`) to the new section names. Local tsc of
+  backoffice needs NODE_OPTIONS=--max-old-space-size=8192 (OOMs at the default).
 
 - 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
   PO send mints a placeholder bill; when the real bill is recorded via Quick

@@ -5,8 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import {
-  ChevronRight,
   LogOut,
+  Settings,
   LayoutDashboard,
   Lock,
   Eye,
@@ -27,9 +27,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
@@ -38,6 +35,7 @@ import {
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { useTheme } from "@/components/theme-provider";
 import { CommandPalette } from "@/components/command-palette";
+import { SectionTabs } from "@/components/section-tabs";
 
 import {
   Dialog,
@@ -53,83 +51,13 @@ import {
   canAccess,
   firstAccessibleHref,
   getVisibleItems,
-  leafIsActive,
   pathMatchesSection,
-  type NavSection,
   type UserProfile,
 } from "@/lib/nav";
 
 // Nav structure, RBAC (canAccess), and active-state helpers live in
 // lib/nav.tsx — shared with the ⌘K palette's page index. This file is just
 // the chrome: sidebar rendering, auth/redirect guards, and page shell.
-
-// Render a section's leaves into the collapsible sub-menu. Handles both flat
-// `items` sections and `subgroups` sections (3rd tier) — subgroups render a
-// small uppercase label header, then their items. RBAC + empty-group hiding
-// preserved exactly. On mobile, picking a page closes the sidebar sheet so
-// the destination is immediately visible.
-function SectionLinks({
-  section,
-  user,
-  pathname,
-}: {
-  section: NavSection;
-  user: UserProfile | undefined;
-  pathname: string;
-}) {
-  const { isMobile, setOpenMobile } = useSidebar();
-  const closeOnMobile = () => {
-    if (isMobile) setOpenMobile(false);
-  };
-
-  if (section.items) {
-    const vis = section.items.filter((item) => !item.hidden && canAccess(user, item.moduleKey));
-    const hrefs = vis.map((i) => i.href);
-    return (
-      <>
-        {vis.map((item) => (
-          <SidebarMenuSubItem key={item.href}>
-            <SidebarMenuSubButton asChild isActive={leafIsActive(pathname, item.href, hrefs)}>
-              <Link href={item.href} onClick={closeOnMobile}>
-                {item.icon}
-                <span className="truncate">{item.label}</span>
-              </Link>
-            </SidebarMenuSubButton>
-          </SidebarMenuSubItem>
-        ))}
-      </>
-    );
-  }
-  if (section.subgroups) {
-    return (
-      <>
-        {section.subgroups.map((sg) => {
-          const vis = sg.items.filter((item) => !item.hidden && canAccess(user, item.moduleKey));
-          if (vis.length === 0) return null;
-          const hrefs = vis.map((i) => i.href);
-          return (
-            <Fragment key={sg.label}>
-              <li className="px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 first:pt-1">
-                {sg.label}
-              </li>
-              {vis.map((item) => (
-                <SidebarMenuSubItem key={item.href}>
-                  <SidebarMenuSubButton asChild isActive={leafIsActive(pathname, item.href, hrefs)}>
-                    <Link href={item.href} onClick={closeOnMobile}>
-                      {item.icon}
-                      <span className="truncate">{item.label}</span>
-                    </Link>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              ))}
-            </Fragment>
-          );
-        })}
-      </>
-    );
-  }
-  return null;
-}
 
 // ─── Theme toggle (sidebar footer) ──────────────────────────────────────
 function SidebarThemeToggle() {
@@ -184,47 +112,20 @@ function SidebarUserFooter({ user, onLogout }: { user: UserProfile; onLogout: ()
 // ─── App Sidebar (single collapsible) ───────────────────────────────────
 function AppSidebar({ user, onLogout }: { user: UserProfile; onLogout: () => void }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const { state, isMobile } = useSidebar();
+  const { isMobile, setOpenMobile } = useSidebar();
   const isDashboard = pathname === "/dashboard" || pathname === "/";
 
-  // Which top-level section is expanded (one at a time). Auto-follows the
-  // active route; the user can toggle any section without leaving the page.
-  const [openSection, setOpenSection] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (pathname === "/dashboard" || pathname === "/") {
-      setOpenSection(null);
-      return;
-    }
-    for (const section of NAV_SECTIONS) {
-      if (pathMatchesSection(pathname, section)) {
-        setOpenSection(section.label);
-        return;
-      }
-    }
-  }, [pathname]);
-
-  // Clicking a section header opens it AND jumps to its first visible page,
-  // so the content area follows the sidebar (owner preference, restored
-  // 2026-07-11 after briefly shipping expand-only — don't change this back).
-  // Clicking the open section while already on one of its pages collapses it.
-  // In the icon-collapsed rail (desktop) the sub-menu can't render, so a
-  // click always navigates.
-  const handleSectionToggle = (section: NavSection) => {
-    const firstHref = getVisibleItems(section, user)[0]?.href;
-    if (state === "collapsed" && !isMobile) {
-      if (firstHref) router.push(firstHref);
-      setOpenSection(section.label);
-      return;
-    }
-    if (openSection === section.label && pathMatchesSection(pathname, section)) {
-      setOpenSection(null);
-      return;
-    }
-    if (firstHref) router.push(firstHref);
-    setOpenSection(section.label);
+  const closeOnMobile = () => {
+    if (isMobile) setOpenMobile(false);
   };
+
+  // One rail entry per section, linking to its first page the user can open;
+  // the section's pages are tabs on the page itself (components/section-tabs).
+  // Settings (placement "footer") is reached from the gear in the footer.
+  const railSections = NAV_SECTIONS.filter((s) => s.placement !== "footer");
+  const settings = NAV_SECTIONS.find((s) => s.placement === "footer");
+  const settingsHref = settings ? getVisibleItems(settings, user)[0]?.href : undefined;
+  const settingsActive = settings ? pathMatchesSection(pathname, settings) : false;
 
   return (
     <Sidebar collapsible="icon">
@@ -254,43 +155,28 @@ function AppSidebar({ user, onLogout }: { user: UserProfile; onLogout: () => voi
             {/* Dashboard — always available */}
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={isDashboard} tooltip="Dashboard">
-                <Link href="/dashboard">
+                <Link href="/dashboard" onClick={closeOnMobile}>
                   <LayoutDashboard />
                   <span>Dashboard</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
 
-            {NAV_SECTIONS.map((section) => {
-              const visible = getVisibleItems(section, user);
-              if (visible.length === 0) return null;
-
-              const sectionActive = pathMatchesSection(pathname, section);
-              const open = openSection === section.label;
-
+            {railSections.map((section) => {
+              const firstHref = getVisibleItems(section, user)[0]?.href;
+              if (!firstHref) return null;
               return (
                 <Fragment key={section.label}>
                   {section.dividerBefore && (
                     <li aria-hidden className="mx-2 my-1 h-px bg-sidebar-border" />
                   )}
                   <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={sectionActive}
-                      tooltip={section.label}
-                      aria-expanded={open}
-                      onClick={() => handleSectionToggle(section)}
-                    >
-                      {section.icon}
-                      <span className="truncate group-data-[collapsible=icon]:hidden">{section.label}</span>
-                      <ChevronRight
-                        className={`ml-auto shrink-0 transition-transform group-data-[collapsible=icon]:hidden ${open ? "rotate-90" : ""}`}
-                      />
+                    <SidebarMenuButton asChild isActive={pathMatchesSection(pathname, section)} tooltip={section.label}>
+                      <Link href={firstHref} onClick={closeOnMobile}>
+                        {section.icon}
+                        <span className="truncate">{section.label}</span>
+                      </Link>
                     </SidebarMenuButton>
-                    {open && (
-                      <SidebarMenuSub>
-                        <SectionLinks section={section} user={user} pathname={pathname} />
-                      </SidebarMenuSub>
-                    )}
                   </SidebarMenuItem>
                 </Fragment>
               );
@@ -300,6 +186,18 @@ function AppSidebar({ user, onLogout }: { user: UserProfile; onLogout: () => voi
       </SidebarContent>
 
       <SidebarFooter>
+        {settings && settingsHref && (
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={settingsActive} tooltip="Settings">
+                <Link href={settingsHref} onClick={closeOnMobile}>
+                  <Settings />
+                  <span>Settings</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        )}
         <SidebarUserFooter user={user} onLogout={onLogout} />
       </SidebarFooter>
       <SidebarRail />
@@ -537,6 +435,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible print:h-auto"
           disabled={pathname?.startsWith("/inventory/supplier-chats") ?? false}
         >
+          <SectionTabs user={user} />
           {children}
         </PullToRefresh>
       </SidebarInset>
