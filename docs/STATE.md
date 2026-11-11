@@ -47,7 +47,23 @@ current month.
   rebound in the 10 days after ads returned. Also NOT causes: prices (unit
   prices flat), seasonality (Sep→Nov 2025 flat ~RM55–60k/wk), regular churn
   (≥3-visit members return at 63% within 2wk, unchanged Aug→Oct). Aug–Sep
-  2026 (~RM68k/wk) ran well above 2025 (~RM57k). Ruled out:
+  2026 (~RM68k/wk) ran well above 2025 (~RM57k). Owner 2026-11-11: ads
+  are back but sales have NOT recovered — so ads are not the main cause.
+  (5) **BOGO voucher blast expired:** loop runs on 30–31 Aug issued ~2,900
+  "Buy 1 Free 1 Drink" (30-day validity); BOGO redemptions 141/104/88/68 per
+  wk in Sept → 17/12/19/31/19 from w/c 5 Oct (issuance ~1,000/wk → ~430/wk);
+  "Free Drink (spend RM25)" stopped 18 Oct. Sept was partly a promo bump.
+  (6) **Menu unavailability, quantified:** items OFF on 11 Nov sold
+  ~RM7.9k/wk in Sept vs ~RM4.0k/wk last 2 wks (part is general decline);
+  long-dead: Salted Egg Croissant (0 sales since ~1 Oct, all outlets),
+  Pomegranate Iced Tea, croissants −80–90% (likely supply). Many items are
+  switched off daily by POS (reason/actor = 'pos', no auto-reset) and stay
+  off overnight. `outlet_product_availability` keeps only the LAST toggle —
+  no history; outlet ids there are `tamarind/conezion/shah-alam` vs
+  `outlet-tam/con/sa` in pos_orders. Also not causes: pickup payment
+  failures (steady ~15%), points earn/redeem (normal). Underlying trend:
+  consistent-source monthly avg Jun 72.8k → Jul 70.8k → Aug 69.5k → Sep 65.2k
+  → Oct/Nov 55.2k per wk — a slide began before October. Ruled out:
   promo/price/discount changes, cash (≈0, cashless), SMS (none since Jun).
   **Bank anomaly:** GHL MID 6600032297 paid lumps RM12.5k (2 Nov), 30.4k
   (6 Nov), 37.0k + 30.6k (10 Nov) vs ≤RM3k pieces before (monthly 30–40k
