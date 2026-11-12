@@ -122,6 +122,39 @@ permissions under the old section names. It works, but it should be regrouped to
 
 ---
 
+## 2b. Approved plan and progress (owner review, 11–12 Nov 2026)
+
+The owner reviewed 45 page mockups (Gosamē UI rules, Celsius brand: light rail,
+espresso main buttons, terracotta only for the logo, active dot and one highlight;
+Peachi wordmark, Space Grotesk, Geist Mono) and approved this order:
+
+| Step | What | Status |
+|---|---|---|
+| 1 | Remove the pure duplicates (list A) and fix dead links (list D) | **Done 12 Nov** |
+| 2 | Celsius UI foundation: tokens, fonts, rail (open section's pages nested), header; phone layout checked on every change | Next |
+| 3 | Today + Inbox (one queue of decisions) | |
+| 4 | HR › Roster (replaces Schedules, Attendance, Roster attendance, Overtime, Leave, Shift swaps) + staff-app shift card with Clock in | |
+| 5 | Merges (list B): Perishables → Items, Pickup landing/analytics, SOP compliance, Monthly cashflow, one SMS tool | |
+| 6 | Remaining sections moved to the new UI | |
+
+**List A, removed 12 Nov** (each old URL redirects; no feature lived only there):
+
+| Removed | Redirects to | Why |
+|---|---|---|
+| `/inventory/categories` (+ `api/inventory/categories`) | `/inventory/groups` | Copy of Groups & Storage (same `itemGroup` table) |
+| `/ops/dashboard` | `/ops/performance` | Same `/api/ops/performance` data |
+| `/settings` (tile hub) | `/settings/outlets` | Repeated the Settings menu; step 2 brings a settings index back here |
+| `/pos` | `/pos/reports` | Link cards only |
+| `/inventory/ai-decisions` | `/inventory/orders/create` | Same recommendations shown on Create PO, Transfers, Wastage; the API stays |
+| `/loyalty/insights` (+ `api/loyalty/admin/ai-insights`) | `/loyalty/members` | No links in; its actions pointed at `/admin/*` (404) |
+
+**List D, fixed 12 Nov:** the purchasing-manager Telegram digest linked
+`/finance/inbox` (no such page): now `/finance`, where its findings
+(`fin_agent_decisions`) show; step 3 repoints it to the Inbox. The `/pickup` low-stock
+link pointed at `/inventory` (no page): now `/inventory/dashboard`.
+
+---
+
 ## 3. Every page, sorted into its section
 
 Key: **Keep** = becomes a tab · **Merge** = folds into the named page · **Retire** = hide,

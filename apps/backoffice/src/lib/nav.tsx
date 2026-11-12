@@ -451,9 +451,9 @@ export const NAV_SECTIONS: NavSection[] = [
       // from nav per owner — pages still exist.
     ],
   },
-  // Ops — is every outlet running to standard? /ops/dashboard renders the
-  // same data as Performance (the superset), so it stays hidden. The Area
-  // Scorecard scores outlets, so it sits with Performance (moved from Rewards).
+  // Ops — is every outlet running to standard? The Area Scorecard scores
+  // outlets, so it sits with Performance (moved from Rewards). The old
+  // /ops/dashboard (same data as Performance) now redirects there.
   {
     label: "Ops",
     icon: <ClipboardCheck className={ICON_SIZE} />,
@@ -462,7 +462,6 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Performance",
         items: [
           { label: "Performance",    href: "/ops/performance",   icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ops:performance" },
-          { label: "Dashboard",      href: "/ops/dashboard",     icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ops:performance", hidden: true },
           { label: "Area Scorecard", href: "/loyalty/dashboard", icon: <Trophy className={ICON_SIZE} />,          moduleKey: "loyalty:dashboard" },
         ],
       },
@@ -507,8 +506,6 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         label: "Business",
         items: [
-          // The Hub tile page duplicates this section link-for-link — hidden.
-          { label: "Hub",            href: "/settings",         icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "settings:outlets", hidden: true },
           { label: "Outlets",        href: "/settings/outlets", icon: <Building2 className={ICON_SIZE} />,       moduleKey: "settings:outlets" },
           { label: "Staff & Access", href: "/settings/staff",   icon: <UserCog className={ICON_SIZE} />,         moduleKey: "settings:staff" },
           { label: "Approval Rules", href: "/settings/rules",   icon: <ShieldCheck className={ICON_SIZE} />,     moduleKey: "settings:rules" },
