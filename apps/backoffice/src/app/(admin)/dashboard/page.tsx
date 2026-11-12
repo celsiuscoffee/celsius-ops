@@ -6,6 +6,7 @@ import { RefreshCw, Boxes, Trash2, Users, Timer, HeartHandshake } from "lucide-r
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell } from "recharts";
 import { useFetch } from "@/lib/use-fetch";
 import { Card } from "@/components/ui/card";
+import { NeedsYou } from "@/components/needs-you";
 
 type UserProfile = { id: string; name: string; role: string };
 
@@ -134,16 +135,19 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Pulse */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Sales" value={view ? formatRM(view.revenue) : "—"}
-          sub={view ? `${view.pctOfTarget}% of ${formatRM(selected ? selected.periodTarget : data?.company.target ?? 0)}` : ""}
-          good={view ? view.onPace : undefined} progress={view?.pctOfTarget} />
-        <Stat label="Avg order" value={view ? `RM ${view.aov}` : "—"} sub={`target RM ${AOV_TARGET}`}
-          good={view ? view.aov >= AOV_TARGET : undefined} />
-        <Stat label="Orders" value={view ? view.orders.toLocaleString() : "—"} sub={data ? `${data.period.days} days` : ""} />
-        <Stat label="Growth" value={view?.growthPct != null ? `${view.growthPct > 0 ? "+" : ""}${view.growthPct}%` : "—"}
-          sub="vs last period" good={view?.growthPct != null ? view.growthPct >= 0 : undefined} />
+      {/* Pulse + Needs you (the Inbox's top five, beside the numbers on desktop) */}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="Sales" value={view ? formatRM(view.revenue) : "—"}
+            sub={view ? `${view.pctOfTarget}% of ${formatRM(selected ? selected.periodTarget : data?.company.target ?? 0)}` : ""}
+            good={view ? view.onPace : undefined} progress={view?.pctOfTarget} />
+          <Stat label="Avg order" value={view ? `RM ${view.aov}` : "—"} sub={`target RM ${AOV_TARGET}`}
+            good={view ? view.aov >= AOV_TARGET : undefined} />
+          <Stat label="Orders" value={view ? view.orders.toLocaleString() : "—"} sub={data ? `${data.period.days} days` : ""} />
+          <Stat label="Growth" value={view?.growthPct != null ? `${view.growthPct > 0 ? "+" : ""}${view.growthPct}%` : "—"}
+            sub="vs last period" good={view?.growthPct != null ? view.growthPct >= 0 : undefined} />
+        </div>
+        <NeedsYou />
       </div>
 
       {/* Branch league — company view */}

@@ -9,7 +9,7 @@
 //   - Header 56 px with the crumb (Section / Page).
 //   - Page tabs: the current page's related views as underline tabs, only when
 //     it has more than one. On a phone the section's pages scroll above them.
-//   - Phone: a top bar and a 4-tab bar (Today · Sales · Procurement · More);
+//   - Phone: a top bar and a 4-tab bar (Today · Inbox · Sales · More);
 //     More opens the rail as a sheet.
 // Everything is read from lib/nav.tsx, so the rail, the crumb, the tabs, ⌘K and
 // the route gate can never disagree. URLs and permissions are untouched.
@@ -18,9 +18,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { Fragment } from "react";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, LogOut, Moon, Search, Settings, Sun, Menu as MenuIcon, BarChart3, Truck } from "lucide-react";
+import { Inbox, LayoutDashboard, LogOut, Moon, Search, Settings, Sun, Menu as MenuIcon, BarChart3 } from "lucide-react";
 import { SidebarContent, SidebarFooter, SidebarHeader, useSidebar } from "@/components/ui/sidebar";
 import { useTheme } from "@/components/theme-provider";
+import { useInbox } from "@/components/needs-you";
 import {
   NAV_SECTIONS,
   getVisibleItems,
@@ -34,6 +35,7 @@ import {
 export const openCommandPalette = () => window.dispatchEvent(new Event("celsius:open-palette"));
 
 const isHome = (p: string) => p === "/" || p === "/dashboard";
+const isInbox = (p: string) => p === "/inbox";
 
 // ─── Rail ───────────────────────────────────────────────────────────────
 
@@ -78,6 +80,8 @@ export function Rail({ user, onLogout, extra }: { user: UserProfile; onLogout: (
   const settingsHref = settings ? getVisibleItems(settings, user)[0]?.href : undefined;
   const settingsOn = settings ? pathMatchesSection(pathname, settings) : false;
   const visibleRail = rail.filter((s) => getVisibleItems(s, user)[0]);
+  const { data: inbox } = useInbox();
+  const inboxCount = inbox?.counts.total ?? 0;
 
   return (
     <>
@@ -102,6 +106,7 @@ export function Rail({ user, onLogout, extra }: { user: UserProfile; onLogout: (
       <SidebarContent className="scrollbar-thin px-3 pb-3">
         <nav aria-label="Main" className="flex flex-col gap-0.5">
           <RailRow href="/dashboard" icon={<LayoutDashboard />} label="Today" active={isHome(pathname)} onNavigate={close} />
+          <RailRow href="/inbox" icon={<Inbox />} label="Inbox" active={isInbox(pathname)} onNavigate={close} count={inboxCount || undefined} />
 
           {visibleRail.map((section: NavSection, i) => {
             const first = getVisibleItems(section, user)[0]?.href;
@@ -211,7 +216,7 @@ function ThemeButton() {
 export function OfficeHeader({ user }: { user: UserProfile }) {
   const pathname = usePathname() ?? "";
   const placement = locate(pathname, user);
-  const sectionLabel = isHome(pathname) ? "Today" : placement?.section.label;
+  const sectionLabel = isHome(pathname) ? "Today" : isInbox(pathname) ? "Inbox" : placement?.section.label;
   const pageLabel = placement?.page && placement.pages.length > 1 ? placement.page.label : undefined;
   const title = pageLabel ?? sectionLabel ?? "Celsius Office";
 
@@ -297,7 +302,8 @@ export function PhoneTabBar({ user }: { user: UserProfile }) {
     return s ? { s, href: getVisibleItems(s, user)[0]?.href } : undefined;
   };
   const sales = sectionHref("Sales");
-  const procurement = sectionHref("Procurement");
+  const { data: inbox } = useInbox();
+  const inboxCount = inbox?.counts.total ?? 0;
   const item = (on: boolean) =>
     "flex flex-1 flex-col items-center gap-[3px] pt-2 text-[11px] " + (on ? "font-semibold text-text" : "text-text-2");
 
@@ -309,14 +315,17 @@ export function PhoneTabBar({ user }: { user: UserProfile }) {
       <Link href="/dashboard" className={item(isHome(pathname))} aria-current={isHome(pathname) ? "page" : undefined}>
         <LayoutDashboard className="size-6" strokeWidth={isHome(pathname) ? 2 : 1.8} />Today
       </Link>
+      <Link href="/inbox" className={item(isInbox(pathname)) + " relative"} aria-current={isInbox(pathname) ? "page" : undefined}>
+        <Inbox className="size-6" strokeWidth={isInbox(pathname) ? 2 : 1.8} />Inbox
+        {inboxCount > 0 && (
+          <span className="absolute top-1 left-[calc(50%+7px)] min-w-[17px] rounded-full bg-danger px-1 text-center font-mono text-[10px] font-semibold leading-[17px] text-on-brand">
+            {inboxCount > 99 ? "99+" : inboxCount}
+          </span>
+        )}
+      </Link>
       {sales?.href && (
         <Link href={sales.href} className={item(pathMatchesSection(pathname, sales.s))}>
           <BarChart3 className="size-6" strokeWidth={1.8} />Sales
-        </Link>
-      )}
-      {procurement?.href && (
-        <Link href={procurement.href} className={item(pathMatchesSection(pathname, procurement.s))}>
-          <Truck className="size-6" strokeWidth={1.8} />Procurement
         </Link>
       )}
       <button type="button" onClick={() => setOpenMobile(!openMobile)} className={item(openMobile)} aria-expanded={openMobile}>
