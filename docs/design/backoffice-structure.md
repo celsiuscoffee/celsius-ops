@@ -132,7 +132,7 @@ Peachi wordmark, Space Grotesk, Geist Mono) and approved this order:
 |---|---|---|
 | 1 | Remove the pure duplicates (list A) and fix dead links (list D) | **Done 12 Nov** |
 | 2 | Celsius UI foundation: tokens, fonts, rail (open section's pages nested), header; phone layout checked on every change | **Done 12 Nov** |
-| 3 | Today + Inbox (one queue of decisions) | Next |
+| 3 | Today + Inbox (one queue of decisions) | **Done 12 Nov** (v1 read-only) |
 | 4 | HR › Roster (replaces Schedules, Attendance, Roster attendance, Overtime, Leave, Shift swaps) + staff-app shift card with Clock in | |
 | 5 | Merges (list B): Perishables → Items, Pickup landing/analytics, SOP compliance, Monthly cashflow, one SMS tool | |
 | 6 | Remaining sections moved to the new UI | |
@@ -168,6 +168,21 @@ link pointed at `/inventory` (no page): now `/inventory/dashboard`.
   `railPages()` decide all of it; `nav-structure.test.ts` pins them.
 - Not yet moved: page insides (step 6), the Inbox tab on the phone bar (step 3 swaps
   Procurement for Inbox).
+
+**Step 3, built 12 Nov (Inbox v1, read only):** `GET /api/inbox` (`lib/inbox/sources.ts`)
+reads the existing queues and links each card to the page where it is decided today:
+leave (pending/escalated), overtime, clock-ins to review (one card), shift swaps awaiting
+approval, pay-rate changes, POs awaiting approval, deliveries with no supplier invoice after
+5 days (one card), overdue supplier invoices (one card) and flagged invoices, payment
+requests awaiting approval, stock transfers to approve or receive, drafted Google review
+replies, low QR feedback, and open finance exceptions (owners/admins). Each source runs only
+if the user can open its page (`canAccess`); managers see only their outlets / team; one
+failing source is named, never hides the rest. `/inbox` page, "Needs you" on Today (top 5),
+Inbox in the rail with its count and in the phone tab bar (replacing Procurement).
+Left out on purpose: agent questions answered on Telegram (`agent_prompts`, no page to open)
+and purchasing-manager findings (`fin_agent_decisions`, never marked handled, so all of them
+would show) — the procurement Telegram digest therefore still links to `/finance`.
+Next: one-tap actions in the Inbox for safe kinds (owner to choose), then step 4.
 
 ---
 

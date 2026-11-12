@@ -11,6 +11,15 @@ current month.
 
 ## Verified facts
 
+- 2026-11-12 — **Backoffice restructure step 3 done (Inbox v1, read only)**, PR
+  celsiuscoffee/celsius-ops#1278. `GET /api/inbox` aggregates 14 existing queues via
+  `apps/backoffice/src/lib/inbox/sources.ts` (gated by `canAccess`, managers scoped with
+  `lib/hr/scope.ts`; inventory/review list routes do NOT scope managers server-side, so the
+  Inbox applies `getAccessibleOutletIds` itself). Not wired against live data in this session
+  (no Celsius DB access here) — first real load should be checked on the Vercel preview or
+  prod; a failing source shows as "Couldn't check …" on the page. `fin_agent_decisions` has
+  no handled state (always applied=false) — needs a dismissed column before it can join.
+
 - 2026-11-12 — **Backoffice restructure step 2 done (Celsius UI foundation)**, same PR
   celsiuscoffee/celsius-ops#1278. Tokens in `apps/backoffice/src/styles/celsius-ui/tokens.css`
   (Gosamē UI names, Celsius values); shadcn vars map onto them; shell in

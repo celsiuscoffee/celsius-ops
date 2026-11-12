@@ -137,7 +137,7 @@ export default function DashboardPage() {
 
       {/* Pulse + Needs you (the Inbox's top five, beside the numbers on desktop) */}
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
           <Stat label="Sales" value={view ? formatRM(view.revenue) : "—"}
             sub={view ? `${view.pctOfTarget}% of ${formatRM(selected ? selected.periodTarget : data?.company.target ?? 0)}` : ""}
             good={view ? view.onPace : undefined} progress={view?.pctOfTarget} />
