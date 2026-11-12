@@ -6,7 +6,6 @@ import {
   Copy,
   Check,
   QrCode,
-  Star,
   ExternalLink,
   Loader2,
   Download,
@@ -225,7 +224,7 @@ export default function ReviewSettingsPage() {
               <div className="rounded-xl border border-border bg-white p-5">
                 <h3 className="font-semibold text-sm">Google Review URL</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Paste your Google Maps review link. Customers with high ratings will be redirected here.
+                  Paste your Google Maps review link. Every customer is offered it, whatever they rate.
                 </p>
                 <input
                   value={googleReviewUrl}
@@ -257,30 +256,10 @@ export default function ReviewSettingsPage() {
                 </div>
               </div>
 
-              {/* Rating threshold */}
-              <div className="rounded-xl border border-border bg-white p-5">
-                <h3 className="font-semibold text-sm">Rating Threshold</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Customers who rate this number of stars or higher will be redirected to Google Reviews.
-                  Lower ratings are captured as internal feedback.
-                </p>
-                <div className="mt-3 flex items-center gap-3">
-                  {[3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      onClick={() => setRatingThreshold(n)}
-                      className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium border transition-colors ${
-                        ratingThreshold === n
-                          ? "border-terracotta bg-terracotta/10 text-terracotta"
-                          : "border-border bg-white text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      <Star className={`h-4 w-4 ${ratingThreshold === n ? "fill-terracotta text-terracotta" : ""}`} />
-                      {n}+ stars
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {/* Rating threshold control REMOVED 2026-11-12: routing customers to
+                  Google by star rating is review gating, which Google forbids
+                  (Putrajaya + Tamarind got a 30-day review restriction). Every
+                  rating now gets the same Google / private-feedback choice. */}
 
               {/* Review page branding */}
               <div className="rounded-xl border border-border bg-white p-5">
@@ -334,7 +313,7 @@ export default function ReviewSettingsPage() {
                 <h3 className="font-semibold text-sm">Your Review QR Code</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Print this QR code and place it at your outlet. Customers scan it, rate their experience,
-                  and get redirected based on their rating.
+                  then choose to post on Google or send private feedback.
                 </p>
 
                 {qrData?.url && (
@@ -399,17 +378,10 @@ export default function ReviewSettingsPage() {
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-bold text-amber-700">{ratingThreshold}+</div>
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">3</div>
                     <div>
-                      <p className="text-sm font-medium">High rating → Google Review</p>
-                      <p className="text-xs text-muted-foreground">Redirected to your Google review page to leave a public review</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">&lt;{ratingThreshold}</div>
-                    <div>
-                      <p className="text-sm font-medium">Low rating → Internal feedback</p>
-                      <p className="text-xs text-muted-foreground">Shows a feedback form. Saved privately for your team to review</p>
+                      <p className="text-sm font-medium">Same choice for every rating</p>
+                      <p className="text-xs text-muted-foreground">Everyone sees both options: post a Google review, or send private feedback to your team. No routing by score (Google forbids review gating).</p>
                     </div>
                   </div>
                 </div>
@@ -419,8 +391,8 @@ export default function ReviewSettingsPage() {
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <p className="text-sm font-medium text-amber-800">Google Review URL not set</p>
                   <p className="mt-1 text-xs text-amber-600">
-                    Go to the &quot;Review settings&quot; tab to add your Google Review URL. Without it, high-rating
-                    customers won&apos;t be redirected.
+                    Go to the &quot;Review settings&quot; tab to add your Google Review URL. Without it, the review page only offers
+                    private feedback.
                   </p>
                 </div>
               )}

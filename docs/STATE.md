@@ -11,6 +11,126 @@ current month.
 
 ## Verified facts
 
+- 2026-11-12 — **Google Business Profile restriction confirmed (owner
+  screenshot): "Reviews and ratings ... restricted" 30 days, "fake
+  engagement policy", public "suspicious reviews were removed" warning.**
+  Putrajaya (purge 6 Oct) and Tamarind (13 Oct) still show 0 new reviews
+  through 11 Nov; Shah Alam unaffected (reviews still arriving). Likely
+  trigger in our code: the QR review page `/review/[outletId]` was REVIEW
+  GATING — ≥4★ auto-redirected to Google, <4★ to a private form (Google
+  forbids selectively soliciting positive reviews). FIXED (owner: "remove
+  them"): every rating now gets the same two options (post on Google /
+  private feedback), no auto-redirect; threshold control removed from
+  /reviews/settings (ReviewSettings.ratingThreshold column left in place,
+  unused by the public page). No review-for-reward found (no missions or
+  rewards mention reviews). Live only after the PR merges (backoffice
+  deploy). Not changed: staff RM10 penalty per attributed negative review
+  (payroll — owner decision) and the daily "review velocity" Telegram nudge.
+
+- 2026-11-12 — **Shah Alam (no Google review purge) fell too → common
+  cause is Google Ads, per outlet.** Per-campaign ads_metric_daily: Putrajaya
+  campaign dark 26 Sep–29 Oct (autopilot pause probe, then account-wide
+  dark), Shah Alam + Tamarind dark 6–29 Oct; all back 30 Oct. Sales steps
+  line up: Putrajaya w/c 5 Oct, Shah Alam + Tamarind w/c 12 Oct. Shah Alam
+  ~RM24k/wk (Aug) → 21k (late Sep) → ~17k from w/c 12 Oct; till −15% orders,
+  pickup −20%, Grab ~flat; AOV only 30.0→29.4 (few 86s there, so not food).
+  Shah Alam first-time member visits/wk ~195 (Sep) → 115/99 (ads dark) →
+  127/118 after ads returned — partial recovery only. Owner's view: a
+  "Google restriction" — if that is the Ads ACCOUNT (not GBP), it explains
+  all three outlets including Shah Alam.
+
+- 2026-11-12 — **Tier rollover fix APPLIED to prod (owner-approved).**
+  `supabase/migrations/112` (evaluate_member_tier qualifies on
+  GREATEST(prev-quarter, current-quarter) spend on lock expiry) and `113`
+  (one-off upgrade-only restore) ran via the Supabase Management API.
+  Restored 102 members: 61 → Silver, 35 → Gold, 6 → Platinum; tier totals
+  now Silver 87, Gold 42, Platinum 13 (Staff/Black Card untouched). Backup +
+  rollback: `member_brands_tier_restore_20261111` (RLS on, anon no SELECT;
+  rollback SQL at the bottom of 113). Smoke test on a restored Gold member:
+  stays Gold (Q3 RM678.95), locked to 2027-01-01. Note: the read-only API
+  role cannot EXECUTE evaluate_member_tier (ACL = postgres, service_role).
+  **Watch:** Gold/Silver/Platinum % discount usage at the till should rise
+  from ~4/wk Gold back toward the Sept ~50/wk.
+
+- 2026-11-11 — **Sales drop investigated: step-down from w/c 5 Oct, sharp
+  break Fri 9 Oct.** `unified_sales` nett ~RM68k/wk (Aug–Sep) → ~RM52k/wk
+  (Oct 5 → Nov 8), −23%: txns −15%, AOV −7%. Broad — all 3 outlets and all
+  channels (pos −17%, pickup −24%, grab −18%); Fri/Sat peaks hit hardest
+  (RM10–12k → RM6–8k). Discounts/basket size did NOT rise. **Real money,
+  not capture:** pos_order_payments card ~31.5k→25k/wk ≈ GHL bank card
+  settlements; bank sales inflow (card+RM+QR+grab) ~62–65k → ~51–55k/wk.
+  Loss is almost all **loyalty-member** orders (~1,180 → ~950/wk);
+  non-member orders ~flat. Contributors found: (1) **Quarter tier reset
+  bug** — `evaluate_member_tier` (DB fn) on lock expiry re-qualifies on the
+  NEW quarter's spend (≈ RM0 on day 1), so on 1 Oct every Silver/Gold/Plat
+  was demoted to Member at their next visit: 62 of ~86 Sept tier-discount
+  users now Member (14 Gold, 47 Silver); Gold-5% orders 51/wk → ~4/wk,
+  Platinum 0. Should qualify on the quarter just ended. Direct cohort spend
+  only −RM600/wk, so a minor slice. (2) **Google review purge** —
+  ReviewDailySnapshot: Putrajaya 1466 → 1340 on 6 Oct, Tamarind 492 → 414
+  on 13 Oct (Shah Alam untouched); new reviews ~0 since. Timing matches the
+  9 Oct break; unconfirmed whether GBP shows a warning/rank penalty.
+  Shah Alam fell ~17% without a purge, so not the whole story. (3) **Menu
+  86s (see PR #1276):** distinct products sold/wk Putrajaya 83 → 62–72,
+  Tamarind 80 → 65–67 from w/c 5–12 Oct (Shah Alam ~flat); croissants,
+  fruit teas, Roti Bakar lose most — but core coffee (Black −61/wk, Latte
+  −59/wk) fell too, so fewer customers overall is the main driver.
+  (4) **Google Ads served NOTHING 6–29 Oct** (biggest single lever found):
+  ads-daily sync (queries yesterday only) returned 0 metric rows AND 0
+  search-term rows every day 6–29 Oct with status OK; ~RM200/day until 5 Oct,
+  resumes 30 Oct (~RM350/day). Spend RM2.5–2.9k/wk in Sept → RM114 → 0 → 0.
+  The ads-autopilot never noticed: it "restored RM70/day" on 8 Oct and judged
+  the till "healthy" on 24 Oct while nothing served. Its own Sep 26 pause
+  probe measured till index 0.88 without ads (~12% of till ≈ RM7–8k/wk
+  fleet) — the right size for about half the drop. Cause of the dark period
+  unknown (Sept invoice RM5,965 paid 19 Oct; Aug paid 18 Sep with no outage)
+  — check Google Ads account history (billing/policy). Sales did NOT visibly
+  rebound in the 10 days after ads returned. Also NOT causes: prices (unit
+  prices flat), seasonality (Sep→Nov 2025 flat ~RM55–60k/wk), regular churn
+  (≥3-visit members return at 63% within 2wk, unchanged Aug→Oct). Aug–Sep
+  2026 (~RM68k/wk) ran well above 2025 (~RM57k). Owner 2026-11-11: ads
+  are back but sales have NOT recovered — so ads are not the main cause.
+  (5) **BOGO voucher blast expired:** loop runs on 30–31 Aug issued ~2,900
+  "Buy 1 Free 1 Drink" (30-day validity); BOGO redemptions 141/104/88/68 per
+  wk in Sept → 17/12/19/31/19 from w/c 5 Oct (issuance ~1,000/wk → ~430/wk);
+  "Free Drink (spend RM25)" stopped 18 Oct. **RETRACTED as a cause:** the
+  loop engine's own holdouts show BOGO had ~zero incremental lift — Merdeka
+  blast (31 Aug, 2,900) conv 7.3% vs holdout 7.6%, RM2.19 vs RM2.49 per
+  recipient; Merdeka 3-arm test b1f1 12.5% vs holdout 12.9% (RM10-off and
+  15%-off arms were WORSE than holdout); product_launch 15.0% vs 17.5%. The
+  redemptions were mostly subsidised visits that would have happened anyway,
+  so their expiry does not explain the drop. Owner asked (11 Nov) to bring
+  BOGO back at the old volume; paused pending owner decision given this.
+  (6) **Menu unavailability, quantified:** items OFF on 11 Nov sold
+  ~RM7.9k/wk in Sept vs ~RM4.0k/wk last 2 wks (part is general decline);
+  long-dead: Salted Egg Croissant (0 sales since ~1 Oct, all outlets),
+  Pomegranate Iced Tea, croissants −80–90% (likely supply). Many items are
+  switched off daily by POS (reason/actor = 'pos', no auto-reset) and stay
+  off overnight. `outlet_product_availability` keeps only the LAST toggle —
+  no history; outlet ids there are `tamarind/conezion/shah-alam` vs
+  `outlet-tam/con/sa` in pos_orders. Also not causes: pickup payment
+  failures (steady ~15%), points earn/redeem (normal). Underlying trend:
+  consistent-source monthly avg Jun 72.8k → Jul 70.8k → Aug 69.5k → Sep 65.2k
+  → Oct/Nov 55.2k per wk — a slide began before October.
+  (7) **4-week block compare (Jul20–Aug16 → Oct12–Nov08, 3 outlets, ex
+  consignment):** sales 278k→210k, tx 9,637→7,846, AOV 28.89→26.74.
+  Unique members 3,739→2,626 (−30%) but visits/member flat (1.57→1.61) and
+  block-to-block member retention flat (~22%); new member sign-ups
+  2,512→2,259→1,843→1,455 (−42%) — the loss is customer INFLOW, not
+  regulars churning. AOV drop = food: % till orders with food 45.4→40.7,
+  food RM/order 10.48→8.86, items/order 2.11→1.96; Tamarind AOV 25.0→23.0
+  and sales −25% in the last block (heaviest 86s). Member AOV 27.37→24.91;
+  Grab AOV 38.4→33.3. NOTE: unified_sales blocks before mid-Aug include
+  late-settling Nilai/IOI consignment — exclude it for like-for-like.
+  Ruled out:
+  promo/price/discount changes, cash (≈0, cashless), SMS (none since Jun).
+  **Bank anomaly:** GHL MID 6600032297 paid lumps RM12.5k (2 Nov), 30.4k
+  (6 Nov), 37.0k + 30.6k (10 Nov) vs ≤RM3k pieces before (monthly 30–40k
+  since Jul vs 60k+ H1) — looks like held settlements released; confirm
+  with GHL. Access: Celsius DB = Supabase `kqdcdhpnyuwrxqhbuyfl` via
+  Management API (token on the celsius-ops env); the Supabase MCP only
+  sees gosame-db.
+
 - 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
   PO send mints a placeholder bill; when the real bill is recorded via Quick
   Upload (pay-and-claim) or the invoices page it lands on a NEW order and the
