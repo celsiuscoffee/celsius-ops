@@ -108,7 +108,10 @@ export type NavSection = {
   moduleKey?: string; // top-level module check
   items?: NavItem[];
   subgroups?: NavSubgroup[];
-  dividerBefore?: boolean; // start of a new rail cluster
+  dividerBefore?: boolean; // start of a new rail cluster (no group label)
+  // Rail group label shown above the first section of each group
+  // ("Sell", "Make and supply", "Run the business").
+  group?: string;
   // "footer" = not listed in the rail; reached from the gear in the sidebar
   // footer (Settings). Defaults to the rail.
   placement?: "rail" | "footer";
@@ -117,10 +120,10 @@ export type NavSection = {
 const ICON_SIZE = "h-4 w-4";
 
 // Structure (2026-11-11 restructure, docs/design/backoffice-structure.md):
-// the sidebar lists ONE entry per section; a section's pages render as a tab
-// strip across the top of the page (components/section-tabs.tsx). Each
-// subgroup is one tab (link = its first visible page); a subgroup with more
-// than one page gets a lighter second row. Keep it to 6 tabs at most.
+// the rail lists ONE entry per section and the open section's pages nest under
+// it (components/office-shell.tsx, Celsius UI step 2, 12 Nov). Each subgroup is
+// one page (link = its first view the user can open); a subgroup with more than
+// one view shows them as underline tabs under the header. Keep it to 6 pages.
 //
 // Sections follow how Celsius runs, in the team's own words:
 //   sell             → Sales · Customers · Marketing
@@ -136,6 +139,7 @@ const ICON_SIZE = "h-4 w-4";
 export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Sales",
+    group: "Sell",
     icon: <BarChart3 className={ICON_SIZE} />,
     subgroups: [
       {
@@ -170,6 +174,7 @@ export const NAV_SECTIONS: NavSection[] = [
   // the reward mechanics that bring them back are under Marketing.
   {
     label: "Customers",
+    group: "Sell",
     icon: <Users className={ICON_SIZE} />,
     subgroups: [
       {
@@ -201,6 +206,7 @@ export const NAV_SECTIONS: NavSection[] = [
   // discount engine, earn rate…) lives behind the Settings gear.
   {
     label: "Marketing",
+    group: "Sell",
     icon: <Megaphone className={ICON_SIZE} />,
     subgroups: [
       {
@@ -251,8 +257,8 @@ export const NAV_SECTIONS: NavSection[] = [
   // and Grab: what we sell, how it's made, how it's packed.
   {
     label: "Menu",
+    group: "Make and supply",
     icon: <UtensilsCrossed className={ICON_SIZE} />,
-    dividerBefore: true,
     subgroups: [
       {
         label: "Products",
@@ -288,6 +294,7 @@ export const NAV_SECTIONS: NavSection[] = [
   // transfers are done on the floor in the staff app; this is the HQ view.
   {
     label: "Stock",
+    group: "Make and supply",
     icon: <Boxes className={ICON_SIZE} />,
     subgroups: [
       {
@@ -332,6 +339,7 @@ export const NAV_SECTIONS: NavSection[] = [
   // at /inventory/orders. This is the team's vocabulary — don't "fix" it.
   {
     label: "Procurement",
+    group: "Make and supply",
     icon: <Truck className={ICON_SIZE} />,
     subgroups: [
       {
@@ -372,8 +380,8 @@ export const NAV_SECTIONS: NavSection[] = [
   },
   {
     label: "HR",
+    group: "Run the business",
     icon: <Users className={ICON_SIZE} />,
-    dividerBefore: true,
     // BrioHR-style module IA, taken to its conclusion in the 2026-07-11
     // housekeeping: the sidebar lists ONE entry per module; the in-module tab
     // strip (components/hr/module-tabs.tsx — verified to render regardless of
@@ -422,6 +430,7 @@ export const NAV_SECTIONS: NavSection[] = [
   // (daily bank balance / projection); Books is the accrual GL lens.
   {
     label: "Finance",
+    group: "Run the business",
     icon: <Coins className={ICON_SIZE} />,
     subgroups: [
       {
@@ -456,6 +465,7 @@ export const NAV_SECTIONS: NavSection[] = [
   // /ops/dashboard (same data as Performance) now redirects there.
   {
     label: "Ops",
+    group: "Run the business",
     icon: <ClipboardCheck className={ICON_SIZE} />,
     subgroups: [
       {
@@ -690,4 +700,49 @@ export function firstAccessibleHref(user: UserProfile): string | undefined {
     }
   }
   return hiddenFallback;
+}
+
+// ─── Shell placement (rail pages, header crumb, page tabs) ──────────────
+// The Celsius UI shell (components/office-shell.tsx) shows, for the section
+// the current URL sits in: its PAGES nested under the section in the rail,
+// and the current page's related views as underline tabs under the header.
+// A subgroup is one page (link = its first page the user can open) and its
+// items are the tabs; in a flat section (HR, Agents) every visible item is a
+// page with no tabs. Longest-prefix matching over ALL items, hidden included,
+// so a hidden deep page still lights up the page it belongs to.
+
+export type RailPage = { label: string; href: string; hrefs: string[]; tabs: NavItem[] };
+
+export function railPages(section: NavSection, user: UserProfile | undefined): RailPage[] {
+  const visible = (i: NavItem) => !i.hidden && canAccess(user, i.moduleKey);
+  if (section.subgroups) {
+    return section.subgroups
+      .map((sg) => {
+        const tabs = sg.items.filter(visible);
+        return { label: sg.label, href: tabs[0]?.href ?? "", hrefs: sg.items.map((i) => i.href), tabs };
+      })
+      .filter((p) => p.tabs.length > 0);
+  }
+  return (section.items ?? []).filter(visible).map((i) => ({ label: i.label, href: i.href, hrefs: [i.href], tabs: [i] }));
+}
+
+function longestMatch(pathname: string, hrefs: string[]): string | undefined {
+  let best: string | undefined;
+  for (const h of hrefs) {
+    if (pathname === h || pathname.startsWith(h + "/")) {
+      if (!best || h.length > best.length) best = h;
+    }
+  }
+  return best;
+}
+
+export type Placement = { section: NavSection; page?: RailPage; href?: string; pages: RailPage[] };
+
+export function locate(pathname: string, user: UserProfile | undefined): Placement | undefined {
+  const section = NAV_SECTIONS.find((s) => pathMatchesSection(pathname, s));
+  if (!section) return undefined;
+  const pages = railPages(section, user);
+  const href = longestMatch(pathname, getSectionHrefs(section));
+  const page = href ? pages.find((p) => p.hrefs.includes(href)) : undefined;
+  return { section, page, href, pages };
 }

@@ -131,8 +131,8 @@ Peachi wordmark, Space Grotesk, Geist Mono) and approved this order:
 | Step | What | Status |
 |---|---|---|
 | 1 | Remove the pure duplicates (list A) and fix dead links (list D) | **Done 12 Nov** |
-| 2 | Celsius UI foundation: tokens, fonts, rail (open section's pages nested), header; phone layout checked on every change | Next |
-| 3 | Today + Inbox (one queue of decisions) | |
+| 2 | Celsius UI foundation: tokens, fonts, rail (open section's pages nested), header; phone layout checked on every change | **Done 12 Nov** |
+| 3 | Today + Inbox (one queue of decisions) | Next |
 | 4 | HR › Roster (replaces Schedules, Attendance, Roster attendance, Overtime, Leave, Shift swaps) + staff-app shift card with Clock in | |
 | 5 | Merges (list B): Perishables → Items, Pickup landing/analytics, SOP compliance, Monthly cashflow, one SMS tool | |
 | 6 | Remaining sections moved to the new UI | |
@@ -152,6 +152,22 @@ Peachi wordmark, Space Grotesk, Geist Mono) and approved this order:
 `/finance/inbox` (no such page): now `/finance`, where its findings
 (`fin_agent_decisions`) show; step 3 repoints it to the Inbox. The `/pickup` low-stock
 link pointed at `/inventory` (no page): now `/inventory/dashboard`.
+
+**Step 2, built 12 Nov:**
+- `src/styles/celsius-ui/tokens.css`: Gosamē UI token names with Celsius values, light
+  and dark (`.dark`). Tailwind gets token classes (`bg-surface`, `text-text-2`,
+  `border-line`, `bg-rail` …). The shared shadcn variables now read the tokens, so every
+  page has the paper/espresso palette and the espresso main action; the old cool-grey dark
+  overrides read the warm tokens too.
+- Geist Mono is loaded (it was referenced but never loaded).
+- `components/office-shell.tsx`: 236 px paper rail (groups Sell, Make and supply, Run the
+  business; the open section's pages nested; ⌘K "Jump to…"; user, Settings gear, Change
+  password, theme, sign out in the foot), 56 px header with the crumb, underline tabs for a
+  page's related views, and on a phone a top bar, the section's pages as a scrolling row,
+  and a 4-tab bar (Today · Sales · Procurement · More). `lib/nav.tsx` `locate()` and
+  `railPages()` decide all of it; `nav-structure.test.ts` pins them.
+- Not yet moved: page insides (step 6), the Inbox tab on the phone bar (step 3 swaps
+  Procurement for Inbox).
 
 ---
 

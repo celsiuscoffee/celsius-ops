@@ -1,5 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Celsius UI tokens (Gosamē UI names, Celsius values). Everything below reads them. */
+@import "../styles/celsius-ui/tokens.css";
 /* Space Grotesk is loaded via next/font in app/layout.tsx — exposed as
    --font-space-grotesk and wired into @theme below. Loading via @import
    url(...) here conflicts with Tailwind 4's @import expansion order. */
@@ -35,14 +37,56 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-space-grotesk), system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-heading: 'Peachi', Georgia, serif;
 
   --color-terracotta: #C2452D;
   --color-terracotta-light: #D4654F;
   --color-terracotta-dark: #A33822;
   --color-brand-dark: #160800;
-  --color-brand-offwhite: #f5f3f0;
+  --color-brand-offwhite: var(--bg);
+
+  /* Celsius UI token utilities: bg-surface, text-text-2, border-line, bg-rail … */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-line-ctl: var(--line-ctl);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-ink: var(--ink);
+  --color-on-ink: var(--on-ink);
+  --color-ink-hover: var(--ink-hover);
+  --color-hero: var(--hero);
+  --color-on-hero: var(--on-hero);
+  --color-brand: var(--brand);
+  --color-on-brand: var(--on-brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-text: var(--brand-text);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-text: var(--danger-text);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-text: var(--warn-text);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-text: var(--ok-text);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-text: var(--info-text);
+  --color-rail: var(--rail);
+  --color-rail-2: var(--rail-2);
+  --color-rail-line: var(--rail-line);
+  --color-rail-text: var(--rail-text);
+  --color-rail-text-2: var(--rail-text-2);
+  --color-sel: var(--sel);
+  --color-tab: var(--tab);
+  --radius-card: var(--r-card);
+  --radius-ctl: var(--r-ctl);
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -82,88 +126,47 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* The app's shared colour variables (shadcn + sidebar) now read the Celsius UI
+   tokens, so every page picks up the paper/espresso palette and the espresso
+   main action at once. Pages move fully onto the tokens section by section. */
 :root {
-  --background: #ffffff;
-  --foreground: #1a1a1a;
-  --card: #ffffff;
-  --card-foreground: #1a1a1a;
-  --popover: #ffffff;
-  --popover-foreground: #1a1a1a;
-  --primary: #C2452D;
-  --primary-foreground: #ffffff;
-  --secondary: #f5f3f0;
-  --secondary-foreground: #1a1a1a;
-  --muted: #f5f3f0;
-  --muted-foreground: #737373;
-  --accent: #C2452D;
-  --accent-foreground: #ffffff;
-  --destructive: #ef4444;
-  --border: #e5e2de;
-  --input: #e5e2de;
-  --ring: #C2452D;
-  --chart-1: #C2452D;
-  --chart-2: #D4654F;
-  --chart-3: #A33822;
-  --chart-4: #160800;
-  --chart-5: #f5f3f0;
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--raised);
+  --popover-foreground: var(--text);
+  --primary: var(--ink);
+  --primary-foreground: var(--on-ink);
+  --secondary: var(--sunken);
+  --secondary-foreground: var(--text);
+  --muted: var(--sunken);
+  --muted-foreground: var(--text-3);
+  --accent: var(--sunken);
+  --accent-foreground: var(--text);
+  --destructive: var(--danger);
+  --border: var(--line);
+  --input: var(--line-ctl);
+  --ring: var(--text);
+  --chart-1: var(--c1);
+  --chart-2: var(--c2);
+  --chart-3: var(--c3);
+  --chart-4: var(--c4);
+  --chart-5: var(--c5);
   --radius: 0.625rem;
-  --sidebar: #160800;
-  --sidebar-foreground: #f5f3f0;
-  --sidebar-primary: #C2452D;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #2a1a10;
-  --sidebar-accent-foreground: #f5f3f0;
-  --sidebar-border: #2a1a10;
-  --sidebar-ring: #C2452D;
+  --sidebar: var(--rail);
+  --sidebar-foreground: var(--rail-text);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--on-brand);
+  --sidebar-accent: var(--rail-2);
+  --sidebar-accent-foreground: var(--rail-text);
+  --sidebar-border: var(--rail-line);
+  --sidebar-ring: var(--text);
 }
 
 .dark {
-  /* Base — near-black for OLED comfort, but not pure #000 (avoids "void" feel) */
-  --background: #0a0a0b;
-  --foreground: #f1f1f3;
-
-  /* Surface hierarchy — each step is ~6 luminance units brighter for clear elevation */
-  --card: #141416;
-  --card-foreground: #f1f1f3;
-  --popover: #1c1c1f;
-  --popover-foreground: #f1f1f3;
-
-  /* Secondary surfaces */
-  --secondary: #1c1c1f;
-  --secondary-foreground: #f1f1f3;
-  --muted: #18181b;
-  --muted-foreground: #a1a1aa;
-
-  /* Brand — terracotta lifted for AA contrast on dark surfaces */
-  --primary: #D4654F;
-  --primary-foreground: #1a0a06;
-  --accent: #D4654F;
-  --accent-foreground: #1a0a06;
-
-  /* Status */
-  --destructive: #f87171;
-
-  /* Structure — borders are subtle but visible against card surfaces */
-  --border: #2e2e33;
-  --input: #2e2e33;
-  --ring: #D4654F;
-
-  /* Charts — brand sequence, lifted */
-  --chart-1: #D4654F;
-  --chart-2: #C2452D;
-  --chart-3: #e8836e;
-  --chart-4: #f5f3f0;
-  --chart-5: #1c1c1f;
-
-  /* Sidebar — deepest surface for clear separation from content */
-  --sidebar: #050506;
-  --sidebar-foreground: #e5e5e8;
-  --sidebar-primary: #D4654F;
-  --sidebar-primary-foreground: #1a0a06;
-  --sidebar-accent: #1c1c1f;
-  --sidebar-accent-foreground: #f1f1f3;
-  --sidebar-border: #1c1c1f;
-  --sidebar-ring: #D4654F;
+  /* Same mapping as :root; the token values switch in tokens.css. */
+  --input: var(--line-2);
   color-scheme: dark;
 }
 
@@ -189,11 +192,11 @@
   /* Thin, subtle scrollbar — used in the sidebar rail and overflow lists.
      The class was referenced before but never defined, so browsers
      rendered the default ~16px chrome over the 56px-wide rail. */
-  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.15) transparent; }
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
   .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
   .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-  .scrollbar-thin::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.15); border-radius: 3px; }
-  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgb(255 255 255 / 0.3); }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: var(--line-ctl); }
 }
 
 /* ─── Dark mode overrides for hardcoded Tailwind utilities ───────────── */
@@ -203,22 +206,30 @@
 /* ── Backgrounds ──
    Map both unprefixed (bg-white) and dark: prefixed (dark:bg-neutral-800)
    so all surfaces collapse onto the same elevation hierarchy:
-   bg (#0a0a0b) → card (#141416) → elevated (#1c1c1f) → hover (#252528). */
+   bg (#0a0a0b) → card (#141416) → elevated (var(--raised)) → hover (var(--raised-2)). */
 .dark .bg-white, .dark .dark\:bg-white { background-color: var(--card) !important; }
 .dark .bg-brand-offwhite { background-color: var(--background) !important; }
-.dark .bg-gray-50, .dark .bg-neutral-50 { background-color: #18181b !important; }
+.dark .bg-gray-50, .dark .bg-neutral-50 { background-color: var(--surface) !important; }
+/* Translucent greys (bg-gray-50/50 is in ~56 table heads and rows) were never
+   remapped, so in dark mode they rendered as a light-grey band. Same well
+   colour as the light-mode intent: a faint step below the card. */
+.dark .bg-gray-50\/30, .dark .bg-gray-50\/40, .dark .bg-gray-50\/50,
+.dark .bg-gray-50\/60, .dark .bg-gray-50\/70, .dark .bg-gray-50\/80,
+.dark .bg-neutral-50\/40, .dark .bg-slate-50\/50 {
+  background-color: color-mix(in srgb, var(--sunken) 70%, transparent) !important;
+}
 .dark .bg-gray-100, .dark .bg-neutral-100 { background-color: var(--muted) !important; }
-.dark .bg-gray-200, .dark .bg-neutral-200 { background-color: #252528 !important; }
+.dark .bg-gray-200, .dark .bg-neutral-200 { background-color: var(--raised-2) !important; }
 
 /* dark: prefixed surfaces — normalize the neutral-700/800/900 chaos */
 .dark .dark\:bg-neutral-900, .dark .dark\:bg-gray-900 { background-color: var(--card) !important; }
 .dark .dark\:bg-neutral-800, .dark .dark\:bg-gray-800 { background-color: var(--popover) !important; }
-.dark .dark\:bg-neutral-700, .dark .dark\:bg-gray-700 { background-color: #252528 !important; }
-.dark .dark\:bg-neutral-600, .dark .dark\:bg-gray-600 { background-color: #2e2e33 !important; }
+.dark .dark\:bg-neutral-700, .dark .dark\:bg-gray-700 { background-color: var(--raised-2) !important; }
+.dark .dark\:bg-neutral-600, .dark .dark\:bg-gray-600 { background-color: var(--line) !important; }
 .dark .dark\:bg-neutral-950, .dark .dark\:bg-gray-950 { background-color: var(--background) !important; }
 .dark .dark\:hover\:bg-neutral-800:hover, .dark .dark\:hover\:bg-gray-800:hover { background-color: var(--popover) !important; }
-.dark .dark\:hover\:bg-neutral-700:hover, .dark .dark\:hover\:bg-gray-700:hover { background-color: #252528 !important; }
-.dark .dark\:hover\:bg-neutral-600:hover, .dark .dark\:hover\:bg-gray-600:hover { background-color: #34343a !important; }
+.dark .dark\:hover\:bg-neutral-700:hover, .dark .dark\:hover\:bg-gray-700:hover { background-color: var(--raised-2) !important; }
+.dark .dark\:hover\:bg-neutral-600:hover, .dark .dark\:hover\:bg-gray-600:hover { background-color: var(--line-2) !important; }
 
 /* Colored backgrounds → dark tinted versions */
 .dark .bg-red-50 { background-color: rgba(220, 38, 38, 0.12) !important; }
@@ -241,20 +252,20 @@
    Tuned so even "muted" copy (500/400) clears AA contrast on --card. */
 .dark .text-black { color: var(--foreground) !important; }
 .dark .text-neutral-900, .dark .text-gray-900,
-.dark .dark\:text-neutral-900, .dark .dark\:text-gray-900 { color: #fafafa !important; }
+.dark .dark\:text-neutral-900, .dark .dark\:text-gray-900 { color: var(--text) !important; }
 .dark .text-neutral-800, .dark .text-gray-800,
-.dark .dark\:text-neutral-800, .dark .dark\:text-gray-800 { color: #ededed !important; }
+.dark .dark\:text-neutral-800, .dark .dark\:text-gray-800 { color: var(--text) !important; }
 .dark .text-neutral-700, .dark .text-gray-700,
-.dark .dark\:text-neutral-700, .dark .dark\:text-gray-700 { color: #d4d4d8 !important; }
+.dark .dark\:text-neutral-700, .dark .dark\:text-gray-700 { color: var(--text-2) !important; }
 .dark .text-neutral-600, .dark .text-gray-600,
-.dark .dark\:text-neutral-600, .dark .dark\:text-gray-600 { color: #b8b8be !important; }
+.dark .dark\:text-neutral-600, .dark .dark\:text-gray-600 { color: var(--text-2) !important; }
 .dark .text-neutral-500, .dark .text-gray-500,
-.dark .dark\:text-neutral-500, .dark .dark\:text-gray-500 { color: #a1a1aa !important; }
+.dark .dark\:text-neutral-500, .dark .dark\:text-gray-500 { color: var(--text-3) !important; }
 .dark .text-neutral-400, .dark .text-gray-400,
-.dark .dark\:text-neutral-400, .dark .dark\:text-gray-400 { color: #8a8a92 !important; }
+.dark .dark\:text-neutral-400, .dark .dark\:text-gray-400 { color: var(--text-3) !important; }
 .dark .text-neutral-300, .dark .text-gray-300,
-.dark .dark\:text-neutral-300, .dark .dark\:text-gray-300 { color: #71717a !important; }
-.dark .dark\:text-white { color: #fafafa !important; }
+.dark .dark\:text-neutral-300, .dark .dark\:text-gray-300 { color: var(--line-ctl) !important; }
+.dark .dark\:text-white { color: var(--text) !important; }
 
 /* Colored text → brighter for dark bg */
 .dark .text-red-700 { color: #f87171 !important; }
@@ -274,13 +285,13 @@
 /* ── Borders ──
    Tuned to be visible against --card (#141416) but not harsh.
    ~16 luminance units brighter than card surface = perceptible edge. */
-.dark .border-neutral-200, .dark .border-gray-200 { border-color: #2e2e33 !important; }
-.dark .border-neutral-100, .dark .border-gray-100 { border-color: #26262a !important; }
-.dark .border-neutral-300, .dark .border-gray-300 { border-color: #3a3a40 !important; }
+.dark .border-neutral-200, .dark .border-gray-200 { border-color: var(--line) !important; }
+.dark .border-neutral-100, .dark .border-gray-100 { border-color: var(--line) !important; }
+.dark .border-neutral-300, .dark .border-gray-300 { border-color: var(--line-2) !important; }
 .dark .border-white { border-color: var(--border) !important; }
-.dark .dark\:border-neutral-700, .dark .dark\:border-gray-700 { border-color: #2e2e33 !important; }
-.dark .dark\:border-neutral-800, .dark .dark\:border-gray-800 { border-color: #252528 !important; }
-.dark .dark\:border-neutral-600, .dark .dark\:border-gray-600 { border-color: #3a3a40 !important; }
+.dark .dark\:border-neutral-700, .dark .dark\:border-gray-700 { border-color: var(--line) !important; }
+.dark .dark\:border-neutral-800, .dark .dark\:border-gray-800 { border-color: var(--raised-2) !important; }
+.dark .dark\:border-neutral-600, .dark .dark\:border-gray-600 { border-color: var(--line-2) !important; }
 .dark .border-red-200 { border-color: rgba(248, 113, 113, 0.3) !important; }
 .dark .border-blue-200 { border-color: rgba(96, 165, 250, 0.3) !important; }
 .dark .border-emerald-200, .dark .border-green-200 { border-color: rgba(52, 211, 153, 0.3) !important; }
@@ -291,10 +302,10 @@
 .dark .border-lime-200 { border-color: rgba(163, 230, 53, 0.3) !important; }
 
 /* ── Dividers ── */
-.dark .divide-neutral-200 > :not(:last-child) { border-color: #2e2e33 !important; }
-.dark .divide-gray-200 > :not(:last-child) { border-color: #2e2e33 !important; }
-.dark .dark\:divide-neutral-700 > :not(:last-child) { border-color: #2e2e33 !important; }
-.dark .dark\:divide-neutral-800 > :not(:last-child) { border-color: #252528 !important; }
+.dark .divide-neutral-200 > :not(:last-child) { border-color: var(--line) !important; }
+.dark .divide-gray-200 > :not(:last-child) { border-color: var(--line) !important; }
+.dark .dark\:divide-neutral-700 > :not(:last-child) { border-color: var(--line) !important; }
+.dark .dark\:divide-neutral-800 > :not(:last-child) { border-color: var(--raised-2) !important; }
 
 /* ── Rings & shadows ──
    On near-black bg, dark shadows are invisible. Pair black drop-shadow
@@ -332,15 +343,15 @@
 
 /* ── Hover states ── */
 .dark .hover\:bg-neutral-50:hover, .dark .hover\:bg-gray-50:hover { background-color: var(--muted) !important; }
-.dark .hover\:bg-neutral-100:hover, .dark .hover\:bg-gray-100:hover { background-color: #252528 !important; }
+.dark .hover\:bg-neutral-100:hover, .dark .hover\:bg-gray-100:hover { background-color: var(--raised-2) !important; }
 .dark .hover\:bg-white:hover { background-color: var(--popover) !important; }
-.dark .hover\:text-gray-600:hover, .dark .hover\:text-neutral-600:hover { color: #d4d4d8 !important; }
-.dark .hover\:text-gray-700:hover, .dark .hover\:text-neutral-700:hover { color: #ededed !important; }
-.dark .hover\:text-gray-900:hover, .dark .hover\:text-neutral-900:hover { color: #fafafa !important; }
+.dark .hover\:text-gray-600:hover, .dark .hover\:text-neutral-600:hover { color: var(--text-2) !important; }
+.dark .hover\:text-gray-700:hover, .dark .hover\:text-neutral-700:hover { color: var(--text) !important; }
+.dark .hover\:text-gray-900:hover, .dark .hover\:text-neutral-900:hover { color: var(--text) !important; }
 
 /* ── Placeholder text ── */
-.dark .placeholder-gray-400::placeholder, .dark .placeholder-neutral-400::placeholder { color: #71717a !important; }
-.dark input::placeholder, .dark textarea::placeholder, .dark select::placeholder { color: #71717a !important; }
+.dark .placeholder-gray-400::placeholder, .dark .placeholder-neutral-400::placeholder { color: var(--line-ctl) !important; }
+.dark input::placeholder, .dark textarea::placeholder, .dark select::placeholder { color: var(--line-ctl) !important; }
 
 /* ── .input — the shared form-field class ──────────────────────────────────
    Used in 154 places across the backoffice and defined NOWHERE. Tailwind 4's
@@ -386,23 +397,23 @@
   background: transparent;
 }
 .dark ::-webkit-scrollbar-thumb {
-  background: #2e2e33;
+  background: var(--line);
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a40;
+  background: var(--line-2);
   background-clip: padding-box;
   border: 2px solid transparent;
 }
 .dark * {
-  scrollbar-color: #2e2e33 transparent;
+  scrollbar-color: var(--line) transparent;
   scrollbar-width: thin;
 }
 
 /* ── Selection color — brand-tinted ── */
 .dark ::selection {
   background-color: rgb(212 101 79 / 0.35);
-  color: #fafafa;
+  color: var(--text);
 }

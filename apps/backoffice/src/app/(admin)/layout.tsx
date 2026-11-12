@@ -1,41 +1,12 @@
 "use client";
 
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
-import Image from "next/image";
-import {
-  LogOut,
-  Settings,
-  LayoutDashboard,
-  Lock,
-  Eye,
-  EyeOff,
-  Check,
-  Loader2,
-  Sun,
-  Moon,
-} from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarRail,
-  SidebarTrigger,
-  useSidebar,
-} from "@/components/ui/sidebar";
+import { Lock, Eye, EyeOff, Check, Loader2 } from "lucide-react";
+import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "@/components/ui/sidebar";
 import { PullToRefresh } from "@/components/pull-to-refresh";
-import { useTheme } from "@/components/theme-provider";
 import { CommandPalette } from "@/components/command-palette";
-import { SectionTabs } from "@/components/section-tabs";
+import { OfficeHeader, PageTabs, PhoneTabBar, Rail } from "@/components/office-shell";
 
 import {
   Dialog,
@@ -50,160 +21,12 @@ import {
   DASHBOARD_HOME_MODULE,
   canAccess,
   firstAccessibleHref,
-  getVisibleItems,
-  pathMatchesSection,
   type UserProfile,
 } from "@/lib/nav";
 
 // Nav structure, RBAC (canAccess), and active-state helpers live in
 // lib/nav.tsx — shared with the ⌘K palette's page index. This file is just
-// the chrome: sidebar rendering, auth/redirect guards, and page shell.
-
-// ─── Theme toggle (sidebar footer) ──────────────────────────────────────
-function SidebarThemeToggle() {
-  const { resolved, setTheme } = useTheme();
-  return (
-    <button
-      onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
-      className="flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
-      title={resolved === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-    >
-      {resolved === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-    </button>
-  );
-}
-
-// ─── User footer ────────────────────────────────────────────────────────
-function SidebarUserFooter({ user, onLogout }: { user: UserProfile; onLogout: () => void }) {
-  return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <div className="flex items-center gap-2 px-1.5 py-1">
-          <Avatar size="sm">
-            <AvatarFallback className="bg-sidebar-primary/30 text-sidebar-foreground text-xs">
-              {user.name?.slice(0, 2).toUpperCase() || "U"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-            <p className="truncate text-xs font-medium text-sidebar-foreground">{user.name}</p>
-            <p className="truncate text-[10px] text-sidebar-foreground/50">{user.role}</p>
-          </div>
-          <div className="flex items-center gap-0.5 group-data-[collapsible=icon]:hidden">
-            <SidebarThemeToggle />
-            <button
-              onClick={onLogout}
-              title="Logout"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </SidebarMenuItem>
-      <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
-        <div className="px-0.5">
-          <PasswordChangeDialog hasPassword={user.hasPassword} />
-        </div>
-      </SidebarMenuItem>
-    </SidebarMenu>
-  );
-}
-
-// ─── App Sidebar (single collapsible) ───────────────────────────────────
-function AppSidebar({ user, onLogout }: { user: UserProfile; onLogout: () => void }) {
-  const pathname = usePathname();
-  const { isMobile, setOpenMobile } = useSidebar();
-  const isDashboard = pathname === "/dashboard" || pathname === "/";
-
-  const closeOnMobile = () => {
-    if (isMobile) setOpenMobile(false);
-  };
-
-  // One rail entry per section, linking to its first page the user can open;
-  // the section's pages are tabs on the page itself (components/section-tabs).
-  // Settings (placement "footer") is reached from the gear in the footer.
-  const railSections = NAV_SECTIONS.filter((s) => s.placement !== "footer");
-  const settings = NAV_SECTIONS.find((s) => s.placement === "footer");
-  const settingsHref = settings ? getVisibleItems(settings, user)[0]?.href : undefined;
-  const settingsActive = settings ? pathMatchesSection(pathname, settings) : false;
-
-  return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader>
-        <div className="flex items-center gap-2 px-1.5 py-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <Image
-            src="/images/celsius-logo-sm.jpg"
-            alt="Celsius"
-            width={32}
-            height={32}
-            className="rounded-lg shrink-0 group-data-[collapsible=icon]:hidden"
-          />
-          <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <p className="font-heading text-sm font-bold leading-tight text-sidebar-foreground">Celsius Ops</p>
-            <p className="text-[10px] text-sidebar-foreground/50">Backoffice</p>
-          </div>
-          {/* Collapse/expand toggle lives in the sidebar (desktop only). When
-              collapsed it's the lone centered control; mobile uses the top-bar
-              trigger instead, so hide this below md. */}
-          <SidebarTrigger className="shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground max-md:hidden" />
-        </div>
-      </SidebarHeader>
-
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarMenu>
-            {/* Dashboard — always available */}
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={isDashboard} tooltip="Dashboard">
-                <Link href="/dashboard" onClick={closeOnMobile}>
-                  <LayoutDashboard />
-                  <span>Dashboard</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-
-            {railSections.map((section) => {
-              const firstHref = getVisibleItems(section, user)[0]?.href;
-              if (!firstHref) return null;
-              return (
-                <Fragment key={section.label}>
-                  {section.dividerBefore && (
-                    <li aria-hidden className="mx-2 my-1 h-px bg-sidebar-border" />
-                  )}
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={pathMatchesSection(pathname, section)} tooltip={section.label}>
-                      <Link href={firstHref} onClick={closeOnMobile}>
-                        {section.icon}
-                        <span className="truncate">{section.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </Fragment>
-              );
-            })}
-          </SidebarMenu>
-        </SidebarGroup>
-      </SidebarContent>
-
-      <SidebarFooter>
-        {settings && settingsHref && (
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={settingsActive} tooltip="Settings">
-                <Link href={settingsHref} onClick={closeOnMobile}>
-                  <Settings />
-                  <span>Settings</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        )}
-        <SidebarUserFooter user={user} onLogout={onLogout} />
-      </SidebarFooter>
-      <SidebarRail />
-    </Sidebar>
-  );
-}
+// the chrome: auth/redirect guards and the page shell (components/office-shell.tsx).
 
 // ─── Password Change Dialog ─────────────────────────────────────────────
 
@@ -258,7 +81,7 @@ function PasswordChangeDialog({ hasPassword }: { hasPassword?: boolean }) {
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
       <DialogTrigger
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[11px] text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors cursor-pointer"
+        className="flex w-full cursor-pointer items-center gap-2 rounded-ctl px-2 py-1.5 text-[11px] text-rail-text-2 transition-colors hover:bg-rail-2 hover:text-rail-text max-md:py-3 max-md:text-[13px]"
       >
         <Lock className="h-3 w-3" />
         {hasPassword ? "Change Password" : "Set Password"}
@@ -408,38 +231,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!user) return null;
 
   return (
-    <SidebarProvider className="h-svh overflow-hidden print:h-auto print:overflow-visible">
-      {/* Sidebar is app chrome — never printed (contents = transparent on screen). */}
+    <SidebarProvider
+      className="h-svh overflow-hidden print:h-auto print:overflow-visible"
+      style={{ "--sidebar-width": "236px" } as React.CSSProperties}
+    >
+      {/* Rail is app chrome — never printed (contents = transparent on screen). */}
       <div className="contents print:hidden">
-        <AppSidebar user={user} onLogout={handleLogout} />
+        <Sidebar collapsible="icon" className="border-r border-rail-line">
+          <Rail user={user} onLogout={handleLogout} extra={<PasswordChangeDialog hasPassword={user.hasPassword} />} />
+          <SidebarRail />
+        </Sidebar>
       </div>
-      <SidebarInset className="min-w-0 bg-brand-offwhite print:overflow-visible">
-        {/* Mobile-only top bar — tap the trigger to open the sidebar sheet.
-            Desktop has no top chrome: the toggle lives in the sidebar header,
-            plus the drag rail and ⌘B. */}
-        <header className="flex items-center gap-3 border-b border-border bg-white px-4 py-3 dark:bg-card md:hidden print:hidden">
-          <SidebarTrigger className="text-foreground" />
-          <Image
-            src="/images/celsius-logo-sm.jpg"
-            alt="Celsius"
-            width={24}
-            height={24}
-            className="rounded-md"
-          />
-          <span className="font-heading text-sm font-bold">Celsius Ops</span>
-        </header>
-
-        {/* Page content */}
+      <SidebarInset className="min-w-0 bg-bg print:overflow-visible">
         <PullToRefresh
           onRefresh={async () => { window.location.reload(); }}
-          className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible print:h-auto"
+          className="flex-1 overflow-y-auto overflow-x-hidden pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-0 print:overflow-visible print:h-auto print:pb-0"
           disabled={pathname?.startsWith("/inventory/supplier-chats") ?? false}
         >
-          <SectionTabs user={user} />
+          <OfficeHeader user={user} />
+          <PageTabs user={user} />
           {children}
         </PullToRefresh>
+        <PhoneTabBar user={user} />
       </SidebarInset>
-      {/* Global ⌘K palette — toggles via Cmd/Ctrl+K from anywhere */}
+      {/* Global ⌘K palette — toggles via Cmd/Ctrl+K, the rail's Jump to, or the phone search */}
       <CommandPalette />
     </SidebarProvider>
   );

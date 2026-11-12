@@ -11,6 +11,15 @@ current month.
 
 ## Verified facts
 
+- 2026-11-12 — **Backoffice restructure step 2 done (Celsius UI foundation)**, same PR
+  celsiuscoffee/celsius-ops#1278. Tokens in `apps/backoffice/src/styles/celsius-ui/tokens.css`
+  (Gosamē UI names, Celsius values); shadcn vars map onto them; shell in
+  `components/office-shell.tsx` (rail nests the open section's pages; phone top bar + tab bar
+  Today · Sales · Procurement · More). Checked at 1440 and iPhone 13, light and dark, collapsed
+  rail. Gotchas: Next dev serves stale globals.css after edits — restart `next dev` with a clean
+  `.next` before judging CSS; `/dashboard` crashes on an empty `{}` API mock (needs
+  `company`/`outlets`), so preview it with realistic mock data. Next: step 3 (Today + Inbox).
+
 - 2026-11-12 — **Backoffice restructure step 1 done** (PR celsiuscoffee/celsius-ops#1278,
   branch `claude/hopeful-heisenberg-9eub5y`): 6 duplicate pages now redirect
   (`/inventory/categories`, `/ops/dashboard`, `/settings` hub, `/pos`,

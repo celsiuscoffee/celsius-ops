@@ -79,8 +79,15 @@ export function CommandPalette() {
         setOpen(false);
       }
     };
+    // The rail's "Jump to…" and the phone search button open it too
+    // (components/office-shell.tsx · openCommandPalette).
+    const onOpen = () => { setOpen(true); setQ(""); setHighlight(0); };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("celsius:open-palette", onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("celsius:open-palette", onOpen);
+    };
   }, [open]);
 
   useEffect(() => {

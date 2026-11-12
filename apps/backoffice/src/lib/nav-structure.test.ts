@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { NAV_SECTIONS } from "./nav";
+import { NAV_SECTIONS, locate, railPages, type UserProfile } from "./nav";
 
-// Pins the section/tab model described above NAV_SECTIONS: the sidebar lists
-// one entry per section and each section's pages render as tabs
-// (components/section-tabs.tsx), so a section must stay small enough to read
-// as one row of tabs.
+// Pins the section/page model described above NAV_SECTIONS: the rail lists one
+// entry per section, the open section's pages nest under it, and on a phone
+// (and for Settings) those pages scroll as one row of tabs
+// (components/office-shell.tsx), so a section must stay small enough for that.
 
 const MAX_TABS = 6;
 
@@ -36,5 +36,40 @@ describe("backoffice nav structure", () => {
 
   it("only Settings lives behind the footer gear", () => {
     expect(NAV_SECTIONS.filter((s) => s.placement === "footer").map((s) => s.label)).toEqual(["Settings"]);
+  });
+});
+
+// The shell (components/office-shell.tsx) nests the open section's pages in the
+// rail and shows the current page's views as tabs. These pin where a URL lands.
+const owner: UserProfile = { id: "o", name: "Owner", role: "OWNER", outletId: null, moduleAccess: [] };
+const section = (label: string) => NAV_SECTIONS.find((s) => s.label === label)!;
+
+describe("shell placement", () => {
+  it("a tab URL lights up its page and section", () => {
+    const p = locate("/inventory/reconciliation", owner);
+    expect(p?.section.label).toBe("Procurement");
+    expect(p?.page?.label).toBe("Invoices");
+    expect(p?.page?.tabs.map((t) => t.label)).toEqual(["Invoices", "Invoice Match"]);
+  });
+
+  it("a deep URL under a page still lands on that page", () => {
+    expect(locate("/inventory/orders/abc-123", owner)?.page?.label).toBe("PO List");
+  });
+
+  it("a page links to its first view the user can open", () => {
+    const pages = railPages(section("Procurement"), owner);
+    expect(pages.map((p) => p.label)).toEqual(["Purchase Orders", "PO List", "Invoices", "Payments", "Suppliers"]);
+    expect(pages.find((p) => p.label === "Invoices")?.href).toBe("/inventory/invoices");
+  });
+
+  it("pages and tabs follow the user's grants", () => {
+    const manager: UserProfile = { id: "m", name: "Mgr", role: "MANAGER", outletId: "x", moduleAccess: ["inventory:invoices"] };
+    const pages = railPages(section("Procurement"), manager);
+    expect(pages.map((p) => p.label)).toEqual(["Invoices"]);
+    expect(railPages(section("Finance"), manager)).toEqual([]); // finance:* is owner/admin only
+  });
+
+  it("the home page belongs to no section", () => {
+    expect(locate("/dashboard", owner)).toBeUndefined();
   });
 });
