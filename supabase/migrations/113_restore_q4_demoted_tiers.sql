@@ -1,6 +1,8 @@
 -- 113_restore_q4_demoted_tiers.sql
 --
--- STATUS: NOT YET APPLIED — awaiting owner approval. Run AFTER 112.
+-- STATUS: APPLIED to production 2026-11-12 after 112 (owner-approved).
+-- Result: 102 rows (61 Silver, 35 Gold, 6 Platinum); backup table RLS on,
+-- anon has no SELECT.
 --
 -- One-off data repair for the 2026-10-01 rollover bug fixed in 112. Members
 -- demoted at their first Q4 visit now hold a lock to 2027-01-01, so the fixed

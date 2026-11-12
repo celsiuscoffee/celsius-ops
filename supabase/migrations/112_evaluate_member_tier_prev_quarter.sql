@@ -1,6 +1,7 @@
 -- 112_evaluate_member_tier_prev_quarter.sql
 --
--- STATUS: NOT YET APPLIED — awaiting owner approval (CLAUDE.md hard rule 6).
+-- STATUS: APPLIED to production 2026-11-12 (owner-approved). Verified: function
+-- has v_prev_start, still SECURITY DEFINER, owner postgres, ACL unchanged.
 --
 -- Bug: evaluate_member_tier() re-qualifies a member on the CURRENT calendar
 -- quarter's spend once their lock expires. The lock always expires exactly at

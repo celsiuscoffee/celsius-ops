@@ -11,6 +11,19 @@ current month.
 
 ## Verified facts
 
+- 2026-11-12 — **Tier rollover fix APPLIED to prod (owner-approved).**
+  `supabase/migrations/112` (evaluate_member_tier qualifies on
+  GREATEST(prev-quarter, current-quarter) spend on lock expiry) and `113`
+  (one-off upgrade-only restore) ran via the Supabase Management API.
+  Restored 102 members: 61 → Silver, 35 → Gold, 6 → Platinum; tier totals
+  now Silver 87, Gold 42, Platinum 13 (Staff/Black Card untouched). Backup +
+  rollback: `member_brands_tier_restore_20261111` (RLS on, anon no SELECT;
+  rollback SQL at the bottom of 113). Smoke test on a restored Gold member:
+  stays Gold (Q3 RM678.95), locked to 2027-01-01. Note: the read-only API
+  role cannot EXECUTE evaluate_member_tier (ACL = postgres, service_role).
+  **Watch:** Gold/Silver/Platinum % discount usage at the till should rise
+  from ~4/wk Gold back toward the Sept ~50/wk.
+
 - 2026-11-11 — **Sales drop investigated: step-down from w/c 5 Oct, sharp
   break Fri 9 Oct.** `unified_sales` nett ~RM68k/wk (Aug–Sep) → ~RM52k/wk
   (Oct 5 → Nov 8), −23%: txns −15%, AOV −7%. Broad — all 3 outlets and all
