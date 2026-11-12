@@ -11,6 +11,22 @@ current month.
 
 ## Verified facts
 
+- 2026-11-12 — **Google Business Profile restriction confirmed (owner
+  screenshot): "Reviews and ratings ... restricted" 30 days, "fake
+  engagement policy", public "suspicious reviews were removed" warning.**
+  Putrajaya (purge 6 Oct) and Tamarind (13 Oct) still show 0 new reviews
+  through 11 Nov; Shah Alam unaffected (reviews still arriving). Likely
+  trigger in our code: the QR review page `/review/[outletId]` was REVIEW
+  GATING — ≥4★ auto-redirected to Google, <4★ to a private form (Google
+  forbids selectively soliciting positive reviews). FIXED (owner: "remove
+  them"): every rating now gets the same two options (post on Google /
+  private feedback), no auto-redirect; threshold control removed from
+  /reviews/settings (ReviewSettings.ratingThreshold column left in place,
+  unused by the public page). No review-for-reward found (no missions or
+  rewards mention reviews). Live only after the PR merges (backoffice
+  deploy). Not changed: staff RM10 penalty per attributed negative review
+  (payroll — owner decision) and the daily "review velocity" Telegram nudge.
+
 - 2026-11-12 — **Shah Alam (no Google review purge) fell too → common
   cause is Google Ads, per outlet.** Per-campaign ads_metric_daily: Putrajaya
   campaign dark 26 Sep–29 Oct (autopilot pause probe, then account-wide

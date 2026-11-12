@@ -1,11 +1,15 @@
 "use client";
 
 /**
- * Public QR review page — the rating gate customers land on.
+ * Public QR review page.
  *
- * ≥ threshold → straight to the outlet's Google review page (auto-redirect +
- * manual fallback button). < threshold → private feedback form so we catch it
- * before it becomes a public review.
+ * NO REVIEW GATING (2026-11-12). This page used to send only ≥ threshold
+ * ratings to Google and route lower ratings to a private form. Google's
+ * policy forbids selectively soliciting positive reviews, and Putrajaya +
+ * Tamarind got a 30-day "fake engagement" review restriction in Oct 2026.
+ * Now every customer, whatever they tap, sees the SAME two options — post
+ * on Google, or send private feedback — and nothing auto-redirects.
+ * `ratingThreshold` in ReviewSettings is intentionally ignored here.
  *
  * Celsius brand system, self-contained: espresso #160800 / terracotta #C2452D /
  * offwhite #f5f3f0, Peachi headings. All colors are explicit hex so the admin
@@ -26,7 +30,7 @@ type PublicSettings = {
   feedbackFields: FeedbackField[];
 };
 
-type Step = "rating" | "feedback" | "thanks" | "redirect";
+type Step = "rating" | "choice" | "feedback" | "thanks";
 
 const RATING_LABELS = ["", "Terrible", "Poor", "Average", "Good", "Great"];
 
@@ -60,20 +64,10 @@ export default function PublicReviewPage({ params }: { params: Promise<{ outletI
       .finally(() => setLoading(false));
   }, [outletId]);
 
+  // Same next step for every rating — never branch on the score (see header).
   const pick = (r: number) => {
     setRating(r);
-    const threshold = settings?.ratingThreshold ?? 4;
-    if (r >= threshold && settings?.googleReviewUrl) {
-      // Straight to Google — no interstitial. The "redirect" state stays
-      // visible only while the browser navigates (and carries a manual
-      // button in case navigation is slow or blocked).
-      setStep("redirect");
-      window.location.href = settings.googleReviewUrl;
-    } else if (r >= threshold) {
-      setStep("thanks"); // no Google URL configured — thank and stop
-    } else {
-      setStep("feedback");
-    }
+    setStep("choice");
   };
 
   const activeFields = (settings?.feedbackFields ?? []).filter((f) => f.active);
@@ -192,21 +186,34 @@ export default function PublicReviewPage({ params }: { params: Promise<{ outletI
               </div>
             )}
 
-            {/* ── In-flight to Google (visible only while the browser navigates) ── */}
-            {step === "redirect" && (
-              <div className="mt-20 text-center">
-                <Loader2 className="mx-auto h-7 w-7 animate-spin" style={{ color: C.terracotta }} />
-                <p className="mt-4 text-sm" style={{ color: C.muted }}>
-                  Opening Google reviews…
+            {/* ── Same two options for every rating (no gating) ── */}
+            {step === "choice" && (
+              <div className="mt-12 text-center">
+                <h2 className="text-2xl leading-tight" style={{ fontFamily: "var(--font-heading)" }}>
+                  Thanks for rating us
+                </h2>
+                <p className="mt-2 text-sm" style={{ color: C.muted }}>
+                  Share your experience publicly, or send it straight to our team.
                 </p>
-                {/* Fallback if navigation is blocked or slow */}
-                <a
-                  href={settings?.googleReviewUrl ?? "#"}
-                  className="mt-8 inline-flex items-center gap-1.5 rounded-xl px-5 py-3 text-sm font-semibold"
-                  style={{ backgroundColor: C.terracotta, color: C.offwhite }}
-                >
-                  Continue to Google <ArrowUpRight className="h-4 w-4" />
-                </a>
+                <div className="mt-8 space-y-3">
+                  {settings?.googleReviewUrl && (
+                    <a
+                      href={settings.googleReviewUrl}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-xl py-3.5 text-[15px] font-semibold"
+                      style={{ backgroundColor: C.terracotta, color: C.offwhite }}
+                    >
+                      Post a review on Google <ArrowUpRight className="h-4 w-4" />
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setStep("feedback")}
+                    className="flex w-full items-center justify-center rounded-xl border py-3.5 text-[15px] font-semibold"
+                    style={{ borderColor: C.surfaceEdge, color: C.offwhite }}
+                  >
+                    Send feedback to the team
+                  </button>
+                </div>
               </div>
             )}
 
@@ -214,10 +221,10 @@ export default function PublicReviewPage({ params }: { params: Promise<{ outletI
             {step === "feedback" && (
               <div className="mt-8">
                 <h2 className="text-center text-2xl leading-tight" style={{ fontFamily: "var(--font-heading)" }}>
-                  We&apos;re sorry we missed the mark
+                  Tell us more
                 </h2>
                 <p className="mt-2 text-center text-sm" style={{ color: C.muted }}>
-                  Tell us what happened — the team reads every message.
+                  The team reads every message.
                 </p>
 
                 <div className="mt-4 flex justify-center gap-1">
@@ -244,7 +251,7 @@ export default function PublicReviewPage({ params }: { params: Promise<{ outletI
                         <textarea
                           value={formData[field.question] || ""}
                           onChange={(e) => setFormData({ ...formData, [field.question]: e.target.value })}
-                          placeholder="What could we have done better?"
+                          placeholder="What should we know?"
                           rows={4}
                           className={`${inputCls} resize-none`}
                           style={inputStyle}
