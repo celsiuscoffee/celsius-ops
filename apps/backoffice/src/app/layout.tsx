@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Space_Grotesk } from "next/font/google";
+import { Geist_Mono, Space_Grotesk } from "next/font/google";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@celsius/ui";
@@ -9,6 +9,15 @@ const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   weight: ["400", "500", "700"],
   variable: "--font-space-grotesk",
+  display: "swap",
+});
+
+// Numbers in tables, codes and timers (Celsius UI: mono with tabular figures).
+// globals.css referenced --font-geist-mono but nothing loaded it until now.
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-geist-mono",
   display: "swap",
 });
 
@@ -32,12 +41,15 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
-  themeColor: "#A2492C",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F5F3F0" },
+    { media: "(prefers-color-scheme: dark)", color: "#120B08" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`h-full ${spaceGrotesk.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`h-full ${spaceGrotesk.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <head>
         {/* Prevent flash of wrong theme */}
         <script

@@ -1,43 +1,12 @@
 "use client";
 
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
-import Image from "next/image";
-import {
-  ChevronRight,
-  LogOut,
-  LayoutDashboard,
-  Lock,
-  Eye,
-  EyeOff,
-  Check,
-  Loader2,
-  Sun,
-  Moon,
-} from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
-  SidebarProvider,
-  SidebarRail,
-  SidebarTrigger,
-  useSidebar,
-} from "@/components/ui/sidebar";
+import { Lock, Eye, EyeOff, Check, Loader2 } from "lucide-react";
+import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "@/components/ui/sidebar";
 import { PullToRefresh } from "@/components/pull-to-refresh";
-import { useTheme } from "@/components/theme-provider";
 import { CommandPalette } from "@/components/command-palette";
+import { OfficeHeader, PageTabs, PhoneTabBar, Rail } from "@/components/office-shell";
 
 import {
   Dialog,
@@ -52,260 +21,12 @@ import {
   DASHBOARD_HOME_MODULE,
   canAccess,
   firstAccessibleHref,
-  getVisibleItems,
-  leafIsActive,
-  pathMatchesSection,
-  type NavSection,
   type UserProfile,
 } from "@/lib/nav";
 
 // Nav structure, RBAC (canAccess), and active-state helpers live in
 // lib/nav.tsx — shared with the ⌘K palette's page index. This file is just
-// the chrome: sidebar rendering, auth/redirect guards, and page shell.
-
-// Render a section's leaves into the collapsible sub-menu. Handles both flat
-// `items` sections and `subgroups` sections (3rd tier) — subgroups render a
-// small uppercase label header, then their items. RBAC + empty-group hiding
-// preserved exactly. On mobile, picking a page closes the sidebar sheet so
-// the destination is immediately visible.
-function SectionLinks({
-  section,
-  user,
-  pathname,
-}: {
-  section: NavSection;
-  user: UserProfile | undefined;
-  pathname: string;
-}) {
-  const { isMobile, setOpenMobile } = useSidebar();
-  const closeOnMobile = () => {
-    if (isMobile) setOpenMobile(false);
-  };
-
-  if (section.items) {
-    const vis = section.items.filter((item) => !item.hidden && canAccess(user, item.moduleKey));
-    const hrefs = vis.map((i) => i.href);
-    return (
-      <>
-        {vis.map((item) => (
-          <SidebarMenuSubItem key={item.href}>
-            <SidebarMenuSubButton asChild isActive={leafIsActive(pathname, item.href, hrefs)}>
-              <Link href={item.href} onClick={closeOnMobile}>
-                {item.icon}
-                <span className="truncate">{item.label}</span>
-              </Link>
-            </SidebarMenuSubButton>
-          </SidebarMenuSubItem>
-        ))}
-      </>
-    );
-  }
-  if (section.subgroups) {
-    return (
-      <>
-        {section.subgroups.map((sg) => {
-          const vis = sg.items.filter((item) => !item.hidden && canAccess(user, item.moduleKey));
-          if (vis.length === 0) return null;
-          const hrefs = vis.map((i) => i.href);
-          return (
-            <Fragment key={sg.label}>
-              <li className="px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 first:pt-1">
-                {sg.label}
-              </li>
-              {vis.map((item) => (
-                <SidebarMenuSubItem key={item.href}>
-                  <SidebarMenuSubButton asChild isActive={leafIsActive(pathname, item.href, hrefs)}>
-                    <Link href={item.href} onClick={closeOnMobile}>
-                      {item.icon}
-                      <span className="truncate">{item.label}</span>
-                    </Link>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-              ))}
-            </Fragment>
-          );
-        })}
-      </>
-    );
-  }
-  return null;
-}
-
-// ─── Theme toggle (sidebar footer) ──────────────────────────────────────
-function SidebarThemeToggle() {
-  const { resolved, setTheme } = useTheme();
-  return (
-    <button
-      onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
-      className="flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
-      title={resolved === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-    >
-      {resolved === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-    </button>
-  );
-}
-
-// ─── User footer ────────────────────────────────────────────────────────
-function SidebarUserFooter({ user, onLogout }: { user: UserProfile; onLogout: () => void }) {
-  return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <div className="flex items-center gap-2 px-1.5 py-1">
-          <Avatar size="sm">
-            <AvatarFallback className="bg-sidebar-primary/30 text-sidebar-foreground text-xs">
-              {user.name?.slice(0, 2).toUpperCase() || "U"}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-            <p className="truncate text-xs font-medium text-sidebar-foreground">{user.name}</p>
-            <p className="truncate text-[10px] text-sidebar-foreground/50">{user.role}</p>
-          </div>
-          <div className="flex items-center gap-0.5 group-data-[collapsible=icon]:hidden">
-            <SidebarThemeToggle />
-            <button
-              onClick={onLogout}
-              title="Logout"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </SidebarMenuItem>
-      <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
-        <div className="px-0.5">
-          <PasswordChangeDialog hasPassword={user.hasPassword} />
-        </div>
-      </SidebarMenuItem>
-    </SidebarMenu>
-  );
-}
-
-// ─── App Sidebar (single collapsible) ───────────────────────────────────
-function AppSidebar({ user, onLogout }: { user: UserProfile; onLogout: () => void }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const { state, isMobile } = useSidebar();
-  const isDashboard = pathname === "/dashboard" || pathname === "/";
-
-  // Which top-level section is expanded (one at a time). Auto-follows the
-  // active route; the user can toggle any section without leaving the page.
-  const [openSection, setOpenSection] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (pathname === "/dashboard" || pathname === "/") {
-      setOpenSection(null);
-      return;
-    }
-    for (const section of NAV_SECTIONS) {
-      if (pathMatchesSection(pathname, section)) {
-        setOpenSection(section.label);
-        return;
-      }
-    }
-  }, [pathname]);
-
-  // Clicking a section header opens it AND jumps to its first visible page,
-  // so the content area follows the sidebar (owner preference, restored
-  // 2026-07-11 after briefly shipping expand-only — don't change this back).
-  // Clicking the open section while already on one of its pages collapses it.
-  // In the icon-collapsed rail (desktop) the sub-menu can't render, so a
-  // click always navigates.
-  const handleSectionToggle = (section: NavSection) => {
-    const firstHref = getVisibleItems(section, user)[0]?.href;
-    if (state === "collapsed" && !isMobile) {
-      if (firstHref) router.push(firstHref);
-      setOpenSection(section.label);
-      return;
-    }
-    if (openSection === section.label && pathMatchesSection(pathname, section)) {
-      setOpenSection(null);
-      return;
-    }
-    if (firstHref) router.push(firstHref);
-    setOpenSection(section.label);
-  };
-
-  return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader>
-        <div className="flex items-center gap-2 px-1.5 py-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <Image
-            src="/images/celsius-logo-sm.jpg"
-            alt="Celsius"
-            width={32}
-            height={32}
-            className="rounded-lg shrink-0 group-data-[collapsible=icon]:hidden"
-          />
-          <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <p className="font-heading text-sm font-bold leading-tight text-sidebar-foreground">Celsius Ops</p>
-            <p className="text-[10px] text-sidebar-foreground/50">Backoffice</p>
-          </div>
-          {/* Collapse/expand toggle lives in the sidebar (desktop only). When
-              collapsed it's the lone centered control; mobile uses the top-bar
-              trigger instead, so hide this below md. */}
-          <SidebarTrigger className="shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground max-md:hidden" />
-        </div>
-      </SidebarHeader>
-
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarMenu>
-            {/* Dashboard — always available */}
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={isDashboard} tooltip="Dashboard">
-                <Link href="/dashboard">
-                  <LayoutDashboard />
-                  <span>Dashboard</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-
-            {NAV_SECTIONS.map((section) => {
-              const visible = getVisibleItems(section, user);
-              if (visible.length === 0) return null;
-
-              const sectionActive = pathMatchesSection(pathname, section);
-              const open = openSection === section.label;
-
-              return (
-                <Fragment key={section.label}>
-                  {section.dividerBefore && (
-                    <li aria-hidden className="mx-2 my-1 h-px bg-sidebar-border" />
-                  )}
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={sectionActive}
-                      tooltip={section.label}
-                      aria-expanded={open}
-                      onClick={() => handleSectionToggle(section)}
-                    >
-                      {section.icon}
-                      <span className="truncate group-data-[collapsible=icon]:hidden">{section.label}</span>
-                      <ChevronRight
-                        className={`ml-auto shrink-0 transition-transform group-data-[collapsible=icon]:hidden ${open ? "rotate-90" : ""}`}
-                      />
-                    </SidebarMenuButton>
-                    {open && (
-                      <SidebarMenuSub>
-                        <SectionLinks section={section} user={user} pathname={pathname} />
-                      </SidebarMenuSub>
-                    )}
-                  </SidebarMenuItem>
-                </Fragment>
-              );
-            })}
-          </SidebarMenu>
-        </SidebarGroup>
-      </SidebarContent>
-
-      <SidebarFooter>
-        <SidebarUserFooter user={user} onLogout={onLogout} />
-      </SidebarFooter>
-      <SidebarRail />
-    </Sidebar>
-  );
-}
+// the chrome: auth/redirect guards and the page shell (components/office-shell.tsx).
 
 // ─── Password Change Dialog ─────────────────────────────────────────────
 
@@ -360,7 +81,7 @@ function PasswordChangeDialog({ hasPassword }: { hasPassword?: boolean }) {
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
       <DialogTrigger
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[11px] text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors cursor-pointer"
+        className="flex w-full cursor-pointer items-center gap-2 rounded-ctl px-2 py-1.5 text-[11px] text-rail-text-2 transition-colors hover:bg-rail-2 hover:text-rail-text max-md:py-3 max-md:text-[13px]"
       >
         <Lock className="h-3 w-3" />
         {hasPassword ? "Change Password" : "Set Password"}
@@ -510,37 +231,30 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!user) return null;
 
   return (
-    <SidebarProvider className="h-svh overflow-hidden print:h-auto print:overflow-visible">
-      {/* Sidebar is app chrome — never printed (contents = transparent on screen). */}
+    <SidebarProvider
+      className="h-svh overflow-hidden print:h-auto print:overflow-visible"
+      style={{ "--sidebar-width": "236px" } as React.CSSProperties}
+    >
+      {/* Rail is app chrome — never printed (contents = transparent on screen). */}
       <div className="contents print:hidden">
-        <AppSidebar user={user} onLogout={handleLogout} />
+        <Sidebar collapsible="icon" className="border-r border-rail-line">
+          <Rail user={user} onLogout={handleLogout} extra={<PasswordChangeDialog hasPassword={user.hasPassword} />} />
+          <SidebarRail />
+        </Sidebar>
       </div>
-      <SidebarInset className="min-w-0 bg-brand-offwhite print:overflow-visible">
-        {/* Mobile-only top bar — tap the trigger to open the sidebar sheet.
-            Desktop has no top chrome: the toggle lives in the sidebar header,
-            plus the drag rail and ⌘B. */}
-        <header className="flex items-center gap-3 border-b border-border bg-white px-4 py-3 dark:bg-card md:hidden print:hidden">
-          <SidebarTrigger className="text-foreground" />
-          <Image
-            src="/images/celsius-logo-sm.jpg"
-            alt="Celsius"
-            width={24}
-            height={24}
-            className="rounded-md"
-          />
-          <span className="font-heading text-sm font-bold">Celsius Ops</span>
-        </header>
-
-        {/* Page content */}
+      <SidebarInset className="min-w-0 bg-bg print:overflow-visible">
         <PullToRefresh
           onRefresh={async () => { window.location.reload(); }}
-          className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible print:h-auto"
+          className="flex-1 overflow-y-auto overflow-x-hidden pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-0 print:overflow-visible print:h-auto print:pb-0"
           disabled={pathname?.startsWith("/inventory/supplier-chats") ?? false}
         >
+          <OfficeHeader user={user} />
+          <PageTabs user={user} />
           {children}
         </PullToRefresh>
+        <PhoneTabBar user={user} />
       </SidebarInset>
-      {/* Global ⌘K palette — toggles via Cmd/Ctrl+K from anywhere */}
+      {/* Global ⌘K palette — toggles via Cmd/Ctrl+K, the rail's Jump to, or the phone search */}
       <CommandPalette />
     </SidebarProvider>
   );

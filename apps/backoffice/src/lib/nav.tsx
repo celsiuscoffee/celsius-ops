@@ -3,12 +3,8 @@
 // (admin)/layout.tsx. Page URLs never change here; only labels/grouping do,
 // so deep links and bookmarks always survive a nav reshuffle.
 //
-// Rail order groups by how often each area is worked, top to bottom:
-//   run the shops   → Sales · Procurement · Ops
-//   people & money  → HR · Finance
-//   growth          → Rewards · Marketing
-//   configuration   → Catalog · Settings
-// (Dashboard sits above all of these; it's rendered separately by the layout.)
+// Section order and the tab model are described above NAV_SECTIONS.
+// (Dashboard sits above all sections; it's rendered separately by the layout.)
 
 import {
   ShoppingBag,
@@ -112,20 +108,39 @@ export type NavSection = {
   moduleKey?: string; // top-level module check
   items?: NavItem[];
   subgroups?: NavSubgroup[];
-  dividerBefore?: boolean; // start of a new rail cluster
+  dividerBefore?: boolean; // start of a new rail cluster (no group label)
+  // Rail group label shown above the first section of each group
+  // ("Sell", "Make and supply", "Run the business").
+  group?: string;
+  // "footer" = not listed in the rail; reached from the gear in the sidebar
+  // footer (Settings). Defaults to the rail.
+  placement?: "rail" | "footer";
 };
 
 const ICON_SIZE = "h-4 w-4";
 
+// Structure (2026-11-11 restructure, docs/design/backoffice-structure.md):
+// the rail lists ONE entry per section and the open section's pages nest under
+// it (components/office-shell.tsx, Celsius UI step 2, 12 Nov). Each subgroup is
+// one page (link = its first view the user can open); a subgroup with more than
+// one view shows them as underline tabs under the header. Keep it to 6 pages.
+//
+// Sections follow how Celsius runs, in the team's own words:
+//   sell             → Sales · Customers · Marketing
+//   make and supply  → Menu · Stock · Procurement
+//   run the business → HR · Finance · Ops
+//   Agents, then Settings (behind the gear in the sidebar footer).
+// Floor work (counts, wastage, receiving, checklists, claims) is done in the
+// staff apps (lib/staff-access-presets.ts); the backoffice is for HQ to
+// review and decide.
+//
+// Page URLs and moduleKeys never change here; only labels/grouping do, so deep
+// links, bookmarks and grants always survive a reshuffle.
 export const NAV_SECTIONS: NavSection[] = [
-  // Sales — one tab for everything sales/POS. Subgroups by cadence: the
-  // analytics you check first, the surfaces worked during service, then the
-  // period-close reports. Customers points at /loyalty/members (the
-  // consolidated customer page).
   {
     label: "Sales",
+    group: "Sell",
     icon: <BarChart3 className={ICON_SIZE} />,
-    dividerBefore: true,
     subgroups: [
       {
         label: "Overview",
@@ -135,11 +150,15 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        label: "Daily",
+        label: "Orders",
         items: [
-          { label: "Orders",              href: "/pickup/orders",         icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
-          { label: "Customers",           href: "/loyalty/members",       icon: <Users className={ICON_SIZE} />,         moduleKey: "loyalty:members" },
-          { label: "Store / Menu Status", href: "/pos/store-menu-status", icon: <Power className={ICON_SIZE} />,         moduleKey: "pickup:settings" },
+          { label: "Orders", href: "/pickup/orders", icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
+        ],
+      },
+      {
+        label: "Menu Status",
+        items: [
+          { label: "Store / Menu Status", href: "/pos/store-menu-status", icon: <Power className={ICON_SIZE} />, moduleKey: "pickup:settings" },
         ],
       },
       {
@@ -151,11 +170,131 @@ export const NAV_SECTIONS: NavSection[] = [
       },
     ],
   },
-  // Procurement — subgroups ordered by daily flow: check the dashboard,
-  // do the ordering work, count/adjust stock, and master data last (it's
-  // set-up-once reference data, not daily work).
+  // Customers — who they are and what they say. Reward *history* sits here;
+  // the reward mechanics that bring them back are under Marketing.
   {
-    label: "Procurement",
+    label: "Customers",
+    group: "Sell",
+    icon: <Users className={ICON_SIZE} />,
+    subgroups: [
+      {
+        label: "Members",
+        items: [
+          { label: "Members", href: "/loyalty/members", icon: <Users className={ICON_SIZE} />, moduleKey: "loyalty:members" },
+        ],
+      },
+      {
+        label: "Reviews",
+        items: [
+          { label: "All Reviews",         href: "/reviews",          icon: <Star className={ICON_SIZE} />,          moduleKey: "reviews:list" },
+          { label: "Feedback Management", href: "/reviews/feedback", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "reviews:list" },
+        ],
+      },
+      {
+        label: "Rewards History",
+        items: [
+          { label: "Vouchers Issued",    href: "/loyalty/vouchers",    icon: <TicketPercent className={ICON_SIZE} />, moduleKey: "loyalty:redemptions" },
+          { label: "Points Redemptions", href: "/loyalty/redemptions", icon: <Receipt className={ICON_SIZE} />,       moduleKey: "loyalty:redemptions" },
+          // Raw per-transaction points ledger — audit-grade, reached via ⌘K.
+          { label: "Points Log",         href: "/loyalty/points-log",  icon: <Coins className={ICON_SIZE} />,         moduleKey: "loyalty:redemptions", hidden: true },
+        ],
+      },
+    ],
+  },
+  // Marketing — what brings customers in and back: loyalty loops and
+  // messages, reward channels, paid ads, local rank. Loyalty *config* (tiers,
+  // discount engine, earn rate…) lives behind the Settings gear.
+  {
+    label: "Marketing",
+    group: "Sell",
+    icon: <Megaphone className={ICON_SIZE} />,
+    subgroups: [
+      {
+        label: "Campaigns",
+        items: [
+          // Campaigns = Loops (the legacy /loyalty/campaigns editor redirects here).
+          { label: "Campaigns", href: "/loyalty/loops",  icon: <Repeat className={ICON_SIZE} />,        moduleKey: "loyalty:campaigns" },
+          // Engage: push reminders (auto) + SMS broadcasts (manual) as tabs inside.
+          { label: "Engage",    href: "/loyalty/engage", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
+        ],
+      },
+      {
+        // Ordered to mirror the pickup app's rewards screen. The Points Shop's
+        // catalog is Settings → Loyalty → All Rewards.
+        label: "Rewards",
+        items: [
+          { label: "Challenges",       href: "/loyalty/missions",         icon: <Target className={ICON_SIZE} />,    moduleKey: "loyalty:rewards" },
+          { label: "Mystery Pool",     href: "/loyalty/mystery",          icon: <Sparkles className={ICON_SIZE} />,  moduleKey: "loyalty:rewards" },
+          { label: "Admin Claimables", href: "/loyalty/admin-claimables", icon: <Gift className={ICON_SIZE} />,      moduleKey: "loyalty:rewards" },
+          { label: "Manual Grant",     href: "/loyalty/manual-grant",     icon: <HandCoins className={ICON_SIZE} />, moduleKey: "loyalty:manual-grant" },
+        ],
+      },
+      {
+        label: "Google Ads",
+        items: [
+          { label: "Overview",         href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:overview" },
+          { label: "Google Campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ads:campaigns" },
+          { label: "Optimizer",        href: "/ads/optimizer", icon: <Scissors className={ICON_SIZE} />,        moduleKey: "ads:campaigns" },
+          { label: "Ad Invoices",      href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,         moduleKey: "ads:invoices" },
+        ],
+      },
+      {
+        label: "GrabFood Ads",
+        items: [
+          { label: "GrabFood Ads", href: "/ads/grab", icon: <Megaphone className={ICON_SIZE} />, moduleKey: "ads:grab" },
+        ],
+      },
+      {
+        label: "Local Rank",
+        items: [
+          { label: "Local Rank",      href: "/reviews/geogrid",    icon: <MapPinned className={ICON_SIZE} />, moduleKey: "reviews:list" },
+          { label: "Rank Scoreboard", href: "/reviews/scoreboard", icon: <Target className={ICON_SIZE} />,    moduleKey: "reviews:list" },
+        ],
+      },
+    ],
+  },
+  // Menu (was "Catalog") — the product catalog shared by POS, the pickup app
+  // and Grab: what we sell, how it's made, how it's packed.
+  {
+    label: "Menu",
+    group: "Make and supply",
+    icon: <UtensilsCrossed className={ICON_SIZE} />,
+    subgroups: [
+      {
+        label: "Products",
+        items: [
+          { label: "Products", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
+        ],
+      },
+      {
+        label: "Recipes",
+        items: [
+          { label: "Menu & BOM",   href: "/inventory/menus",        icon: <BookOpen className={ICON_SIZE} />, moduleKey: "inventory:menus" },
+          // Printable per-item BOM — linked from the Menu & BOM page.
+          { label: "Recipe Cards", href: "/inventory/menus/cards",  icon: <Printer className={ICON_SIZE} />,  moduleKey: "inventory:menus", hidden: true },
+          // Central-kitchen sub-BOM (raw → prepped). Same gate as Menu & BOM.
+          { label: "Prep Recipes", href: "/inventory/prep-recipes", icon: <ChefHat className={ICON_SIZE} />,  moduleKey: "inventory:menus" },
+        ],
+      },
+      {
+        label: "Packaging",
+        items: [
+          { label: "Packaging", href: "/inventory/packaging", icon: <PackageOpen className={ICON_SIZE} />, moduleKey: "inventory:packaging" },
+        ],
+      },
+      {
+        label: "Splash Posters",
+        items: [
+          { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />, moduleKey: "pickup:menu" },
+        ],
+      },
+    ],
+  },
+  // Stock — what we hold, where, and where it leaks. Counts, wastage and
+  // transfers are done on the floor in the staff app; this is the HQ view.
+  {
+    label: "Stock",
+    group: "Make and supply",
     icon: <Boxes className={ICON_SIZE} />,
     subgroups: [
       {
@@ -166,66 +305,83 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        // Owner-preferred labels (restored 2026-07-11 after the #894 rename
-        // didn't stick): "Purchase Orders" = the WhatsApp supplier-chat
-        // surface where POs are raised; "PO List" = the resulting list at
-        // /inventory/orders. This is the team's established vocabulary —
-        // don't "fix" it again.
-        label: "Ordering",
-        items: [
-          { label: "Purchase Orders", href: "/inventory/supplier-chats", icon: <MessageCircle className={ICON_SIZE} />,  moduleKey: "inventory:orders" },
-          { label: "PO List",         href: "/inventory/orders",         icon: <FileText className={ICON_SIZE} />,       moduleKey: "inventory:orders" },
-          // Agent QA runs in the background (the verifier grades every decision
-          // regardless); the viewer stays at /inventory/agent-qa, off the nav by choice.
-          { label: "Receivings",       href: "/inventory/receivings",     icon: <Receipt className={ICON_SIZE} />,        moduleKey: "inventory:receivings" },
-          { label: "Invoices",         href: "/inventory/invoices",       icon: <ClipboardList className={ICON_SIZE} />,  moduleKey: "inventory:invoices" },
-          { label: "Reconciliation",   href: "/inventory/reconciliation", icon: <Scale className={ICON_SIZE} />,          moduleKey: "inventory:invoices" },
-          { label: "Payment Requests", href: "/inventory/pay-and-claim",  icon: <HandCoins className={ICON_SIZE} />,      moduleKey: "inventory:pay-and-claim" },
-          { label: "Transfers",        href: "/inventory/transfers",      icon: <ArrowLeftRight className={ICON_SIZE} />, moduleKey: "inventory:transfers" },
-        ],
-      },
-      {
-        label: "Stock",
+        label: "Stock Count",
         items: [
           { label: "Stock Count", href: "/inventory/stock-count", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "inventory:stock-count" },
-          { label: "Wastage",     href: "/inventory/wastage",     icon: <Trash2 className={ICON_SIZE} />,         moduleKey: "inventory:wastage" },
-          { label: "Par Levels",  href: "/inventory/par-levels",  icon: <TrendingUp className={ICON_SIZE} />,     moduleKey: "inventory:par-levels" },
         ],
       },
       {
-        // Packaging's nav home is Catalog (it's part of the menu definition —
-        // cups/lids/straws attach to menu items & channels); it was listed in
-        // both sections before, which read as two different pages.
-        label: "Master Data",
+        label: "Wastage",
         items: [
-          { label: "Ingredients",      href: "/inventory/products",    icon: <Package className={ICON_SIZE} />, moduleKey: "inventory:products" },
-          { label: "Perishables",      href: "/inventory/perishables", icon: <Box className={ICON_SIZE} />,     moduleKey: "inventory:perishables" },
-          { label: "Suppliers",        href: "/inventory/suppliers",   icon: <Truck className={ICON_SIZE} />,   moduleKey: "inventory:suppliers" },
-          { label: "Groups & Storage", href: "/inventory/groups",      icon: <Tags className={ICON_SIZE} />,    moduleKey: "inventory:categories" },
+          { label: "Wastage", href: "/inventory/wastage", icon: <Trash2 className={ICON_SIZE} />, moduleKey: "inventory:wastage" },
+        ],
+      },
+      {
+        label: "Transfers",
+        items: [
+          { label: "Transfers", href: "/inventory/transfers", icon: <ArrowLeftRight className={ICON_SIZE} />, moduleKey: "inventory:transfers" },
+        ],
+      },
+      {
+        label: "Items",
+        items: [
+          { label: "Ingredients",      href: "/inventory/products",    icon: <Package className={ICON_SIZE} />,    moduleKey: "inventory:products" },
+          { label: "Perishables",      href: "/inventory/perishables", icon: <Box className={ICON_SIZE} />,        moduleKey: "inventory:perishables" },
+          { label: "Par Levels",       href: "/inventory/par-levels",  icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "inventory:par-levels" },
+          { label: "Groups & Storage", href: "/inventory/groups",      icon: <Tags className={ICON_SIZE} />,       moduleKey: "inventory:categories" },
         ],
       },
     ],
   },
-  // Ops — housekeeping 2026-07-11: flat again after pruning. /ops/dashboard
-  // and /ops/performance render the SAME /api/ops/performance data;
-  // Performance is the superset (filters, trend, drill-downs), so it's the
-  // section landing and the tile-only Dashboard is hidden. SOP Categories
-  // (pure taxonomy setup) moved to Settings → System.
+  // Procurement — right items, right price, paid correctly. Owner-preferred
+  // labels (restored 2026-07-11): "Purchase Orders" = the WhatsApp
+  // supplier-chat surface where POs are raised; "PO List" = the resulting list
+  // at /inventory/orders. This is the team's vocabulary — don't "fix" it.
   {
-    label: "Ops",
-    icon: <ClipboardCheck className={ICON_SIZE} />,
-    items: [
-      { label: "Performance",      href: "/ops/performance", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ops:performance" },
-      { label: "Dashboard",        href: "/ops/dashboard",   icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ops:performance", hidden: true },
-      { label: "Ops Workspace",    href: "/ops/chat-inbox",  icon: <MessageSquare className={ICON_SIZE} />,   moduleKey: "ops:chat-inbox" },
-      { label: "Audits",           href: "/ops/audit",       icon: <ClipboardCheck className={ICON_SIZE} />,  moduleKey: "ops:audit" },
-      { label: "SOPs & Templates", href: "/ops/sops",        icon: <BookOpen className={ICON_SIZE} />,        moduleKey: "ops:sops" },
+    label: "Procurement",
+    group: "Make and supply",
+    icon: <Truck className={ICON_SIZE} />,
+    subgroups: [
+      {
+        label: "Purchase Orders",
+        items: [
+          { label: "Purchase Orders", href: "/inventory/supplier-chats", icon: <MessageCircle className={ICON_SIZE} />, moduleKey: "inventory:orders" },
+        ],
+      },
+      {
+        label: "PO List",
+        items: [
+          { label: "PO List",    href: "/inventory/orders",     icon: <FileText className={ICON_SIZE} />, moduleKey: "inventory:orders" },
+          { label: "Receivings", href: "/inventory/receivings", icon: <Receipt className={ICON_SIZE} />,  moduleKey: "inventory:receivings" },
+        ],
+      },
+      {
+        label: "Invoices",
+        items: [
+          { label: "Invoices",      href: "/inventory/invoices",       icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "inventory:invoices" },
+          // Invoice ↔ PO matching. Renamed from "Reconciliation" so it can't be
+          // confused with Finance → Bank Match.
+          { label: "Invoice Match", href: "/inventory/reconciliation", icon: <Scale className={ICON_SIZE} />,         moduleKey: "inventory:invoices" },
+        ],
+      },
+      {
+        label: "Payments",
+        items: [
+          { label: "Payment Requests", href: "/inventory/pay-and-claim", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "inventory:pay-and-claim" },
+        ],
+      },
+      {
+        label: "Suppliers",
+        items: [
+          { label: "Suppliers", href: "/inventory/suppliers", icon: <Truck className={ICON_SIZE} />, moduleKey: "inventory:suppliers" },
+        ],
+      },
     ],
   },
   {
     label: "HR",
+    group: "Run the business",
     icon: <Users className={ICON_SIZE} />,
-    dividerBefore: true,
     // BrioHR-style module IA, taken to its conclusion in the 2026-07-11
     // housekeeping: the sidebar lists ONE entry per module; the in-module tab
     // strip (components/hr/module-tabs.tsx — verified to render regardless of
@@ -268,175 +424,98 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Review Penalties", href: "/hr/review-penalties", icon: <AlertTriangle className={ICON_SIZE} />, moduleKey: "hr:review-penalties", hidden: true },
     ],
   },
+
   // Finance — moduleKeys start with "finance:", which canAccess hard-restricts
-  // to OWNER/ADMIN regardless of moduleAccess, so the section won't render in
-  // the rail for managers/staff.
+  // to OWNER/ADMIN regardless of moduleAccess. Cash is the cash-basis lens
+  // (daily bank balance / projection); Books is the accrual GL lens.
   {
     label: "Finance",
-    icon: <Banknote className={ICON_SIZE} />,
+    group: "Run the business",
+    icon: <Coins className={ICON_SIZE} />,
     subgroups: [
       {
-        label: "Books",
-        items: [
-          { label: "Ledger",         href: "/finance/transactions", icon: <FileText className={ICON_SIZE} />,   moduleKey: "finance:transactions" },
-          { label: "Reports",        href: "/finance/reports",      icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "finance:reports" },
-          { label: "Reconciliation", href: "/finance/recon",        icon: <Scale className={ICON_SIZE} />,      moduleKey: "finance:reports" },
-        ],
-      },
-      {
-        label: "Reference",
-        items: [
-          { label: "Chart of Accounts", href: "/finance/coa",          icon: <BookOpen className={ICON_SIZE} />, moduleKey: "finance:reports" },
-          { label: "Fixed Assets",      href: "/finance/fixed-assets", icon: <Landmark className={ICON_SIZE} />, moduleKey: "finance:reports" },
-        ],
-      },
-      {
-        // NOT legacy (mislabelled that way briefly): these are the cash-basis
-        // lens, actively maintained — Cashflow is the daily bank-balance /
-        // cash-generated / projection view, Cash Tracking its per-outlet ×
-        // category matrix child. Books above is the accrual GL lens.
         label: "Cash",
         items: [
           { label: "Cashflow",      href: "/finance/cashflow",      icon: <LineChart className={ICON_SIZE} />,       moduleKey: "finance:cashflow" },
           { label: "Cash Tracking", href: "/finance/cash-tracking", icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
         ],
       },
-      // Hidden from the rail (Home/Compliance/Bank Statements/Payouts/Recurring
-      // Expenses) — pages still exist, just dropped from nav per owner. Re-add a
-      // line here to restore any of them.
+      {
+        label: "Books",
+        items: [
+          { label: "Ledger",     href: "/finance/transactions", icon: <FileText className={ICON_SIZE} />,   moduleKey: "finance:transactions" },
+          { label: "Reports",    href: "/finance/reports",      icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "finance:reports" },
+          // Bank ↔ books. Renamed from "Reconciliation" (see Invoice Match).
+          { label: "Bank Match", href: "/finance/recon",        icon: <Scale className={ICON_SIZE} />,      moduleKey: "finance:reports" },
+        ],
+      },
+      {
+        label: "Accounts",
+        items: [
+          { label: "Chart of Accounts", href: "/finance/coa",          icon: <BookOpen className={ICON_SIZE} />, moduleKey: "finance:reports" },
+          { label: "Fixed Assets",      href: "/finance/fixed-assets", icon: <Landmark className={ICON_SIZE} />, moduleKey: "finance:reports" },
+        ],
+      },
+      // Home/Compliance/Bank Statements/Payouts/Recurring Expenses are dropped
+      // from nav per owner — pages still exist.
     ],
   },
-  // Rewards — the loyalty programme's day-to-day surfaces. The loyalty
-  // *config* (Tiers, Discount Engine, All Rewards, Outcome Types, Birthday
-  // Treats, Earn Rate) lives under Settings → Loyalty.
+  // Ops — is every outlet running to standard? The Area Scorecard scores
+  // outlets, so it sits with Performance (moved from Rewards). The old
+  // /ops/dashboard (same data as Performance) now redirects there.
   {
-    label: "Rewards",
-    icon: <Gift className={ICON_SIZE} />,
-    dividerBefore: true,
+    label: "Ops",
+    group: "Run the business",
+    icon: <ClipboardCheck className={ICON_SIZE} />,
     subgroups: [
       {
-        // The rewards-program Overview was replaced by the Area Scorecard:
-        // a per-outlet KPI scoreboard (loyalty capture, upsell, ops
-        // compliance, wastage). The mechanic-specific rewards Analytics /
-        // AI Insights pages remain available via deep-link
-        // (/loyalty/analytics, /loyalty/insights).
-        label: "Overview",
+        label: "Performance",
         items: [
-          { label: "Area Scorecard", href: "/loyalty/dashboard", icon: <Trophy className={ICON_SIZE} />, moduleKey: "loyalty:dashboard" },
+          { label: "Performance",    href: "/ops/performance",   icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ops:performance" },
+          { label: "Area Scorecard", href: "/loyalty/dashboard", icon: <Trophy className={ICON_SIZE} />,          moduleKey: "loyalty:dashboard" },
         ],
       },
       {
-        label: "Campaigns",
+        label: "Workspace",
         items: [
-          // Campaigns = Loops. The legacy preset editor (/loyalty/campaigns)
-          // is retired (redirects here); every objective now runs as an
-          // adaptive loop (holdout + offer/voucher/send-time learning).
-          { label: "Campaigns", href: "/loyalty/loops",  icon: <Repeat className={ICON_SIZE} />,        moduleKey: "loyalty:campaigns" },
-          // Engage = unified surface for "how we reach customers". Push
-          // reminders (auto) + SMS broadcasts (manual) are tabs inside it.
-          { label: "Engage",    href: "/loyalty/engage", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
+          { label: "Ops Workspace", href: "/ops/chat-inbox", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "ops:chat-inbox" },
         ],
       },
       {
-        // Channels = "where rewards reach customers", ordered to mirror the
-        // pickup app's rewards screen. Manual Grant sits here too — it's the
-        // admin-issued channel, and too small to warrant its own subgroup.
-        //
-        // The Points Shop has no entry: its catalog is managed in
-        // Settings → Loyalty → All Rewards (any template with points_cost
-        // set is a points-shop item).
-        label: "Channels",
+        label: "Audits",
         items: [
-          { label: "Challenges",       href: "/loyalty/missions",         icon: <Target className={ICON_SIZE} />,    moduleKey: "loyalty:rewards" },
-          { label: "Mystery Pool",     href: "/loyalty/mystery",          icon: <Sparkles className={ICON_SIZE} />,  moduleKey: "loyalty:rewards" },
-          { label: "Admin Claimables", href: "/loyalty/admin-claimables", icon: <Gift className={ICON_SIZE} />,      moduleKey: "loyalty:rewards" },
-          { label: "Manual Grant",     href: "/loyalty/manual-grant",     icon: <HandCoins className={ICON_SIZE} />, moduleKey: "loyalty:manual-grant" },
+          { label: "Audits", href: "/ops/audit", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "ops:audit" },
         ],
       },
       {
-        // History = read-only audit trails of what was issued + redeemed.
-        // Points Log (the raw per-transaction points ledger) is hidden —
-        // audit-grade reference reached via ⌘K, not a daily surface.
-        label: "History",
+        label: "SOPs",
         items: [
-          { label: "Vouchers Issued",    href: "/loyalty/vouchers",    icon: <TicketPercent className={ICON_SIZE} />, moduleKey: "loyalty:redemptions" },
-          { label: "Points Redemptions", href: "/loyalty/redemptions", icon: <Receipt className={ICON_SIZE} />,       moduleKey: "loyalty:redemptions" },
-          { label: "Points Log",         href: "/loyalty/points-log",  icon: <Coins className={ICON_SIZE} />,         moduleKey: "loyalty:redemptions", hidden: true },
+          { label: "SOPs & Templates", href: "/ops/sops", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "ops:sops" },
         ],
       },
     ],
   },
-  // Marketing — the outward-facing channels: customer reviews + paid ads
-  // (Google + GrabFood in one Advertising group).
+  // Agents — what the AI agents are doing and why. Not configuration, so it
+  // left Settings → System. Same grant as before.
   {
-    label: "Marketing",
-    icon: <Megaphone className={ICON_SIZE} />,
-    subgroups: [
-      {
-        label: "Reviews",
-        items: [
-          { label: "All Reviews",         href: "/reviews",            icon: <Star className={ICON_SIZE} />,          moduleKey: "reviews:list" },
-          { label: "Feedback Management", href: "/reviews/feedback",   icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "reviews:list" },
-          { label: "Local Rank",          href: "/reviews/geogrid",    icon: <MapPinned className={ICON_SIZE} />,     moduleKey: "reviews:list" },
-          { label: "Rank Scoreboard",     href: "/reviews/scoreboard", icon: <Target className={ICON_SIZE} />,        moduleKey: "reviews:list" },
-        ],
-      },
-      {
-        label: "Advertising",
-        items: [
-          { label: "Google Ads Overview", href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:overview" },
-          { label: "Campaigns",           href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ads:campaigns" },
-          { label: "Optimizer",           href: "/ads/optimizer", icon: <Scissors className={ICON_SIZE} />,        moduleKey: "ads:campaigns" },
-          { label: "Ad Invoices",         href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,         moduleKey: "ads:invoices" },
-          { label: "GrabFood Ads",        href: "/ads/grab",      icon: <Megaphone className={ICON_SIZE} />,       moduleKey: "ads:grab" },
-        ],
-      },
-    ],
-  },
-  // Catalog (= product catalog) is shared across POS, Pickup app, and the
-  // Grab integration. It's definition/config work, not daily ops, so it sits
-  // in the configuration cluster next to Settings. URLs stay at /pickup/* //
-  // /inventory/* to avoid breaking bookmarks.
-  {
-    label: "Catalog",
-    icon: <UtensilsCrossed className={ICON_SIZE} />,
+    label: "Agents",
+    icon: <Bot className={ICON_SIZE} />,
     dividerBefore: true,
-    // Ordered by how central each is to the menu definition: the product
-    // list, then what makes up each product (BOM → printable cards →
-    // packaging rules), and app presentation (splash posters) last.
     items: [
-      { label: "Products", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
-      // Menu & BOM (recipe/BOM editor) lives with the catalog/menu definition,
-      // not under Procurement. Gate stays inventory:menus so access is unchanged.
-      { label: "Menu & BOM",   href: "/inventory/menus",       icon: <BookOpen className={ICON_SIZE} />, moduleKey: "inventory:menus" },
-      // Printable per-item BOM — linked from the Menu & BOM page
-      // (inventory/menus/page.tsx), so hidden from the sidebar.
-      { label: "Recipe Cards", href: "/inventory/menus/cards", icon: <Printer className={ICON_SIZE} />,  moduleKey: "inventory:menus", hidden: true },
-      // Central-kitchen sub-BOM (raw → prepped). Same gate as Menu & BOM: it's
-      // the same kind of recipe editing, and a fresh moduleKey would be granted
-      // to nobody, hiding the page from everyone until roles were re-issued.
-      { label: "Prep Recipes",   href: "/inventory/prep-recipes", icon: <ChefHat className={ICON_SIZE} />,   moduleKey: "inventory:menus" },
-      // Packaging rules attach cups/lids/straws to menu items & channels —
-      // part of the menu definition. Single nav home (dropped the duplicate
-      // Procurement → Master Data entry). Gate stays inventory:packaging.
-      { label: "Packaging",      href: "/inventory/packaging",   icon: <PackageOpen className={ICON_SIZE} />, moduleKey: "inventory:packaging" },
-      { label: "Splash Posters", href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />,   moduleKey: "pickup:menu" },
+      { label: "AI Agents", href: "/agents", icon: <Bot className={ICON_SIZE} />, moduleKey: "settings:system" },
     ],
   },
-  // ── Settings (consolidated). Every configurable surface across the
-  // platform lives here, grouped by domain. Page URLs are unchanged (deep
-  // links + the /settings hub tiles still work). RBAC is per-item, and empty
-  // groups auto-hide for users without access.
+  // ── Settings — rendered behind the gear in the sidebar footer, not in the
+  // rail (placement: "footer"). Every configurable surface, grouped by domain.
+  // RBAC is per-item; empty groups auto-hide.
   {
     label: "Settings",
     icon: <SlidersHorizontal className={ICON_SIZE} />,
+    placement: "footer",
     subgroups: [
       {
         label: "Business",
         items: [
-          // The Hub tile page duplicates this Settings section link-for-link —
-          // hidden so there's one way in (still deep-linkable + ⌘K).
-          { label: "Hub",            href: "/settings",         icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "settings:outlets", hidden: true },
           { label: "Outlets",        href: "/settings/outlets", icon: <Building2 className={ICON_SIZE} />,       moduleKey: "settings:outlets" },
           { label: "Staff & Access", href: "/settings/staff",   icon: <UserCog className={ICON_SIZE} />,         moduleKey: "settings:staff" },
           { label: "Approval Rules", href: "/settings/rules",   icon: <ShieldCheck className={ICON_SIZE} />,     moduleKey: "settings:rules" },
@@ -453,16 +532,12 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        // Loyalty config — the "set it up once" rewards machinery. The
-        // operational loyalty pages (scorecard, channels, history, campaigns)
-        // live under the Rewards section.
         label: "Loyalty",
         items: [
           { label: "Tiers",           href: "/loyalty/tiers",        icon: <Crown className={ICON_SIZE} />,  moduleKey: "loyalty:rewards" },
           { label: "Discount Engine", href: "/loyalty/promotions",   icon: <Tag className={ICON_SIZE} />,    moduleKey: "loyalty:rewards" },
           { label: "All Rewards",     href: "/loyalty/all-rewards",  icon: <Ticket className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
-          // Outcome Types: code-bound reward shapes; only labels/visuals are
-          // editable and rarely — hidden, reachable via ⌘K.
+          // Code-bound reward shapes; rarely edited — hidden, reachable via ⌘K.
           { label: "Outcome Types",   href: "/loyalty/reward-kinds", icon: <Layers className={ICON_SIZE} />, moduleKey: "loyalty:rewards", hidden: true },
           { label: "Birthday Treats", href: "/loyalty/birthday",     icon: <Cake className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
           { label: "Earn Rate",       href: "/loyalty/settings",     icon: <Coins className={ICON_SIZE} />,  moduleKey: "loyalty:rewards" },
@@ -478,13 +553,10 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         label: "System",
         items: [
-          { label: "AI Agents",    href: "/agents",                icon: <Bot className={ICON_SIZE} />,            moduleKey: "settings:system" },
-          { label: "Stock Count",  href: "/settings/stock-count",  icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
-          // SOP taxonomy CRUD — setup-grade, so it lives with the other
-          // configuration (moved out of the Ops section, 2026-07-11).
-          { label: "SOP Categories", href: "/ops/categories",      icon: <Tags className={ICON_SIZE} />,           moduleKey: "ops:categories" },
-          { label: "Integrations", href: "/settings/integrations", icon: <Plug className={ICON_SIZE} />,           moduleKey: "settings:integrations" },
-          { label: "System",       href: "/settings/system",       icon: <Wrench className={ICON_SIZE} />,         moduleKey: "settings:system" },
+          { label: "Stock Count",    href: "/settings/stock-count",  icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
+          { label: "SOP Categories", href: "/ops/categories",        icon: <Tags className={ICON_SIZE} />,           moduleKey: "ops:categories" },
+          { label: "Integrations",   href: "/settings/integrations", icon: <Plug className={ICON_SIZE} />,           moduleKey: "settings:integrations" },
+          { label: "System",         href: "/settings/system",       icon: <Wrench className={ICON_SIZE} />,         moduleKey: "settings:system" },
         ],
       },
     ],
@@ -628,4 +700,49 @@ export function firstAccessibleHref(user: UserProfile): string | undefined {
     }
   }
   return hiddenFallback;
+}
+
+// ─── Shell placement (rail pages, header crumb, page tabs) ──────────────
+// The Celsius UI shell (components/office-shell.tsx) shows, for the section
+// the current URL sits in: its PAGES nested under the section in the rail,
+// and the current page's related views as underline tabs under the header.
+// A subgroup is one page (link = its first page the user can open) and its
+// items are the tabs; in a flat section (HR, Agents) every visible item is a
+// page with no tabs. Longest-prefix matching over ALL items, hidden included,
+// so a hidden deep page still lights up the page it belongs to.
+
+export type RailPage = { label: string; href: string; hrefs: string[]; tabs: NavItem[] };
+
+export function railPages(section: NavSection, user: UserProfile | undefined): RailPage[] {
+  const visible = (i: NavItem) => !i.hidden && canAccess(user, i.moduleKey);
+  if (section.subgroups) {
+    return section.subgroups
+      .map((sg) => {
+        const tabs = sg.items.filter(visible);
+        return { label: sg.label, href: tabs[0]?.href ?? "", hrefs: sg.items.map((i) => i.href), tabs };
+      })
+      .filter((p) => p.tabs.length > 0);
+  }
+  return (section.items ?? []).filter(visible).map((i) => ({ label: i.label, href: i.href, hrefs: [i.href], tabs: [i] }));
+}
+
+function longestMatch(pathname: string, hrefs: string[]): string | undefined {
+  let best: string | undefined;
+  for (const h of hrefs) {
+    if (pathname === h || pathname.startsWith(h + "/")) {
+      if (!best || h.length > best.length) best = h;
+    }
+  }
+  return best;
+}
+
+export type Placement = { section: NavSection; page?: RailPage; href?: string; pages: RailPage[] };
+
+export function locate(pathname: string, user: UserProfile | undefined): Placement | undefined {
+  const section = NAV_SECTIONS.find((s) => pathMatchesSection(pathname, s));
+  if (!section) return undefined;
+  const pages = railPages(section, user);
+  const href = longestMatch(pathname, getSectionHrefs(section));
+  const page = href ? pages.find((p) => p.hrefs.includes(href)) : undefined;
+  return { section, page, href, pages };
 }

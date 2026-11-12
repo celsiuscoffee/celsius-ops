@@ -539,7 +539,7 @@ export default function PickupDashboard() {
         <div className="bg-white rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold text-sm">Low Stock Alerts</h2>
-            <Link href="/inventory" className="text-xs text-primary font-medium flex items-center gap-0.5">
+            <Link href="/inventory/dashboard" className="text-xs text-primary font-medium flex items-center gap-0.5">
               View inventory <ChevronRight className="h-3 w-3" />
             </Link>
           </div>

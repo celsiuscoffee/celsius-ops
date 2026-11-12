@@ -11,6 +11,50 @@ current month.
 
 ## Verified facts
 
+- 2026-11-12 — **Backoffice restructure step 3 done (Inbox v1, read only)**, PR
+  celsiuscoffee/celsius-ops#1278. `GET /api/inbox` aggregates 14 existing queues via
+  `apps/backoffice/src/lib/inbox/sources.ts` (gated by `canAccess`, managers scoped with
+  `lib/hr/scope.ts`; inventory/review list routes do NOT scope managers server-side, so the
+  Inbox applies `getAccessibleOutletIds` itself). Not wired against live data in this session
+  (no Celsius DB access here) — first real load should be checked on the Vercel preview or
+  prod; a failing source shows as "Couldn't check …" on the page. `fin_agent_decisions` has
+  no handled state (always applied=false) — needs a dismissed column before it can join.
+
+- 2026-11-12 — **Backoffice restructure step 2 done (Celsius UI foundation)**, same PR
+  celsiuscoffee/celsius-ops#1278. Tokens in `apps/backoffice/src/styles/celsius-ui/tokens.css`
+  (Gosamē UI names, Celsius values); shadcn vars map onto them; shell in
+  `components/office-shell.tsx` (rail nests the open section's pages; phone top bar + tab bar
+  Today · Sales · Procurement · More). Checked at 1440 and iPhone 13, light and dark, collapsed
+  rail. Gotchas: Next dev serves stale globals.css after edits — restart `next dev` with a clean
+  `.next` before judging CSS; `/dashboard` crashes on an empty `{}` API mock (needs
+  `company`/`outlets`), so preview it with realistic mock data. Next: step 3 (Today + Inbox).
+
+- 2026-11-12 — **Backoffice restructure step 1 done** (PR celsiuscoffee/celsius-ops#1278,
+  branch `claude/hopeful-heisenberg-9eub5y`): 6 duplicate pages now redirect
+  (`/inventory/categories`, `/ops/dashboard`, `/settings` hub, `/pos`,
+  `/inventory/ai-decisions`, `/loyalty/insights`), their only-caller APIs deleted
+  (`api/inventory/categories`, `api/loyalty/admin/ai-insights`), dead links fixed
+  (`/finance/inbox` in the purchasing-manager digest → `/finance`; `/pickup` → `/inventory`).
+  Owner approved 45 mockups (Gosamē UI rules + Celsius brand) and the 6-step order in
+  `docs/design/backoffice-structure.md` §2b; owner wants **phone view checked on every
+  change**. Next: step 2, Celsius UI foundation. Mock sources (HTML generator) live only in
+  the session scratchpad, not the repo. GitHub Actions runs no jobs on this repo since
+  ~2 Nov (runner_id 0, billing/settings) — CI cannot verify PRs until the owner fixes it.
+  Server `redirect()` under the client `(admin)` layout answers 200 and redirects in the
+  browser — test redirects with a browser, not curl.
+
+- 2026-11-11 — **Back-office structure audit** (`docs/design/backoffice-structure.md`,
+  proposal only). 175 routes; nav.tsx registers 103 (86 visible, 17 hidden); ~60 pages
+  are not registered, and 26 of them sit under no registered prefix, so the client route
+  gate in `(admin)/layout.tsx` doesn't check them. No page-view data exists (ActivityLog
+  only logs actions), so start with Step 0a (view logging) before retiring anything.
+  Owner questions (CK transfers, which score stays, Growth vs Marketing, Inbox for
+  managers) are open in section 6 of that doc.
+  **Step 1 built (same PR):** sidebar = 10 sections + Settings gear; pages as tabs
+  (`components/section-tabs.tsx`, driven by nav.tsx subgroups). Follow-up: regroup the
+  Staff & Access grant cards (`lib/modules.ts`) to the new section names. Local tsc of
+  backoffice needs NODE_OPTIONS=--max-old-space-size=8192 (OOMs at the default).
+
 - 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
   PO send mints a placeholder bill; when the real bill is recorded via Quick
   Upload (pay-and-claim) or the invoices page it lands on a NEW order and the
