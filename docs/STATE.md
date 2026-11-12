@@ -11,6 +11,18 @@ current month.
 
 ## Verified facts
 
+- 2026-11-12 — **Shah Alam (no Google review purge) fell too → common
+  cause is Google Ads, per outlet.** Per-campaign ads_metric_daily: Putrajaya
+  campaign dark 26 Sep–29 Oct (autopilot pause probe, then account-wide
+  dark), Shah Alam + Tamarind dark 6–29 Oct; all back 30 Oct. Sales steps
+  line up: Putrajaya w/c 5 Oct, Shah Alam + Tamarind w/c 12 Oct. Shah Alam
+  ~RM24k/wk (Aug) → 21k (late Sep) → ~17k from w/c 12 Oct; till −15% orders,
+  pickup −20%, Grab ~flat; AOV only 30.0→29.4 (few 86s there, so not food).
+  Shah Alam first-time member visits/wk ~195 (Sep) → 115/99 (ads dark) →
+  127/118 after ads returned — partial recovery only. Owner's view: a
+  "Google restriction" — if that is the Ads ACCOUNT (not GBP), it explains
+  all three outlets including Shah Alam.
+
 - 2026-11-12 — **Tier rollover fix APPLIED to prod (owner-approved).**
   `supabase/migrations/112` (evaluate_member_tier qualifies on
   GREATEST(prev-quarter, current-quarter) spend on lock expiry) and `113`
