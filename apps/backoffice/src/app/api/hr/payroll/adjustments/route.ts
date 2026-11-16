@@ -14,10 +14,14 @@ export const dynamic = "force-dynamic";
 // Action: 'add' | 'remove'
 // Kind:   'allowance' (additions / pre-tax deductions stored in allowances jsonb)
 //       | 'deduction' (post-tax deductions stored in other_deductions jsonb)
-// Body for 'add': { run_id, item_id, kind, code, label, amount, note? }
+// Body for 'add': { run_id, item_id, kind, code, label, amount, note?, relates_to_year? }
+//   relates_to_year (allowances only): set when the line is pay for an EARLIER
+//   year paid in this run — e.g. December salary arrears paid in January. The
+//   EA export reports such lines in B.2 instead of B.1. Leave it out for
+//   current-year pay, including arrears for an earlier month of this year.
 // Body for 'remove': { run_id, item_id, kind, code }
 
-type Allowances = Record<string, { amount: number; label?: string; code?: string; note?: string | null }>;
+type Allowances = Record<string, { amount: number; label?: string; code?: string; note?: string | null; relates_to_year?: number }>;
 type OtherDeductions = Record<string, unknown>;
 
 export async function POST(req: NextRequest) {
@@ -27,7 +31,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { action, run_id, item_id, kind, code, label, amount, note } = body || {};
+  const { action, run_id, item_id, kind, code, label, amount, note, relates_to_year } = body || {};
 
   if (!run_id || !item_id || !kind || !code) {
     return NextResponse.json({ error: "run_id, item_id, kind, code required" }, { status: 400 });
@@ -42,7 +46,7 @@ export async function POST(req: NextRequest) {
   // Don't allow editing confirmed or paid runs.
   const { data: run } = await hrSupabaseAdmin
     .from("hr_payroll_runs")
-    .select("status")
+    .select("status, period_year, period_start")
     .eq("id", run_id)
     .maybeSingle();
   if (!run) return NextResponse.json({ error: "Run not found" }, { status: 404 });
@@ -69,8 +73,28 @@ export async function POST(req: NextRequest) {
     if (numAmount < 0) {
       return NextResponse.json({ error: "amount must be ≥ 0" }, { status: 400 });
     }
+    let relatesToYear: number | undefined;
+    if (relates_to_year != null && relates_to_year !== "") {
+      if (kind !== "allowance") {
+        return NextResponse.json({ error: "relates_to_year only applies to earnings" }, { status: 400 });
+      }
+      const y = Number(relates_to_year);
+      const runYear = Number(run.period_year) || Number(String(run.period_start || "").slice(0, 4));
+      if (!Number.isInteger(y) || y < 2000) {
+        return NextResponse.json({ error: "relates_to_year must be a year, e.g. 2025" }, { status: 400 });
+      }
+      if (runYear && y >= runYear) {
+        return NextResponse.json({
+          error: `relates_to_year must be before the run's year (${runYear}) — same-year arrears are ordinary pay, leave it blank`,
+        }, { status: 400 });
+      }
+      relatesToYear = y;
+    }
     if (kind === "allowance") {
-      allowances[code] = { amount: numAmount, label: label || code, code, note: note || null };
+      allowances[code] = {
+        amount: numAmount, label: label || code, code, note: note || null,
+        ...(relatesToYear ? { relates_to_year: relatesToYear } : {}),
+      };
     } else {
       other[code] = { amount: numAmount, label: label || code, note: note || null };
     }

@@ -6,6 +6,7 @@ import { fetchAllRows } from "@/lib/hr/fetch-all";
 import {
   generateEAFormCSV,
   generateFormE_CP8D,
+  priorYearArrears,
   type EARecord,
 } from "@/lib/hr/statutory/annual";
 
@@ -76,13 +77,25 @@ export async function GET(req: NextRequest) {
     const pcbGross = Number(
       (item.computation_details as Record<string, unknown> | null)?.pcb_gross ?? NaN,
     );
-    const allowanceTotal = Number.isFinite(pcbGross)
+    const allowanceTotalRaw = Number.isFinite(pcbGross)
       ? Math.max(0, pcbGross - grossBasic)
       : Object.values(alloc || {}).reduce((s, v) => s + Number(v?.amount || 0), 0);
+
+    // Prior-year arrears (lines tagged relates_to_year < year) belong in EA
+    // B.2, not B.1(c). Carve them out of the allowance figure they were summed
+    // into. Capped at the allowance figure so a non-taxable tagged line under
+    // the pcb_gross path can't push B.1(c) negative.
+    const arrears = priorYearArrears(alloc, year);
+    const arrearsAmount = Math.min(arrears.amount, allowanceTotalRaw);
+    const allowanceTotal = allowanceTotalRaw - arrearsAmount;
 
     if (existing) {
       existing.grossRemuneration += grossBasic;
       existing.otherAllowances += allowanceTotal;
+      existing.priorYearArrears += arrearsAmount;
+      for (const y of arrears.years) {
+        if (!existing.priorYearArrearsYears.includes(y)) existing.priorYearArrearsYears.push(y);
+      }
       existing.epfEmployee += Number(item.epf_employee || 0);
       existing.socsoEmployee += Number(item.socso_employee || 0);
       existing.pcbTax += Number(item.pcb_tax || 0);
@@ -103,6 +116,8 @@ export async function GET(req: NextRequest) {
         feesCommissions: 0,
         otherAllowances: allowanceTotal,
         esopBenefit: 0,
+        priorYearArrears: arrearsAmount,
+        priorYearArrearsYears: arrearsAmount > 0 ? [...arrears.years] : [],
         bikValue: 0,
         livingAccommodation: 0,
         epfEmployee: Number(item.epf_employee || 0),

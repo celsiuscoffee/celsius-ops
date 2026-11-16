@@ -11,6 +11,16 @@ current month.
 
 ## Verified facts
 
+- 2026-11-16 — **EA export: prior-year arrears now go to B.2.** An allowance
+  line with `relates_to_year < form year` (new, set via the run page's ad-hoc
+  adjustment form for ARREARS codes, validated in `/api/hr/payroll/adjustments`)
+  is carved out of B.1(c) into new CSV columns "B.2 Prior-Year Arrears" /
+  "B.2 Relates To Year" (`priorYearArrears()` in `lib/hr/statutory/annual.ts`).
+  CP8D/Form E gross unchanged (still paid that year). Untagged lines are never
+  guessed. **Pending owner approval:** backfill the 19 "Arrears Of Salary"
+  lines in the Jan-2026 monthly run (RM10,755.14, owner confirmed Hidayat's is
+  Dec-2025 pay) with `relates_to_year: 2025`. Hand-made EA PDF for Nur Hidayat
+  bin Jamalolail produced this session (not stored in repo — PII).
 - 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
   PO send mints a placeholder bill; when the real bill is recorded via Quick
   Upload (pay-and-claim) or the invoices page it lands on a NEW order and the
