@@ -220,4 +220,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # next build runs its own TypeScript pass; backoffice OOMs it at the
+      # default ~2 GB heap just like the typecheck job above.
       - run: cd apps/${{ matrix.app }} && npx next build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
