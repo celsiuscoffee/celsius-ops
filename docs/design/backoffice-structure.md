@@ -133,7 +133,7 @@ Peachi wordmark, Space Grotesk, Geist Mono) and approved this order:
 | 1 | Remove the pure duplicates (list A) and fix dead links (list D) | **Done 12 Nov** |
 | 2 | Celsius UI foundation: tokens, fonts, rail (open section's pages nested), header; phone layout checked on every change | **Done 12 Nov** |
 | 3 | Today + Inbox (one queue of decisions) | **Done 12 Nov** (v1 read-only) |
-| 4 | HR › Roster (replaces Schedules, Attendance, Roster attendance, Overtime, Leave, Shift swaps) + staff-app shift card with Clock in | |
+| 4 | HR › Roster (replaces Schedules, Attendance, Roster attendance, Overtime, Leave, Shift swaps) + staff-app shift card with Clock in | **A. Roster built 16 Nov**; B. staff-app card next |
 | 5 | Merges (list B): Perishables → Items, Pickup landing/analytics, SOP compliance, Monthly cashflow, one SMS tool | |
 | 6 | Remaining sections moved to the new UI | |
 
@@ -183,6 +183,14 @@ Left out on purpose: agent questions answered on Telegram (`agent_prompts`, no p
 and purchasing-manager findings (`fin_agent_decisions`, never marked handled, so all of them
 would show) — the procurement Telegram digest therefore still links to `/finance`.
 Next: one-tap actions in the Inbox for safe kinds (owner to choose), then step 4.
+
+**Step 4A, built 16 Nov:** `/hr/roster` (HR's first page; Scheduling tab group), on existing
+APIs only: the week grid from `/api/hr/schedules/roster-attendance` (rostered vs clocked, late,
+did not come, approved leave), a day card on click, Today (in now / did not come), Leave to
+decide and Shift swaps with Approve/Decline in place (same PATCH calls as their pages), and
+Overtime and Clock-ins as counts with "Review" to their pages (they feed payroll and keep their
+partial-approve / excuse / payroll-sync flows). The six old pages stay until the owner has
+checked Roster against real data; then they redirect.
 
 ---
 

@@ -389,6 +389,10 @@ export const NAV_SECTIONS: NavSection[] = [
     // those siblings are `hidden` here (⌘K + route gate + grants intact).
     // Analytics is linked from the HR dashboard hub. URLs unchanged.
     items: [
+      // Roster (step 4, 12 Nov): one page for the week's shifts, clock-ins, leave,
+      // swaps and overtime — HR's first page. The pages it gathers stay until the
+      // owner has checked it against real data.
+      { label: "Roster",      href: "/hr/roster",    icon: <CalendarDays className={ICON_SIZE} />,    moduleKey: "hr:schedules" },
       { label: "Dashboard",   href: "/hr",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "hr:dashboard" },
       { label: "Analytics",   href: "/hr/analytics", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "hr:dashboard", hidden: true },
       { label: "Employees",   href: "/hr/employees", icon: <UserCog className={ICON_SIZE} />,         moduleKey: "hr:employees" },
