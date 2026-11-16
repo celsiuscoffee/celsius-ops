@@ -17,9 +17,9 @@ current month.
   is carved out of B.1(c) into new CSV columns "B.2 Prior-Year Arrears" /
   "B.2 Relates To Year" (`priorYearArrears()` in `lib/hr/statutory/annual.ts`).
   CP8D/Form E gross unchanged (still paid that year). Untagged lines are never
-  guessed. **Pending owner approval:** backfill the 19 "Arrears Of Salary"
-  lines in the Jan-2026 monthly run (RM10,755.14, owner confirmed Hidayat's is
-  Dec-2025 pay) with `relates_to_year: 2025`. Hand-made EA PDF for Nur Hidayat
+  guessed. **Backfilled 2026-11-16 (owner approved):** all 19 "Arrears Of
+  Salary" lines in the Jan-2026 monthly run (RM10,755.14, Dec-2025 pay) now
+  carry `relates_to_year: 2025` — only that key added; amounts untouched. Hand-made EA PDF for Nur Hidayat
   bin Jamalolail produced this session (not stored in repo — PII).
 - 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
   PO send mints a placeholder bill; when the real bill is recorded via Quick
