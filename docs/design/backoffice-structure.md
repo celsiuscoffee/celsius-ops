@@ -133,7 +133,7 @@ Peachi wordmark, Space Grotesk, Geist Mono) and approved this order:
 | 1 | Remove the pure duplicates (list A) and fix dead links (list D) | **Done 12 Nov** |
 | 2 | Celsius UI foundation: tokens, fonts, rail (open section's pages nested), header; phone layout checked on every change | **Done 12 Nov** |
 | 3 | Today + Inbox (one queue of decisions) | **Done 12 Nov** (v1 read-only) |
-| 4 | HR › Roster (replaces Schedules, Attendance, Roster attendance, Overtime, Leave, Shift swaps) + staff-app shift card with Clock in | **A. Roster built 16 Nov**; B. staff-app card next |
+| 4 | HR › Roster (replaces Schedules, Attendance, Roster attendance, Overtime, Leave, Shift swaps) + staff-app shift card with Clock in | **Done 16 Nov** (A. Roster; B. staff-app shift on the Today clock card) |
 | 5 | Merges (list B): Perishables → Items, Pickup landing/analytics, SOP compliance, Monthly cashflow, one SMS tool | |
 | 6 | Remaining sections moved to the new UI | |
 
@@ -191,6 +191,13 @@ decide and Shift swaps with Approve/Decline in place (same PATCH calls as their 
 Overtime and Clock-ins as counts with "Review" to their pages (they feed payroll and keep their
 partial-approve / excuse / payroll-sync flows). The six old pages stay until the owner has
 checked Roster against real data; then they redirect.
+
+**Step 4B, built 16 Nov:** the staff app's (`apps/staff-native`) Today clock card now shows
+today's rostered shift ("Your shift · 7:30 AM – 3:30 PM · Shah Alam", "Starts in 12 min";
+"Ends 3:30 PM" once clocked in), from the existing `/api/hr/shifts`. JS only, app.json
+untouched, so it ships as an OTA on merge (merging = production deploy to manager phones;
+see the ota-release skill). The clock-in itself (selfie, location, optional biometric) is
+unchanged.
 
 ---
 

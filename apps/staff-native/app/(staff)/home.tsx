@@ -28,6 +28,8 @@ import * as Updates from "expo-updates";
 import { Screen } from "../../components/Screen";
 import { listChecklists, type ChecklistSummary } from "../../lib/ops/checklists";
 import { getClockStatus, type ClockStatus } from "../../lib/hr/clock";
+import { fetchShifts, type Shift } from "../../lib/hr/api";
+import { pickTodayShift, shiftLine } from "../../lib/hr/shift-card";
 import { useStaff } from "../../lib/store";
 import { hasAccess } from "../../lib/access";
 import { ApiError } from "../../lib/api";
@@ -72,6 +74,9 @@ function StaffHome() {
   const session = useStaff((s) => s.session);
   const [checklists, setChecklists] = useState<ChecklistSummary[]>([]);
   const [clock, setClock] = useState<ClockStatus | null>(null);
+  // Today's rostered shift for the clock card (null = none rostered today).
+  const [todayShift, setTodayShift] = useState<Shift | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [elapsed, setElapsed] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -83,16 +88,19 @@ function StaffHome() {
     async (silent = false) => {
       if (!silent) setLoading(true);
       try {
-        const [cls, cs] = await Promise.all([
+        const [cls, cs, sh] = await Promise.all([
           session?.outletId
             ? listChecklists({ date: today, outletId: session.outletId }).catch(
                 () => [],
               )
             : Promise.resolve<ChecklistSummary[]>([]),
           getClockStatus().catch(() => null),
+          fetchShifts().catch(() => null),
         ]);
         setChecklists(cls);
         setClock(cs);
+        setTodayShift(pickTodayShift(sh?.shifts, today));
+        setNowMs(Date.now());
       } finally {
         setLoading(false);
       }
@@ -127,6 +135,12 @@ function StaffHome() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [clock?.activeLog]);
+
+  // Keep "Starts in 12 min" current while the screen is open.
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -197,6 +211,7 @@ function StaffHome() {
   }, [pending]);
 
   const isClockedIn = !!clock?.activeLog;
+  const shiftInfo = todayShift ? shiftLine(todayShift, nowMs, isClockedIn) : null;
   const clockedSince = clock?.activeLog
     ? new Date(clock.activeLog.clock_in).toLocaleTimeString([], {
         hour: "2-digit",
@@ -291,19 +306,21 @@ function StaffHome() {
                       {elapsed || "-"}
                     </Text>
                     <Text className="text-xs font-body text-success/80">
-                      Tap to clock out
+                      {shiftInfo ? `${shiftInfo.hint} · tap to clock out` : "Tap to clock out"}
                     </Text>
                   </>
                 ) : (
                   <>
                     <Text className="text-[10px] font-body-bold uppercase tracking-wide text-white/80">
-                      Not clocked in
+                      {shiftInfo
+                        ? `Your shift · ${shiftInfo.times}${todayShift?.outlet_name ? ` · ${todayShift.outlet_name}` : ""}`
+                        : "No shift rostered today"}
                     </Text>
                     <Text className="mt-0.5 text-xl font-display text-white">
                       Clock in
                     </Text>
                     <Text className="text-xs font-body text-white/80">
-                      GPS + biometric · 5 seconds
+                      {shiftInfo ? `${shiftInfo.hint} · selfie + location` : "Selfie + location · 5 seconds"}
                     </Text>
                   </>
                 )}

@@ -11,6 +11,13 @@ current month.
 
 ## Verified facts
 
+- 2026-11-16 — **Restructure step 4 built** (PR celsiuscoffee/celsius-ops#1278): `/hr/roster`
+  (backoffice, existing APIs only; leave and swaps decided in place, overtime and clock-ins
+  link to their payroll-aware pages) and the staff-native Today clock card shows today's shift
+  (`lib/hr/shift-card.ts`, tested). **Merging this PR now OTAs staff-native to manager phones**
+  (JS-only, runtime unchanged 1.0.0) — follow the ota-release post-merge check. The six old HR
+  pages still exist; redirect them only after the owner checks Roster on real data.
+
 - 2026-11-12 — **Backoffice restructure step 3 done (Inbox v1, read only)**, PR
   celsiuscoffee/celsius-ops#1278. `GET /api/inbox` aggregates 14 existing queues via
   `apps/backoffice/src/lib/inbox/sources.ts` (gated by `canAccess`, managers scoped with
