@@ -215,4 +215,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # backoffice (375 pages) needs more than the runner's default ~2 GB
+      # heap; reproduced locally: 2 GB aborts, 4 GB builds.
       - run: cd apps/${{ matrix.app }} && npx next build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
