@@ -182,6 +182,8 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Celsius UI: figures line up in tables, tiles and timers */
+    font-variant-numeric: tabular-nums;
   }
   html {
     @apply font-sans;
