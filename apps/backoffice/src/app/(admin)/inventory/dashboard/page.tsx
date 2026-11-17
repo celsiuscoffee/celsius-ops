@@ -1,12 +1,15 @@
 "use client";
 
+// Stock › Overview (restructure step 6, 17 Nov 2026): what we hold, what it
+// cost this month, and where it leaks. Celsius UI page pattern: title + one
+// line, at most four key numbers each with a reference, a "needs you" strip,
+// one list. Same two APIs as before; the purchasing totals that repeated
+// Procurement were dropped.
+
+import { useState } from "react";
 import Link from "next/link";
-import {
-  Boxes, ShoppingCart, Receipt, AlertTriangle, Trash2, Warehouse,
-  Truck, FileText, HandCoins, Package,
-} from "lucide-react";
+import { ArrowRight, ClipboardCheck } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
-import { Badge } from "@/components/ui/badge";
 
 type InventoryDashboard = {
   ordersPlaced: number;
@@ -27,201 +30,118 @@ type InventoryStats = {
   suppliers: number;
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "bg-gray-400", PENDING_APPROVAL: "bg-amber-500", APPROVED: "bg-blue-500",
-  SENT: "bg-green-500", AWAITING_DELIVERY: "bg-purple-500", PARTIALLY_RECEIVED: "bg-amber-600",
-  COMPLETED: "bg-gray-500", CANCELLED: "bg-red-500",
+const rm = (v: number | undefined | null) =>
+  `RM ${Number(v ?? 0).toLocaleString("en-MY", { maximumFractionDigits: 0 })}`;
+
+// Order states as Celsius UI signals: blue = moving, amber = waiting on us,
+// green = done, red = stopped, grey = not started.
+const STATUS: Record<string, { label: string; cls: string }> = {
+  DRAFT: { label: "Draft", cls: "bg-sunken text-text-2" },
+  PENDING_APPROVAL: { label: "Needs approval", cls: "bg-warn-soft text-warn-text" },
+  APPROVED: { label: "Approved", cls: "bg-info-soft text-info-text" },
+  SENT: { label: "Sent", cls: "bg-info-soft text-info-text" },
+  AWAITING_DELIVERY: { label: "Awaiting delivery", cls: "bg-info-soft text-info-text" },
+  PARTIALLY_RECEIVED: { label: "Part received", cls: "bg-warn-soft text-warn-text" },
+  COMPLETED: { label: "Received", cls: "bg-ok-soft text-ok-text" },
+  CANCELLED: { label: "Cancelled", cls: "bg-danger-soft text-danger-text" },
 };
 
-function rm(v: number | undefined | null): string {
-  const n = Number(v ?? 0);
-  if (n >= 1000) return `RM ${(n / 1000).toFixed(1)}k`;
-  return `RM ${n.toFixed(0)}`;
-}
-
-function Tile({ href, icon: Icon, label, value, accent, sub }: {
-  href: string;
-  icon: React.ElementType;
-  label: string;
-  value: string | null;
-  accent: string;
-  sub?: string;
-}) {
+function Kpi({ href, label, value, note, tone, word }: { href: string; label: string; value: string | null; note: React.ReactNode; tone?: "warn" | "ok"; word?: boolean }) {
   return (
-    <Link href={href} className="rounded-xl border border-line bg-surface p-4 hover:shadow-md transition-shadow">
-      <div className="flex items-center gap-1.5 mb-1">
-        <Icon className={`h-3.5 w-3.5 ${accent}`} />
-        <span className="text-[10px] text-text-2">{label}</span>
-      </div>
-      {value !== null
-        ? <p className="text-2xl font-bold text-text">{value}</p>
-        : <div className="h-8 w-20 bg-line rounded animate-pulse mt-0.5" />}
-      {sub && <p className="text-[10px] text-text-3 mt-0.5">{sub}</p>}
+    <Link href={href} className="group rounded-card border border-line bg-surface p-4 transition-colors hover:border-line-2">
+      <p className="text-[12px] font-medium text-text-2">{label}</p>
+      {value === null
+        ? <div className="mt-1.5 h-8 w-24 animate-pulse rounded bg-sunken" />
+        : <p className={"mt-1 whitespace-nowrap text-[21px] font-semibold leading-8 sm:text-[26px] " + (word ? "" : "font-mono ") + (tone === "warn" ? "text-warn-text" : "text-text")}>{value}</p>}
+      <p className="mt-1 text-[12px] text-text-3">{note}</p>
     </Link>
   );
 }
 
-export default function ProcurementDashboardPage() {
+export default function StockOverviewPage() {
   const { data: dash } = useFetch<InventoryDashboard>("/api/inventory/dashboard");
   const { data: stats } = useFetch<InventoryStats>("/api/inventory/admin/stats");
 
+  // day of the month in Malaysia time, read once when the page opens
+  const [day] = useState(() => Math.max(1, new Date(Date.now() + 8 * 3600_000).getUTCDate()));
+  const cogsPerDay = stats ? stats.cogsThisMonth / day : 0;
+  const daysCover = stats && cogsPerDay > 0 ? stats.inventoryValue / cogsPerDay : null;
+  const wastePct = dash && dash.weeklySpending > 0 ? (dash.wasteTotal / dash.weeklySpending) * 100 : null;
+
+  const needs: { href: string; text: string; tone: "warn" | "danger" | "info" }[] = [];
+  if (dash?.pendingApprovals) needs.push({ href: "/inventory/orders?status=PENDING_APPROVAL", text: `${dash.pendingApprovals} purchase ${dash.pendingApprovals === 1 ? "order needs" : "orders need"} approval`, tone: "warn" });
+  if (stats?.invoices.overdueAmount) needs.push({ href: "/inventory/invoices?status=OVERDUE", text: `${rm(stats.invoices.overdueAmount)} of supplier invoices overdue`, tone: "danger" });
+  if (dash?.deliveriesExpected) needs.push({ href: "/inventory/receivings", text: `${dash.deliveriesExpected} ${dash.deliveriesExpected === 1 ? "delivery" : "deliveries"} to receive`, tone: "info" });
+
   return (
-    <div className="overflow-x-hidden px-4 pt-6 pb-10 md:px-8">
-      <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
-          <Boxes className="h-6 w-6 text-brand-text" /> Procurement
-        </h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">Stock value, purchasing, invoices, and waste at a glance.</p>
+    <div className="mx-auto max-w-[1240px] space-y-5 px-4 pt-6 pb-10 md:px-8">
+      <div>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Stock</h1>
+        <p className="mt-1.5 text-sm text-text-2">What we hold, what it cost this month, and where it leaks.</p>
       </div>
 
-      {/* Top KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-        <Tile
-          href="/inventory/reports"
-          icon={Warehouse}
-          accent="text-emerald-500"
-          label="Inventory Value"
-          value={stats ? rm(stats.inventoryValue) : null}
-        />
-        <Tile
-          href="/inventory/reports"
-          icon={Receipt}
-          accent="text-orange-500"
-          label="COGS (Month)"
-          value={stats ? rm(stats.cogsThisMonth) : null}
-        />
-        <Tile
-          href="/inventory/orders"
-          icon={ShoppingCart}
-          accent="text-blue-500"
-          label="Spend (Week)"
-          value={dash ? rm(dash.weeklySpending) : null}
-          sub={dash ? `${dash.ordersPlaced} POs placed` : undefined}
-        />
-        <Tile
-          href="/inventory/orders?status=PENDING_APPROVAL"
-          icon={AlertTriangle}
-          accent={dash && dash.pendingApprovals > 0 ? "text-amber-600" : "text-text-3"}
-          label="Pending Approvals"
-          value={dash ? String(dash.pendingApprovals) : null}
-        />
-        <Tile
-          href="/inventory/invoices"
-          icon={FileText}
-          accent="text-blue-500"
-          label="Invoices Due"
-          value={stats ? rm(stats.invoices.pendingAmount) : null}
-          sub={stats ? `${stats.invoices.total} total` : undefined}
-        />
-        <Tile
-          href="/inventory/wastage"
-          icon={Trash2}
-          accent="text-red-500"
-          label="Waste (Week)"
-          value={dash ? rm(dash.wasteTotal) : null}
-        />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi href="/inventory/reports" label="Stock value" value={stats ? rm(stats.inventoryValue) : null}
+          note={daysCover !== null ? <>about <b className="text-text-2">{Math.round(daysCover)} days</b> of use at this month&apos;s rate</> : "across all outlets"} />
+        <Kpi href="/inventory/reports" label="Cost of goods, this month" value={stats ? rm(stats.cogsThisMonth) : null}
+          note={stats ? <><b className="text-text-2">{rm(cogsPerDay)}</b> a day over {day} {day === 1 ? "day" : "days"}</> : "—"} />
+        <Kpi href="/inventory/wastage" label="Waste, last 7 days" value={dash ? rm(dash.wasteTotal) : null}
+          tone={wastePct !== null && wastePct > 3 ? "warn" : undefined}
+          note={wastePct !== null ? <><b className="text-text-2">{wastePct.toFixed(1)}%</b> of {rm(dash?.weeklySpending)} bought in the same 7 days</> : "of the last 7 days' purchases"} />
+        <Kpi word href="/inventory/stock-count" label="Stock count, today" value={dash ? (dash.stockCheckDone ? "Done" : "Not yet") : null}
+          tone={dash && !dash.stockCheckDone ? "warn" : undefined}
+          note={dash ? (dash.stockCheckDone ? "today's count is in" : "no outlet has counted today") : "—"} />
       </div>
 
-      {/* Alerts */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        {dash && dash.pendingApprovals > 0 && (
-          <Link href="/inventory/orders?status=PENDING_APPROVAL" className="rounded-full bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100">
-            ⚠️ {dash.pendingApprovals} {dash.pendingApprovals === 1 ? "PO" : "POs"} awaiting approval
-          </Link>
-        )}
-        {stats && stats.invoices.overdueAmount > 0 && (
-          <Link href="/inventory/invoices?status=OVERDUE" className="rounded-full bg-red-50 border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100">
-            🚨 {rm(stats.invoices.overdueAmount)} overdue invoices
-          </Link>
-        )}
-        {dash && dash.deliveriesExpected > 0 && (
-          <Link href="/inventory/receivings" className="rounded-full bg-purple-50 border border-purple-200 px-3 py-1.5 text-xs font-medium text-purple-700 hover:bg-purple-100">
-            📦 {dash.deliveriesExpected} {dash.deliveriesExpected === 1 ? "delivery" : "deliveries"} expected
-          </Link>
-        )}
-        {dash && !dash.stockCheckDone && (
-          <Link href="/inventory/stock-count" className="rounded-full bg-orange-50 border border-orange-200 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100">
-            📋 No stock count today
-          </Link>
-        )}
-      </div>
-
-      {/* Detail */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Recent orders */}
-        <div className="rounded-xl border border-line bg-surface p-4 sm:p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-text flex items-center gap-2">
-              <ShoppingCart className="h-4 w-4 text-blue-500" /> Recent Purchase Orders
-            </h2>
-            <Link href="/inventory/orders" className="text-xs text-brand-text hover:underline">All →</Link>
-          </div>
-          {!dash ? (
-            <div className="space-y-2">
-              {[1,2,3,4,5].map(i => <div key={i} className="h-8 bg-sunken rounded animate-pulse" />)}
-            </div>
-          ) : dash.recentOrders.length === 0 ? (
-            <p className="text-xs text-text-3 py-6 text-center">No recent orders</p>
-          ) : (
-            dash.recentOrders.slice(0, 6).map((order) => (
-              <div key={order.id} className="flex items-center justify-between py-2 border-b border-line last:border-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <code className="text-[10px] text-brand-text">{order.orderNumber}</code>
-                  <span className="text-xs text-text-2 truncate">{order.supplier}</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs font-medium">RM {order.totalAmount.toFixed(0)}</span>
-                  <Badge className={`text-[8px] px-1.5 py-0 ${STATUS_COLORS[order.status] ?? "bg-gray-400"}`}>
-                    {order.status.replace(/_/g, " ").toLowerCase()}
-                  </Badge>
-                </div>
-              </div>
-            ))
-          )}
+      {needs.length > 0 && (
+        <div className="flex flex-wrap gap-2" aria-label="Needs you">
+          {needs.map((n) => (
+            <Link key={n.href} href={n.href}
+              className={"inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium max-md:h-10 " +
+                (n.tone === "danger" ? "bg-danger-soft text-danger-text" : n.tone === "warn" ? "bg-warn-soft text-warn-text" : "bg-info-soft text-info-text")}>
+              {n.text} <ArrowRight className="size-3.5" aria-hidden />
+            </Link>
+          ))}
         </div>
+      )}
 
-        {/* Operations summary */}
-        <div className="space-y-6">
-          <div className="rounded-xl border border-line bg-surface p-4 sm:p-5">
-            <h2 className="text-sm font-semibold text-text flex items-center gap-2 mb-3">
-              <Package className="h-4 w-4 text-brand-text" /> This Week
-            </h2>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-lg bg-sunken p-3 text-center">
-                <p className="text-2xl font-bold text-text">{dash?.ordersPlaced ?? "—"}</p>
-                <p className="text-[10px] text-text-2">POs Placed</p>
-              </div>
-              <div className="rounded-lg bg-sunken p-3 text-center">
-                <p className="text-2xl font-bold text-text">{dash?.receivingsThisWeek ?? "—"}</p>
-                <p className="text-[10px] text-text-2">Receivings</p>
-              </div>
-              <div className="rounded-lg bg-sunken p-3 text-center">
-                <p className="text-2xl font-bold text-text">{dash?.deliveriesExpected ?? "—"}</p>
-                <p className="text-[10px] text-text-2">Pending</p>
-              </div>
-            </div>
+      <section className="overflow-clip rounded-card border border-line bg-surface">
+        <div className="flex items-center justify-between px-4 pt-4 pb-3">
+          <div>
+            <h2 className="text-[15px] font-semibold text-text">Recent purchase orders</h2>
+            <p className="mt-0.5 text-[12px] text-text-3">
+              {dash ? `${dash.ordersPlaced} placed and ${dash.receivingsThisWeek} received in the last 7 days` : "What is on its way into stock"}
+            </p>
           </div>
-
-          <div className="rounded-xl border border-line bg-surface p-4 sm:p-5">
-            <h2 className="text-sm font-semibold text-text flex items-center gap-2 mb-3">
-              <HandCoins className="h-4 w-4 text-emerald-600" /> Catalog
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              <Link href="/inventory/products" className="rounded-lg bg-sunken hover:bg-sunken p-3 text-center transition-colors">
-                <p className="text-2xl font-bold text-text">{stats?.products ?? "—"}</p>
-                <p className="text-[10px] text-text-2">Active products</p>
-              </Link>
-              <Link href="/inventory/suppliers" className="rounded-lg bg-sunken hover:bg-sunken p-3 text-center transition-colors">
-                <div className="flex items-center justify-center gap-1.5">
-                  <Truck className="h-4 w-4 text-text-3" />
-                  <p className="text-2xl font-bold text-text">{stats?.suppliers ?? "—"}</p>
-                </div>
-                <p className="text-[10px] text-text-2">Suppliers</p>
-              </Link>
-            </div>
-          </div>
+          <Link href="/inventory/orders" className="text-[13px] font-medium text-text-2 hover:text-text">PO list</Link>
         </div>
-      </div>
+        {!dash ? (
+          <div className="space-y-2 px-4 pb-4">{[1, 2, 3, 4].map((i) => <div key={i} className="h-10 animate-pulse rounded bg-sunken" />)}</div>
+        ) : dash.recentOrders.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 border-t border-line px-4 py-10 text-center">
+            <ClipboardCheck className="size-6 text-text-3" aria-hidden />
+            <p className="text-sm text-text-2">No purchase orders yet. Raise one from Procurement › Purchase Orders.</p>
+          </div>
+        ) : (
+          <ul>
+            {dash.recentOrders.slice(0, 8).map((o) => {
+              const st = STATUS[o.status] ?? { label: o.status.replace(/_/g, " ").toLowerCase(), cls: "bg-sunken text-text-2" };
+              return (
+                <li key={o.id} className="border-t border-line">
+                  <Link href={`/inventory/orders/${o.id}`} className="flex min-h-12 items-center gap-3 px-4 py-2 hover:bg-raised">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14px] font-medium text-text">{o.supplier}</span>
+                      <span className="block font-mono text-[12px] text-text-3">{o.orderNumber}</span>
+                    </span>
+                    <span className={"hidden shrink-0 rounded-full px-2 py-0.5 text-[12px] sm:inline " + st.cls}>{st.label}</span>
+                    <span className="w-24 shrink-0 text-right font-mono text-[14px] font-semibold text-text">{rm(o.totalAmount)}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

@@ -268,6 +268,17 @@ leading-[30px] tracking-[-0.01em] text-text`) and one page margin on 135 pages
 (`px-4 pt-6 pb-10 md:px-8`, the same as Inbox and Roster; cards, pop-ups and
 centred loading states untouched).
 
+**Part 3 (17 Nov):** one selected-chip style (the Inbox's), tabular figures app-wide.
+
+**Stock › Overview rebuilt (17 Nov)** as the first page on the full pattern: title
+"Stock" + one line; four key numbers each with a reference (stock value → days
+of cover at this month's rate; cost of goods month-to-date → per day; waste last
+7 days → % of purchases in the same 7 days, amber above 3%; today's count →
+done / not yet); a needs-you strip (approvals, overdue invoices, deliveries);
+one list (recent purchase orders). Same two APIs; the purchasing totals that
+repeated Procurement were dropped. The 3% waste line is a starting guess for
+the owner to set.
+
 Still to do in step 6: page-by-page layout (title + one line, at most four key
 numbers each against a reference, one list), section by section, starting with
 the most-used pages once Office Usage has data.
