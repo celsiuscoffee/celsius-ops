@@ -332,9 +332,12 @@ pop-ups. Thresholds that are guesses for the owner: food cost amber above
 35% (Recipes), order waiting amber over 15 minutes (Orders), outlets under 80%
 of round target (Sales dashboard). Prep recipes' "Central Prep price" is now
 "Listed price" (the field is still `transferPrice`; Celsius has no central
-kitchen). Follow-ups: shared `pos/_ReportsTabs.tsx`, `components/hr/page-header.tsx`
-and `components/inventory/EditOrderModal.tsx` still use old styling; nav labels
-are still Title Case while pages say sentence case; wide tables kept on
+kitchen). Tidy-up done the same day: `pos/_ReportsTabs.tsx` uses underline tabs,
+`components/hr/page-header.tsx` uses the page title style (back link reads
+"Team"), `EditOrderModal.tsx` is on tokens with an espresso save button, and
+every nav label is sentence case. Procurement's first page is now named
+"Supplier chats" (it was a second "Purchase orders"). The Compare page looked
+up its default preset by the old Title Case label; fixed. Wide tables kept on
 Members, Google campaigns, Rank scoreboard, GrabFood and the sales report.
 
 Still to do in step 6: page-by-page layout (title + one line, at most four key

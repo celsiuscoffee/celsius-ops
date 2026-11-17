@@ -165,9 +165,9 @@ export const NAV_SECTIONS: NavSection[] = [
           { label: "Reports",             href: "/pos/reports",             icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "sales:reports" },
           // Per-cashier till numbers (docs/design/cashier-performance-dashboard.md);
           // the till's own cashier scorecard reads the same metrics.
-          { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,     moduleKey: "sales:reports" },
+          { label: "Cashier performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,     moduleKey: "sales:reports" },
           // Pickup app orders, revenue and engagement (the old /pickup dashboard redirects here).
-          { label: "Pickup App",          href: "/pickup/analytics",        icon: <ShoppingBag className={ICON_SIZE} />, moduleKey: "sales:reports" },
+          { label: "Pickup app",          href: "/pickup/analytics",        icon: <ShoppingBag className={ICON_SIZE} />, moduleKey: "sales:reports" },
         ],
       },
     ],
@@ -183,16 +183,16 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Members",
         items: [
           { label: "Members",      href: "/loyalty/members",      icon: <Users className={ICON_SIZE} />,     moduleKey: "loyalty:members" },
-          { label: "Manual Grant", href: "/loyalty/manual-grant", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "loyalty:manual-grant" },
+          { label: "Manual grant", href: "/loyalty/manual-grant", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "loyalty:manual-grant" },
         ],
       },
       {
-        label: "Rewards History",
+        label: "Rewards history",
         items: [
           { label: "Vouchers",    href: "/loyalty/vouchers",    icon: <TicketPercent className={ICON_SIZE} />, moduleKey: "loyalty:redemptions" },
           { label: "Redemptions", href: "/loyalty/redemptions", icon: <Receipt className={ICON_SIZE} />,       moduleKey: "loyalty:redemptions" },
           // Raw per-transaction points ledger — audit-grade, reached via ⌘K.
-          { label: "Points Log",  href: "/loyalty/points-log",  icon: <Coins className={ICON_SIZE} />,         moduleKey: "loyalty:redemptions", hidden: true },
+          { label: "Points log",  href: "/loyalty/points-log",  icon: <Coins className={ICON_SIZE} />,         moduleKey: "loyalty:redemptions", hidden: true },
         ],
       },
       {
@@ -200,8 +200,8 @@ export const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Reviews",         href: "/reviews",            icon: <Star className={ICON_SIZE} />,          moduleKey: "reviews:list" },
           { label: "Feedback",        href: "/reviews/feedback",   icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "reviews:list" },
-          { label: "Local Rank",      href: "/reviews/geogrid",    icon: <MapPinned className={ICON_SIZE} />,     moduleKey: "reviews:list" },
-          { label: "Rank Scoreboard", href: "/reviews/scoreboard", icon: <Target className={ICON_SIZE} />,        moduleKey: "reviews:list" },
+          { label: "Local rank",      href: "/reviews/geogrid",    icon: <MapPinned className={ICON_SIZE} />,     moduleKey: "reviews:list" },
+          { label: "Rank scoreboard", href: "/reviews/scoreboard", icon: <Target className={ICON_SIZE} />,        moduleKey: "reviews:list" },
         ],
       },
     ],
@@ -232,10 +232,10 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Ads",
         items: [
           { label: "Google",           href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:overview" },
-          { label: "Google Campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ads:campaigns" },
+          { label: "Google campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ads:campaigns" },
           { label: "Optimizer",        href: "/ads/optimizer", icon: <Scissors className={ICON_SIZE} />,        moduleKey: "ads:campaigns" },
           { label: "GrabFood",         href: "/ads/grab",      icon: <Megaphone className={ICON_SIZE} />,       moduleKey: "ads:grab" },
-          { label: "Ad Invoices",      href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,         moduleKey: "ads:invoices" },
+          { label: "Ad invoices",      href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,         moduleKey: "ads:invoices" },
         ],
       },
     ],
@@ -258,17 +258,17 @@ export const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Recipes",      href: "/inventory/menus",        icon: <BookOpen className={ICON_SIZE} />,    moduleKey: "inventory:menus" },
           // Printable per-item BOM — linked from the Recipes page.
-          { label: "Recipe Cards", href: "/inventory/menus/cards",  icon: <Printer className={ICON_SIZE} />,     moduleKey: "inventory:menus", hidden: true },
+          { label: "Recipe cards", href: "/inventory/menus/cards",  icon: <Printer className={ICON_SIZE} />,     moduleKey: "inventory:menus", hidden: true },
           // Prep sub-recipes made at the outlets (raw → prepped). Celsius has no central kitchen.
-          { label: "Prep Recipes", href: "/inventory/prep-recipes", icon: <ChefHat className={ICON_SIZE} />,     moduleKey: "inventory:menus" },
+          { label: "Prep recipes", href: "/inventory/prep-recipes", icon: <ChefHat className={ICON_SIZE} />,     moduleKey: "inventory:menus" },
           { label: "Packaging",    href: "/inventory/packaging",    icon: <PackageOpen className={ICON_SIZE} />, moduleKey: "inventory:packaging" },
         ],
       },
       {
-        label: "Menu Status",
+        label: "Menu status",
         items: [
           // Store open/closed and items switched off, per outlet and channel.
-          { label: "Menu Status", href: "/pos/store-menu-status", icon: <Power className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+          { label: "Menu status", href: "/pos/store-menu-status", icon: <Power className={ICON_SIZE} />, moduleKey: "pickup:settings" },
         ],
       },
     ],
@@ -291,15 +291,15 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Ingredients",
         items: [
           { label: "Ingredients", href: "/inventory/products",    icon: <Package className={ICON_SIZE} />,    moduleKey: "inventory:products" },
-          { label: "Par Levels",  href: "/inventory/par-levels",  icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "inventory:par-levels" },
+          { label: "Par levels",  href: "/inventory/par-levels",  icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "inventory:par-levels" },
           // Same item list as Ingredients, filtered to itemType PERISHABLE.
           { label: "Perishables", href: "/inventory/perishables", icon: <Box className={ICON_SIZE} />,        moduleKey: "inventory:perishables" },
         ],
       },
       {
-        label: "Stock Count",
+        label: "Stock count",
         items: [
-          { label: "Stock Count", href: "/inventory/stock-count", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "inventory:stock-count" },
+          { label: "Stock count", href: "/inventory/stock-count", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "inventory:stock-count" },
         ],
       },
       {
@@ -326,16 +326,16 @@ export const NAV_SECTIONS: NavSection[] = [
     icon: <Truck className={ICON_SIZE} />,
     subgroups: [
       {
-        label: "Purchase Orders",
+        label: "Supplier chats",
         items: [
-          { label: "Purchase Orders", href: "/inventory/supplier-chats", icon: <MessageCircle className={ICON_SIZE} />, moduleKey: "inventory:orders" },
+          { label: "Supplier chats", href: "/inventory/supplier-chats", icon: <MessageCircle className={ICON_SIZE} />, moduleKey: "inventory:orders" },
         ],
       },
       {
-        label: "PO List",
+        label: "Purchase orders",
         items: [
-          { label: "PO List",    href: "/inventory/orders",     icon: <FileText className={ICON_SIZE} />, moduleKey: "inventory:orders" },
-          { label: "Receivings", href: "/inventory/receivings", icon: <Receipt className={ICON_SIZE} />,  moduleKey: "inventory:receivings" },
+          { label: "Purchase orders",    href: "/inventory/orders",     icon: <FileText className={ICON_SIZE} />, moduleKey: "inventory:orders" },
+          { label: "Receiving", href: "/inventory/receivings", icon: <Receipt className={ICON_SIZE} />,  moduleKey: "inventory:receivings" },
         ],
       },
       {
@@ -344,13 +344,13 @@ export const NAV_SECTIONS: NavSection[] = [
           { label: "Invoices",      href: "/inventory/invoices",       icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "inventory:invoices" },
           // Invoice ↔ PO matching. Renamed from "Reconciliation" so it can't be
           // confused with Money → Bank Match.
-          { label: "Invoice Match", href: "/inventory/reconciliation", icon: <Scale className={ICON_SIZE} />,         moduleKey: "inventory:invoices" },
+          { label: "Invoice match", href: "/inventory/reconciliation", icon: <Scale className={ICON_SIZE} />,         moduleKey: "inventory:invoices" },
         ],
       },
       {
-        label: "Payment Requests",
+        label: "Payment requests",
         items: [
-          { label: "Payment Requests", href: "/inventory/pay-and-claim", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "inventory:pay-and-claim" },
+          { label: "Payment requests", href: "/inventory/pay-and-claim", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "inventory:pay-and-claim" },
         ],
       },
       {
@@ -376,12 +376,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Schedules",   href: "/hr/schedules", icon: <CalendarDays className={ICON_SIZE} />,    moduleKey: "hr:schedules", hidden: true },
       { label: "Attendance",  href: "/hr/attendance", icon: <Clock className={ICON_SIZE} />,          moduleKey: "hr:attendance", hidden: true },
       { label: "Overtime",    href: "/hr/overtime",   icon: <Clock className={ICON_SIZE} />,          moduleKey: "hr:overtime", hidden: true },
-      { label: "Shift Swaps", href: "/hr/shift-swaps", icon: <ArrowLeftRight className={ICON_SIZE} />, moduleKey: "hr:schedules", hidden: true },
+      { label: "Shift swaps", href: "/hr/shift-swaps", icon: <ArrowLeftRight className={ICON_SIZE} />, moduleKey: "hr:schedules", hidden: true },
       { label: "Leave",       href: "/hr/leave",     icon: <CalendarOff className={ICON_SIZE} />,     moduleKey: "hr:leave", hidden: true },
-      { label: "Roster Attendance", href: "/hr/roster-attendance", icon: <Clock className={ICON_SIZE} />, moduleKey: "hr:schedules", hidden: true },
-      { label: "PT Hours",    href: "/hr/pt-hours",  icon: <Clock className={ICON_SIZE} />,           moduleKey: "hr:attendance", hidden: true },
+      { label: "Roster attendance", href: "/hr/roster-attendance", icon: <Clock className={ICON_SIZE} />, moduleKey: "hr:schedules", hidden: true },
+      { label: "PT hours",    href: "/hr/pt-hours",  icon: <Clock className={ICON_SIZE} />,           moduleKey: "hr:attendance", hidden: true },
       { label: "Availability",   href: "/hr/availability", icon: <Clock className={ICON_SIZE} />,     moduleKey: "hr:schedules", hidden: true },
-      { label: "Coverage Rules", href: "/hr/coverage",     icon: <Flame className={ICON_SIZE} />,     moduleKey: "hr:schedules", hidden: true },
+      { label: "Coverage rules", href: "/hr/coverage",     icon: <Flame className={ICON_SIZE} />,     moduleKey: "hr:schedules", hidden: true },
       // People: the staff list; its tab strip holds the HR overview, PT rates,
       // app access, certificates and memos.
       { label: "People",      href: "/hr/employees", icon: <UserCog className={ICON_SIZE} />,         moduleKey: "hr:employees" },
@@ -389,22 +389,22 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Analytics",   href: "/hr/analytics", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "hr:dashboard", hidden: true },
       // Keyed on hr:employees, not hr:payroll — a PT staffing manager sets hourly
       // rates without getting the payroll module (runs, payslips, bank files).
-      { label: "PT Rates",    href: "/hr/pt-rates",  icon: <Banknote className={ICON_SIZE} />,        moduleKey: "hr:employees", hidden: true },
-      { label: "App Access",  href: "/hr/access-presets", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "hr:employees", hidden: true },
+      { label: "PT rates",    href: "/hr/pt-rates",  icon: <Banknote className={ICON_SIZE} />,        moduleKey: "hr:employees", hidden: true },
+      { label: "App access",  href: "/hr/access-presets", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "hr:employees", hidden: true },
       { label: "Certifications", href: "/hr/certifications", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "hr:employees", hidden: true },
       { label: "Memos",       href: "/hr/memos",     icon: <FileText className={ICON_SIZE} />,        moduleKey: "hr:memos", hidden: true },
       { label: "Payroll",     href: "/hr/payroll",   icon: <Banknote className={ICON_SIZE} />,        moduleKey: "hr:payroll" },
       // Read-only view of what the levers scored. Corrections live on
       // /hr/performance; this stays as the plain company-wide readout.
       { label: "Allowances",  href: "/hr/allowances", icon: <Banknote className={ICON_SIZE} />,       moduleKey: "hr:allowances", hidden: true },
-      { label: "Statutory Calendar", href: "/hr/compliance", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "hr:payroll", hidden: true },
+      { label: "Statutory calendar", href: "/hr/compliance", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "hr:payroll", hidden: true },
       // One screen, two tabs: Allowance (levers, deductions, corrections) and
       // Scorecard (attendance/ops/reviews). Deliberately NOT keyed on
       // hr:allowances, which canAccess hard-restricts to OWNER/ADMIN — a
       // staffing manager needs to waive a wrongly-docked absence for their own
       // team, and the API scopes them to their subtree and to line waivers.
       { label: "Performance", href: "/hr/performance", icon: <TrendingUp className={ICON_SIZE} />,    moduleKey: "hr:performance" },
-      { label: "Review Penalties", href: "/hr/review-penalties", icon: <AlertTriangle className={ICON_SIZE} />, moduleKey: "hr:review-penalties", hidden: true },
+      { label: "Review penalties", href: "/hr/review-penalties", icon: <AlertTriangle className={ICON_SIZE} />, moduleKey: "hr:review-penalties", hidden: true },
     ],
   },
 
@@ -416,18 +416,18 @@ export const NAV_SECTIONS: NavSection[] = [
     icon: <Coins className={ICON_SIZE} />,
     subgroups: [
       {
-        label: "Cash Flow",
+        label: "Cash flow",
         items: [
-          { label: "Cash Flow",     href: "/finance/cashflow",         icon: <LineChart className={ICON_SIZE} />,       moduleKey: "finance:cashflow" },
-          { label: "Cash Tracking", href: "/finance/cash-tracking",    icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
+          { label: "Cash flow",     href: "/finance/cashflow",         icon: <LineChart className={ICON_SIZE} />,       moduleKey: "finance:cashflow" },
+          { label: "Cash tracking", href: "/finance/cash-tracking",    icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
           { label: "Monthly",       href: "/finance/monthly-cashflow", icon: <CalendarDays className={ICON_SIZE} />,    moduleKey: "finance:cashflow" },
         ],
       },
       {
-        label: "Bank Match",
+        label: "Bank match",
         items: [
           // Bank ↔ books. Renamed from "Reconciliation" (see Invoice Match).
-          { label: "Bank Match", href: "/finance/recon", icon: <Scale className={ICON_SIZE} />, moduleKey: "finance:reports" },
+          { label: "Bank match", href: "/finance/recon", icon: <Scale className={ICON_SIZE} />, moduleKey: "finance:reports" },
         ],
       },
       {
@@ -435,7 +435,7 @@ export const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Reports",      href: "/finance/reports",      icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "finance:reports" },
           { label: "Ledger",       href: "/finance/transactions", icon: <FileText className={ICON_SIZE} />,   moduleKey: "finance:transactions" },
-          { label: "Fixed Assets", href: "/finance/fixed-assets", icon: <Landmark className={ICON_SIZE} />,   moduleKey: "finance:reports" },
+          { label: "Fixed assets", href: "/finance/fixed-assets", icon: <Landmark className={ICON_SIZE} />,   moduleKey: "finance:reports" },
         ],
       },
       // Home/Compliance/Bank Statements/Payouts/Recurring Expenses are dropped
@@ -450,11 +450,11 @@ export const NAV_SECTIONS: NavSection[] = [
     icon: <ClipboardCheck className={ICON_SIZE} />,
     subgroups: [
       {
-        label: "Outlet Scorecard",
+        label: "Outlet scorecard",
         items: [
-          { label: "Outlet Scorecard", href: "/ops/performance",   icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "ops:performance" },
+          { label: "Outlet scorecard", href: "/ops/performance",   icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "ops:performance" },
           // The scores the ops scoreboard job sends out (/api/scorecard).
-          { label: "Area Scorecard",   href: "/loyalty/dashboard", icon: <Trophy className={ICON_SIZE} />,    moduleKey: "loyalty:dashboard" },
+          { label: "Area scorecard",   href: "/loyalty/dashboard", icon: <Trophy className={ICON_SIZE} />,    moduleKey: "loyalty:dashboard" },
         ],
       },
       {
@@ -473,10 +473,10 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        label: "What Happened",
+        label: "What happened",
         items: [
           // Was "Ops Workspace": incidents, messages and reminders.
-          { label: "What Happened", href: "/ops/chat-inbox", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "ops:chat-inbox" },
+          { label: "What happened", href: "/ops/chat-inbox", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "ops:chat-inbox" },
         ],
       },
     ],
@@ -488,7 +488,7 @@ export const NAV_SECTIONS: NavSection[] = [
     icon: <Bot className={ICON_SIZE} />,
     dividerBefore: true,
     items: [
-      { label: "AI Agents", href: "/agents", icon: <Bot className={ICON_SIZE} />, moduleKey: "settings:system" },
+      { label: "AI agents", href: "/agents", icon: <Bot className={ICON_SIZE} />, moduleKey: "settings:system" },
     ],
   },
   // ── Settings — rendered behind the gear in the sidebar footer, not in the
@@ -503,20 +503,20 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Business",
         items: [
           { label: "Outlets",           href: "/settings/outlets", icon: <Building2 className={ICON_SIZE} />,   moduleKey: "settings:outlets" },
-          { label: "Staff & Access",    href: "/settings/staff",   icon: <UserCog className={ICON_SIZE} />,     moduleKey: "settings:staff" },
-          { label: "Approval Rules",    href: "/settings/rules",   icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "settings:rules" },
-          { label: "HR Settings",       href: "/hr/settings",      icon: <UserCog className={ICON_SIZE} />,     moduleKey: "hr:settings" },
-          { label: "Chart of Accounts", href: "/finance/coa",      icon: <BookOpen className={ICON_SIZE} />,    moduleKey: "finance:reports" },
+          { label: "Staff & access",    href: "/settings/staff",   icon: <UserCog className={ICON_SIZE} />,     moduleKey: "settings:staff" },
+          { label: "Approval rules",    href: "/settings/rules",   icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "settings:rules" },
+          { label: "HR settings",       href: "/hr/settings",      icon: <UserCog className={ICON_SIZE} />,     moduleKey: "hr:settings" },
+          { label: "Chart of accounts", href: "/finance/coa",      icon: <BookOpen className={ICON_SIZE} />,    moduleKey: "finance:reports" },
         ],
       },
       {
-        label: "POS & Pickup",
+        label: "POS & pickup",
         items: [
-          { label: "POS Settings",    href: "/pos/settings",          icon: <CreditCard className={ICON_SIZE} />,  moduleKey: "pickup:settings" },
+          { label: "POS settings",    href: "/pos/settings",          icon: <CreditCard className={ICON_SIZE} />,  moduleKey: "pickup:settings" },
           { label: "Printers",        href: "/pos/printers",          icon: <Printer className={ICON_SIZE} />,     moduleKey: "pickup:settings" },
-          { label: "Table QR Codes",  href: "/pos/table-qr",          icon: <QrCode className={ICON_SIZE} />,      moduleKey: "pickup:settings" },
-          { label: "Pickup Settings", href: "/pickup/settings",       icon: <ShoppingBag className={ICON_SIZE} />, moduleKey: "pickup:settings" },
-          { label: "Splash Posters",  href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />,   moduleKey: "pickup:menu" },
+          { label: "Table QR codes",  href: "/pos/table-qr",          icon: <QrCode className={ICON_SIZE} />,      moduleKey: "pickup:settings" },
+          { label: "Pickup settings", href: "/pickup/settings",       icon: <ShoppingBag className={ICON_SIZE} />, moduleKey: "pickup:settings" },
+          { label: "Splash posters",  href: "/pickup/splash-posters", icon: <ImagePlus className={ICON_SIZE} />,   moduleKey: "pickup:menu" },
         ],
       },
       {
@@ -525,37 +525,37 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Loyalty",
         items: [
           { label: "Challenges",       href: "/loyalty/missions",         icon: <Target className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
-          { label: "Mystery Pool",     href: "/loyalty/mystery",          icon: <Sparkles className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
-          { label: "Admin Claimables", href: "/loyalty/admin-claimables", icon: <Gift className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
-          { label: "All Rewards",      href: "/loyalty/all-rewards",      icon: <Ticket className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
+          { label: "Mystery pool",     href: "/loyalty/mystery",          icon: <Sparkles className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
+          { label: "Admin claimables", href: "/loyalty/admin-claimables", icon: <Gift className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
+          { label: "All rewards",      href: "/loyalty/all-rewards",      icon: <Ticket className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
           { label: "Tiers",            href: "/loyalty/tiers",            icon: <Crown className={ICON_SIZE} />,    moduleKey: "loyalty:rewards" },
-          { label: "Discount Engine",  href: "/loyalty/promotions",       icon: <Tag className={ICON_SIZE} />,      moduleKey: "loyalty:rewards" },
+          { label: "Discount engine",  href: "/loyalty/promotions",       icon: <Tag className={ICON_SIZE} />,      moduleKey: "loyalty:rewards" },
           // Code-bound reward shapes; rarely edited — hidden, reachable via ⌘K.
-          { label: "Outcome Types",    href: "/loyalty/reward-kinds",     icon: <Layers className={ICON_SIZE} />,   moduleKey: "loyalty:rewards", hidden: true },
-          { label: "Birthday Treats",  href: "/loyalty/birthday",         icon: <Cake className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
-          { label: "Earn Rate",        href: "/loyalty/settings",         icon: <Coins className={ICON_SIZE} />,    moduleKey: "loyalty:rewards" },
+          { label: "Outcome types",    href: "/loyalty/reward-kinds",     icon: <Layers className={ICON_SIZE} />,   moduleKey: "loyalty:rewards", hidden: true },
+          { label: "Birthday treats",  href: "/loyalty/birthday",         icon: <Cake className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
+          { label: "Earn rate",        href: "/loyalty/settings",         icon: <Coins className={ICON_SIZE} />,    moduleKey: "loyalty:rewards" },
         ],
       },
       {
         label: "Marketing",
         items: [
           { label: "Reviews",    href: "/reviews/settings", icon: <MessageCircle className={ICON_SIZE} />, moduleKey: "reviews:settings" },
-          { label: "Google Ads", href: "/ads/settings",     icon: <Megaphone className={ICON_SIZE} />,     moduleKey: "ads:settings" },
+          { label: "Google ads", href: "/ads/settings",     icon: <Megaphone className={ICON_SIZE} />,     moduleKey: "ads:settings" },
         ],
       },
       {
         label: "Stock",
         items: [
-          { label: "Groups & Storage", href: "/inventory/groups",     icon: <Tags className={ICON_SIZE} />,           moduleKey: "inventory:categories" },
-          { label: "Stock Count",      href: "/settings/stock-count", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
+          { label: "Groups & storage", href: "/inventory/groups",     icon: <Tags className={ICON_SIZE} />,           moduleKey: "inventory:categories" },
+          { label: "Stock count",      href: "/settings/stock-count", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
         ],
       },
       {
         label: "System",
         items: [
-          { label: "SOP Categories", href: "/ops/categories",        icon: <Tags className={ICON_SIZE} />,   moduleKey: "ops:categories" },
+          { label: "SOP categories", href: "/ops/categories",        icon: <Tags className={ICON_SIZE} />,   moduleKey: "ops:categories" },
           { label: "Integrations",   href: "/settings/integrations", icon: <Plug className={ICON_SIZE} />,   moduleKey: "settings:integrations" },
-          { label: "Office Usage",   href: "/settings/usage",        icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "settings:staff" },
+          { label: "Office usage",   href: "/settings/usage",        icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "settings:staff" },
           { label: "System",         href: "/settings/system",       icon: <Wrench className={ICON_SIZE} />, moduleKey: "settings:system" },
         ],
       },

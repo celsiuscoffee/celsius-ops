@@ -135,7 +135,7 @@ function InvoicePreviewPane({ photos }: { photos: string[] }) {
         )}
       </div>
       <div className="px-3 py-2 border-t border-gray-700 flex items-center justify-between">
-        <a href={url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-blue-400 hover:text-blue-300">
+        <a href={url} target="_blank" rel="noopener noreferrer" className="text-[11px] font-medium text-info-text hover:text-info-soft">
           Open in new tab →
         </a>
         <span className="text-[10px] text-text-2">{isPdf ? "PDF" : failed ? "Preview unavailable" : "Image"}</span>
@@ -627,7 +627,7 @@ export function EditOrderModal({
       <DialogContent className={`max-h-[95vh] overflow-y-auto ${order?.invoice && order.invoice.photos.length > 0 ? "sm:max-w-[1400px] w-[95vw]" : "sm:max-w-3xl"}`}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {confirmOnSave ? <CheckCircle2 className="h-4 w-4 text-yellow-500" /> : <Pencil className="h-4 w-4" />}
+            {confirmOnSave ? <CheckCircle2 className="h-4 w-4 text-warn-text" /> : <Pencil className="h-4 w-4" />}
             {confirmOnSave ? `Upload Invoice — ${order?.orderNumber}` : `Edit ${order?.orderNumber}`}
           </DialogTitle>
         </DialogHeader>
@@ -645,12 +645,12 @@ export function EditOrderModal({
             <div className="rounded-md bg-sunken px-3 py-2 text-xs text-text-2">
               {order.supplier} → {order.outlet}
               {detectedSupplier && detectedSupplier.toLowerCase() !== order.supplier.toLowerCase() && (
-                <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700">
+                <span className="ml-2 rounded bg-warn-soft px-1.5 py-0.5 text-[9px] font-medium text-warn-text">
                   AI detected: {detectedSupplier}
                 </span>
               )}
               {detectedSupplier && detectedSupplier.toLowerCase() === order.supplier.toLowerCase() && (
-                <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-[9px] font-medium text-green-700">
+                <span className="ml-2 rounded bg-ok-soft px-1.5 py-0.5 text-[9px] font-medium text-ok-text">
                   ✓ Supplier matched
                 </span>
               )}
@@ -662,7 +662,7 @@ export function EditOrderModal({
                 <Receipt className="h-3.5 w-3.5" />
                 Invoice
                 {order.invoice && (
-                  <Badge className="ml-1 text-[9px] bg-gray-400">{order.invoice.invoiceNumber}</Badge>
+                  <Badge className="ml-1 bg-sunken text-[9px] text-text-2">{order.invoice.invoiceNumber}</Badge>
                 )}
                 {!order.invoice && (
                   <span className="ml-1 text-[10px] font-normal text-text-3">— will be created when you add a due date or photo</span>
@@ -704,7 +704,7 @@ export function EditOrderModal({
                       <div key={i} className="group relative rounded-md border overflow-hidden">
                         {f.type === "pdf" ? (
                           <div className="flex items-center gap-1.5 px-3 py-2 bg-sunken">
-                            <FileText className="h-4 w-4 text-red-500" />
+                            <FileText className="h-4 w-4 text-danger-text" />
                             <span className="text-xs text-text-2 max-w-[120px] truncate">{f.name}</span>
                           </div>
                         ) : (
@@ -714,7 +714,7 @@ export function EditOrderModal({
                         )}
                         <button
                           onClick={(e) => { e.stopPropagation(); setEditInvoiceFiles((prev) => prev.filter((_, j) => j !== i)); }}
-                          className="absolute -right-1 -top-1 rounded-full bg-red-500 p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute -right-1 -top-1 rounded-full bg-danger-text p-0.5 text-on-ink opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -726,16 +726,16 @@ export function EditOrderModal({
 
               {/* AI extraction status */}
               {extracting && (
-                <div className="mb-3 flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2">
-                  <Sparkles className="h-4 w-4 animate-pulse text-purple-500" />
-                  <span className="text-xs text-purple-700">AI is extracting invoice details...</span>
+                <div className="mb-3 flex items-center gap-2 rounded-lg border border-line bg-info-soft px-3 py-2">
+                  <Sparkles className="h-4 w-4 animate-pulse text-info-text" />
+                  <span className="text-xs text-info-text">AI is extracting invoice details...</span>
                 </div>
               )}
 
               {Object.keys(aiExtracted).length > 0 && !extracting && (
-                <div className="mb-3 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-                  <Sparkles className="h-4 w-4 text-green-500" />
-                  <span className="text-xs text-green-700">AI auto-filled fields — review and correct if needed</span>
+                <div className="mb-3 flex items-center gap-2 rounded-lg border border-line bg-ok-soft px-3 py-2">
+                  <Sparkles className="h-4 w-4 text-ok-text" />
+                  <span className="text-xs text-ok-text">AI auto-filled fields — review and correct if needed</span>
                 </div>
               )}
 
@@ -744,27 +744,27 @@ export function EditOrderModal({
                 <div>
                   <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-text-2">
                     <FileText className="h-3.5 w-3.5" /> Invoice Number
-                    {order.status === "SENT" && <span className="text-red-500">*</span>}
-                    {aiExtracted.invoiceNumber && <span className="ml-1 rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                    {order.status === "SENT" && <span className="text-danger-text">*</span>}
+                    {aiExtracted.invoiceNumber && <span className="ml-1 rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
                   </label>
                   <Input
                     type="text"
                     placeholder="e.g. INV-001234"
                     value={editInvoiceNumber}
                     onChange={(e) => { setEditInvoiceNumber(e.target.value); setAiExtracted((p) => { const n = { ...p }; delete n.invoiceNumber; return n; }); }}
-                    className={aiExtracted.invoiceNumber ? "border-purple-300 bg-purple-50/30" : ""}
+                    className={aiExtracted.invoiceNumber ? "border-line bg-info-soft" : ""}
                   />
                 </div>
                 <div>
                   <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-text-2">
                     <CalendarDays className="h-3.5 w-3.5" /> Invoice Date
-                    {aiExtracted.issueDate && <span className="ml-1 rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                    {aiExtracted.issueDate && <span className="ml-1 rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
                   </label>
                   <Input
                     type="date"
                     value={editInvoiceIssueDate}
                     onChange={(e) => { setEditInvoiceIssueDate(e.target.value); setAiExtracted((p) => { const n = { ...p }; delete n.issueDate; return n; }); }}
-                    className={aiExtracted.issueDate ? "border-purple-300 bg-purple-50/30" : ""}
+                    className={aiExtracted.issueDate ? "border-line bg-info-soft" : ""}
                   />
                 </div>
               </div>
@@ -772,13 +772,13 @@ export function EditOrderModal({
                 <div>
                   <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-text-2">
                     <CalendarDays className="h-3.5 w-3.5" /> Invoice Due Date
-                    {aiExtracted.dueDate && <span className="ml-1 rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                    {aiExtracted.dueDate && <span className="ml-1 rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
                   </label>
                   <Input
                     type="date"
                     value={editInvoiceDueDate}
                     onChange={(e) => { setEditInvoiceDueDate(e.target.value); setAiExtracted((p) => { const n = { ...p }; delete n.dueDate; return n; }); }}
-                    className={aiExtracted.dueDate ? "border-purple-300 bg-purple-50/30" : ""}
+                    className={aiExtracted.dueDate ? "border-line bg-info-soft" : ""}
                   />
                 </div>
               </div>
@@ -788,8 +788,8 @@ export function EditOrderModal({
             <div>
               <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-text-2">
                 <Truck className="h-3.5 w-3.5" /> Delivery Date
-                {order.status === "SENT" && <span className="text-red-500">*</span>}
-                {aiExtracted.deliveryDate && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                {order.status === "SENT" && <span className="text-danger-text">*</span>}
+                {aiExtracted.deliveryDate && <span className="rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
               </label>
               <Input
                 type="date"
@@ -812,11 +812,11 @@ export function EditOrderModal({
                 : invoiceTotal;
               const depositAlreadyPaid = !!order.invoice?.depositPaidAt;
               return (
-                <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
-                  <p className="mb-2 text-xs font-semibold text-amber-900">Deposit (optional)</p>
+                <div className="rounded-lg border border-line bg-warn-soft p-3">
+                  <p className="mb-2 text-xs font-semibold text-warn-text">Deposit (optional)</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1 block text-[11px] font-medium text-amber-900/80">Deposit %</label>
+                      <label className="mb-1 block text-[11px] font-medium text-warn-text">Deposit %</label>
                       <Input
                         type="number"
                         min="0"
@@ -828,7 +828,7 @@ export function EditOrderModal({
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-[11px] font-medium text-amber-900/80">Balance due (days)</label>
+                      <label className="mb-1 block text-[11px] font-medium text-warn-text">Balance due (days)</label>
                       <Input
                         type="number"
                         min="0"
@@ -842,21 +842,21 @@ export function EditOrderModal({
                   {validPct && invoiceTotal > 0 ? (
                     <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                       <div className="rounded bg-surface px-2 py-1.5">
-                        <span className="text-amber-700">Deposit ({pct}%)</span>
-                        <p className="font-semibold text-amber-900">RM {depAmt.toFixed(2)}</p>
+                        <span className="text-warn-text">Deposit ({pct}%)</span>
+                        <p className="font-semibold text-warn-text">RM {depAmt.toFixed(2)}</p>
                       </div>
                       <div className="rounded bg-surface px-2 py-1.5">
-                        <span className="text-amber-700">Balance</span>
-                        <p className="font-semibold text-amber-900">RM {balance.toFixed(2)}</p>
+                        <span className="text-warn-text">Balance</span>
+                        <p className="font-semibold text-warn-text">RM {balance.toFixed(2)}</p>
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-1.5 text-[11px] text-amber-800/70">
+                    <p className="mt-1.5 text-[11px] text-warn-text">
                       Leave % blank for full payment. Set % to require a deposit before delivery — system splits the invoice into Pay Deposit + Pay Balance.
                     </p>
                   )}
                   {depositAlreadyPaid && (
-                    <p className="mt-2 text-[11px] text-amber-700">
+                    <p className="mt-2 text-[11px] text-warn-text">
                       Deposit already paid on {new Date(order.invoice!.depositPaidAt!).toLocaleDateString("en-MY")}. Editing the % won&apos;t reverse that — only adjusts what&apos;s recorded.
                     </p>
                   )}
@@ -868,7 +868,7 @@ export function EditOrderModal({
             <div>
               <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-text-2 uppercase">
                 Order Items
-                {aiExtracted.items && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium normal-case text-purple-600">AI updated qty &amp; prices</span>}
+                {aiExtracted.items && <span className="rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium normal-case text-info-text">AI updated qty &amp; prices</span>}
               </p>
               <div className="rounded-lg border overflow-hidden overflow-x-auto">
                 <table className="w-full text-xs min-w-[720px]">
@@ -885,10 +885,10 @@ export function EditOrderModal({
                   <tbody>
                     {editItems.map((item, idx) => {
                       if (item.removed) return (
-                        <tr key={item.id} className="border-b border-line bg-red-50/50">
+                        <tr key={item.id} className="border-b border-line bg-danger-soft">
                           <td className="px-3 py-2 text-text-3 line-through" colSpan={5}>{item.product}</td>
                           <td className="px-3 py-2 text-center">
-                            <button onClick={() => setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, removed: false } : p))} className="text-blue-500 hover:text-blue-700" title="Undo">
+                            <button onClick={() => setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, removed: false } : p))} className="text-info-text hover:text-info-text" title="Undo">
                               <Plus className="h-3.5 w-3.5" />
                             </button>
                           </td>
@@ -901,7 +901,7 @@ export function EditOrderModal({
                             <p className="font-medium text-text">{item.product}</p>
                             <p className="text-[10px] text-text-3">
                               {item.sku}
-                              {item.notes === "Added from invoice" && <span className="ml-1 rounded bg-purple-100 px-1 py-0.5 text-[9px] font-medium text-purple-600">AI added</span>}
+                              {item.notes === "Added from invoice" && <span className="ml-1 rounded bg-info-soft px-1 py-0.5 text-[9px] font-medium text-info-text">AI added</span>}
                             </p>
                           </td>
                           <td className="px-3 py-2 text-text-2">{item.uom || item.package}</td>
@@ -927,7 +927,7 @@ export function EditOrderModal({
                           </td>
                           <td className="px-3 py-2 text-right font-medium text-text">RM {lineTotal.toFixed(2)}</td>
                           <td className="px-3 py-2 text-center">
-                            <button onClick={() => setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, removed: true } : p))} className="text-red-400 hover:text-red-600" title="Remove">
+                            <button onClick={() => setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, removed: true } : p))} className="text-danger-text hover:text-danger-text" title="Remove">
                               <X className="h-3.5 w-3.5" />
                             </button>
                           </td>
@@ -938,7 +938,7 @@ export function EditOrderModal({
                       <tr className="border-t border-line">
                         <td colSpan={4} className="px-3 py-1.5 text-right text-text-2">
                           Delivery Charge
-                          <span className="ml-1 rounded bg-purple-100 px-1 py-0.5 text-[9px] font-medium text-purple-600">AI</span>
+                          <span className="ml-1 rounded bg-info-soft px-1 py-0.5 text-[9px] font-medium text-info-text">AI</span>
                         </td>
                         <td className="px-3 py-1.5 text-right text-text-2">RM {aiDeliveryCharge.toFixed(2)}</td>
                         <td></td>
@@ -955,14 +955,14 @@ export function EditOrderModal({
 
               {/* Unmatched items warning */}
               {aiUnmatched.length > 0 && (
-                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                  <p className="text-xs font-medium text-amber-700">Items on invoice not matched to order:</p>
+                <div className="mt-2 rounded-lg border border-line bg-warn-soft px-3 py-2">
+                  <p className="text-xs font-medium text-warn-text">Items on invoice not matched to order:</p>
                   <ul className="mt-1 space-y-0.5">
                     {aiUnmatched.map((item, i) => (
-                      <li key={i} className="text-xs text-amber-600">• {item}</li>
+                      <li key={i} className="text-xs text-warn-text">• {item}</li>
                     ))}
                   </ul>
-                  <p className="mt-1.5 text-[10px] text-amber-500">Add these items manually if needed, or update product catalog.</p>
+                  <p className="mt-1.5 text-[10px] text-warn-text">Add these items manually if needed, or update product catalog.</p>
                 </div>
               )}
 
@@ -1033,14 +1033,14 @@ export function EditOrderModal({
 
         <DialogFooter className="flex gap-2">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={saveEdit} disabled={editSaving || uploading} className={confirmOnSave ? "bg-yellow-500 hover:bg-yellow-600" : "bg-ink hover:bg-ink-hover"}>
+          <Button onClick={saveEdit} disabled={editSaving || uploading} className="bg-ink text-on-ink hover:bg-ink-hover">
             {editSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
-            {confirmOnSave ? "Upload Invoice" : "Save Changes"}
+            {confirmOnSave ? "Upload invoice" : "Save changes"}
           </Button>
           {order && ["SENT", "APPROVED"].includes(order.status) && (
             <Button
               disabled={editSaving || uploading}
-              className="bg-purple-500 hover:bg-purple-600"
+              variant="outline"
               onClick={uploadInvoiceAndSend}
             >
               {editSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Truck className="mr-1.5 h-4 w-4" />}

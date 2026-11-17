@@ -535,7 +535,7 @@ export default function SalesComparePage() {
 
     const initialSlots = urlSlots.length > 0
       ? urlSlots
-      : getPresets().find((p) => p.label === "This Month vs Last Month")?.slots ?? [];
+      : getPresets().find((p) => p.label === "This month vs last month")?.slots ?? [];
     setSlots(initialSlots);
     setOutletIds(urlOutlets);
     fetchData(initialSlots, urlOutlets);

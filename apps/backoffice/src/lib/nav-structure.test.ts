@@ -49,16 +49,16 @@ describe("shell placement", () => {
     const p = locate("/inventory/reconciliation", owner);
     expect(p?.section.label).toBe("Procurement");
     expect(p?.page?.label).toBe("Invoices");
-    expect(p?.page?.tabs.map((t) => t.label)).toEqual(["Invoices", "Invoice Match"]);
+    expect(p?.page?.tabs.map((t) => t.label)).toEqual(["Invoices", "Invoice match"]);
   });
 
   it("a deep URL under a page still lands on that page", () => {
-    expect(locate("/inventory/orders/abc-123", owner)?.page?.label).toBe("PO List");
+    expect(locate("/inventory/orders/abc-123", owner)?.page?.label).toBe("Purchase orders");
   });
 
   it("a page links to its first view the user can open", () => {
     const pages = railPages(section("Procurement"), owner);
-    expect(pages.map((p) => p.label)).toEqual(["Purchase Orders", "PO List", "Invoices", "Payment Requests", "Suppliers"]);
+    expect(pages.map((p) => p.label)).toEqual(["Supplier chats", "Purchase orders", "Invoices", "Payment requests", "Suppliers"]);
     expect(pages.find((p) => p.label === "Invoices")?.href).toBe("/inventory/invoices");
   });
 
