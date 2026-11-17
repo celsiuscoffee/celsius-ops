@@ -89,7 +89,7 @@ function isReimbursed(p: Payment | null): boolean {
 }
 
 function StatusPill({ p }: { p: Payment | null }) {
-  if (isReimbursed(p)) return <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-700"><CheckCircle2 className="h-3 w-3" />Reimbursed</span>;
+  if (isReimbursed(p)) return <span className="inline-flex items-center gap-1 rounded bg-ok-soft px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ok-text"><CheckCircle2 className="h-3 w-3" />Reimbursed</span>;
   return <span className="rounded bg-sunken px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-text-2">Outstanding</span>;
 }
 
@@ -216,14 +216,14 @@ export default function StatementsPage() {
     <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
         <div>
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Ads Claims</h1>
-          <p className="text-xs text-text-2">Pay-and-claim tracking per outlet per month (8% SST on digital services)</p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Ad invoices</h1>
+          <p className="mt-0.5 text-sm text-text-2">Ad bills paid by each outlet each month, and whether they have been claimed back (8% SST on digital services).</p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           <select
             value={outletId}
             onChange={(e) => { setOutletId(e.target.value); setCampaignId("all"); }}
-            className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm"
+            className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
           >
             <option value="all">All outlets</option>
             <option value="unlinked">Unlinked</option>
@@ -234,7 +234,7 @@ export default function StatementsPage() {
           <select
             value={campaignId}
             onChange={(e) => setCampaignId(e.target.value)}
-            className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm"
+            className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
           >
             <option value="all">All campaigns</option>
             {campaignOptions.map((c) => (
@@ -244,7 +244,7 @@ export default function StatementsPage() {
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm"
+            className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
           >
             {[currentYear, currentYear - 1, currentYear - 2].map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -271,10 +271,10 @@ export default function StatementsPage() {
         </button>
         <button
           onClick={() => setStatusFilter(statusFilter === "reimbursed" ? "all" : "reimbursed")}
-          className={`min-w-0 rounded-lg border p-2.5 sm:p-4 text-left transition-colors ${statusFilter === "reimbursed" ? "border-emerald-500 bg-emerald-50" : "border-line bg-surface hover:border-emerald-300"}`}
+          className={`min-w-0 rounded-lg border p-2.5 sm:p-4 text-left transition-colors ${statusFilter === "reimbursed" ? "border-ok bg-ok-soft" : "border-line bg-surface hover:border-ok/30"}`}
         >
-          <div className="truncate text-[10px] sm:text-xs text-emerald-600">Reimbursed</div>
-          <div className="mt-1 truncate text-sm font-semibold tabular-nums text-emerald-700 sm:text-xl">{fmtMYR(data.summary.paidMYR)}</div>
+          <div className="truncate text-[10px] sm:text-xs text-ok-text">Reimbursed</div>
+          <div className="mt-1 truncate text-sm font-semibold tabular-nums text-ok-text sm:text-xl">{fmtMYR(data.summary.paidMYR)}</div>
         </button>
         <button
           onClick={() => setStatusFilter(statusFilter === "outstanding" ? "all" : "outstanding")}

@@ -47,11 +47,14 @@ export default function CampaignsPage() {
   return (
     <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Campaigns</h1>
+        <div>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Google campaigns</h1>
+          <p className="mt-0.5 text-sm text-text-2">Each Google Ads campaign: spend, clicks and conversions, and which outlet it belongs to.</p>
+        </div>
         <select
           value={days}
           onChange={(e) => setDays(Number(e.target.value))}
-          className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm"
+          className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
         >
           <option value="7">Last 7 days</option>
           <option value="30">Last 30 days</option>
@@ -86,8 +89,8 @@ export default function CampaignsPage() {
                     </td>
                     <td className="px-3 py-2">
                       <span className={`rounded px-1.5 py-0.5 text-[11px] ${
-                        c.status === "ENABLED" ? "bg-emerald-50 text-emerald-700"
-                        : c.status === "PAUSED" ? "bg-amber-50 text-amber-700"
+                        c.status === "ENABLED" ? "bg-ok-soft text-ok-text"
+                        : c.status === "PAUSED" ? "bg-warn-soft text-warn-text"
                         : "bg-sunken text-text-2"
                       }`}>{c.status}</span>
                     </td>

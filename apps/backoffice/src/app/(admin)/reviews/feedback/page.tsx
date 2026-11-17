@@ -48,10 +48,10 @@ const FILTERS: { key: string; label: string; match: (s: string) => boolean }[] =
 ];
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  pending: { label: "Needs reply", cls: "bg-amber-100 text-amber-800" },
-  open: { label: "New feedback", cls: "bg-amber-100 text-amber-800" },
-  approved: { label: "Awaiting customer", cls: "bg-blue-100 text-blue-800" },
-  compensated: { label: "Compensated", cls: "bg-emerald-100 text-emerald-800" },
+  pending: { label: "Needs reply", cls: "bg-warn-soft text-warn-text" },
+  open: { label: "New feedback", cls: "bg-warn-soft text-warn-text" },
+  approved: { label: "Awaiting customer", cls: "bg-info-soft text-info-text" },
+  compensated: { label: "Compensated", cls: "bg-ok-soft text-ok-text" },
   resolved: { label: "Resolved", cls: "bg-line text-text-2" },
   rejected: { label: "Rejected", cls: "bg-line text-text-2" },
   expired: { label: "Expired", cls: "bg-line text-text-2" },
@@ -64,7 +64,7 @@ function StarRow({ rating }: { rating: number }) {
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
-          className={`h-3.5 w-3.5 ${i <= rating ? "fill-amber-400 text-amber-400" : "text-text-3"}`}
+          className={`h-3.5 w-3.5 ${i <= rating ? "fill-warn text-warn-text" : "text-text-3"}`}
         />
       ))}
     </div>
@@ -162,11 +162,11 @@ export default function FeedbackManagementPage() {
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <Link href="/reviews" className="mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to Reviews
+          <Link href="/reviews" className="mb-1 flex items-center gap-1 text-xs text-text-2 hover:text-text">
+            <ArrowLeft className="h-3.5 w-3.5" /> Reviews
           </Link>
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Feedback Management</h1>
-          <p className="text-sm text-muted-foreground">Every negative Google review and QR feedback, worked through to a compensated customer.</p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Feedback</h1>
+          <p className="mt-0.5 text-sm text-text-2">Every negative Google review and QR feedback, worked through to a compensated customer.</p>
         </div>
         <button
           onClick={() => load(true)}
@@ -187,7 +187,7 @@ export default function FeedbackManagementPage() {
             className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
               filter === f.key
                 ? "bg-ink text-on-ink"
-                : "border border-border bg-surface text-muted-foreground hover:bg-muted"
+                : "border border-line bg-surface text-text-2 hover:bg-sunken"
             }`}
           >
             {f.label} ({counts(f.key)})
@@ -199,12 +199,12 @@ export default function FeedbackManagementPage() {
       <div className="mt-4 space-y-3">
         {cases === null ? (
           <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Loader2 className="h-6 w-6 animate-spin text-text-2" />
           </div>
         ) : visible.length === 0 ? (
-          <div className="rounded-xl border border-border bg-surface p-10 text-center">
-            <Check className="mx-auto h-10 w-10 text-muted-foreground/30" />
-            <p className="mt-3 text-sm text-muted-foreground">Nothing here right now.</p>
+          <div className="rounded-xl border border-line bg-surface p-10 text-center">
+            <Check className="mx-auto h-10 w-10 text-text-2/30" />
+            <p className="mt-3 text-sm text-text-2">Nothing here right now.</p>
           </div>
         ) : (
           visible.map((c) => {
@@ -213,14 +213,14 @@ export default function FeedbackManagementPage() {
             const draftVal = edits[c.id] ?? c.draftReply;
             const compForm = comp[c.id];
             return (
-              <div key={c.id} className="rounded-xl border border-border bg-surface p-4">
+              <div key={c.id} className="rounded-xl border border-line bg-surface p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
                       <StarRow rating={c.rating} />
-                      <span className="text-sm font-medium text-foreground">{c.reviewerName || "Anonymous"}</span>
+                      <span className="text-sm font-medium text-text">{c.reviewerName || "Anonymous"}</span>
                     </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{c.outletName} · {timeAgo(c.createdAt)}</p>
+                    <p className="mt-0.5 text-xs text-text-2">{c.outletName} · {timeAgo(c.createdAt)}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <span className="rounded-full bg-sunken px-2 py-1 text-[11px] font-medium text-text-2">{c.source === "qr" ? "QR" : "Google"}</span>
@@ -229,35 +229,35 @@ export default function FeedbackManagementPage() {
                 </div>
 
                 {c.comment && (
-                  <p className="mt-2 rounded-lg bg-muted/50 p-2 text-sm text-foreground">{c.comment}</p>
+                  <p className="mt-2 rounded-lg bg-sunken p-2 text-sm text-text">{c.comment}</p>
                 )}
 
                 {/* NEEDS REPLY — editable draft + approve/reject */}
                 {c.status === "pending" && (
                   <div className="mt-3">
-                    <p className="mb-1 text-xs font-medium text-muted-foreground">AI draft reply (edit before approving)</p>
+                    <p className="mb-1 text-xs font-medium text-text-2">AI draft reply (edit before approving)</p>
                     <textarea
                       value={draftVal}
                       onChange={(e) => setEdits((m) => ({ ...m, [c.id]: e.target.value }))}
                       rows={3}
-                      className="w-full rounded-lg border border-border bg-surface p-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                      className="w-full rounded-lg border border-line bg-surface p-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
                     />
-                    <p className="mt-1 text-[11px] text-muted-foreground">A recovery link is added automatically when you approve.</p>
+                    <p className="mt-1 text-[11px] text-text-2">A recovery link is added automatically when you approve.</p>
 
                     {/* Approver context → regenerate a more honest, specific reply */}
-                    <div className="mt-2 rounded-lg border border-dashed border-border p-2">
-                      <p className="mb-1 text-xs font-medium text-muted-foreground">What actually happened? (optional — gives a better, less generic reply)</p>
+                    <div className="mt-2 rounded-lg border border-dashed border-line p-2">
+                      <p className="mb-1 text-xs font-medium text-text-2">What actually happened? (optional — gives a better, less generic reply)</p>
                       <textarea
                         value={ctx[c.id] ?? ""}
                         onChange={(e) => setCtx((m) => ({ ...m, [c.id]: e.target.value }))}
                         rows={2}
                         placeholder="e.g. sink was broken so drinks went out in takeaway cups; repair booked for Friday"
-                        className="w-full rounded-lg border border-border bg-surface p-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                        className="w-full rounded-lg border border-line bg-surface p-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
                       />
                       <button
                         onClick={() => regenerate(c)}
                         disabled={regen[c.id]}
-                        className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                        className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-text hover:bg-sunken disabled:opacity-50"
                       >
                         {regen[c.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                         Regenerate draft
@@ -276,7 +276,7 @@ export default function FeedbackManagementPage() {
                       <button
                         onClick={() => act(c, "reject")}
                         disabled={isBusy}
-                        className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                        className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-text-2 hover:bg-sunken disabled:opacity-50"
                       >
                         <X className="h-4 w-4" /> Reject
                       </button>
@@ -287,30 +287,30 @@ export default function FeedbackManagementPage() {
                 {/* AWAITING CUSTOMER — code + compensate/resolve/expire */}
                 {c.status === "approved" && (
                   <div className="mt-3 space-y-2">
-                    <div className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                    <div className="rounded-lg bg-info-soft px-3 py-2 text-sm text-info-text">
                       Reply posted. Recovery code <span className="font-mono font-semibold">{c.recoveryCode}</span> — waiting for the customer to claim their voucher.
                     </div>
                     {compForm ? (
-                      <div className="rounded-lg border border-border p-2">
-                        <p className="mb-1.5 text-xs font-medium text-muted-foreground">Got their number directly? Compensate now.</p>
+                      <div className="rounded-lg border border-line p-2">
+                        <p className="mb-1.5 text-xs font-medium text-text-2">Got their number directly? Compensate now.</p>
                         <div className="flex flex-wrap items-center gap-2">
                           <input
                             value={compForm.phone}
                             onChange={(e) => setComp((m) => ({ ...m, [c.id]: { ...compForm, phone: e.target.value } }))}
                             placeholder="01XXXXXXXX"
                             inputMode="tel"
-                            className="w-40 rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                            className="w-40 rounded-lg border border-line px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
                           />
                           <input
                             value={compForm.name}
                             onChange={(e) => setComp((m) => ({ ...m, [c.id]: { ...compForm, name: e.target.value } }))}
                             placeholder="Name (optional)"
-                            className="w-36 rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                            className="w-36 rounded-lg border border-line px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
                           />
                           <button
                             onClick={() => act(c, "compensate", { phone: compForm.phone, name: compForm.name })}
                             disabled={isBusy || !compForm.phone.trim()}
-                            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                            className="flex items-center gap-1.5 rounded-lg bg-ok px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ok disabled:opacity-50"
                           >
                             <Gift className="h-4 w-4" /> Issue voucher
                           </button>
@@ -321,21 +321,21 @@ export default function FeedbackManagementPage() {
                         <button
                           onClick={() => setComp((m) => ({ ...m, [c.id]: { phone: "", name: c.reviewerName ?? "" } }))}
                           disabled={isBusy}
-                          className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-surface px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                          className="flex items-center gap-1.5 rounded-lg border border-ok/30 bg-surface px-3 py-1.5 text-sm font-medium text-ok-text hover:bg-ok-soft disabled:opacity-50"
                         >
                           <Phone className="h-4 w-4" /> Compensate manually
                         </button>
                         <button
                           onClick={() => act(c, "resolve")}
                           disabled={isBusy}
-                          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-text-2 hover:bg-sunken disabled:opacity-50"
                         >
                           Mark resolved
                         </button>
                         <button
                           onClick={() => act(c, "expire")}
                           disabled={isBusy}
-                          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-text-2 hover:bg-sunken disabled:opacity-50"
                         >
                           No response
                         </button>
@@ -348,24 +348,24 @@ export default function FeedbackManagementPage() {
                 {c.status === "open" && (
                   <div className="mt-3 space-y-2">
                     {c.phone ? (
-                      <p className="text-xs text-muted-foreground">Contact: <span className="font-medium text-foreground">{c.phone}</span></p>
+                      <p className="text-xs text-text-2">Contact: <span className="font-medium text-text">{c.phone}</span></p>
                     ) : (
-                      <p className="text-xs text-amber-700">No phone on this feedback — enter one to compensate.</p>
+                      <p className="text-xs text-warn-text">No phone on this feedback — enter one to compensate.</p>
                     )}
                     {compForm ? (
-                      <div className="rounded-lg border border-border p-2">
+                      <div className="rounded-lg border border-line p-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <input
                             value={compForm.phone}
                             onChange={(e) => setComp((m) => ({ ...m, [c.id]: { ...compForm, phone: e.target.value } }))}
                             placeholder="01XXXXXXXX"
                             inputMode="tel"
-                            className="w-40 rounded-lg border border-border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                            className="w-40 rounded-lg border border-line px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
                           />
                           <button
                             onClick={() => act(c, "compensate", { phone: compForm.phone, name: compForm.name })}
                             disabled={isBusy || !compForm.phone.trim()}
-                            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                            className="flex items-center gap-1.5 rounded-lg bg-ok px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ok disabled:opacity-50"
                           >
                             <Gift className="h-4 w-4" /> Issue voucher
                           </button>
@@ -376,14 +376,14 @@ export default function FeedbackManagementPage() {
                         <button
                           onClick={() => (c.phone ? act(c, "compensate", {}) : setComp((m) => ({ ...m, [c.id]: { phone: "", name: c.reviewerName ?? "" } })))}
                           disabled={isBusy}
-                          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                          className="flex items-center gap-1.5 rounded-lg bg-ok px-3 py-2 text-sm font-medium text-on-ink hover:bg-ok disabled:opacity-50"
                         >
                           <Gift className="h-4 w-4" /> Compensate (free coffee)
                         </button>
                         <button
                           onClick={() => act(c, "dismiss")}
                           disabled={isBusy}
-                          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                          className="rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-text-2 hover:bg-sunken disabled:opacity-50"
                         >
                           Dismiss
                         </button>
@@ -395,7 +395,7 @@ export default function FeedbackManagementPage() {
                 {/* COMPENSATED — show capture + resolve */}
                 {c.status === "compensated" && (
                   <div className="mt-3 space-y-2">
-                    <div className="flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                    <div className="flex items-center gap-1.5 rounded-lg bg-ok-soft px-3 py-2 text-sm text-ok-text">
                       <Gift className="h-4 w-4" /> Customer captured + free coffee issued{c.claimedAt ? ` · ${timeAgo(c.claimedAt)}` : ""}.
                     </div>
                     <button
@@ -410,7 +410,7 @@ export default function FeedbackManagementPage() {
 
                 {/* CLOSED states */}
                 {(c.status === "resolved" || c.status === "rejected" || c.status === "expired" || c.status === "dismissed") && c.resolvedAt && (
-                  <p className="mt-2 text-xs text-muted-foreground">
+                  <p className="mt-2 text-xs text-text-2">
                     {badge.label}{c.decidedBy ? ` by ${c.decidedBy}` : ""} · {timeAgo(c.resolvedAt)}
                   </p>
                 )}

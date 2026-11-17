@@ -15,12 +15,12 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import {
-  ArrowLeft, Repeat, RefreshCw, Send, FlaskConical, Loader2,
+  Repeat, RefreshCw, Send, FlaskConical, Loader2,
   CheckCircle2, AlertTriangle, Trophy, Users, ShieldOff, Coins, Plus, X, Crown, Sparkles, Clock, BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { KeyNumber } from "@/components/ui/key-number";
 import { useLatestRequest } from "@/lib/use-latest-request";
 
 // ---- agreed knobs -----------------------------------------------------------
@@ -123,23 +123,23 @@ function estSmsCost(round: Round): number | null {
 }
 function StatusBadge({ status }: { status: Round["status"] }) {
   const map: Record<Round["status"], { label: string; cls: string }> = {
-    prepared: { label: "Prepared — awaiting send", cls: "bg-amber-100 text-amber-800" },
-    sent: { label: "Sent — measuring", cls: "bg-blue-100 text-blue-800" },
-    measured: { label: "Measured", cls: "bg-green-100 text-green-800" },
+    prepared: { label: "Prepared — awaiting send", cls: "bg-warn-soft text-warn-text" },
+    sent: { label: "Sent — measuring", cls: "bg-info-soft text-info-text" },
+    measured: { label: "Measured", cls: "bg-ok-soft text-ok-text" },
   };
   const s = map[status];
   return <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium", s.cls)}>{s.label}</span>;
 }
 function RoleBadge({ role }: { role: string }) {
   if (role === "champion") return (
-    <span className="inline-flex items-center gap-1 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-800"><Crown className="h-3 w-3" /> champion</span>
+    <span className="inline-flex items-center gap-1 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-medium text-ok-text"><Crown className="h-3 w-3" /> champion</span>
   );
   if (role === "challenger") return (
-    <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800"><Sparkles className="h-3 w-3" /> challenger</span>
+    <span className="inline-flex items-center gap-1 rounded bg-info-soft px-1.5 py-0.5 text-xs font-medium text-info-text"><Sparkles className="h-3 w-3" /> challenger</span>
   );
   // round_gap segments (regular / win-back) and any other fixed-campaign role
   return (
-    <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800"><Sparkles className="h-3 w-3" /> {role}</span>
+    <span className="inline-flex items-center gap-1 rounded bg-warn-soft px-1.5 py-0.5 text-xs font-medium text-warn-text"><Sparkles className="h-3 w-3" /> {role}</span>
   );
 }
 
@@ -220,17 +220,10 @@ export default function LoopsPage() {
   const activeTriggered = !!opt?.loops.find((l) => l.key === loopKey)?.triggered;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/loyalty/engage" className="mb-4 inline-flex items-center gap-1 text-sm text-text-2 hover:text-text">
-        <ArrowLeft className="h-4 w-4" /> Engage
-      </Link>
-
-      <div className="mb-1 flex items-center gap-2">
-        <Repeat className="h-6 w-6 text-[#A2492C]" />
-        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Win-back loops</h1>
-      </div>
-      <p className="mb-4 text-sm text-text-2">
-        Every campaign is a loop: the engine proposes each round&apos;s offers against a holdout and learns which logic wins — the setup sharpens over time. Pick an objective:
+    <div className="max-w-5xl px-4 pt-6 pb-10 md:px-8">
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Campaigns</h1>
+      <p className="mt-0.5 mb-5 text-sm text-text-2">
+        Win-back, welcome and birthday offers by SMS: what they cost, what came back, and which offer wins against a holdout.
       </p>
 
       {evalData && <EvaluationPanel data={evalData} days={evalDays} onDays={setEvalDays} loops={opt?.loops ?? []} />}
@@ -244,7 +237,7 @@ export default function LoopsPage() {
             if (!confirm("Fire all auto-triggered loops NOW? Sends LIVE SMS to everyone who currently qualifies — Reactivation / Welcome / Birthday AND the Round-gap batch (Conezion / Shah Alam / Tamarind, ~150). Loops that already ran today are skipped.")) return;
             await runNow(false);
           }}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#A2492C] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink disabled:opacity-50"
         >
           {busy === "run" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Run all triggered loops now
         </button>
@@ -254,7 +247,7 @@ export default function LoopsPage() {
             if (!confirm("FORCE run NOW? Ignores the once-a-day guard and fires every triggered loop's current qualifiers immediately. Already-messaged customers are still protected by the cooldown. Sends LIVE SMS.")) return;
             await runNow(true);
           }}
-          className="inline-flex items-center gap-2 rounded-lg border border-[#A2492C] px-3 py-2 text-sm font-medium text-[#A2492C] disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-ink px-3 py-2 text-sm font-medium text-brand-text disabled:opacity-50"
         >
           {busy === "run" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Force run now
         </button>
@@ -268,7 +261,7 @@ export default function LoopsPage() {
               key={l.key}
               onClick={() => setLoopKey(l.key)}
               title={l.objective}
-              className={cn("rounded-full border px-3 py-1.5 text-sm", loopKey === l.key ? "border-[#A2492C] bg-[#A2492C] text-white" : "border-line bg-surface text-text-2 hover:border-line-2")}
+              className={cn("rounded-full border px-3 py-1.5 text-sm", loopKey === l.key ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-text-2 hover:border-line-2")}
             >
               {l.label}
             </button>
@@ -277,7 +270,7 @@ export default function LoopsPage() {
       )}
 
       {opt?.loops.find((l) => l.key === loopKey)?.triggered && (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-ok/30 bg-ok-soft px-4 py-3 text-sm text-ok-text">
           <Repeat className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span>
             <strong>Auto-triggered daily.</strong>{" "}
@@ -296,7 +289,7 @@ export default function LoopsPage() {
       </div>
 
       {err && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger-text">
           <AlertTriangle className="h-4 w-4" /> {err}
         </div>
       )}
@@ -355,7 +348,7 @@ export default function LoopsPage() {
       ))}
 
       {lastPreview && (
-        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="mb-6 rounded-lg border border-warn/30 bg-warn-soft px-4 py-3 text-sm text-warn-text">
           <div className="mb-1 font-medium">Round {lastPreview.round_no} prepared — {lastPreview.total.toLocaleString()} reachable, vouchers issued. No SMS sent yet.</div>
           <div className="flex flex-wrap gap-x-5 gap-y-1">
             <span>Holdout: <strong>{lastPreview.holdout.toLocaleString()}</strong></span>
@@ -437,17 +430,8 @@ export default function LoopsPage() {
 }
 
 // ---- Evaluation overview: cross-loop scorecard ------------------------------
-function Kpi({ label, value, sub, highlight }: { label: string; value: string; sub?: string; highlight?: boolean }) {
-  return (
-    <div className={cn("rounded-lg border p-3", highlight ? "border-[#A2492C]/30 bg-[#A2492C]/5" : "border-line bg-sunken")}>
-      <p className="text-xs text-text-2">{label}</p>
-      <p className="mt-0.5 text-xl font-semibold tabular-nums">{value}</p>
-      {sub && <p className="text-xs text-text-3">{sub}</p>}
-    </div>
-  );
-}
 const EVAL_PRESETS: Array<{ label: string; val: number | null }> = [
-  { label: "7d", val: 7 }, { label: "30d", val: 30 }, { label: "90d", val: 90 }, { label: "All", val: null },
+  { label: "7 days", val: 7 }, { label: "30 days", val: 30 }, { label: "90 days", val: 90 }, { label: "All time", val: null },
 ];
 function EvaluationPanel({ data, days, onDays, loops }: { data: Evaluation; days: number | null; onDays: (d: number | null) => void; loops: LoopMeta[] }) {
   const lv = data.live.totals;
@@ -461,31 +445,32 @@ function EvaluationPanel({ data, days, onDays, loops }: { data: Evaluation; days
   return (
     <div className="mb-6 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <BarChart3 className="h-5 w-5 text-[#A2492C]" />
-        <h2 className="text-lg font-semibold">Campaign scorecards</h2>
-        <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700" title="Auto-updates every 20s">
+        <BarChart3 className="h-5 w-5 text-brand-text" />
+        <h2 className="text-lg font-semibold text-text">All campaigns</h2>
+        <span className="inline-flex items-center gap-1 rounded-full bg-ok-soft px-2 py-0.5 text-[11px] font-medium text-ok-text" title="Auto-updates every 20s">
           <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ok opacity-75" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-ok" />
           </span>
           Live
         </span>
         {days ? <span className="text-xs text-text-3">last {days}d</span> : null}
         <div className="ml-auto flex items-center gap-1">
           {EVAL_PRESETS.map((p) => (
-            <button key={p.label} onClick={() => onDays(p.val)} className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", days === p.val ? "bg-[#A2492C] text-white" : "bg-sunken text-text-2 hover:bg-line")}>{p.label}</button>
+            <button key={p.label} onClick={() => onDays(p.val)} className={cn("min-h-8 rounded-md px-2.5 py-1 text-xs font-medium transition-colors", days === p.val ? "bg-ink text-on-ink" : "bg-sunken text-text-2 hover:bg-line")}>{p.label}</button>
           ))}
         </div>
       </div>
 
       {/* All-campaigns total */}
-      <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-3">All campaigns</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-          <Kpi label="SMS sent" value={lv.sent.toLocaleString()} sub={`${rm(lv.sms_cost_rm)} spent`} />
-          <Kpi label="Redeemed" value={lv.redeemed.toLocaleString()} sub={`${lv.redeemed_rate}%`} />
-          <Kpi label="Orders (raw)" value={lv.orders.toLocaleString()} sub="not incremental" />
-          <Kpi label="RM Orders (raw)" value={rm(lv.revenue_rm)} sub="gross · in window" />
+      <div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KeyNumber label="SMS sent" value={lv.sent.toLocaleString()} note={<><b className="font-semibold text-text-2">{rm(lv.sms_cost_rm)}</b> spent</>} />
+          <KeyNumber label="Vouchers redeemed" value={lv.redeemed.toLocaleString()} note={`${lv.redeemed_rate}% of vouchers sent`} />
+          <KeyNumber label="Orders from recipients" value={lv.orders.toLocaleString()} note={<>{rm(lv.revenue_rm)} gross, not all extra</>} />
+          <KeyNumber label="Extra margin vs holdout" value={rm(data.totals.incremental_margin_rm ?? 0)}
+            tone={(data.totals.incremental_margin_rm ?? 0) < 0 ? "warn" : undefined}
+            note={data.totals.sms_cost_rm ? <>{(data.totals.roi ?? 0).toFixed(1)}× the SMS cost of measured rounds</> : "shows once a round is measured"} />
         </div>
         <p className="mt-2 text-[11px] text-text-3">Orders &amp; RM are <strong>gross attributed</strong> — every order a recipient made in the window, including ones they&apos;d have made anyway. <strong>Not ROI.</strong> True ROI vs the holdout shows per campaign once each window closes.</p>
       </div>
@@ -509,10 +494,10 @@ function CampaignBoard({ meta, live, meas }: {
   const hasResults = !!meas && meas.rounds > 0;
   const next = live?.next_results_at ? new Date(live.next_results_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" }) : null;
   const pausedArmKeys = Object.keys(meta.pausedArms ?? {});
-  const status = meta.paused ? { t: "Paused", c: "bg-amber-100 text-amber-800" }
-    : pausedArmKeys.length ? { t: "Partly paused", c: "bg-amber-100 text-amber-800" }
-    : measuring ? { t: "Measuring", c: "bg-blue-100 text-blue-800" }
-    : hasResults ? { t: "Measured", c: "bg-green-100 text-green-800" }
+  const status = meta.paused ? { t: "Paused", c: "bg-warn-soft text-warn-text" }
+    : pausedArmKeys.length ? { t: "Partly paused", c: "bg-warn-soft text-warn-text" }
+    : measuring ? { t: "Measuring", c: "bg-info-soft text-info-text" }
+    : hasResults ? { t: "Measured", c: "bg-ok-soft text-ok-text" }
     : sent > 0 ? { t: "Sent", c: "bg-sunken text-text-2" }
     : { t: "Idle", c: "bg-sunken text-text-3" };
   return (
@@ -525,9 +510,9 @@ function CampaignBoard({ meta, live, meas }: {
         <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", status.c)}>{status.t}</span>
       </div>
       {meta.paused ? (
-        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">Not sending — {meta.paused}</p>
+        <p className="mt-2 rounded-lg bg-warn-soft px-2.5 py-1.5 text-xs text-warn-text">Not sending — {meta.paused}</p>
       ) : pausedArmKeys.length ? (
-        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">{pausedArmKeys.map((k) => `${k} arm paused — ${meta.pausedArms![k]}`).join(" · ")}</p>
+        <p className="mt-2 rounded-lg bg-warn-soft px-2.5 py-1.5 text-xs text-warn-text">{pausedArmKeys.map((k) => `${k} arm paused — ${meta.pausedArms![k]}`).join(" · ")}</p>
       ) : null}
       {sent === 0 ? (
         <p className="mt-3 text-sm text-text-3">{meta.triggered ? "Runs automatically — fires when customers qualify." : "No sends yet."}</p>
@@ -543,15 +528,15 @@ function CampaignBoard({ meta, live, meas }: {
             <MiniStat label="Sent" value={sent.toLocaleString()} />
             <MiniStat label="Redeemed" value={`${live!.redeemed} (${live!.redeemed_rate}%)`} />
             <MiniStat label="Spent" value={rm(live!.sms_cost_rm)} />
-            <MiniStat label="Orders (raw)" value={live!.orders.toLocaleString()} />
-            <MiniStat label="RM Orders (raw)" value={rm(live!.revenue_rm)} />
+            <MiniStat label="Orders" value={live!.orders.toLocaleString()} />
+            <MiniStat label="Sales, gross" value={rm(live!.revenue_rm)} />
           </div>
           {hasResults ? (
             // The ONLY ROI number on this card — lift vs the POOLED holdout.
             // Raw orders above include natural repeats + other marketing.
-            <div className="mt-3 rounded-lg bg-green-50 px-2.5 py-1.5 text-xs text-green-900"><strong>True ROI vs holdout:</strong> {meas!.roi > 0 ? `${meas!.roi}×` : "—"} · {meas!.avg_lift_pp > 0 ? "+" : ""}{meas!.avg_lift_pp}pp lift · {rm(meas!.incremental_margin_rm)} incr. margin{meas!.holdout_n > 0 ? ` · vs ${meas!.holdout_n} held out${meas!.holdout_n < 30 ? " (low confidence)" : ""}` : ""}</div>
+            <div className="mt-3 rounded-lg bg-ok-soft px-2.5 py-1.5 text-xs text-ok-text"><strong>True ROI vs holdout:</strong> {meas!.roi > 0 ? `${meas!.roi}×` : "—"} · {meas!.avg_lift_pp > 0 ? "+" : ""}{meas!.avg_lift_pp}pp lift · {rm(meas!.incremental_margin_rm)} incr. margin{meas!.holdout_n > 0 ? ` · vs ${meas!.holdout_n} held out${meas!.holdout_n < 30 ? " (low confidence)" : ""}` : ""}</div>
           ) : measuring && next ? (
-            <p className="mt-2 text-xs text-blue-700">Measuring — no ROI verdict until the holdout closes ({next}). Raw orders above are not ROI.</p>
+            <p className="mt-2 text-xs text-info-text">Measuring — no ROI verdict until the holdout closes ({next}). Raw orders above are not ROI.</p>
           ) : null}
         </>
       )}
@@ -562,7 +547,7 @@ function CampaignBoard({ meta, live, meas }: {
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-text-3">{label}</p>
+      <p className="text-[12px] text-text-3">{label}</p>
       <p className="text-sm font-semibold tabular-nums text-text">{value}</p>
     </div>
   );
@@ -577,7 +562,7 @@ function RoundGapPrepareCard({ busy, onPrepare, note }: { busy: boolean; onPrepa
   return (
     <div className="mb-6 rounded-xl border border-line bg-surface p-5 shadow-sm">
       <div className="mb-1 flex items-center gap-2">
-        <Coins className="h-5 w-5 text-[#A2492C]" />
+        <Coins className="h-5 w-5 text-brand-text" />
         <h2 className="text-lg font-semibold">Prepare a round-gap campaign</h2>
       </div>
       <p className="mb-3 text-xs text-text-2">
@@ -592,14 +577,14 @@ function RoundGapPrepareCard({ busy, onPrepare, note }: { busy: boolean; onPrepa
             <button
               disabled={busy}
               onClick={() => { if (confirm(`Prepare "${c.title}"? This tags the audience + creates the promo. No SMS until you send the round.`)) onPrepare(c.id); }}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-[#A2492C] px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-on-ink disabled:opacity-50"
             >
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />} Prepare
             </button>
           </div>
         ))}
       </div>
-      {note && <p className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-900">{note}</p>}
+      {note && <p className="mt-3 rounded-lg border border-ok/30 bg-ok-soft px-3 py-2 text-xs text-ok-text">{note}</p>}
     </div>
   );
 }
@@ -610,7 +595,7 @@ function MessagesPanel({ arms }: { arms: ProposalArm[] }) {
   return (
     <div className="mb-6 rounded-xl border border-line bg-surface p-5 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Send className="h-5 w-5 text-[#A2492C]" />
+        <Send className="h-5 w-5 text-brand-text" />
         <h2 className="text-lg font-semibold">Messages going out</h2>
         <span className="text-xs text-text-3">exactly what each customer receives · {arms.length} in rotation</span>
       </div>
@@ -641,7 +626,7 @@ function OptimizerPanel({ opt }: { opt: Optimizer }) {
   return (
     <div className="mb-6 rounded-xl border border-line bg-surface p-5 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
-        <Trophy className="h-5 w-5 text-[#A2492C]" />
+        <Trophy className="h-5 w-5 text-brand-text" />
         <h2 className="text-lg font-semibold">Optimizer</h2>
       </div>
 
@@ -652,11 +637,11 @@ function OptimizerPanel({ opt }: { opt: Optimizer }) {
       ) : (
         <>
           {champion ? (
-            <div className="mb-3 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-ok/30 bg-ok-soft px-3 py-2 text-sm text-ok-text">
               <Crown className="h-4 w-4" /> Champion: <strong>{champion.label}</strong> — {champion.incr_margin_per_recipient_rm >= 0 ? "+" : ""}{rm(champion.incr_margin_per_recipient_rm)}/recipient, {champion.avg_lift_pp >= 0 ? "+" : ""}{champion.avg_lift_pp}pp over {champion.recipients.toLocaleString()} sent.
             </div>
           ) : (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <div className="mb-3 rounded-lg border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn-text">
               Still exploring — no offer has {CHAMPION_MIN_RECIPIENTS}+ recipients yet, so no champion is crowned. Keep running rounds.
             </div>
           )}
@@ -674,17 +659,17 @@ function OptimizerPanel({ opt }: { opt: Optimizer }) {
               </thead>
               <tbody>
                 {lb.map((e) => (
-                  <tr key={e.template_id} className={cn("border-b border-line", champion?.template_id === e.template_id && "bg-green-50")}>
+                  <tr key={e.template_id} className={cn("border-b border-line", champion?.template_id === e.template_id && "bg-ok-soft")}>
                     <td className="py-2 pr-3 font-medium">
                       <span className="inline-flex items-center gap-1.5">
-                        {champion?.template_id === e.template_id && <Crown className="h-3.5 w-3.5 text-green-600" />}
+                        {champion?.template_id === e.template_id && <Crown className="h-3.5 w-3.5 text-ok-text" />}
                         {e.label}
                       </span>
                     </td>
                     <td className="py-2 pr-3 text-text-2">{e.logic ?? "—"}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{e.rounds}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{e.recipients.toLocaleString()}</td>
-                    <td className={cn("py-2 pr-3 text-right tabular-nums", e.avg_lift_pp >= SUCCESS_BAR_PP ? "text-green-700" : e.avg_lift_pp > 0 ? "text-text-2" : "text-red-600")}>
+                    <td className={cn("py-2 pr-3 text-right tabular-nums", e.avg_lift_pp >= SUCCESS_BAR_PP ? "text-ok-text" : e.avg_lift_pp > 0 ? "text-text-2" : "text-danger-text")}>
                       {e.avg_lift_pp > 0 ? "+" : ""}{e.avg_lift_pp}pp
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">{e.incr_margin_per_recipient_rm >= 0 ? "+" : ""}{rm(e.incr_margin_per_recipient_rm)}</td>
@@ -699,7 +684,7 @@ function OptimizerPanel({ opt }: { opt: Optimizer }) {
       {/* Send-time learning — best window + per-window lift (unknown #3). */}
       <div className="mt-4 border-t border-line pt-3">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-          <Clock className="h-4 w-4 text-[#A2492C]" />
+          <Clock className="h-4 w-4 text-brand-text" />
           <span className="font-medium">Best send time</span>
           <span className="text-text-2">— {windowLabel(opt.send_window_proposal?.window)}. {opt.send_window_proposal?.reason}</span>
         </div>
@@ -763,7 +748,7 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
   return (
     <div className="mb-6 rounded-xl border border-line bg-surface p-5 shadow-sm">
       <div className="mb-4 flex items-center gap-2">
-        <FlaskConical className="h-5 w-5 text-[#A2492C]" />
+        <FlaskConical className="h-5 w-5 text-brand-text" />
         <h2 className="text-lg font-semibold">New round</h2>
       </div>
 
@@ -794,7 +779,7 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
 
       <div className="mb-2 flex items-center justify-between">
         <span className="text-sm font-medium text-text-2">Proposed arms ({arms.length})</span>
-        <button onClick={addArm} className="inline-flex items-center gap-1 text-xs text-[#A2492C] hover:underline"><Plus className="h-3.5 w-3.5" /> add arm</button>
+        <button onClick={addArm} className="inline-flex items-center gap-1 text-xs text-brand-text hover:underline"><Plus className="h-3.5 w-3.5" /> add arm</button>
       </div>
       <div className="space-y-2">
         {arms.map((a, i) => (
@@ -811,7 +796,7 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
                   <option key={c.voucher_template_id} value={c.voucher_template_id}>{c.label} · {c.logic}</option>
                 ))}
               </select>
-              <button onClick={() => setArms((prev) => prev.filter((_, j) => j !== i))} className="ml-auto text-text-3 hover:text-red-600" aria-label="remove arm"><X className="h-4 w-4" /></button>
+              <button onClick={() => setArms((prev) => prev.filter((_, j) => j !== i))} className="ml-auto text-text-3 hover:text-danger-text" aria-label="remove arm"><X className="h-4 w-4" /></button>
             </div>
             <p className="mb-2 text-xs text-text-2">{a.reason}</p>
             <textarea
@@ -823,7 +808,7 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
             {(() => {
               const s = smsSegments(a.message);
               return (
-                <p className={cn("mt-1 text-xs", s.segments > 1 ? "font-medium text-red-600" : "text-text-3")}>
+                <p className={cn("mt-1 text-xs", s.segments > 1 ? "font-medium text-danger-text" : "text-text-3")}>
                   {s.chars}/{s.gsm7 ? 160 : 70} incl. sender · {s.segments === 1 ? "1 SMS" : `${s.segments} SMS — shorten to fit 1`}{!s.gsm7 && " · non-GSM char (halves the limit)"}
                 </p>
               );
@@ -833,7 +818,7 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
       </div>
 
       {anyOverLimit && (
-        <p className="mb-2 text-xs font-medium text-red-600">One or more messages exceed a single SMS — shorten them before preparing (keeps cost at 1 SMS each).</p>
+        <p className="mb-2 text-xs font-medium text-danger-text">One or more messages exceed a single SMS — shorten them before preparing (keeps cost at 1 SMS each).</p>
       )}
       <button
         disabled={busy || arms.length === 0 || anyOverLimit}
@@ -843,7 +828,7 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
           holdoutPct: holdout, attributionWindowDays: windowD, maxRecipients: triggered ? undefined : maxRecipients,
           segment: segmentOpts(),
         })}
-        className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#A2492C] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="mt-4 inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink disabled:opacity-50"
       >
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
         Prepare round (issues vouchers, no SMS)
@@ -891,19 +876,19 @@ function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, propo
 
       <div className="mb-3 flex flex-wrap gap-1.5">
         {round.arms?.map((a) => (
-          <span key={a.key} className="rounded-full bg-[#A2492C]/10 px-2.5 py-0.5 text-xs text-[#A2492C]">{a.label}</span>
+          <span key={a.key} className="rounded-full bg-brand-soft px-2.5 py-0.5 text-xs text-brand-text">{a.label}</span>
         ))}
       </div>
 
       {round.status === "prepared" && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-amber-900">
+        <div className="rounded-lg border border-warn/30 bg-warn-soft p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-warn-text">
             <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" /> vouchers issued, awaiting send</span>
             {est != null && <span>Est. SMS cost: <strong>{rm(est)}</strong></span>}
           </div>
 
           {round.scheduled_send_at && (
-            <div className="mb-2 inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-1 text-xs text-amber-900">
+            <div className="mb-2 inline-flex items-center gap-1 rounded bg-warn-soft px-2 py-1 text-xs text-warn-text">
               <Clock className="h-3.5 w-3.5" /> Scheduled for {new Date(round.scheduled_send_at).toLocaleString("en-MY")} ({windowLabel(round.send_window)}) — the cron fires it automatically.
             </div>
           )}
@@ -921,7 +906,7 @@ function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, propo
             <button
               disabled={busy}
               onClick={() => onSchedule(new Date(when).toISOString(), win)}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#A2492C] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink disabled:opacity-50"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4" />} {round.scheduled_send_at ? "Reschedule" : "Schedule send"}
             </button>
@@ -931,14 +916,14 @@ function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, propo
           <button
             disabled={busy}
             onClick={() => { if (confirm(`Send SMS NOW for round ${round.round_no}? Fires ${est != null ? `~${rm(est)} of` : ""} live SMS immediately.`)) onSend(); }}
-            className="inline-flex items-center gap-2 rounded-lg border border-blue-600 px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-info px-4 py-2 text-sm font-medium text-info-text disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send now
           </button>
           <button
             disabled={busy}
             onClick={() => { if (confirm(`Cancel round ${round.round_no}? This deletes the un-sent vouchers + the round. No SMS has gone out.`)) onCancel(); }}
-            className="ml-2 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-text-2 hover:text-red-600 disabled:opacity-50"
+            className="ml-2 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-text-2 hover:text-danger-text disabled:opacity-50"
           >
             <X className="h-4 w-4" /> Cancel round
           </button>
@@ -946,13 +931,13 @@ function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, propo
       )}
 
       {round.status === "sent" && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+        <div className="rounded-lg border border-info/30 bg-info-soft p-3">
           {triggered ? (
-            <div className="text-sm text-blue-900">SMS sent{round.sent_at ? ` ${new Date(round.sent_at).toLocaleDateString("en-MY")}` : ""}. <strong>Auto-measures</strong> when the {round.attribution_window_days}-day window closes — nothing to do.</div>
+            <div className="text-sm text-info-text">SMS sent{round.sent_at ? ` ${new Date(round.sent_at).toLocaleDateString("en-MY")}` : ""}. <strong>Auto-measures</strong> when the {round.attribution_window_days}-day window closes — nothing to do.</div>
           ) : (
             <>
-              <div className="mb-2 text-sm text-blue-900">SMS sent{round.sent_at ? ` ${new Date(round.sent_at).toLocaleDateString("en-MY")}` : ""}. Auto-measures when the {round.attribution_window_days}-day window closes, or measure now:</div>
-              <button disabled={busy} onClick={onMeasure} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+              <div className="mb-2 text-sm text-info-text">SMS sent{round.sent_at ? ` ${new Date(round.sent_at).toLocaleDateString("en-MY")}` : ""}. Auto-measures when the {round.attribution_window_days}-day window closes, or measure now:</div>
+              <button disabled={busy} onClick={onMeasure} className="inline-flex items-center gap-2 rounded-lg bg-info px-4 py-2 text-sm font-medium text-on-ink disabled:opacity-50">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Measure results
               </button>
             </>
@@ -1002,16 +987,16 @@ function Results({ round }: { round: Round }) {
           </thead>
           <tbody>
             {treatment.map((t) => (
-              <tr key={t.arm} className={cn("border-b border-line", t.arm === winnerArm && "bg-green-50")}>
+              <tr key={t.arm} className={cn("border-b border-line", t.arm === winnerArm && "bg-ok-soft")}>
                 <td className="py-2 pr-3 font-medium">
                   <span className="inline-flex items-center gap-1.5">
-                    {t.arm === winnerArm && <Trophy className="h-3.5 w-3.5 text-green-600" />}
+                    {t.arm === winnerArm && <Trophy className="h-3.5 w-3.5 text-ok-text" />}
                     {labelFor(t.arm)}
                   </span>
                 </td>
                 <td className="py-2 pr-3 text-right tabular-nums">{t.n.toLocaleString()}</td>
                 <td className="py-2 pr-3 text-right tabular-nums">{t.conversion_rate}%</td>
-                <td className={cn("py-2 pr-3 text-right font-medium tabular-nums", t.lift_pp >= SUCCESS_BAR_PP ? "text-green-700" : t.lift_pp > 0 ? "text-text-2" : "text-red-600")}>
+                <td className={cn("py-2 pr-3 text-right font-medium tabular-nums", t.lift_pp >= SUCCESS_BAR_PP ? "text-ok-text" : t.lift_pp > 0 ? "text-text-2" : "text-danger-text")}>
                   {t.lift_pp > 0 ? "+" : ""}{t.lift_pp}pp {t.meetsBar && "✓"}
                 </td>
                 <td className="py-2 pr-3 text-right tabular-nums">{t.redemption_rate}%</td>

@@ -9,8 +9,6 @@ import {
   Loader2,
   ExternalLink,
   Settings,
-  TrendingUp,
-  Store,
   Calendar,
   Sparkles,
   Check,
@@ -18,6 +16,8 @@ import {
   Send,
 } from "lucide-react";
 import Link from "next/link";
+import { KeyNumber } from "@/components/ui/key-number";
+import { summariseReviews } from "@/lib/reviews-summary";
 import { useFetch } from "@/lib/use-fetch";
 
 // ─── Types ─────────────────────────────────────────────────
@@ -81,7 +81,7 @@ function StarRating({ rating, size = 16 }: { rating: number; size?: number }) {
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
-          className={i <= rating ? "fill-amber-400 text-amber-400" : "text-text-3"}
+          className={i <= rating ? "fill-warn text-warn-text" : "text-text-3"}
           style={{ width: size, height: size }}
         />
       ))}
@@ -140,7 +140,7 @@ function ReviewCard({
   };
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <div className="rounded-xl border border-line bg-surface p-5">
       <div className="flex items-start gap-3">
         {/* Avatar */}
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-bold text-brand-text">
@@ -150,29 +150,29 @@ function ReviewCard({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-sm">{review.reviewer.name}</span>
             {badge && (
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+              <span className="rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-medium text-info-text">
                 {badge}
               </span>
             )}
             {outletName && (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <span className="rounded-full bg-sunken px-2 py-0.5 text-[10px] font-medium text-text-2">
                 {outletName}
               </span>
             )}
-            <span className="text-xs text-muted-foreground">{timeAgo(review.createdAt)}</span>
+            <span className="text-xs text-text-2">{timeAgo(review.createdAt)}</span>
           </div>
           <div className="mt-1 flex items-center gap-2">
             <svg className="h-4 w-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
             <StarRating rating={review.rating} size={14} />
           </div>
           {review.comment && (
-            <p className="mt-2 text-sm text-foreground leading-relaxed">{review.comment}</p>
+            <p className="mt-2 text-sm text-text leading-relaxed">{review.comment}</p>
           )}
 
           {/* Existing reply */}
           {review.reply && (
-            <div className="mt-3 rounded-lg bg-muted/50 p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-1">Your reply</p>
+            <div className="mt-3 rounded-lg bg-sunken p-3">
+              <p className="text-xs font-medium text-text-2 mb-1">Your reply</p>
               <p className="text-sm">{review.reply.comment}</p>
             </div>
           )}
@@ -182,7 +182,7 @@ function ReviewCard({
             {!review.reply && (
               <button
                 onClick={() => setShowReply(!showReply)}
-                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+                className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium hover:bg-sunken transition-colors"
               >
                 <MessageSquare className="h-3.5 w-3.5" />
                 Reply review
@@ -197,13 +197,13 @@ function ReviewCard({
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 placeholder="Your response"
-                className="w-full rounded-lg border border-border bg-transparent p-3 text-sm outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+                className="w-full rounded-lg border border-line bg-transparent p-3 text-sm outline-none focus:ring-2 focus:ring-ring/50 resize-none"
                 rows={3}
               />
               <div className="mt-2 flex items-center gap-2">
                 <button
                   onClick={() => { setShowReply(false); setReplyText(""); }}
-                  className="px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  className="px-3 py-1.5 text-xs text-text-2 hover:text-text"
                 >
                   Cancel
                 </button>
@@ -228,34 +228,34 @@ function ReviewCard({
 
 function FeedbackCard({ fb, showOutlet, badge }: { fb: Feedback & { outletName?: string }; showOutlet?: boolean; badge?: string }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <div className="rounded-xl border border-line bg-surface p-5">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-600">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-info-soft text-sm font-bold text-info-text">
           {fb.name?.slice(0, 1).toUpperCase() || "?"}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-sm">{fb.name || "Anonymous"}</span>
             {badge && (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+              <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[10px] font-medium text-ok-text">
                 {badge}
               </span>
             )}
             {showOutlet && (fb as DashboardFeedback).outletName && (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <span className="rounded-full bg-sunken px-2 py-0.5 text-[10px] font-medium text-text-2">
                 {(fb as DashboardFeedback).outletName}
               </span>
             )}
-            <span className="text-xs text-muted-foreground">{timeAgo(fb.createdAt)}</span>
+            <span className="text-xs text-text-2">{timeAgo(fb.createdAt)}</span>
           </div>
           <div className="mt-1">
             <StarRating rating={fb.rating} size={14} />
           </div>
-          {fb.phone && <p className="mt-1 text-xs text-muted-foreground">{fb.phone}</p>}
+          {fb.phone && <p className="mt-1 text-xs text-text-2">{fb.phone}</p>}
           {fb.feedback && (
-            <p className="mt-2 text-sm text-foreground leading-relaxed">{fb.feedback}</p>
+            <p className="mt-2 text-sm text-text leading-relaxed">{fb.feedback}</p>
           )}
-          <span className="mt-2 inline-block rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground uppercase">
+          <span className="mt-2 inline-block rounded-full bg-sunken px-2 py-0.5 text-[10px] font-medium text-text-2 uppercase">
             {fb.source}
           </span>
         </div>
@@ -325,21 +325,21 @@ function GbpPostModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-surface p-6">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-bg px-4 pt-6 pb-10 md:px-8">
+      <div className="mx-auto w-full max-w-2xl rounded-card border border-line bg-surface p-5 md:p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold">GBP Update Post</h2>
-            <p className="text-sm text-muted-foreground">{outletName}</p>
+            <h2 className="text-xl font-semibold text-text">Google update post</h2>
+            <p className="text-sm text-text-2">{outletName}</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted">
+          <button onClick={onClose} className="rounded-lg p-2 hover:bg-sunken">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Post type selector */}
         <div className="mt-4">
-          <p className="text-xs font-medium text-muted-foreground mb-2">Post type (optional)</p>
+          <p className="text-xs font-medium text-text-2 mb-2">Post type (optional)</p>
           <div className="flex flex-wrap gap-1.5">
             {Object.entries(POST_TYPE_LABELS).map(([key, label]) => (
               <button
@@ -348,7 +348,7 @@ function GbpPostModal({
                 className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
                   postType === key
                     ? "bg-ink text-on-ink"
-                    : "border border-border bg-surface text-muted-foreground hover:bg-muted"
+                    : "border border-line bg-surface text-text-2 hover:bg-sunken"
                 }`}
               >
                 {label}
@@ -371,7 +371,7 @@ function GbpPostModal({
         {generating && (
           <div className="mt-4 flex items-center justify-center gap-2 py-6">
             <Loader2 className="h-5 w-5 animate-spin text-brand-text" />
-            <span className="text-sm text-muted-foreground">Generating...</span>
+            <span className="text-sm text-text-2">Generating...</span>
           </div>
         )}
 
@@ -381,16 +381,16 @@ function GbpPostModal({
             <textarea
               value={editedText}
               onChange={(e) => setEditedText(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface p-3 text-sm outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+              className="w-full rounded-lg border border-line bg-surface p-3 text-sm outline-none focus:ring-2 focus:ring-ring/50 resize-none"
               rows={5}
               maxLength={1500}
             />
-            <p className="mt-1 text-right text-[10px] text-muted-foreground">{editedText.length}/1500</p>
+            <p className="mt-1 text-right text-[10px] text-text-2">{editedText.length}/1500</p>
 
             {posted ? (
-              <div className="mt-3 flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 p-3">
-                <Check className="h-4 w-4 text-green-600" />
-                <span className="text-sm font-medium text-green-700">Posted to Google Business Profile</span>
+              <div className="mt-3 flex items-center gap-2 rounded-lg bg-ok-soft border border-ok/30 p-3">
+                <Check className="h-4 w-4 text-ok-text" />
+                <span className="text-sm font-medium text-ok-text">Posted to Google Business Profile</span>
               </div>
             ) : (
               <div className="mt-3 flex items-center gap-2">
@@ -404,7 +404,7 @@ function GbpPostModal({
                 </button>
                 <button
                   onClick={() => generate()}
-                  className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg border border-line px-4 py-2 text-sm font-medium hover:bg-sunken transition-colors"
                 >
                   <Sparkles className="h-4 w-4" />
                   Regenerate
@@ -498,14 +498,14 @@ function AutoReplyModal({
   const approvedByUser = results?.filter((r) => r.needsApproval && postedIds.has(r.reviewId)) ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-surface p-6">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-bg px-4 pt-6 pb-10 md:px-8">
+      <div className="mx-auto w-full max-w-3xl rounded-card border border-line bg-surface p-5 md:p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold">Auto-Reply Reviews</h2>
-            <p className="text-sm text-muted-foreground">{outletName}</p>
+            <h2 className="text-xl font-semibold text-text">Draft replies</h2>
+            <p className="text-sm text-text-2">{outletName}</p>
           </div>
-          <button onClick={() => { onDone(); onClose(); }} className="rounded-lg p-2 hover:bg-muted">
+          <button onClick={() => { onDone(); onClose(); }} className="rounded-lg p-2 hover:bg-sunken">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -513,8 +513,8 @@ function AutoReplyModal({
         {!results && !loading && (
           <div className="mt-6 text-center">
             <Sparkles className="mx-auto h-10 w-10 text-brand-text" />
-            <p className="mt-3 text-sm text-foreground font-medium">AI will reply to all unreplied Google reviews</p>
-            <ul className="mt-2 text-xs text-muted-foreground space-y-1">
+            <p className="mt-3 text-sm text-text font-medium">AI will reply to all unreplied Google reviews</p>
+            <ul className="mt-2 text-xs text-text-2 space-y-1">
               <li>4-5 star reviews: auto-posted immediately</li>
               <li>1-3 star reviews: drafted for your approval</li>
             </ul>
@@ -530,15 +530,15 @@ function AutoReplyModal({
         {loading && (
           <div className="mt-6 flex flex-col items-center gap-3 py-10">
             <Loader2 className="h-8 w-8 animate-spin text-brand-text" />
-            <p className="text-sm text-muted-foreground">Generating replies with AI...</p>
+            <p className="text-sm text-text-2">Generating replies with AI...</p>
           </div>
         )}
 
         {results && !loading && (
           <div className="mt-4 space-y-4">
             {results.length === 0 && (
-              <div className="rounded-xl border border-border bg-muted/30 p-6 text-center">
-                <Check className="mx-auto h-8 w-8 text-green-500" />
+              <div className="rounded-xl border border-line bg-sunken p-6 text-center">
+                <Check className="mx-auto h-8 w-8 text-ok-text" />
                 <p className="mt-2 text-sm font-medium">All reviews already replied!</p>
               </div>
             )}
@@ -546,19 +546,19 @@ function AutoReplyModal({
             {/* Auto-posted good reviews */}
             {autoPosted.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-2">
+                <p className="text-xs font-semibold text-ok-text uppercase tracking-wide mb-2">
                   Auto-posted ({autoPosted.length})
                 </p>
                 <div className="space-y-2">
                   {autoPosted.map((r) => (
-                    <div key={r.reviewId} className="rounded-lg border border-green-200 bg-green-50 p-3">
+                    <div key={r.reviewId} className="rounded-lg border border-ok/30 bg-ok-soft p-3">
                       <div className="flex items-center gap-2">
                         <StarRating rating={r.rating} size={12} />
                         <span className="text-sm font-medium">{r.reviewer}</span>
-                        <Check className="ml-auto h-4 w-4 text-green-600" />
+                        <Check className="ml-auto h-4 w-4 text-ok-text" />
                       </div>
-                      {r.comment && <p className="mt-1 text-xs text-muted-foreground">{r.comment}</p>}
-                      <p className="mt-2 text-xs text-green-800 bg-green-100 rounded p-2">{r.reply}</p>
+                      {r.comment && <p className="mt-1 text-xs text-text-2">{r.comment}</p>}
+                      <p className="mt-2 text-xs text-ok-text bg-ok-soft rounded p-2">{r.reply}</p>
                     </div>
                   ))}
                 </div>
@@ -568,19 +568,19 @@ function AutoReplyModal({
             {/* Approved by user */}
             {approvedByUser.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-2">
+                <p className="text-xs font-semibold text-ok-text uppercase tracking-wide mb-2">
                   Approved & posted ({approvedByUser.length})
                 </p>
                 <div className="space-y-2">
                   {approvedByUser.map((r) => (
-                    <div key={r.reviewId} className="rounded-lg border border-green-200 bg-green-50 p-3">
+                    <div key={r.reviewId} className="rounded-lg border border-ok/30 bg-ok-soft p-3">
                       <div className="flex items-center gap-2">
                         <StarRating rating={r.rating} size={12} />
                         <span className="text-sm font-medium">{r.reviewer}</span>
-                        <Check className="ml-auto h-4 w-4 text-green-600" />
+                        <Check className="ml-auto h-4 w-4 text-ok-text" />
                       </div>
-                      {r.comment && <p className="mt-1 text-xs text-muted-foreground">{r.comment}</p>}
-                      <p className="mt-2 text-xs text-green-800 bg-green-100 rounded p-2">{r.reply}</p>
+                      {r.comment && <p className="mt-1 text-xs text-text-2">{r.comment}</p>}
+                      <p className="mt-2 text-xs text-ok-text bg-ok-soft rounded p-2">{r.reply}</p>
                     </div>
                   ))}
                 </div>
@@ -590,30 +590,30 @@ function AutoReplyModal({
             {/* Pending approval (bad reviews) */}
             {pendingApproval.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">
+                <p className="text-xs font-semibold text-warn-text uppercase tracking-wide mb-2">
                   Needs approval ({pendingApproval.length})
                 </p>
                 <div className="space-y-2">
                   {pendingApproval.map((r, i) => (
-                    <div key={r.reviewId} className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <div key={r.reviewId} className="rounded-lg border border-warn/30 bg-warn-soft p-3">
                       <div className="flex items-center gap-2">
                         <StarRating rating={r.rating} size={12} />
                         <span className="text-sm font-medium">{r.reviewer}</span>
                       </div>
-                      {r.comment && <p className="mt-1 text-xs text-muted-foreground">{r.comment}</p>}
+                      {r.comment && <p className="mt-1 text-xs text-text-2">{r.comment}</p>}
 
                       {editingIdx === i ? (
                         <div className="mt-2">
                           <textarea
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
-                            className="w-full rounded-lg border border-border bg-surface p-2 text-xs outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+                            className="w-full rounded-lg border border-line bg-surface p-2 text-xs outline-none focus:ring-2 focus:ring-ring/50 resize-none"
                             rows={4}
                           />
                           <div className="mt-1.5 flex items-center gap-2">
                             <button
                               onClick={() => setEditingIdx(null)}
-                              className="text-xs text-muted-foreground hover:text-foreground"
+                              className="text-xs text-text-2 hover:text-text"
                             >
                               Cancel
                             </button>
@@ -629,19 +629,19 @@ function AutoReplyModal({
                         </div>
                       ) : (
                         <>
-                          <p className="mt-2 text-xs text-amber-800 bg-amber-100 rounded p-2">{r.reply}</p>
+                          <p className="mt-2 text-xs text-warn-text bg-warn-soft rounded p-2">{r.reply}</p>
                           <div className="mt-2 flex items-center gap-2">
                             <button
                               onClick={() => approveReply(r)}
                               disabled={posting[r.reviewId]}
-                              className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                              className="flex items-center gap-1 rounded-lg bg-ok px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ok disabled:opacity-50"
                             >
                               {posting[r.reviewId] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                               Approve & post
                             </button>
                             <button
                               onClick={() => { setEditingIdx(i); setEditText(r.reply); }}
-                              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                              className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium hover:bg-sunken"
                             >
                               Edit
                             </button>
@@ -726,14 +726,14 @@ function BatchAutoReplyModal({ onClose }: { onClose: () => void }) {
   ) ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-surface p-6">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-bg px-4 pt-6 pb-10 md:px-8">
+      <div className="mx-auto w-full max-w-3xl rounded-card border border-line bg-surface p-5 md:p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold">Batch Auto-Reply</h2>
-            <p className="text-sm text-muted-foreground">All outlets at once</p>
+            <h2 className="text-xl font-semibold text-text">Draft replies for all outlets</h2>
+            <p className="text-sm text-text-2">All outlets at once</p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 hover:bg-muted">
+          <button onClick={onClose} className="rounded-lg p-2 hover:bg-sunken">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -742,7 +742,7 @@ function BatchAutoReplyModal({ onClose }: { onClose: () => void }) {
           <div className="mt-6 text-center">
             <Sparkles className="mx-auto h-10 w-10 text-brand-text" />
             <p className="mt-3 text-sm font-medium">Reply to all unreplied reviews across all outlets</p>
-            <ul className="mt-2 text-xs text-muted-foreground space-y-1">
+            <ul className="mt-2 text-xs text-text-2 space-y-1">
               <li>4-5 star: auto-posted immediately</li>
               <li>1-3 star: drafted for your approval</li>
             </ul>
@@ -758,35 +758,35 @@ function BatchAutoReplyModal({ onClose }: { onClose: () => void }) {
         {loading && (
           <div className="mt-6 flex flex-col items-center gap-3 py-10">
             <Loader2 className="h-8 w-8 animate-spin text-brand-text" />
-            <p className="text-sm text-muted-foreground">Processing all outlets...</p>
+            <p className="text-sm text-text-2">Processing all outlets...</p>
           </div>
         )}
 
         {data && !loading && (
           <div className="mt-4 space-y-4">
             {/* Summary */}
-            <div className="flex items-center gap-4 rounded-xl bg-muted/30 p-4">
+            <div className="flex items-center gap-4 rounded-xl bg-sunken p-4">
               <div className="text-center">
                 <span className="text-2xl font-bold">{data.totalOutlets}</span>
-                <p className="text-[10px] text-muted-foreground">Outlets</p>
+                <p className="text-[10px] text-text-2">Outlets</p>
               </div>
               <div className="text-center">
                 <span className="text-2xl font-bold">{totalUnreplied}</span>
-                <p className="text-[10px] text-muted-foreground">Unreplied</p>
+                <p className="text-[10px] text-text-2">Unreplied</p>
               </div>
               <div className="text-center">
-                <span className="text-2xl font-bold text-green-600">{data.totalPosted}</span>
-                <p className="text-[10px] text-muted-foreground">Auto-posted</p>
+                <span className="text-2xl font-bold text-ok-text">{data.totalPosted}</span>
+                <p className="text-[10px] text-text-2">Auto-posted</p>
               </div>
               <div className="text-center">
-                <span className="text-2xl font-bold text-amber-600">{allPending.length}</span>
-                <p className="text-[10px] text-muted-foreground">Pending</p>
+                <span className="text-2xl font-bold text-warn-text">{allPending.length}</span>
+                <p className="text-[10px] text-text-2">Pending</p>
               </div>
             </div>
 
             {totalUnreplied === 0 && (
-              <div className="rounded-xl border border-border bg-muted/30 p-6 text-center">
-                <Check className="mx-auto h-8 w-8 text-green-500" />
+              <div className="rounded-xl border border-line bg-sunken p-6 text-center">
+                <Check className="mx-auto h-8 w-8 text-ok-text" />
                 <p className="mt-2 text-sm font-medium">All reviews across all outlets already replied!</p>
               </div>
             )}
@@ -794,21 +794,21 @@ function BatchAutoReplyModal({ onClose }: { onClose: () => void }) {
             {/* Per-outlet auto-posted summary */}
             {data.outlets.filter((o) => o.results.some((r) => r.posted || (postedIds.has(r.reviewId) && !r.needsApproval))).length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-2">Auto-posted</p>
+                <p className="text-xs font-semibold text-ok-text uppercase tracking-wide mb-2">Auto-posted</p>
                 {data.outlets.map((outlet) => {
                   const posted = outlet.results.filter((r) => r.posted);
                   if (posted.length === 0) return null;
                   return (
-                    <div key={outlet.outletId} className="mb-2 rounded-lg border border-green-200 bg-green-50 p-3">
-                      <p className="text-xs font-semibold text-green-700">{outlet.outletName} — {posted.length} replied</p>
+                    <div key={outlet.outletId} className="mb-2 rounded-lg border border-ok/30 bg-ok-soft p-3">
+                      <p className="text-xs font-semibold text-ok-text">{outlet.outletName} — {posted.length} replied</p>
                       {posted.map((r) => (
-                        <div key={r.reviewId} className="mt-2 border-t border-green-200 pt-2">
+                        <div key={r.reviewId} className="mt-2 border-t border-ok/30 pt-2">
                           <div className="flex items-center gap-2">
                             <StarRating rating={r.rating} size={10} />
                             <span className="text-xs font-medium">{r.reviewer}</span>
                           </div>
-                          {r.comment && <p className="text-[10px] text-muted-foreground mt-0.5">{r.comment}</p>}
-                          <p className="text-[10px] text-green-800 bg-green-100 rounded p-1.5 mt-1">{r.reply}</p>
+                          {r.comment && <p className="text-[10px] text-text-2 mt-0.5">{r.comment}</p>}
+                          <p className="text-[10px] text-ok-text bg-ok-soft rounded p-1.5 mt-1">{r.reply}</p>
                         </div>
                       ))}
                     </div>
@@ -820,25 +820,25 @@ function BatchAutoReplyModal({ onClose }: { onClose: () => void }) {
             {/* Pending approval */}
             {allPending.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">
+                <p className="text-xs font-semibold text-warn-text uppercase tracking-wide mb-2">
                   Needs approval ({allPending.length})
                 </p>
                 {allPending.map((r) => (
-                  <div key={r.reviewId} className="mb-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <div key={r.reviewId} className="mb-2 rounded-lg border border-warn/30 bg-warn-soft p-3">
                     <div className="flex items-center gap-2">
                       <StarRating rating={r.rating} size={12} />
                       <span className="text-sm font-medium">{r.reviewer}</span>
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                      <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-medium text-warn-text">
                         {r.outletName}
                       </span>
                     </div>
-                    {r.comment && <p className="mt-1 text-xs text-muted-foreground">{r.comment}</p>}
-                    <p className="mt-2 text-xs text-amber-800 bg-amber-100 rounded p-2">{r.reply}</p>
+                    {r.comment && <p className="mt-1 text-xs text-text-2">{r.comment}</p>}
+                    <p className="mt-2 text-xs text-warn-text bg-warn-soft rounded p-2">{r.reply}</p>
                     <div className="mt-2 flex items-center gap-2">
                       <button
                         onClick={() => approveReply(r.outletId, r)}
                         disabled={posting[r.reviewId]}
-                        className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                        className="flex items-center gap-1 rounded-lg bg-ok px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ok disabled:opacity-50"
                       >
                         {posting[r.reviewId] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                         Approve & post
@@ -915,8 +915,8 @@ function DashboardView() {
     <>
       {/* Period filter */}
       <div className="mt-6 flex flex-wrap items-center gap-2">
-        <Calendar className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground mr-1">Period:</span>
+        <Calendar className="h-4 w-4 text-text-2" />
+        <span className="text-sm text-text-2 mr-1">Period:</span>
         {(["day", "week", "month", "custom"] as const).map((p) => (
           <button
             key={p}
@@ -924,10 +924,10 @@ function DashboardView() {
             className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               period === p
                 ? "bg-ink text-on-ink"
-                : "border border-border bg-surface text-muted-foreground hover:bg-muted"
+                : "border border-line bg-surface text-text-2 hover:bg-sunken"
             }`}
           >
-            {p === "day" ? "Today" : p === "week" ? "7 Days" : p === "month" ? "30 Days" : "Custom"}
+            {p === "day" ? "Today" : p === "week" ? "7 days" : p === "month" ? "30 days" : "Custom"}
           </button>
         ))}
         {period === "custom" && (
@@ -936,14 +936,14 @@ function DashboardView() {
               type="date"
               value={customFrom}
               onChange={(e) => setCustomFrom(e.target.value)}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+              className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
             />
-            <span className="text-sm text-muted-foreground">to</span>
+            <span className="text-sm text-text-2">to</span>
             <input
               type="date"
               value={customTo}
               onChange={(e) => setCustomTo(e.target.value)}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+              className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
             />
           </div>
         )}
@@ -956,7 +956,7 @@ function DashboardView() {
           className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink/90 transition-colors"
         >
           <Sparkles className="h-4 w-4" />
-          Auto-Reply All Outlets
+          Draft replies for all outlets
         </button>
       </div>
 
@@ -965,46 +965,22 @@ function DashboardView() {
         <BatchAutoReplyModal onClose={() => setShowBatchReply(false)} />
       )}
 
-      {/* Aggregated stats */}
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-border bg-surface p-4">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <TrendingUp className="h-4 w-4" />
-            <span className="text-xs font-medium">Avg Rating</span>
+      {/* Key numbers */}
+      {(() => {
+        const sum = summariseReviews(data?.allGoogleReviews ?? [], (data?.allFeedbacks ?? []).length, data?.outlets ?? []);
+        const wait = isLoading && !data;
+        return (
+          <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KeyNumber label="Average rating" value={wait ? null : data?.overallAvgRating ? `${data.overallAvgRating.toFixed(1)} ★` : "–"} note={periodLabel} />
+            <KeyNumber label="Google reviews" value={wait ? null : String(sum.google.count)} tone={sum.google.unreplied > 0 ? "warn" : undefined}
+              note={sum.google.unreplied > 0 ? <><b className="font-semibold text-text-2">{sum.google.unreplied}</b> without a reply</> : "every review answered"} />
+            <KeyNumber label="Complaints" value={wait ? null : String(sum.complaints.count)} tone={sum.complaints.count > 0 ? "warn" : undefined}
+              note={<>{sum.complaints.lowGoogle} low Google · {sum.complaints.qr} QR feedback</>} />
+            <KeyNumber label="Outlets on Google" value={wait ? null : `${sum.connected.count} of ${sum.connected.of}`} tone={sum.connected.count < sum.connected.of ? "warn" : undefined}
+              note={sum.connected.count < sum.connected.of ? "some outlets are not connected" : "all connected"} />
           </div>
-          <div className="mt-2 flex items-center gap-1">
-            <span className="text-2xl font-bold">{data?.overallAvgRating?.toFixed(1) ?? "–"}</span>
-            <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-          </div>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">{periodLabel}</p>
-        </div>
-        <div className="rounded-xl border border-border bg-surface p-4">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <svg className="h-4 w-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-            <span className="text-xs font-medium">Google Reviews</span>
-          </div>
-          <span className="mt-2 block text-2xl font-bold">{data?.totalGoogleReviews ?? 0}</span>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">{periodLabel}</p>
-        </div>
-        <div className="rounded-xl border border-border bg-surface p-4">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <MessageSquare className="h-4 w-4" />
-            <span className="text-xs font-medium">Feedback</span>
-          </div>
-          <span className="mt-2 block text-2xl font-bold">
-            {((data?.allGoogleReviews ?? []).filter((r) => r.rating <= 3).length + (data?.allFeedbacks ?? []).length)}
-          </span>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">{periodLabel}</p>
-        </div>
-        <div className="rounded-xl border border-border bg-surface p-4">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Store className="h-4 w-4" />
-            <span className="text-xs font-medium">Outlets</span>
-          </div>
-          <span className="mt-2 block text-2xl font-bold">{data?.outlets?.length ?? 0}</span>
-          <p className="mt-0.5 text-[10px] text-muted-foreground">Connected</p>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Per-outlet breakdown — clickable to filter */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1015,33 +991,33 @@ function DashboardView() {
             className={`rounded-xl border p-4 text-left transition-colors ${
               filterOutletId === outlet.outletId
                 ? "border-ink bg-brand-soft ring-1 ring-brand"
-                : "border-border bg-surface hover:border-ink/40"
+                : "border-line bg-surface hover:border-ink/40"
             }`}
           >
             <h3 className="text-sm font-semibold truncate">{outlet.outletName}</h3>
             <div className="mt-2 flex items-center gap-3 text-sm">
               <div>
                 <span className="font-bold">{outlet.google.averageRating?.toFixed(1) || "–"}</span>
-                <Star className="ml-0.5 inline h-3 w-3 fill-amber-400 text-amber-400" />
+                <Star className="ml-0.5 inline h-3 w-3 fill-warn text-warn-text" />
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-xs text-text-2">
                 {outlet.google.periodCount} Google &middot; {outlet.internal.stats.total} Internal
               </div>
             </div>
             {!outlet.google.connected && (
-              <p className="mt-1 text-[10px] text-amber-600">GBP not connected</p>
+              <p className="mt-1 text-[10px] text-warn-text">GBP not connected</p>
             )}
           </button>
         ))}
       </div>
       {filterOutletId && (
         <div className="mt-2 flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            Filtered: <span className="font-medium text-foreground">{data?.outlets?.find((o) => o.outletId === filterOutletId)?.outletName}</span>
+          <span className="text-xs text-text-2">
+            Filtered: <span className="font-medium text-text">{data?.outlets?.find((o) => o.outletId === filterOutletId)?.outletName}</span>
           </span>
           <button
             onClick={() => setFilterOutletId(null)}
-            className="rounded-md p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="rounded-md p-0.5 text-text-2 hover:bg-sunken hover:text-text"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -1049,12 +1025,12 @@ function DashboardView() {
       )}
 
       {/* Sub-tabs + toolbar */}
-      <div className="mt-6 flex items-center justify-between">
-        <div className="flex items-center gap-1 border-b border-border">
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1 border-b border-line">
           <button
             onClick={() => setDashTab("google")}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              dashTab === "google" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+              dashTab === "google" ? "border-foreground text-text" : "border-transparent text-text-2 hover:text-text"
             }`}
           >
             Reviews ({filteredGoogleReviews.length})
@@ -1062,7 +1038,7 @@ function DashboardView() {
           <button
             onClick={() => setDashTab("internal")}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              dashTab === "internal" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+              dashTab === "internal" ? "border-foreground text-text" : "border-transparent text-text-2 hover:text-text"
             }`}
           >
             Feedback ({combinedFeedback.length})
@@ -1070,28 +1046,28 @@ function DashboardView() {
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-text-2" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search..."
-              className="w-48 rounded-lg border border-border bg-surface py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+              className="h-10 w-full rounded-ctl border border-line bg-surface pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/50 sm:w-48"
             />
           </div>
           <div className="relative">
             <button
               onClick={() => setShowFilter(!showFilter)}
-              className={`rounded-lg border p-2 transition-colors ${filterRating ? "border-text bg-raised font-semibold text-text" : "border-border bg-surface text-muted-foreground hover:bg-muted"}`}
+              className={`rounded-lg border p-2 transition-colors ${filterRating ? "border-text bg-raised font-semibold text-text" : "border-line bg-surface text-text-2 hover:bg-sunken"}`}
             >
               <Filter className="h-4 w-4" />
             </button>
             {showFilter && (
-              <div className="absolute right-0 top-10 z-20 w-48 rounded-xl border border-border bg-surface p-3 shadow-lg">
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Filter by rating</p>
+              <div className="absolute right-0 top-10 z-20 w-48 rounded-xl border border-line bg-surface p-3 shadow-lg">
+                <p className="text-xs font-semibold text-text-2 mb-2">Filter by rating</p>
                 <div className="space-y-1">
                   <button
                     onClick={() => { setFilterRating(null); setShowFilter(false); }}
-                    className={`w-full rounded-md px-3 py-1.5 text-left text-sm ${!filterRating ? "bg-muted font-medium" : "hover:bg-muted"}`}
+                    className={`w-full rounded-md px-3 py-1.5 text-left text-sm ${!filterRating ? "bg-sunken font-medium" : "hover:bg-sunken"}`}
                   >
                     All ratings
                   </button>
@@ -1099,7 +1075,7 @@ function DashboardView() {
                     <button
                       key={r}
                       onClick={() => { setFilterRating(r); setShowFilter(false); }}
-                      className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm ${filterRating === r ? "bg-muted font-medium" : "hover:bg-muted"}`}
+                      className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm ${filterRating === r ? "bg-sunken font-medium" : "hover:bg-sunken"}`}
                     >
                       <StarRating rating={r} size={12} />
                       <span>{r} star</span>
@@ -1116,15 +1092,15 @@ function DashboardView() {
       <div className="mt-4 space-y-3">
         {isLoading && (
           <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Loader2 className="h-6 w-6 animate-spin text-text-2" />
           </div>
         )}
         {!isLoading && dashTab === "google" && (
           <>
             {filteredGoogleReviews.length === 0 ? (
-              <div className="rounded-xl border border-border bg-surface p-10 text-center">
-                <Star className="mx-auto h-10 w-10 text-muted-foreground/30" />
-                <p className="mt-3 text-sm text-muted-foreground">No 4-5 star reviews in this period</p>
+              <div className="rounded-xl border border-line bg-surface p-10 text-center">
+                <Star className="mx-auto h-10 w-10 text-text-2/30" />
+                <p className="mt-3 text-sm text-text-2">No 4-5 star reviews in this period</p>
               </div>
             ) : (
               filteredGoogleReviews.map((r) => (
@@ -1142,9 +1118,9 @@ function DashboardView() {
         {!isLoading && dashTab === "internal" && (
           <>
             {filteredFeedback.length === 0 ? (
-              <div className="rounded-xl border border-border bg-surface p-10 text-center">
-                <MessageSquare className="mx-auto h-10 w-10 text-muted-foreground/30" />
-                <p className="mt-3 text-sm text-muted-foreground">No feedback in this period</p>
+              <div className="rounded-xl border border-line bg-surface p-10 text-center">
+                <MessageSquare className="mx-auto h-10 w-10 text-text-2/30" />
+                <p className="mt-3 text-sm text-text-2">No feedback in this period</p>
               </div>
             ) : (
               filteredFeedback.map((item, idx) =>
@@ -1174,27 +1150,18 @@ function DashboardView() {
 
 export default function ReviewsPage() {
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="max-w-6xl px-4 pt-6 pb-10 md:px-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Reviews</h1>
-          <p className="text-sm text-muted-foreground">Manage Google reviews & internal feedback</p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Reviews</h1>
+          <p className="mt-0.5 text-sm text-text-2">How customers rate us on Google and by QR, and whether every review gets an answer.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/reviews/feedback"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
-          >
-            <MessageSquare className="h-4 w-4" />
-            Feedback management
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/reviews/feedback" className="inline-flex h-10 items-center gap-1.5 rounded-ctl border border-line bg-surface px-3 text-sm font-medium text-text hover:bg-sunken">
+            <MessageSquare className="h-4 w-4" /> Feedback
           </Link>
-          <Link
-            href="/reviews/settings"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
-          >
-            <Settings className="h-4 w-4" />
-            Review settings
+          <Link href="/reviews/settings" className="inline-flex h-10 items-center gap-1.5 rounded-ctl border border-line bg-surface px-3 text-sm font-medium text-text hover:bg-sunken">
+            <Settings className="h-4 w-4" /> Settings
           </Link>
         </div>
       </div>

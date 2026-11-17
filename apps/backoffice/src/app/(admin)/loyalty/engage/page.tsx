@@ -2,10 +2,8 @@
 
 import { useState, useMemo, useEffect } from "react";
 import {
-  MessageSquare,
   Send,
   Calendar,
-  Users,
   Phone,
   Plus,
   Search,
@@ -18,7 +16,6 @@ import {
   Eye,
   Pencil,
   Trash2,
-  CreditCard,
   History,
   AlertTriangle,
   RefreshCw,
@@ -28,6 +25,7 @@ import { useConfirm, toast } from "@celsius/ui";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { KeyNumber } from "@/components/ui/key-number";
 import { formatPhone } from "@/lib/loyalty/utils";
 import { exportToCSV } from "@/lib/loyalty/export";
 import { fetchMembers } from "@/lib/loyalty/api";
@@ -102,13 +100,13 @@ const statusBadge: Record<
   MessageStatus,
   { bg: string; text: string; label: string }
 > = {
-  sent: { bg: "bg-green-50", text: "text-green-700", label: "Sent" },
+  sent: { bg: "bg-ok-soft", text: "text-ok-text", label: "Sent" },
   scheduled: {
-    bg: "bg-blue-50",
-    text: "text-blue-700",
+    bg: "bg-info-soft",
+    text: "text-info-text",
     label: "Scheduled",
   },
-  draft: { bg: "bg-yellow-50", text: "text-yellow-700", label: "Draft" },
+  draft: { bg: "bg-warn-soft", text: "text-warn-text", label: "Draft" },
 };
 
 const channelBadge: Record<
@@ -116,8 +114,8 @@ const channelBadge: Record<
   { bg: string; text: string; label: string; icon: typeof Phone }
 > = {
   sms: {
-    bg: "bg-blue-50",
-    text: "text-blue-700",
+    bg: "bg-info-soft",
+    text: "text-info-text",
     label: "SMS",
     icon: Phone,
   },
@@ -568,37 +566,20 @@ export default function NotificationsPage() {
     totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
 
   return (
-    <div className="p-3 sm:p-6 space-y-6 pb-20 md:pb-0">
+    <div className="space-y-6 px-4 pt-6 pb-24 md:px-8 md:pb-10">
       <ConfirmDialog />
 
       {/* ── Page header + tab switcher ───────────────────────── */}
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
-          <MessageSquare className="h-5 w-5 text-amber-600" />
-          Engage
-        </h1>
-        <p className="text-xs text-text-2 mt-0.5">
-          How we reach customers — automatic push reminders + manual SMS broadcasts.
-        </p>
-        <div className="mt-3 inline-flex rounded-lg border border-line p-0.5 bg-surface text-sm">
-          <button
-            onClick={() => setTopTab("push")}
-            className={`px-4 py-1.5 rounded-md transition flex items-center gap-1.5 ${
-              topTab === "push" ? "bg-amber-100 text-amber-900 font-semibold" : "text-text-2 hover:text-text"
-            }`}
-          >
-            <Bell className="h-3.5 w-3.5" />
-            Push reminders
-          </button>
-          <button
-            onClick={() => setTopTab("sms")}
-            className={`px-4 py-1.5 rounded-md transition flex items-center gap-1.5 ${
-              topTab === "sms" ? "bg-amber-100 text-amber-900 font-semibold" : "text-text-2 hover:text-text"
-            }`}
-          >
-            <Phone className="h-3.5 w-3.5" />
-            SMS broadcasts
-          </button>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Messages</h1>
+        <p className="mt-0.5 text-sm text-text-2">How we reach customers: automatic push reminders, and SMS broadcasts you send by hand.</p>
+        <div className="mt-4 flex gap-6 border-b border-line">
+          {([["push", "Push reminders", Bell], ["sms", "SMS broadcasts", Phone]] as const).map(([key, label, Icon]) => (
+            <button key={key} onClick={() => setTopTab(key)}
+              className={`-mb-px inline-flex items-center gap-1.5 border-b-2 pb-2.5 text-sm transition-colors ${topTab === key ? "border-text font-semibold text-text" : "border-transparent text-text-2 hover:text-text"}`}>
+              <Icon className="h-3.5 w-3.5" /> {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -608,89 +589,34 @@ export default function NotificationsPage() {
       {/* SMS tab — existing manual broadcast flow */}
       {topTab === "sms" && (
       <>
-      {/* ── KPI Cards ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-        {/* SMS123 Balance */}
-        <div className="rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-50">
-              <CreditCard className="h-5 w-5 text-green-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-text-2">SMS credits · <span className="uppercase">{smsProvider === "smsniaga" ? "SMS Niaga" : smsProvider}</span></p>
-              <div className="flex items-center gap-2">
-                <p className={`font-sans text-xl font-bold ${smsBalance !== null && smsBalance < 100 ? "text-red-500" : "text-text dark:text-white"}`}>
-                  {smsBalance !== null ? Math.floor(smsBalance).toLocaleString() : "—"}
-                </p>
-                <button onClick={refreshSmsBalance} disabled={smsBalanceLoading} className="text-text-3 hover:text-text-2" title="Refresh balance">
-                  <RefreshCw className={`h-3.5 w-3.5 ${smsBalanceLoading ? "animate-spin" : ""}`} />
-                </button>
-              </div>
-              {smsProvider === "sms123" ? (
-                <a href="https://www.sms123.net" target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium text-brand-text hover:underline inline-flex items-center gap-0.5">
-                  Top up on SMS123 <ExternalLink className="h-2.5 w-2.5" />
-                </a>
-              ) : (
-                <span className="text-[10px] text-text-3">Live gateway · balance managed in SMS Niaga</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Sent this month */}
-        <div className="rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
-              <Send className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-text-2">Sent this month</p>
-              <p className="font-sans text-xl font-bold text-text dark:text-white">
-                {smsSentThisMonth.toLocaleString()}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Delivery rate */}
-        <div className="rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50">
-              <MessageSquare className="h-5 w-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-text-2">Delivery rate</p>
-              <p className="font-sans text-xl font-bold text-text dark:text-white">
-                {deliveryRate}%
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Members reachable */}
-        <div className="rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50">
-              <Users className="h-5 w-5 text-brand-text" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-text-2">Members reachable</p>
-              <p className="font-sans text-xl font-bold text-text dark:text-white">
-                {allMembers.length.toLocaleString()}
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* ── Key numbers ─────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label={`SMS credits · ${smsProvider === "smsniaga" ? "SMS Niaga" : smsProvider === "sms123" ? "SMS123" : smsProvider}`}
+          value={smsBalance !== null ? Math.floor(smsBalance).toLocaleString() : "–"}
+          tone={smsBalance !== null && smsBalance < 100 ? "warn" : undefined}
+          note={
+            <span className="inline-flex flex-wrap items-center gap-x-2">
+              <button onClick={refreshSmsBalance} disabled={smsBalanceLoading} className="inline-flex min-h-6 items-center gap-1 font-medium text-brand-text hover:underline disabled:opacity-50">
+                <RefreshCw className={`h-3 w-3 ${smsBalanceLoading ? "animate-spin" : ""}`} /> Refresh
+              </button>
+              {smsProvider === "sms123"
+                ? <a href="https://www.sms123.net" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 font-medium text-brand-text hover:underline">Top up <ExternalLink className="h-2.5 w-2.5" /></a>
+                : <span>balance kept in SMS Niaga</span>}
+            </span>
+          } />
+        <KeyNumber label="Sent this month" value={smsSentThisMonth.toLocaleString()} note="SMS sent through the gateway" />
+        <KeyNumber label="Delivered" value={totalSent > 0 ? `${deliveryRate}%` : "–"} tone={totalSent > 0 && deliveryRate < 90 ? "warn" : undefined} note={totalSent > 0 ? `of ${totalSent.toLocaleString()} SMS sent` : "nothing sent yet"} />
+        <KeyNumber label="Members reachable" value={(allMembers.length - smsOptOutCount).toLocaleString()} note={smsOptOutCount > 0 ? <><b className="font-semibold text-text-2">{smsOptOutCount.toLocaleString()}</b> opted out of SMS</> : "no one has opted out"} />
       </div>
 
 
       {/* ── SMS Log Panel ── */}
       {showSmsLog && (
-        <div className="rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-line dark:border-neutral-700">
-            <h3 className="text-sm font-semibold text-text dark:text-white flex items-center gap-2">
+        <div className="rounded-xl border border-line bg-surface shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-line">
+            <h3 className="text-sm font-semibold text-text flex items-center gap-2">
               <History className="h-4 w-4 text-text-3" />
-              SMS Send Log
+              SMS send log
             </h3>
             <button onClick={() => setShowSmsLog(false)} className="text-text-3 hover:text-text-2">
               <X className="h-4 w-4" />
@@ -698,7 +624,7 @@ export default function NotificationsPage() {
           </div>
           <div className="overflow-x-auto max-h-80 overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-sunken dark:bg-neutral-800">
+              <thead className="sticky top-0 bg-sunken">
                 <tr className="text-xs text-text-2 uppercase">
                   <th className="px-4 py-2 text-left">Time</th>
                   <th className="px-4 py-2 text-left">Phone</th>
@@ -706,7 +632,7 @@ export default function NotificationsPage() {
                   <th className="px-4 py-2 text-left">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-line dark:divide-neutral-700/50">
+              <tbody className="divide-y divide-line">
                 {smsLogs.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-8 text-center text-text-3">
@@ -714,16 +640,16 @@ export default function NotificationsPage() {
                     </td>
                   </tr>
                 ) : smsLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-sunken/50 dark:hover:bg-neutral-700/30">
+                  <tr key={log.id} className="hover:bg-sunken/50">
                     <td className="px-4 py-2 whitespace-nowrap font-sans text-text-2">
-                      {new Date(log.created_at).toLocaleString("en-MY", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      {new Date(log.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kuala_Lumpur" })}
                     </td>
                     <td className="px-4 py-2 font-sans text-text-2">{formatPhone(log.phone)}</td>
                     <td className="px-4 py-2 text-text-2 max-w-xs truncate">{log.message}</td>
                     <td className="px-4 py-2">
                       <span className={cn(
                         "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                        log.status === "sent" || log.status === "delivered" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+                        log.status === "sent" || log.status === "delivered" ? "bg-ok-soft text-ok-text" : "bg-danger-soft text-danger-text"
                       )}>
                         {log.status}
                       </span>
@@ -751,8 +677,8 @@ export default function NotificationsPage() {
                 className={cn(
                   "whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
                   activeTab === tab.key
-                    ? "bg-gray-900 text-white"
-                    : "text-text-2 hover:bg-sunken dark:hover:bg-neutral-700 hover:text-text-2"
+                    ? "bg-ink text-on-ink"
+                    : "text-text-2 hover:bg-sunken hover:text-text-2"
                 )}
               >
                 {tab.label}
@@ -761,8 +687,8 @@ export default function NotificationsPage() {
                     className={cn(
                       "ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-xs",
                       activeTab === tab.key
-                        ? "bg-surface/20 text-white"
-                        : "bg-sunken dark:bg-neutral-700 text-text-2"
+                        ? "bg-on-ink/20 text-on-ink"
+                        : "bg-sunken text-text-2"
                     )}
                   >
                     {count}
@@ -798,7 +724,7 @@ export default function NotificationsPage() {
           ) : (
             <button
               onClick={() => setShowSearch(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-line dark:border-neutral-700 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-line text-text-2 hover:bg-sunken"
             >
               <Search className="h-4 w-4" />
             </button>
@@ -825,7 +751,7 @@ export default function NotificationsPage() {
                 { key: "status", label: "Status" },
               ], `celsius-notifications-${today}`);
             }}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-line dark:border-neutral-700 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-line text-text-2 hover:bg-sunken"
             title="Export CSV"
           >
             <Download className="h-4 w-4" />
@@ -834,7 +760,7 @@ export default function NotificationsPage() {
           {/* Test SMS */}
           <Link
             href="/loyalty/engage/test"
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-line dark:border-neutral-700 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700 px-3 text-sm font-medium transition-colors"
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-line text-text-2 hover:bg-sunken px-3 text-sm font-medium transition-colors"
           >
             <AlertTriangle className="h-4 w-4" />
             <span className="hidden sm:inline">Test</span>
@@ -847,7 +773,7 @@ export default function NotificationsPage() {
               "flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors",
               showSmsLog
                 ? "border-text bg-raised font-semibold text-text"
-                : "border-line dark:border-neutral-700 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
+                : "border-line text-text-2 hover:bg-sunken"
             )}
           >
             <History className="h-4 w-4" />
@@ -866,11 +792,11 @@ export default function NotificationsPage() {
       </div>
 
       {/* ── Message Table ──────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-line dark:border-neutral-700 bg-sunken/60 dark:bg-neutral-800">
+              <tr className="border-b border-line bg-sunken/60">
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-2">
                   Message
                 </th>
@@ -892,7 +818,7 @@ export default function NotificationsPage() {
                 <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-2" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-line dark:divide-neutral-700/50">
+            <tbody className="divide-y divide-line">
               {filtered.map((msg) => {
                 const sBadge = statusBadge[msg.status];
                 const cBadge = channelBadge[msg.channel];
@@ -900,24 +826,26 @@ export default function NotificationsPage() {
                 return (
                   <tr
                     key={msg.id}
-                    className="transition-colors hover:bg-sunken/50 dark:hover:bg-neutral-700/50"
+                    className="transition-colors hover:bg-sunken/50"
                   >
                     {/* Message */}
                     <td className="max-w-[260px] px-4 py-3">
-                      <p className="truncate font-medium text-text dark:text-white">
+                      <p className="truncate font-medium text-text">
                         {msg.message}
                       </p>
                       {msg.scheduledAt && (
                         <p className="mt-0.5 flex items-center gap-1 text-xs text-text-3">
                           <Clock className="h-3 w-3" />
                           {new Date(msg.scheduledAt).toLocaleDateString(
-                            "en-MY",
+                            "en-US",
                             {
                               day: "numeric",
                               month: "short",
                               year: "numeric",
-                              hour: "2-digit",
+                              hour: "numeric",
                               minute: "2-digit",
+                              hour12: true,
+                              timeZone: "Asia/Kuala_Lumpur",
                             }
                           )}
                         </p>
@@ -981,7 +909,7 @@ export default function NotificationsPage() {
                               setOpenMenu(msg.id);
                             }
                           }}
-                          className="rounded-lg p-1.5 text-text-3 hover:bg-sunken dark:hover:bg-neutral-700 hover:text-text-2"
+                          className="rounded-lg p-1.5 text-text-3 hover:bg-sunken hover:text-text-2"
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
@@ -1012,7 +940,7 @@ export default function NotificationsPage() {
         <div
           data-engage-menu
           style={{ position: "fixed", top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, zIndex: 50 }}
-          className="w-40 overflow-hidden rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 shadow-lg"
+          className="w-40 overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
         >
           <button
             onClick={(e) => {
@@ -1022,7 +950,7 @@ export default function NotificationsPage() {
               setOpenMenu(null);
               setMenuPos(null);
             }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-2 hover:bg-sunken"
           >
             <Eye className="h-3.5 w-3.5" />
             View Details
@@ -1051,7 +979,7 @@ export default function NotificationsPage() {
               setOpenMenu(null);
               setMenuPos(null);
             }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-2 hover:bg-sunken"
           >
             <Pencil className="h-3.5 w-3.5" />
             Edit
@@ -1061,7 +989,7 @@ export default function NotificationsPage() {
               e.stopPropagation();
               setDeleteConfirm(openMenu);
             }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-danger-text hover:bg-danger-soft"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Delete
@@ -1073,13 +1001,13 @@ export default function NotificationsPage() {
         <div
           data-engage-menu
           style={{ position: "fixed", top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, zIndex: 50 }}
-          className="w-56 rounded-xl border border-red-200 dark:border-red-900 bg-surface dark:bg-neutral-800 shadow-lg p-3"
+          className="w-56 rounded-xl border border-danger/30 bg-surface shadow-lg p-3"
         >
           <p className="text-sm text-text-2 mb-2">Delete this message?</p>
           <div className="flex gap-2">
             <button
               onClick={(e) => { e.stopPropagation(); setDeleteConfirm(null); setOpenMenu(null); setMenuPos(null); }}
-              className="flex-1 rounded-lg bg-sunken dark:bg-neutral-700 px-3 py-1.5 text-xs font-medium text-text-2"
+              className="flex-1 rounded-lg bg-sunken px-3 py-1.5 text-xs font-medium text-text-2"
             >
               Cancel
             </button>
@@ -1093,7 +1021,7 @@ export default function NotificationsPage() {
                 setOpenMenu(null);
                 setMenuPos(null);
               }}
-              className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white"
+              className="flex-1 rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-on-ink"
             >
               Delete
             </button>
@@ -1108,48 +1036,48 @@ export default function NotificationsPage() {
           onClick={() => setViewingMsg(null)}
         >
           <div
-            className="relative w-full max-w-lg md:max-w-3xl rounded-2xl bg-surface dark:bg-neutral-800 p-6 shadow-xl"
+            className="relative w-full max-w-lg md:max-w-3xl rounded-2xl bg-surface p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setViewingMsg(null)}
-              className="absolute right-4 top-4 rounded-lg p-1 text-text-3 hover:bg-sunken dark:hover:bg-neutral-700"
+              className="absolute right-4 top-4 rounded-lg p-1 text-text-3 hover:bg-sunken"
             >
               <X className="h-5 w-5" />
             </button>
-            <h2 className="mb-4 text-lg font-bold text-text dark:text-white">
+            <h2 className="mb-4 text-lg font-bold text-text">
               Message Details
             </h2>
             <div className="space-y-3 text-sm">
-              <div className="flex justify-between border-b border-line dark:border-neutral-700 pb-2">
+              <div className="flex justify-between border-b border-line pb-2">
                 <span className="text-text-2">Channel</span>
-                <span className="font-medium text-text dark:text-white capitalize">{viewingMsg.channel}</span>
+                <span className="font-medium text-text capitalize">{viewingMsg.channel}</span>
               </div>
-              <div className="flex justify-between border-b border-line dark:border-neutral-700 pb-2">
+              <div className="flex justify-between border-b border-line pb-2">
                 <span className="text-text-2">Audience</span>
-                <span className="font-medium text-text dark:text-white">{viewingMsg.audience}</span>
+                <span className="font-medium text-text">{viewingMsg.audience}</span>
               </div>
-              <div className="flex justify-between border-b border-line dark:border-neutral-700 pb-2">
+              <div className="flex justify-between border-b border-line pb-2">
                 <span className="text-text-2">Status</span>
-                <span className="font-medium text-text dark:text-white capitalize">{viewingMsg.status}</span>
+                <span className="font-medium text-text capitalize">{viewingMsg.status}</span>
               </div>
               {viewingMsg.sent !== null && (
-                <div className="flex justify-between border-b border-line dark:border-neutral-700 pb-2">
+                <div className="flex justify-between border-b border-line pb-2">
                   <span className="text-text-2">Sent / Delivered</span>
-                  <span className="font-medium text-text dark:text-white">{viewingMsg.sent?.toLocaleString()} / {(viewingMsg.delivered ?? 0).toLocaleString()}</span>
+                  <span className="font-medium text-text">{viewingMsg.sent?.toLocaleString()} / {(viewingMsg.delivered ?? 0).toLocaleString()}</span>
                 </div>
               )}
               {viewingMsg.scheduledAt && (
-                <div className="flex justify-between border-b border-line dark:border-neutral-700 pb-2">
+                <div className="flex justify-between border-b border-line pb-2">
                   <span className="text-text-2">Scheduled</span>
-                  <span className="font-medium text-text dark:text-white">
+                  <span className="font-medium text-text">
                     {new Date(viewingMsg.scheduledAt).toLocaleString("en-MY")}
                   </span>
                 </div>
               )}
-              <div className="border-b border-line dark:border-neutral-700 pb-2">
+              <div className="border-b border-line pb-2">
                 <span className="text-text-2 block mb-1">Message</span>
-                <p className="rounded-lg bg-sunken dark:bg-neutral-700 p-3 text-text dark:text-white whitespace-pre-wrap">{viewingMsg.message}</p>
+                <p className="rounded-lg bg-sunken p-3 text-text whitespace-pre-wrap">{viewingMsg.message}</p>
               </div>
             </div>
             <div className="mt-5 flex gap-2">
@@ -1172,13 +1100,13 @@ export default function NotificationsPage() {
                   }
                   setShowComposeModal(true);
                 }}
-                className="flex-1 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-[#A93B26]"
+                className="flex-1 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover"
               >
                 Edit Message
               </button>
               <button
                 onClick={() => setViewingMsg(null)}
-                className="flex-1 rounded-lg bg-sunken dark:bg-neutral-700 px-4 py-2 text-sm font-medium text-text-2"
+                className="flex-1 rounded-lg bg-sunken px-4 py-2 text-sm font-medium text-text-2"
               >
                 Close
               </button>
@@ -1188,24 +1116,24 @@ export default function NotificationsPage() {
       )}
 
       {showComposeModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 pt-6 pb-10">
-          <div className="relative w-full max-w-4xl rounded-2xl bg-surface dark:bg-neutral-800 p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-bg px-4 pt-6 pb-10 md:px-8">
+          <div className="relative mx-auto w-full max-w-5xl rounded-card border border-line bg-surface p-5 md:p-6">
             {/* Close */}
             <button
               onClick={() => {
                 setShowComposeModal(false);
                 resetForm();
               }}
-              className="absolute right-4 top-4 rounded-lg p-1 text-text-3 hover:bg-sunken dark:hover:bg-neutral-700 hover:text-text-2"
+              className="absolute right-4 top-4 rounded-lg p-1 text-text-3 hover:bg-sunken hover:text-text-2"
             >
               <X className="h-5 w-5" />
             </button>
 
-            <h2 className="mb-5 text-lg font-bold text-text dark:text-white">
-              {editingMsg ? "Edit message" : "Compose message"}
+            <h2 className="mb-5 text-xl font-semibold text-text">
+              {editingMsg ? "Edit message" : "New message"}
             </h2>
 
-            <div className="flex gap-6">
+            <div className="flex flex-col gap-6 lg:flex-row">
               {/* ─── Left: Form ─── */}
               <div className="flex-1 space-y-4">
                 {/* Channel */}
@@ -1418,7 +1346,7 @@ export default function NotificationsPage() {
                         className={cn(
                           "text-xs",
                           fullMessage.length > charLimit * 0.9
-                            ? "text-red-500"
+                            ? "text-danger-text"
                             : "text-text-3"
                         )}
                       >
@@ -1427,22 +1355,22 @@ export default function NotificationsPage() {
                       </span>
                       {(formChannel === "sms" || formChannel === "both") && formScheduleType === "now" && smsBalance !== null && (
                         <span className="text-xs text-text-3">
-                          Credits: <span className={smsBalance < getTargetPhones().length ? "text-red-500 font-medium" : "text-green-600 font-medium"}>{Math.floor(smsBalance).toLocaleString()}</span> / {getTargetPhones().length.toLocaleString()} needed
+                          Credits: <span className={smsBalance < getTargetPhones().length ? "text-danger-text font-medium" : "text-ok-text font-medium"}>{Math.floor(smsBalance).toLocaleString()}</span> / {getTargetPhones().length.toLocaleString()} needed
                         </span>
                       )}
                     </div>
                     {(formChannel === "sms" || formChannel === "both") && formScheduleType === "now" && smsBalance !== null && smsBalance < getTargetPhones().length && (
-                      <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2.5">
-                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                        <p className="text-xs text-amber-700 dark:text-amber-300">
+                      <div className="mt-2 flex items-start gap-2 rounded-lg bg-warn-soft border border-warn/30 p-2.5">
+                        <AlertTriangle className="h-4 w-4 text-warn-text shrink-0 mt-0.5" />
+                        <p className="text-xs text-warn-text">
                           Insufficient SMS123 balance. <a href="https://www.sms123.net" target="_blank" rel="noopener noreferrer" className="underline font-medium">Top up on SMS123</a>
                         </p>
                       </div>
                     )}
                     {(formChannel === "sms" || formChannel === "both") && usesNamePlaceholder && missingNameCount > 0 && (
-                      <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-2.5">
-                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                        <p className="text-xs text-amber-700 dark:text-amber-300">
+                      <div className="mt-2 flex items-start gap-2 rounded-lg bg-warn-soft border border-warn/30 p-2.5">
+                        <AlertTriangle className="h-4 w-4 text-warn-text shrink-0 mt-0.5" />
+                        <p className="text-xs text-warn-text">
                           <span className="font-medium">{missingNameCount.toLocaleString()}</span> of {targetCount.toLocaleString()} recipients don&apos;t have a name on file. They&apos;ll see &ldquo;there&rdquo; instead of their name (e.g. &ldquo;Hey there!&rdquo;).
                         </p>
                       </div>
@@ -1475,7 +1403,7 @@ export default function NotificationsPage() {
                         "flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors",
                         formScheduleType === "now"
                           ? "border-text bg-raised font-semibold text-text"
-                          : "border-line dark:border-neutral-600 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
+                          : "border-line text-text-2 hover:bg-sunken"
                       )}
                     >
                       <input
@@ -1494,7 +1422,7 @@ export default function NotificationsPage() {
                         "flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors",
                         formScheduleType === "later"
                           ? "border-text bg-raised font-semibold text-text"
-                          : "border-line dark:border-neutral-600 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
+                          : "border-line text-text-2 hover:bg-sunken"
                       )}
                     >
                       <input
@@ -1559,11 +1487,11 @@ export default function NotificationsPage() {
                     </div>
 
                     {/* Chat header */}
-                    <div className="mb-2 rounded-lg bg-blue-500 px-3 py-2">
-                      <p className="text-xs font-medium text-white">
+                    <div className="mb-2 rounded-lg bg-info px-3 py-2">
+                      <p className="text-xs font-medium text-on-ink">
                         {formSenderId || "SMS"}
                       </p>
-                      <p className="text-[10px] text-white/70">
+                      <p className="text-[10px] text-on-ink/70">
                         +60 3-5521 1234
                       </p>
                     </div>
@@ -1571,12 +1499,13 @@ export default function NotificationsPage() {
                     {/* Chat area */}
                     <div className="min-h-[200px] rounded-lg bg-surface p-3">
                       {/* Message bubble */}
-                      <div className="max-w-[90%] rounded-xl bg-blue-500 px-3 py-2 text-xs leading-relaxed text-white">
+                      <div className="max-w-[90%] rounded-xl bg-info px-3 py-2 text-xs leading-relaxed text-on-ink">
                         <p className="whitespace-pre-wrap">{previewText}</p>
-                        <p className="mt-1 text-right text-[9px] text-white/60" suppressHydrationWarning>
-                          {new Date().toLocaleTimeString("en-MY", {
-                            hour: "2-digit",
+                        <p className="mt-1 text-right text-[9px] text-on-ink/60" suppressHydrationWarning>
+                          {new Date().toLocaleTimeString("en-US", {
+                            hour: "numeric",
                             minute: "2-digit",
+                            hour12: true,
                           })}
                         </p>
                       </div>
@@ -1585,7 +1514,7 @@ export default function NotificationsPage() {
                 </div>
 
                 {/* Variable legend */}
-                <div className="mt-3 rounded-lg border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 p-3">
+                <div className="mt-3 rounded-lg border border-line bg-surface p-3">
                   <p className="mb-2 text-xs font-medium text-text-2">
                     Preview values
                   </p>
@@ -1607,13 +1536,13 @@ export default function NotificationsPage() {
             </div>
 
             {/* Actions */}
-            <div className="mt-6 flex items-center justify-end gap-3 border-t border-line dark:border-neutral-700 pt-4">
+            <div className="mt-6 flex items-center justify-end gap-3 border-t border-line pt-4">
               <button
                 onClick={() => {
                   setShowComposeModal(false);
                   resetForm();
                 }}
-                className="rounded-lg border border-line-2 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
+                className="rounded-lg border border-line-2 px-4 py-2 text-sm font-medium text-text-2 hover:bg-sunken"
               >
                 Cancel
               </button>
@@ -1635,7 +1564,7 @@ export default function NotificationsPage() {
                     resetForm();
                   }}
                   disabled={!formMessage.trim()}
-                  className="rounded-lg border border-line-2 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-text-2 hover:bg-sunken dark:hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="rounded-lg border border-line-2 px-4 py-2 text-sm font-medium text-text-2 hover:bg-sunken disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Save as draft
                 </button>

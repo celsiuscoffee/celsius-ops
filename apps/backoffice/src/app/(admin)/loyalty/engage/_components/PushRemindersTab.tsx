@@ -211,11 +211,11 @@ export default function PushRemindersTab() {
           Triggered push notifications fan out daily. Click a row to edit copy and audience.
           Built-in campaigns ship with the app; custom ones you build yourself.
         </p>
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700" title="Auto-updates every 20s">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-ok-soft px-2 py-0.5 text-[11px] font-medium text-ok-text" title="Auto-updates every 20s">
             <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ok opacity-75" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-ok" />
             </span>
             Live
           </span>
@@ -223,19 +223,19 @@ export default function PushRemindersTab() {
             <button
               onClick={() => setWindowMode("7d")}
               className={`px-3 py-1.5 rounded-md transition ${
-                windowMode === "7d" ? "bg-amber-100 text-amber-900 font-semibold" : "text-text-2"
+                windowMode === "7d" ? "bg-raised text-text font-semibold shadow-sm" : "text-text-2"
               }`}
-            >Last 7 days</button>
+            >7 days</button>
             <button
               onClick={() => setWindowMode("30d")}
               className={`px-3 py-1.5 rounded-md transition ${
-                windowMode === "30d" ? "bg-amber-100 text-amber-900 font-semibold" : "text-text-2"
+                windowMode === "30d" ? "bg-raised text-text font-semibold shadow-sm" : "text-text-2"
               }`}
-            >Last 30 days</button>
+            >30 days</button>
           </div>
           <button
             onClick={() => setCreating(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700"
+            className="inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap px-3 py-1.5 rounded-lg bg-ink text-on-ink text-sm font-semibold hover:bg-ink-hover"
           >
             <Plus className="h-3.5 w-3.5" />
             New campaign
@@ -290,7 +290,7 @@ function CampaignList({ title, subtitle, campaigns, loading, windowMode, busyKey
     <div className="bg-surface border border-line rounded-xl overflow-hidden">
       <div className="px-5 py-3 border-b border-line bg-sunken/60 flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-text-2 uppercase tracking-wide">{title}</h2>
+          <h2 className="text-sm font-semibold text-text">{title}</h2>
           <p className="text-[11px] text-text-2 mt-0.5">{subtitle}</p>
         </div>
         <span className="text-[11px] text-text-3">{campaigns.length} campaign{campaigns.length === 1 ? "" : "s"}</span>
@@ -314,12 +314,12 @@ function CampaignList({ title, subtitle, campaigns, loading, windowMode, busyKey
             return (
               <li
                 key={c.key}
-                className="px-5 py-4 hover:bg-amber-50/30 transition cursor-pointer"
+                className="px-5 py-4 hover:bg-sunken transition cursor-pointer"
                 onClick={() => onClickRow(c)}
               >
                 <div className="flex items-center gap-4">
                   <div className="flex flex-col items-center w-10">
-                    <Icon className={`h-5 w-5 ${c.enabled ? "text-amber-600" : "text-text-3"}`} />
+                    <Icon className={`h-5 w-5 ${c.enabled ? "text-warn-text" : "text-text-3"}`} />
                   </div>
 
                   <div className="flex-1 min-w-0">
@@ -352,7 +352,7 @@ function CampaignList({ title, subtitle, campaigns, loading, windowMode, busyKey
                     disabled={busyKey === c.key}
                     className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
                       c.enabled
-                        ? "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200"
+                        ? "bg-warn-soft text-warn-text hover:bg-warn-soft border border-warn/30"
                         : "bg-sunken text-text-2 hover:bg-sunken border border-line"
                     } ${busyKey === c.key ? "opacity-60 cursor-wait" : ""}`}
                     aria-pressed={c.enabled}
@@ -378,7 +378,7 @@ function NewCampaignDialog({ onClose, onCreate }: { onClose: () => void; onCreat
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30" onClick={onClose}>
       <div className="bg-surface rounded-2xl shadow-2xl max-w-sm w-full p-5" onClick={(e) => e.stopPropagation()}>
         <h3 className="font-semibold text-text flex items-center gap-2">
-          <Wand2 className="h-4 w-4 text-amber-600" />
+          <Wand2 className="h-4 w-4 text-warn-text" />
           New custom campaign
         </h3>
         <p className="text-xs text-text-2 mt-1">Name it. You&apos;ll add the audience rule + copy in the editor next.</p>
@@ -387,14 +387,14 @@ function NewCampaignDialog({ onClose, onCreate }: { onClose: () => void; onCreat
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. VIP morning nudge"
-          className="mt-3 w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
+          className="mt-3 w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-warn focus:outline-none"
         />
         <div className="flex justify-end gap-2 mt-4">
           <button onClick={onClose} className="text-sm font-medium text-text-2 hover:text-text px-3 py-2">Cancel</button>
           <button
             onClick={() => name.trim() && onCreate(name.trim())}
             disabled={!name.trim()}
-            className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-50"
+            className="px-4 py-2 rounded-lg bg-ink text-on-ink text-sm font-semibold hover:bg-ink-hover disabled:opacity-50"
           >
             Create
           </button>
@@ -529,9 +529,8 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <button type="button" aria-label="Close editor" onClick={onClose} className="flex-1 bg-black/30" />
-      <div className="w-full max-w-lg bg-surface shadow-2xl flex flex-col h-full overflow-hidden">
+    <div className="fixed inset-0 z-50 flex justify-center overflow-hidden bg-bg md:px-8 md:py-6">
+      <div className="flex h-full w-full max-w-3xl flex-col overflow-hidden bg-surface md:rounded-card md:border md:border-line">
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
           <div className="min-w-0">
             <h3 className="font-semibold text-text truncate">{campaign.name}</h3>
@@ -549,7 +548,7 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
           {/* Audience rule (custom only) */}
           {isCustom && (
             <div>
-              <p className="text-[11px] uppercase tracking-wide text-text-2 font-semibold mb-2">Audience rule</p>
+              <p className="text-[12px] text-text-2 font-semibold mb-2">Audience rule</p>
               <p className="text-xs text-text-2 mb-2">
                 Send to members where ALL of these match. Empty rule = nobody (safe default).
               </p>
@@ -567,7 +566,7 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
                     const def = AUDIENCE_FIELD_DEFS[0];
                     setConds((arr) => [...arr, defaultCondForField(def.name)]);
                   }}
-                  className="inline-flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900 font-semibold mt-1"
+                  className="inline-flex items-center gap-1.5 text-xs text-warn-text hover:text-warn-text font-semibold mt-1"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Add condition
@@ -579,7 +578,7 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
           {/* Built-in trigger info */}
           {!isCustom && (
             <div className="rounded-lg bg-sunken border border-line px-3 py-2.5">
-              <p className="text-[11px] uppercase tracking-wide text-text-2 font-semibold mb-1">Trigger</p>
+              <p className="text-[12px] text-text-2 font-semibold mb-1">Trigger</p>
               <p className="text-xs text-text-2">
                 Built-in trigger — the cron determines who gets this. Edit copy, cap, and window below.
               </p>
@@ -588,8 +587,8 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
 
           {/* Live preview */}
           <div>
-            <p className="text-[11px] uppercase tracking-wide text-text-2 font-semibold mb-2">Preview</p>
-            <div className="rounded-2xl bg-gray-900 text-white px-4 py-3 shadow-md">
+            <p className="text-[12px] text-text-2 font-semibold mb-2">Preview</p>
+            <div className="rounded-2xl bg-ink text-on-ink px-4 py-3 shadow-md">
               <p className="text-[10px] opacity-60 uppercase tracking-wider">Celsius Coffee · now</p>
               <p className="font-semibold text-sm mt-1">{renderPreview(title) || <span className="opacity-40">Title…</span>}</p>
               <p className="text-xs mt-0.5 opacity-90 leading-relaxed">{renderPreview(body) || <span className="opacity-40">Body…</span>}</p>
@@ -601,7 +600,7 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-warn focus:outline-none"
               placeholder="e.g. Don't let this slip away"
             />
             {variables.length > 0 && (
@@ -615,7 +614,7 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={3}
-              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-amber-400 focus:outline-none resize-none"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-warn focus:outline-none resize-none"
               placeholder="e.g. Your {{rewardName}} expires in {{daysLeft}} day{{daysLeftPlural}}"
             />
             {variables.length > 0 && (
@@ -628,7 +627,7 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
             <input
               value={deeplink}
               onChange={(e) => setDeeplink(e.target.value)}
-              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-amber-400 focus:outline-none"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-warn focus:outline-none"
               placeholder="rewards"
             />
           </Field>
@@ -637,27 +636,27 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Max sends">
               <input type="number" min={0} value={capCount} onChange={(e) => setCapCount(Number(e.target.value))}
-                className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-amber-400 focus:outline-none" />
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-warn focus:outline-none" />
             </Field>
             <Field label="Per (days)">
               <input type="number" min={1} value={capDays} onChange={(e) => setCapDays(Number(e.target.value))}
-                className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-amber-400 focus:outline-none" />
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-warn focus:outline-none" />
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Send from (MYT hour)">
               <input type="number" min={0} max={23} value={windowStart} onChange={(e) => setWindowStart(Number(e.target.value))}
-                className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-amber-400 focus:outline-none" />
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-warn focus:outline-none" />
             </Field>
             <Field label="Until (MYT hour)">
               <input type="number" min={1} max={24} value={windowEnd} onChange={(e) => setWindowEnd(Number(e.target.value))}
-                className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-amber-400 focus:outline-none" />
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-warn focus:outline-none" />
             </Field>
           </div>
 
           {/* Test send */}
           <div className="border-t border-line pt-5">
-            <p className="text-[11px] uppercase tracking-wide text-text-2 font-semibold mb-2 flex items-center gap-1">
+            <p className="text-[12px] text-text-2 font-semibold mb-2 flex items-center gap-1">
               <Sparkles className="h-3 w-3" />
               Test send
             </p>
@@ -666,9 +665,9 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
             </p>
             <div className="flex gap-2">
               <input value={testPhone} onChange={(e) => setTestPhone(e.target.value)} placeholder="+60 12 345 6789"
-                className="flex-1 rounded-lg border border-line px-3 py-2 text-sm focus:border-amber-400 focus:outline-none" />
+                className="flex-1 rounded-lg border border-line px-3 py-2 text-sm focus:border-warn focus:outline-none" />
               <button onClick={sendTest} disabled={testSending || !testPhone || !title || !body}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold hover:bg-black disabled:opacity-40">
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-ink text-on-ink text-sm font-semibold hover:bg-ink-hover disabled:opacity-40">
                 <Send className="h-3.5 w-3.5" />
                 {testSending ? "Sending…" : "Send"}
               </button>
@@ -679,7 +678,7 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
           {isCustom && (
             <div className="border-t border-line pt-5">
               <button onClick={deleteCampaign} disabled={deleting}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 hover:text-red-800">
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger-text hover:text-danger-text">
                 <Trash2 className="h-3.5 w-3.5" />
                 {deleting ? "Deleting…" : "Delete this campaign"}
               </button>
@@ -692,7 +691,7 @@ function CampaignEditor({ campaign, onClose, onSaved, onDeleted }: {
             Cancel
           </button>
           <button onClick={save} disabled={saving}
-            className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 disabled:opacity-50">
+            className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-ink text-on-ink text-sm font-semibold hover:bg-ink-hover disabled:opacity-50">
             <Save className="h-3.5 w-3.5" />
             {saving ? "Saving…" : "Save changes"}
           </button>
@@ -745,7 +744,7 @@ function RuleRow({ cond, onChange, onRemove }: {
       <select
         value={cond.field}
         onChange={(e) => setField(e.target.value)}
-        className="text-xs bg-surface border border-line rounded px-2 py-1.5 focus:border-amber-400 focus:outline-none flex-1 min-w-0"
+        className="text-xs bg-surface border border-line rounded px-2 py-1.5 focus:border-warn focus:outline-none flex-1 min-w-0"
       >
         {AUDIENCE_FIELD_DEFS.map((d) => (
           <option key={d.name} value={d.name}>{d.label}</option>
@@ -754,7 +753,7 @@ function RuleRow({ cond, onChange, onRemove }: {
       <select
         value={cond.op}
         onChange={(e) => setOp(e.target.value)}
-        className="text-xs bg-surface border border-line rounded px-2 py-1.5 focus:border-amber-400 focus:outline-none"
+        className="text-xs bg-surface border border-line rounded px-2 py-1.5 focus:border-warn focus:outline-none"
       >
         {ops.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -769,10 +768,10 @@ function RuleRow({ cond, onChange, onRemove }: {
             else setValue(raw);
           }}
           placeholder={def.hint ?? (isList ? "Silver, Gold" : "")}
-          className="text-xs bg-surface border border-line rounded px-2 py-1.5 focus:border-amber-400 focus:outline-none w-28"
+          className="text-xs bg-surface border border-line rounded px-2 py-1.5 focus:border-warn focus:outline-none w-28"
         />
       )}
-      <button onClick={onRemove} className="p-1 text-text-3 hover:text-red-600" aria-label="Remove condition">
+      <button onClick={onRemove} className="p-1 text-text-3 hover:text-danger-text" aria-label="Remove condition">
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
@@ -783,14 +782,14 @@ function RuleRow({ cond, onChange, onRemove }: {
 
 function Pill({ color, children }: { color: "green" | "gray" | "amber" | "indigo"; children: React.ReactNode }) {
   const c = {
-    green:  "bg-green-100 text-green-700",
+    green:  "bg-ok-soft text-ok-text",
     gray:   "bg-sunken text-text-2",
-    amber:  "bg-amber-50 text-amber-700",
-    indigo: "bg-indigo-50 text-indigo-700",
+    amber:  "bg-warn-soft text-warn-text",
+    indigo: "bg-info-soft text-info-text",
   }[color];
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium uppercase tracking-wide ${c}`}>
-      {color === "green" && <span className="w-1.5 h-1.5 rounded-full bg-green-500" />}
+    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${c}`}>
+      {color === "green" && <span className="w-1.5 h-1.5 rounded-full bg-ok" />}
       {children}
     </span>
   );
@@ -800,7 +799,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   return (
     <label className="block">
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] uppercase tracking-wide text-text-2 font-semibold">{label}</span>
+        <span className="text-[12px] text-text-2 font-semibold">{label}</span>
         {hint && <span className="text-[10px] text-text-3">{hint}</span>}
       </div>
       {children}
@@ -817,7 +816,7 @@ function VarChips({ vars, onPick }: { vars: { name: string; example: string | nu
           type="button"
           onClick={() => onPick(v.name)}
           title={v.description}
-          className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 font-mono"
+          className="text-[11px] px-2 py-0.5 rounded-full bg-warn-soft text-warn-text border border-warn/30 hover:bg-warn-soft font-mono"
         >
           {`{{${v.name}}}`}
         </button>
@@ -826,14 +825,14 @@ function VarChips({ vars, onPick }: { vars: { name: string; example: string | nu
   );
 }
 
-function StatBox({ label, value, sub, highlight }: { label: string; value: string; sub?: string; highlight?: boolean }) {
+function StatBox({ label, value, sub }: { label: string; value: string; sub?: string; highlight?: boolean }) {
   return (
-    <div className={`bg-surface border rounded-xl px-4 py-3 ${highlight ? "border-amber-200 shadow-sm" : "border-line"}`}>
-      <div className="text-[11px] text-text-2 font-medium uppercase tracking-wide flex items-center gap-1">
+    <div className="rounded-card border border-line bg-surface px-4 py-3">
+      <div className="text-[12px] text-text-2 font-medium flex items-center gap-1">
         {label === "Revenue" && <ShoppingCart className="h-3 w-3" />}
         {label}
       </div>
-      <div className={`text-xl font-bold mt-1 ${highlight ? "text-amber-700" : "text-text"}`}>{value}</div>
+      <div className="mt-1 font-mono text-xl font-semibold text-text">{value}</div>
       {sub && <div className="text-[11px] text-text-3 mt-0.5">{sub}</div>}
     </div>
   );
@@ -842,8 +841,8 @@ function StatBox({ label, value, sub, highlight }: { label: string; value: strin
 function Stat({ label, value, sub, highlight }: { label: string; value: string; sub?: string; highlight?: boolean }) {
   return (
     <div className="text-right">
-      <div className="text-[10px] text-text-3 uppercase tracking-wide">{label}</div>
-      <div className={`text-sm font-semibold ${highlight ? "text-amber-700" : "text-text"}`}>{value}</div>
+      <div className="text-[11px] text-text-3">{label}</div>
+      <div className={`text-sm font-semibold ${highlight ? "text-warn-text" : "text-text"}`}>{value}</div>
       {sub && <div className="text-[10px] text-text-3 mt-0.5">{sub}</div>}
     </div>
   );

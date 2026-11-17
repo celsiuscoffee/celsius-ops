@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
 import { Card } from "@/components/ui/card";
-import { Loader2, RefreshCw, Trash2, Megaphone } from "lucide-react";
+import { Loader2, RefreshCw, Trash2 } from "lucide-react";
 
 /* ─── types ─── */
 type OverviewRow = {
@@ -70,18 +70,18 @@ export default function GrabMarketingPage() {
   return (
     <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <Megaphone className="h-5 w-5 text-emerald-600" />
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">GrabFood Marketing</h1>
+        <div>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">GrabFood</h1>
+          <p className="mt-0.5 text-sm text-text-2">What GrabFood ads and promotions cost, and the orders they brought in.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm">
+          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text">
             <option value="all">All outlets</option>
             {(outlets ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text" />
           <span className="text-text-3">→</span>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text" />
         </div>
       </div>
 
@@ -89,7 +89,7 @@ export default function GrabMarketingPage() {
       <div className="flex gap-1 border-b border-line">
         {([["overview", "Overview"], ["campaigns", "Campaigns"], ["spend", "Ad Spend"]] as [Tab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${tab === k ? "border-emerald-600 text-emerald-700" : "border-transparent text-text-2 hover:text-text"}`}>
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${tab === k ? "border-ok text-ok-text" : "border-transparent text-text-2 hover:text-text"}`}>
             {label}
           </button>
         ))}
@@ -118,8 +118,8 @@ function OverviewTab({ q }: { q: Q<Overview> }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {stats.map((s) => (
           <Card key={s.label} className="p-4">
-            <div className="text-xs uppercase tracking-wide text-text-2">{s.label}</div>
-            <div className={`mt-1 text-lg font-semibold ${s.accent ? "text-emerald-700" : "text-text"}`}>{s.value}</div>
+            <div className="text-[12px] font-medium text-text-2">{s.label}</div>
+            <div className={`mt-1 text-lg font-semibold ${s.accent ? "text-ok-text" : "text-text"}`}>{s.value}</div>
           </Card>
         ))}
       </div>
@@ -172,7 +172,7 @@ function CampaignsTab({ q, onSync, syncing, syncMsg }: {
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-text-2">Promotions mirrored from GrabFood (read-only).</p>
         <button onClick={onSync} disabled={syncing}
-          className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60">
+          className="inline-flex items-center gap-1.5 rounded-md bg-ok px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ok disabled:opacity-60">
           {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Sync from Grab
         </button>
       </div>
@@ -254,15 +254,15 @@ function SpendTab({ q, outlets, defaults }: {
             <option value="">Select outlet…</option>
             {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
-          <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
-          <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
-          <input type="number" min="0" step="0.01" placeholder="Amount (RM)" value={amount} onChange={(e) => setAmount(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
-          <button onClick={add} disabled={busy} className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60">
+          <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text" />
+          <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text" />
+          <input type="number" min="0" step="0.01" placeholder="Amount (RM)" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text" />
+          <button onClick={add} disabled={busy} className="rounded-md bg-ok px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ok disabled:opacity-60">
             {busy ? "Adding…" : "Add"}
           </button>
         </div>
         <input type="text" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} className="mt-2 w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
-        {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+        {err && <p className="mt-2 text-xs text-danger-text">{err}</p>}
       </Card>
 
       <Card className="overflow-hidden">
@@ -288,7 +288,7 @@ function SpendTab({ q, outlets, defaults }: {
                     <td className="px-3 py-2 text-right font-medium">{fmtMYR(e.amountMYR)}</td>
                     <td className="px-3 py-2 text-text-2">{e.note ?? "—"}</td>
                     <td className="px-3 py-2 text-right">
-                      <button onClick={() => del(e.id)} className="text-text-3 hover:text-red-600" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => del(e.id)} className="text-text-3 hover:text-danger-text" title="Delete"><Trash2 className="h-4 w-4" /></button>
                     </td>
                   </tr>
                 ))}
