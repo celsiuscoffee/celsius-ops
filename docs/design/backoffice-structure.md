@@ -45,9 +45,8 @@ What Celsius already does well, and should keep:
 
 The template's menu, changed in three places for Celsius:
 
-- **CK stays.** Celsius has prep recipes (raw → prepped), `prep-labour` reports, and a
-  central kitchen mentioned in the code. Confirm with ops whether it moves stock to outlets
-  as a real transfer. If it doesn't, merge CK into Stock.
+- **No CK.** Celsius has no central kitchen (owner, 17 Nov 2026). Prep recipes (raw →
+  prepped) are made at the outlets and live under Menu › Recipes.
 - **Colony becomes "Agents".** Celsius runs AI agents (procurement, finance, ops pulse,
   verifier). It isn't settings, so it moves out of Settings → System.
 - **Growth.** Celsius spends real effort on loyalty loops, SMS/push, Google and Grab ads,
@@ -479,8 +478,9 @@ The template's order, changed to reuse what Celsius already has. Each step is it
 
 ## 6. Questions for the owner before Step 1
 
-1. Does the central kitchen send stock to outlets as transfers today? This decides whether
-   CK is its own section.
+1. ~~Does the central kitchen send stock to outlets?~~ **Answered (owner, 17 Nov 2026):
+   Celsius has no central kitchen.** No CK section; Prep Recipes stays under Menu ›
+   Recipes; the outlet type picker is gone from Settings › Outlets.
 2. Which score should stay: the allowance scorecard (`/hr/performance`), ops performance, or
    cashier performance? Allowance pay depends on it, so this is a payroll decision.
 3. Is "Growth" the right word, or would the team say "Marketing"? (Naming test: understood

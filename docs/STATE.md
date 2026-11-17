@@ -11,6 +11,11 @@ current month.
 
 ## Verified facts
 
+- 2026-11-17 — **Celsius has no central kitchen** (owner). Do not design for one: no CK
+  section, no CK outlet type in Settings › Outlets (picker and filter removed; the
+  `OutletType.CENTRAL_KITCHEN` enum value stays in the schema, unused). Transfers are
+  outlet to outlet.
+
 - 2026-11-17 — **Stock › Transfers on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
   4 key numbers from `lib/inventory/transfer-summary.ts` (late = in transit > 2 days), list,
   detail as a full page. New/Smart transfer forms still modals. Next: those forms, then Menu.

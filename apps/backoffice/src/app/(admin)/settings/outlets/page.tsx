@@ -43,7 +43,6 @@ const emptyForm: OutletForm = {
 export default function OutletsPage() {
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "OUTLET" | "CENTRAL_KITCHEN">("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<OutletForm>(emptyForm);
@@ -170,7 +169,7 @@ export default function OutletsPage() {
     loadOutlets();
   };
 
-  const filtered = outlets.filter((b) => filter === "all" || b.type === filter);
+  const filtered = outlets;
 
   const openAdd = () => { setForm(emptyForm); setEditingId(null); setActiveTab("details"); setDialogOpen(true); };
   const openEdit = (b: Outlet) => {
@@ -209,14 +208,6 @@ export default function OutletsPage() {
         </Button>
       </div>
 
-      <div className="mt-4 flex gap-1.5">
-        {(["all", "OUTLET", "CENTRAL_KITCHEN"] as const).map((t) => (
-          <button key={t} onClick={() => setFilter(t)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${filter === t ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}>
-            {t === "all" ? "All" : t === "OUTLET" ? "Outlet" : "Central Kitchen"}
-          </button>
-        ))}
-      </div>
-
       <div className="mt-4 rounded-xl border border-line bg-surface overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
           <thead>
@@ -240,7 +231,6 @@ export default function OutletsPage() {
                     <Building2 className="h-4 w-4 text-text-3" />
                     <div>
                       <p className="font-medium text-text">{outlet.name}</p>
-                      <p className="text-xs text-text-3">{outlet.type === "OUTLET" ? "Outlet" : "Central Kitchen"}</p>
                     </div>
                   </div>
                 </td>
@@ -345,16 +335,9 @@ export default function OutletsPage() {
                 <div><label className="text-sm font-medium text-text-2">Outlet Name</label><Input className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
                 <div><label className="text-sm font-medium text-text-2">Outlet Code</label><Input className="mt-1" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm font-medium text-text-2">Type</label>
-                  <select className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                    <option value="OUTLET">Outlet</option>
-                    <option value="CENTRAL_KITCHEN">Central Kitchen</option>
-                  </select>
-                </div>
-                <div><label className="text-sm font-medium text-text-2">Phone</label><Input className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-              </div>
+              {/* Celsius has no central kitchen (owner, 17 Nov 2026): every location is an
+                  outlet, so the type picker is gone. form.type keeps what the record has. */}
+              <div><label className="text-sm font-medium text-text-2">Phone</label><Input className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
               <div><label className="text-sm font-medium text-text-2">Address</label><Input className="mt-1" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-sm font-medium text-text-2">City</label><Input className="mt-1" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
