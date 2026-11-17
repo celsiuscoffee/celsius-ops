@@ -121,9 +121,9 @@ function aiConfidenceBadge(claim: Claim) {
   const hasPhotos = (claim.invoice?.photoCount ?? 0) > 0;
 
   const score = [hasSupplier, hasItems, hasAmount, hasPhotos].filter(Boolean).length;
-  if (score >= 3) return { label: "High", className: "border-green-200 bg-green-50 text-green-700" };
-  if (score >= 2) return { label: "Medium", className: "border-amber-200 bg-amber-50 text-amber-700" };
-  return { label: "Low", className: "border-red-200 bg-red-50 text-red-700" };
+  if (score >= 3) return { label: "High", className: "border-ok/30 bg-ok-soft text-ok-text" };
+  if (score >= 2) return { label: "Medium", className: "border-warn/30 bg-warn-soft text-warn-text" };
+  return { label: "Low", className: "border-danger/30 bg-danger-soft text-danger-text" };
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
@@ -760,8 +760,8 @@ export default function PayAndClaimPage() {
   };
 
   const TABS = [
-    { key: "draft" as const, label: "Draft" },
-    { key: "pending" as const, label: "Pending" },
+    { key: "draft" as const, label: "To check" },
+    { key: "pending" as const, label: "Waiting to be paid" },
     { key: "reimbursed" as const, label: "Paid" },
     { key: "all" as const, label: "All" },
   ];
@@ -771,54 +771,47 @@ export default function PayAndClaimPage() {
       {/* ── Header ── */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Payment Requests</h1>
-          <p className="mt-0.5 text-xs sm:text-sm text-text-2">Staff claims and direct vendor payment requests</p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Payment requests</h1>
+          <p className="mt-0.5 text-sm text-text-2">What staff paid out of pocket or asked us to pay a vendor: what needs checking, what is waiting to be paid, and what is paid.</p>
         </div>
         <div className="flex items-center gap-2">
           <Link href="/inventory/pay-and-claim/batches" className="flex-1 sm:flex-none">
             <Button size="sm" variant="outline" className="w-full sm:w-auto">
-              Claim Batches
+              Claim batches
             </Button>
           </Link>
           <Button size="sm" variant="outline" onClick={openQuickUpload} className="flex-1 sm:flex-none">
-            <Upload className="mr-1.5 h-4 w-4" /> New Request
+            <Upload className="mr-1.5 h-4 w-4" /> New request
           </Button>
         </div>
       </div>
 
       {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {([
-          { key: "draft" as const, label: "Draft / Review", icon: AlertTriangle, iconColor: "text-amber-500", valueColor: "text-amber-600", ring: "ring-amber-300", border: "border-amber-300", count: draftClaims.length, amount: draftAmount },
-          { key: "pending" as const, label: "Pending Payment", icon: Clock, iconColor: "text-[#C2714F]", valueColor: "text-[#C2714F]", ring: "ring-[#C2714F]/30", border: "border-[#C2714F]", count: pendingClaims.length, amount: pendingAmount },
-          { key: "reimbursed" as const, label: "Paid", icon: CheckCircle2, iconColor: "text-green-500", valueColor: "text-green-600", ring: "ring-green-300", border: "border-green-300", count: reimbursedClaims.length, amount: reimbursedAmount },
+          { key: "draft" as const, label: "To check", icon: AlertTriangle, iconColor: "text-warn-text", count: draftClaims.length, amount: draftAmount },
+          { key: "pending" as const, label: "Waiting to be paid", icon: Clock, iconColor: "text-brand-text", count: pendingClaims.length, amount: pendingAmount },
+          { key: "reimbursed" as const, label: "Paid", icon: CheckCircle2, iconColor: "text-ok-text", count: reimbursedClaims.length, amount: reimbursedAmount },
         ]).map((card) => (
           <Card
             key={card.key}
-            className={`p-5 cursor-pointer transition-all hover:shadow-sm ${
+            className={`cursor-pointer rounded-card p-4 shadow-none transition-colors ${
               tab === card.key
-                ? `${card.border} ring-2 ${card.ring} shadow-sm`
-                : "hover:ring-2 hover:ring-line"
+                ? "border-text bg-raised"
+                : "border-line hover:border-line-2"
             }`}
             onClick={() => setTab(card.key)}
           >
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <card.icon className={`h-4 w-4 ${card.iconColor}`} />
-                <span className="text-xs text-text-2">{card.label}</span>
+                <span className="text-[12px] font-medium text-text-2">{card.label}</span>
               </div>
-              {card.count > 0 && (
-                <span className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${
-                  card.key === "draft" ? "bg-amber-500" : card.key === "pending" ? "bg-[#C2714F]" : "bg-green-500"
-                }`}>
-                  {card.count}
-                </span>
-              )}
             </div>
-            <p className={`text-xl font-bold font-sans ${card.valueColor}`}>
-              {card.count} <span className="text-sm font-normal text-text-3">requests</span>
+            <p className={`mt-1 font-mono text-[21px] font-semibold leading-8 sm:text-[26px] ${card.key === "draft" && card.count > 0 ? "text-warn-text" : "text-text"}`}>
+              {card.count} <span className="font-sans text-sm font-normal text-text-3">{card.count === 1 ? "request" : "requests"}</span>
             </p>
-            <p className="text-xs text-text-3 mt-0.5">
+            <p className="mt-1 text-[12px] text-text-3">
               RM {card.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </p>
           </Card>
@@ -827,7 +820,7 @@ export default function PayAndClaimPage() {
 
       {/* ── Tabs + Search + Outlet Filter ── */}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-        <div className="-mx-3 flex rounded-none border-y sm:mx-0 sm:rounded-lg sm:border overflow-x-auto">
+        <div className="flex flex-wrap gap-1.5">
           {TABS.map((t) => (
             <button
               key={t.key}
@@ -835,13 +828,13 @@ export default function PayAndClaimPage() {
                 setTab(t.key);
                 if (t.key !== "pending") clearBatchSelection();
               }}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                tab === t.key ? "bg-gray-900 text-white" : "bg-surface text-text-2 hover:bg-sunken"
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                tab === t.key ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"
               }`}
             >
               {t.label}
               {t.key === "draft" && draftClaims.length > 0 && (
-                <span className="ml-1.5 rounded-full bg-amber-500 text-white px-1.5 py-0.5 text-[9px]">
+                <span className="ml-1.5 rounded-full bg-warn-soft text-warn-text px-1.5 py-0.5 text-[9px]">
                   {draftClaims.length}
                 </span>
               )}
@@ -854,16 +847,16 @@ export default function PayAndClaimPage() {
             placeholder="Search requests..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-xs"
+            className="h-10 pl-8 text-sm"
           />
         </div>
         {outlets.length > 0 && (
           <select
             value={outletFilter}
             onChange={(e) => setOutletFilter(e.target.value)}
-            className="rounded-md border px-2 py-1.5 text-xs h-8"
+            className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
           >
-            <option value="">All Outlets</option>
+            <option value="">All outlets</option>
             {outlets.map((o) => (
               <option key={o.id} value={o.id}>{o.name}</option>
             ))}
@@ -885,10 +878,10 @@ export default function PayAndClaimPage() {
               <tr className="border-b bg-sunken/50 text-text-2 text-left">
                 {tab === "pending" && <th className="px-3 py-3 font-medium w-8"></th>}
                 <th className="px-4 py-3 font-medium w-10"></th>
-                <th className="px-4 py-3 font-medium">Claim #</th>
+                <th className="px-4 py-3 font-medium">Request</th>
                 <th className="px-4 py-3 font-medium">Outlet</th>
                 <th className="px-4 py-3 font-medium">Supplier</th>
-                <th className="px-4 py-3 font-medium">Paid By</th>
+                <th className="px-4 py-3 font-medium">Paid by</th>
                 <th className="px-4 py-3 font-medium text-right">Amount (RM)</th>
                 <th className="px-4 py-3 font-medium">Status</th>
                 {tab !== "reimbursed" && <th className="px-4 py-3 font-medium">AI</th>}
@@ -936,12 +929,12 @@ export default function PayAndClaimPage() {
                       <td className="px-4 py-3">
                         {c.invoice && c.invoice.photos?.length > 0 ? (
                           <div
-                            className="w-9 h-9 rounded border overflow-hidden cursor-pointer"
+                            className="w-9 h-9 rounded border border-line overflow-hidden cursor-pointer"
                             onClick={(e) => { e.stopPropagation(); openReview(c); }}
                           >
                             {isPdf(c.invoice.photos[0]) ? (
                               <div className="w-full h-full flex items-center justify-center bg-sunken">
-                                <FileText className="h-4 w-4 text-red-400" />
+                                <FileText className="h-4 w-4 text-danger-text" />
                               </div>
                             ) : (
                               <img
@@ -952,7 +945,7 @@ export default function PayAndClaimPage() {
                             )}
                           </div>
                         ) : (
-                          <div className="w-9 h-9 rounded border flex items-center justify-center bg-sunken">
+                          <div className="w-9 h-9 rounded border border-line flex items-center justify-center bg-sunken">
                             <ImageIcon className="h-3.5 w-3.5 text-text-3" />
                           </div>
                         )}
@@ -983,7 +976,7 @@ export default function PayAndClaimPage() {
                       </td>
                       <td className="px-4 py-3">
                         {c.status === "DRAFT" ? (
-                          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                          <Badge variant="outline" className="border-warn/30 bg-warn-soft text-warn-text">
                             Draft
                           </Badge>
                         ) : c.invoice ? (
@@ -991,16 +984,16 @@ export default function PayAndClaimPage() {
                             variant="outline"
                             className={
                               c.invoice.status === "PAID"
-                                ? "border-green-200 bg-green-50 text-green-700"
+                                ? "border-ok/30 bg-ok-soft text-ok-text"
                                 : c.invoice.status === "OVERDUE"
-                                  ? "border-red-200 bg-red-50 text-red-700"
-                                  : "border-[#C2714F]/20 bg-[#C2714F]/5 text-[#C2714F]"
+                                  ? "border-danger/30 bg-danger-soft text-danger-text"
+                                  : "border-line bg-brand-soft text-brand-text"
                             }
                           >
-                            {c.invoice.status === "PAID" ? "Paid" : c.invoice.status}
+                            {({ PAID: "Paid", OVERDUE: "Overdue", PENDING: "Waiting", INITIATED: "Payment started", DRAFT: "Draft" } as Record<string, string>)[c.invoice.status] ?? c.invoice.status}
                           </Badge>
                         ) : (
-                          <Badge variant="outline">No Invoice</Badge>
+                          <Badge variant="outline">No invoice</Badge>
                         )}
                       </td>
                       {tab !== "reimbursed" && (
@@ -1019,7 +1012,7 @@ export default function PayAndClaimPage() {
                           {c.status === "DRAFT" && (
                             <Button
                               size="sm"
-                              className="h-6 text-[10px] px-2 bg-[#C2714F] hover:bg-[#A85D3F] text-white"
+                              className="h-6 text-[10px] px-2 bg-ink text-on-ink hover:bg-ink-hover"
                               onClick={(e) => { e.stopPropagation(); openReview(c); }}
                             >
                               <Eye className="mr-1 h-3 w-3" /> Review
@@ -1097,9 +1090,9 @@ export default function PayAndClaimPage() {
                                         Auto-extracted
                                         {ai.confidence && (
                                           <span className={`ml-1 rounded px-1 py-[1px] text-[9px] ${
-                                            ai.confidence === "high" ? "bg-green-50 text-green-700"
-                                            : ai.confidence === "low" ? "bg-red-50 text-red-700"
-                                            : "bg-amber-50 text-amber-700"
+                                            ai.confidence === "high" ? "bg-ok-soft text-ok-text"
+                                            : ai.confidence === "low" ? "bg-danger-soft text-danger-text"
+                                            : "bg-warn-soft text-warn-text"
                                           }`}>{ai.confidence}</span>
                                         )}
                                       </p>
@@ -1247,18 +1240,18 @@ export default function PayAndClaimPage() {
                       <div>
                         <label className="text-xs font-medium text-text-2 mb-1.5 flex items-center gap-1.5">
                           Supplier
-                          {rvAiFields.supplier && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                          {rvAiFields.supplier && <span className="rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
                         </label>
                         <select
                           value={rvSupplierId}
                           onChange={(e) => setRvSupplierId(e.target.value)}
-                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          className="w-full rounded-md border border-line px-3 py-2 text-sm"
                         >
                           <option value="">Select supplier</option>
                           {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                         {rvAiHints.supplierName && rvAiHints.supplierName !== "Ad-hoc Purchase" && (
-                          <p className="text-[10px] text-purple-500 mt-1">
+                          <p className="text-[10px] text-info-text mt-1">
                             <Sparkles className="h-2.5 w-2.5 inline mr-0.5" />
                             Detected: &quot;{rvAiHints.supplierName}&quot;
                           </p>
@@ -1267,7 +1260,7 @@ export default function PayAndClaimPage() {
                       <div>
                         <label className="text-xs font-medium text-text-2 mb-1.5 flex items-center gap-1.5">
                           Amount (RM)
-                          {rvAiFields.amount && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                          {rvAiFields.amount && <span className="rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
                         </label>
                         <Input
                           type="number"
@@ -1275,31 +1268,31 @@ export default function PayAndClaimPage() {
                           value={rvAmount}
                           onChange={(e) => setRvAmount(e.target.value)}
                           placeholder="0.00"
-                          className={`h-9 text-sm ${rvAiFields.amount ? "border-purple-300 bg-purple-50/30" : ""}`}
+                          className={`h-9 text-sm ${rvAiFields.amount ? "border-info/30 bg-info-soft" : ""}`}
                         />
                       </div>
                       <div>
                         <label className="text-xs font-medium text-text-2 mb-1.5 flex items-center gap-1.5">
-                          Purchase Date
-                          {rvAiFields.date && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                          Purchase date
+                          {rvAiFields.date && <span className="rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
                         </label>
                         <Input
                           type="date"
                           value={rvDate}
                           onChange={(e) => setRvDate(e.target.value)}
-                          className={`h-9 text-sm ${rvAiFields.date ? "border-purple-300 bg-purple-50/30" : ""}`}
+                          className={`h-9 text-sm ${rvAiFields.date ? "border-info/30 bg-info-soft" : ""}`}
                         />
                       </div>
                       <div>
                         <label className="text-xs font-medium text-text-2 mb-1.5 flex items-center gap-1.5">
-                          Invoice Number
-                          {rvAiFields.invoiceNumber && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                          Invoice number
+                          {rvAiFields.invoiceNumber && <span className="rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
                         </label>
                         <Input
                           value={rvInvoiceNum}
                           onChange={(e) => setRvInvoiceNum(e.target.value)}
                           placeholder="Auto-generated if empty"
-                          className={`h-9 text-sm ${rvAiFields.invoiceNumber ? "border-purple-300 bg-purple-50/30" : ""}`}
+                          className={`h-9 text-sm ${rvAiFields.invoiceNumber ? "border-info/30 bg-info-soft" : ""}`}
                         />
                       </div>
                       <div>
@@ -1307,7 +1300,7 @@ export default function PayAndClaimPage() {
                         <select
                           value={rvStaffId}
                           onChange={(e) => setRvStaffId(e.target.value)}
-                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          className="w-full rounded-md border border-line px-3 py-2 text-sm"
                         >
                           <option value="">{reviewClaim?.claimedBy || "Select staff"}</option>
                           {staff.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
@@ -1333,9 +1326,9 @@ export default function PayAndClaimPage() {
                     {/* Product items */}
                     <div className="border-t pt-4">
                       <label className="text-xs font-semibold text-text-2 mb-2 block">
-                        Product Items
+                        Product items
                         {rvCart.length === 0 && (
-                          <span className="ml-2 text-[10px] font-normal text-amber-500">Add items before approving</span>
+                          <span className="ml-2 text-[10px] font-normal text-warn-text">Add items before approving</span>
                         )}
                       </label>
 
@@ -1352,7 +1345,7 @@ export default function PayAndClaimPage() {
                             />
                           </div>
                           {rvProductSearch && rvFilteredProducts.length > 0 && (
-                            <div className="border rounded-lg max-h-36 overflow-y-auto divide-y mb-2">
+                            <div className="border border-line rounded-lg max-h-36 overflow-y-auto divide-y mb-2">
                               {rvFilteredProducts.slice(0, 10).map((p) => (
                                 <button
                                   key={`${p.id}-${p.packageId}`}
@@ -1376,7 +1369,7 @@ export default function PayAndClaimPage() {
 
                       {/* Cart */}
                       {rvCart.length > 0 ? (
-                        <div className="border rounded-lg divide-y">
+                        <div className="border border-line rounded-lg divide-y">
                           {rvCart.map((item, idx) => (
                             <div key={idx} className="flex items-center gap-2 px-3 py-2.5">
                               <div className="flex-1 min-w-0">
@@ -1411,7 +1404,7 @@ export default function PayAndClaimPage() {
                               <span className="text-xs font-mono w-20 text-right">
                                 RM {(item.quantity * item.unitPrice).toFixed(2)}
                               </span>
-                              <button onClick={() => setRvCart(rvCart.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 p-0.5">
+                              <button onClick={() => setRvCart(rvCart.filter((_, i) => i !== idx))} className="text-danger-text hover:text-danger-text p-0.5">
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </div>
@@ -1432,7 +1425,7 @@ export default function PayAndClaimPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-red-200 text-red-600 hover:bg-red-50"
+                  className="border-danger/30 text-danger-text hover:bg-danger-soft"
                   disabled={rvSaving}
                   onClick={() => handleReviewAction("reject")}
                 >
@@ -1446,11 +1439,11 @@ export default function PayAndClaimPage() {
                     onClick={() => handleReviewAction("save")}
                   >
                     {rvSaving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
-                    Save Draft
+                    Save draft
                   </Button>
                   <Button
                     size="sm"
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                    className="bg-ink hover:bg-ink-hover text-on-ink"
                     disabled={rvSaving || rvCart.length === 0 || !rvSupplierId}
                     onClick={() => handleReviewAction("approve")}
                   >
@@ -1483,7 +1476,7 @@ export default function PayAndClaimPage() {
               </div>
               <div className="flex-1 min-h-0 flex items-center justify-center relative p-4">
                 {quPhotos.length === 0 ? (
-                  <label className={`flex flex-col items-center justify-center cursor-pointer text-center rounded-lg border-2 border-dashed p-8 w-full h-full transition-colors ${quDragging ? "border-[#C2714F] bg-orange-900/20" : "border-gray-600"}`}>
+                  <label className={`flex flex-col items-center justify-center cursor-pointer text-center rounded-lg border-2 border-dashed p-8 w-full h-full transition-colors ${quDragging ? "border-brand-text bg-brand-soft" : "border-gray-600"}`}>
                     {quUploading ? (
                       <Loader2 className="h-10 w-10 animate-spin text-text-3 mb-3" />
                     ) : (
@@ -1509,9 +1502,9 @@ export default function PayAndClaimPage() {
                   </>
                 )}
                 {quExtracting && (
-                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-lg border border-purple-400/50 bg-purple-900/80 px-4 py-2">
-                    <Sparkles className="h-4 w-4 animate-pulse text-purple-300" />
-                    <span className="text-xs text-purple-200">AI reading receipt...</span>
+                  <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-lg border border-info bg-info/80 px-4 py-2">
+                    <Sparkles className="h-4 w-4 animate-pulse text-info-text" />
+                    <span className="text-xs text-info-text">AI reading receipt...</span>
                   </div>
                 )}
               </div>
@@ -1558,7 +1551,7 @@ export default function PayAndClaimPage() {
 
               <div className="min-h-0 flex-1 overflow-y-auto p-5 space-y-4">
                 {/* Category + Flow toggles — drive form shape */}
-                <div className="space-y-3 rounded-lg border bg-sunken p-3">
+                <div className="space-y-3 rounded-lg border border-line bg-sunken p-3">
                   <div>
                     <label className="text-[10px] uppercase font-semibold tracking-wider text-text-2 mb-1.5 block">Category</label>
                     <div className="flex gap-1">
@@ -1569,7 +1562,7 @@ export default function PayAndClaimPage() {
                           onClick={() => setQuCategory(cat)}
                           className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
                             quCategory === cat
-                              ? "border-[#C2714F] bg-[#C2714F] text-white"
+                              ? "border-ink bg-ink text-on-ink"
                               : "border-line-2 bg-surface text-text-2 hover:bg-sunken"
                           }`}
                         >
@@ -1586,7 +1579,7 @@ export default function PayAndClaimPage() {
                         onClick={() => setQuFlow("CLAIM")}
                         className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-medium text-left transition-colors ${
                           quFlow === "CLAIM"
-                            ? "border-blue-500 bg-blue-50 text-blue-700"
+                            ? "border-info bg-info-soft text-info-text"
                             : "border-line-2 bg-surface text-text-2 hover:bg-sunken"
                         }`}
                       >
@@ -1598,7 +1591,7 @@ export default function PayAndClaimPage() {
                         onClick={() => setQuFlow("REQUEST")}
                         className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-medium text-left transition-colors ${
                           quFlow === "REQUEST"
-                            ? "border-blue-500 bg-blue-50 text-blue-700"
+                            ? "border-info bg-info-soft text-info-text"
                             : "border-line-2 bg-surface text-text-2 hover:bg-sunken"
                         }`}
                       >
@@ -1611,9 +1604,9 @@ export default function PayAndClaimPage() {
 
                 {/* AI detection banner */}
                 {Object.keys(quAiData).length > 0 && !quExtracting && (
-                  <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-                    <Sparkles className="h-4 w-4 text-green-500" />
-                    <span className="text-xs text-green-700">
+                  <div className="flex items-center gap-2 rounded-lg border border-ok/30 bg-ok-soft px-3 py-2">
+                    <Sparkles className="h-4 w-4 text-ok-text" />
+                    <span className="text-xs text-ok-text">
                       AI detected:{" "}
                       {(quAiData as Record<string, string>).supplierName && `${(quAiData as Record<string, string>).supplierName}`}
                       {(quAiData as Record<string, string>).totalAmount && ` / RM ${(quAiData as Record<string, string>).totalAmount}`}
@@ -1629,9 +1622,9 @@ export default function PayAndClaimPage() {
                     <div>
                       <label className="text-xs font-medium text-text-2 mb-1.5 flex items-center gap-1.5">
                         Supplier
-                        {(quAiData as Record<string, string>).supplierName && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                        {(quAiData as Record<string, string>).supplierName && <span className="rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
                       </label>
-                      <select value={quSupplierId} onChange={(e) => setQuSupplierId(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm">
+                      <select value={quSupplierId} onChange={(e) => setQuSupplierId(e.target.value)} className="w-full rounded-md border border-line px-3 py-2 text-sm">
                         <option value="">Select supplier</option>
                         {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
@@ -1640,33 +1633,33 @@ export default function PayAndClaimPage() {
                   <div>
                     <label className="text-xs font-medium text-text-2 mb-1.5 flex items-center gap-1.5">
                       Amount (RM) *
-                      {(quAiData as Record<string, string>).totalAmount && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                      {(quAiData as Record<string, string>).totalAmount && <span className="rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
                     </label>
-                    <Input type="number" step="0.01" value={quAmount} onChange={(e) => setQuAmount(e.target.value)} placeholder="0.00" className={`h-9 text-sm ${(quAiData as Record<string, string>).totalAmount ? "border-purple-300 bg-purple-50/30" : ""}`} />
+                    <Input type="number" step="0.01" value={quAmount} onChange={(e) => setQuAmount(e.target.value)} placeholder="0.00" className={`h-9 text-sm ${(quAiData as Record<string, string>).totalAmount ? "border-info/30 bg-info-soft" : ""}`} />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-text-2 mb-1.5 flex items-center gap-1.5">
-                      {quCategory === "INGREDIENT" ? "Purchase Date" : "Request Date"}
-                      {(quAiData as Record<string, string>).issueDate && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                      {quCategory === "INGREDIENT" ? "Purchase date" : "Request date"}
+                      {(quAiData as Record<string, string>).issueDate && <span className="rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
                     </label>
-                    <Input type="date" value={quDate} onChange={(e) => setQuDate(e.target.value)} className={`h-9 text-sm ${(quAiData as Record<string, string>).issueDate ? "border-purple-300 bg-purple-50/30" : ""}`} />
+                    <Input type="date" value={quDate} onChange={(e) => setQuDate(e.target.value)} className={`h-9 text-sm ${(quAiData as Record<string, string>).issueDate ? "border-info/30 bg-info-soft" : ""}`} />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-text-2 mb-1.5 block">Due Date</label>
+                    <label className="text-xs font-medium text-text-2 mb-1.5 block">Due date</label>
                     <Input type="date" value={quDueDate} onChange={(e) => setQuDueDate(e.target.value)} min={quDate || undefined} className="h-9 text-sm" placeholder="When payment is due" />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-text-2 mb-1.5 flex items-center gap-1.5">
                       Invoice / Ref Number
-                      {(quAiData as Record<string, string>).invoiceNumber && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[9px] font-medium text-purple-600">AI</span>}
+                      {(quAiData as Record<string, string>).invoiceNumber && <span className="rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-medium text-info-text">AI</span>}
                     </label>
-                    <Input value={quInvoiceNum} onChange={(e) => setQuInvoiceNum(e.target.value)} placeholder="Auto-generated if empty" className={`h-9 text-sm ${(quAiData as Record<string, string>).invoiceNumber ? "border-purple-300 bg-purple-50/30" : ""}`} />
+                    <Input value={quInvoiceNum} onChange={(e) => setQuInvoiceNum(e.target.value)} placeholder="Auto-generated if empty" className={`h-9 text-sm ${(quAiData as Record<string, string>).invoiceNumber ? "border-info/30 bg-info-soft" : ""}`} />
                   </div>
                   {/* Claimed By — only for CLAIM flow (REQUEST has no staff payee) */}
                   {quFlow === "CLAIM" && (
                     <div>
                       <label className="text-xs font-medium text-text-2 mb-1.5 block">Claimed By (Staff) *</label>
-                      <select value={quStaffId} onChange={(e) => setQuStaffId(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm">
+                      <select value={quStaffId} onChange={(e) => setQuStaffId(e.target.value)} className="w-full rounded-md border border-line px-3 py-2 text-sm">
                         <option value="">Select staff</option>
                         {staff.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
                       </select>
@@ -1674,7 +1667,7 @@ export default function PayAndClaimPage() {
                   )}
                   <div>
                     <label className="text-xs font-medium text-text-2 mb-1.5 block">Outlet *</label>
-                    <select value={quOutletId} onChange={(e) => setQuOutletId(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm">
+                    <select value={quOutletId} onChange={(e) => setQuOutletId(e.target.value)} className="w-full rounded-md border border-line px-3 py-2 text-sm">
                       <option value="">Select outlet</option>
                       {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                     </select>
@@ -1683,10 +1676,10 @@ export default function PayAndClaimPage() {
 
                 {/* One-off vendor block — REQUEST flow for asset/maintenance/other */}
                 {quFlow === "REQUEST" && quCategory !== "INGREDIENT" && (
-                  <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-3">
+                  <div className="rounded-lg border border-info/30 bg-info-soft p-3 space-y-3">
                     <div className="flex items-center justify-between">
-                      <p className="text-[10px] uppercase font-semibold tracking-wider text-blue-700">One-off Vendor Details</p>
-                      <p className="text-[10px] text-blue-600">Finance will transfer to this account</p>
+                      <p className="text-[10px] uppercase font-semibold tracking-wider text-info-text">One-off Vendor Details</p>
+                      <p className="text-[10px] text-info-text">Finance will transfer to this account</p>
                     </div>
                     <div>
                       <label className="text-xs font-medium text-text-2 mb-1 block">Vendor Name *</label>
@@ -1702,7 +1695,7 @@ export default function PayAndClaimPage() {
                         <Input value={quVendorAccNum} onChange={(e) => setQuVendorAccNum(e.target.value)} placeholder="1234567890" className="h-9 text-sm font-mono" />
                       </div>
                       <div>
-                        <label className="text-xs font-medium text-text-2 mb-1 block">Account Name</label>
+                        <label className="text-xs font-medium text-text-2 mb-1 block">Account name</label>
                         <Input value={quVendorAccName} onChange={(e) => setQuVendorAccName(e.target.value)} placeholder="Account holder" className="h-9 text-sm" />
                       </div>
                     </div>
@@ -1719,8 +1712,8 @@ export default function PayAndClaimPage() {
                 {quCategory === "INGREDIENT" && (
                 <div className="border-t pt-4">
                   <label className="text-xs font-semibold text-text-2 mb-2 block">
-                    Product Items
-                    {quCart.length === 0 && <span className="ml-2 text-[10px] font-normal text-amber-500">Add items before approving</span>}
+                    Product items
+                    {quCart.length === 0 && <span className="ml-2 text-[10px] font-normal text-warn-text">Add items before approving</span>}
                   </label>
 
                   <div className="mb-3">
@@ -1734,7 +1727,7 @@ export default function PayAndClaimPage() {
                       </div>
                     )}
                       {quProductSearch && quFilteredProducts.length > 0 && (
-                        <div className="border rounded-lg max-h-36 overflow-y-auto divide-y mb-2">
+                        <div className="border border-line rounded-lg max-h-36 overflow-y-auto divide-y mb-2">
                           {quFilteredProducts.slice(0, 10).map((p) => (
                             <button key={`${p.id}-${p.packageId}`} onClick={() => { quAddToCart(p); setQuProductSearch(""); }} className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-sunken">
                               <div>
@@ -1753,7 +1746,7 @@ export default function PayAndClaimPage() {
 
                   {/* Cart */}
                   {quCart.length > 0 && (
-                    <div className="border rounded-lg divide-y">
+                    <div className="border border-line rounded-lg divide-y">
                       {quCart.map((item, idx) => (
                         <div key={idx} className="flex items-center gap-2 px-3 py-2.5">
                           <div className="flex-1 min-w-0">
@@ -1770,7 +1763,7 @@ export default function PayAndClaimPage() {
                             <Input type="number" step="0.01" value={item.unitPrice} onChange={(e) => quUpdatePrice(idx, parseFloat(e.target.value) || 0)} className="w-20 h-7 text-xs text-right" />
                           </div>
                           <span className="text-xs font-mono w-20 text-right">RM {(item.quantity * item.unitPrice).toFixed(2)}</span>
-                          <button onClick={() => setQuCart(quCart.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600 p-0.5"><Trash2 className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => setQuCart(quCart.filter((_, i) => i !== idx))} className="text-danger-text hover:text-danger-text p-0.5"><Trash2 className="h-3.5 w-3.5" /></button>
                         </div>
                       ))}
                       <div className="flex items-center justify-between px-3 py-2.5 bg-sunken font-medium text-sm">
@@ -1792,12 +1785,12 @@ export default function PayAndClaimPage() {
                   onClick={() => handleQuickSubmit(true)}
                 >
                   {quSubmitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
-                  Save Draft
+                  Save draft
                 </Button>
                 <Button
                   disabled={quSubmitting || !quOutletId || quPhotos.length === 0}
                   onClick={() => handleQuickSubmit(false)}
-                  className="bg-[#C2714F] hover:bg-[#A85D3F] text-white"
+                  className="bg-ink text-on-ink hover:bg-ink-hover"
                 >
                   {quSubmitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}
                   Submit
@@ -1820,7 +1813,7 @@ export default function PayAndClaimPage() {
           {reimburseClaim && (
             <div className="space-y-4">
               {/* Claim summary */}
-              <div className="rounded-lg border bg-sunken p-3 space-y-1.5">
+              <div className="rounded-lg border border-line bg-sunken p-3 space-y-1.5">
                 <div className="flex justify-between text-sm">
                   <span className="text-text-2">Claim</span>
                   <span className="font-medium">{reimburseClaim.orderNumber}</span>
@@ -1831,7 +1824,7 @@ export default function PayAndClaimPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-text-2">Amount</span>
-                  <span className="font-semibold text-lg text-[#C2714F]">RM {reimburseClaim.invoice?.amount.toFixed(2) || reimburseClaim.totalAmount.toFixed(2)}</span>
+                  <span className="font-semibold text-lg text-brand-text">RM {reimburseClaim.invoice?.amount.toFixed(2) || reimburseClaim.totalAmount.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -1851,9 +1844,9 @@ export default function PayAndClaimPage() {
                     : null
                   : reimburseClaim.claimedByBank;
                 return (
-                  <div className="rounded-lg border p-3 space-y-1.5">
+                  <div className="rounded-lg border border-line p-3 space-y-1.5">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-text-3">Transfer To</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-text-3">Transfer to</p>
                       <p className="text-[10px] text-text-2">{payeeLabel}</p>
                     </div>
                     {bank?.bankAccountNumber ? (
@@ -1867,12 +1860,12 @@ export default function PayAndClaimPage() {
                           <span className="font-mono font-medium">{bank.bankAccountNumber}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-text-2">Account Name</span>
+                          <span className="text-text-2">Account name</span>
                           <span className="font-medium">{bank.bankAccountName || "—"}</span>
                         </div>
                       </>
                     ) : (
-                      <p className="text-sm text-amber-600">
+                      <p className="text-sm text-warn-text">
                         {isRequest
                           ? "No vendor bank details on the request — check the invoice photo."
                           : "No bank details on file for this staff member."}
@@ -1885,11 +1878,11 @@ export default function PayAndClaimPage() {
               {/* Payment details */}
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs font-medium text-text-2 mb-1.5 block">Payment Method</label>
+                  <label className="text-xs font-medium text-text-2 mb-1.5 block">Payment method</label>
                   <select
                     value={reimbursePaymentVia}
                     onChange={(e) => setReimbursePaymentVia(e.target.value)}
-                    className="w-full rounded-md border px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-line px-3 py-2 text-sm"
                   >
                     <option>Bank Transfer</option>
                     <option>Cash</option>
@@ -1898,7 +1891,7 @@ export default function PayAndClaimPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-text-2 mb-1.5 block">Payment Reference <span className="text-red-600">*</span></label>
+                  <label className="text-xs font-medium text-text-2 mb-1.5 block">Payment reference <span className="text-danger-text">*</span></label>
                   <Input
                     value={reimbursePaymentRef}
                     onChange={(e) => setReimbursePaymentRef(e.target.value)}
@@ -1916,10 +1909,10 @@ export default function PayAndClaimPage() {
             <Button
               disabled={reimburseSaving}
               onClick={handleReimburse}
-              className="bg-green-600 hover:bg-green-700 text-white"
+              className="bg-ink hover:bg-ink-hover text-on-ink"
             >
               {reimburseSaving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
-              Confirm Paid
+              Confirm paid
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1961,7 +1954,7 @@ export default function PayAndClaimPage() {
                 <Button
                   onClick={submitBatch}
                   disabled={batchSubmitting}
-                  className="h-8 bg-emerald-600 text-white hover:bg-emerald-700"
+                  className="h-8 bg-ink text-on-ink hover:bg-ink-hover"
                 >
                   {batchSubmitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}
                   Create Batch ({batchSelected.size})

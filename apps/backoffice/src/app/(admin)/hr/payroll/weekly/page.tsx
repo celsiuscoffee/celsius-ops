@@ -204,26 +204,26 @@ export default function WeeklyPayrollPage() {
 
   return (
     <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
-      <div className="flex items-center gap-3">
-        <Link href="/hr/payroll" className="text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="inline h-4 w-4" /> Monthly
+      <div>
+        <Link href="/hr/payroll" className="inline-flex items-center gap-1 text-[13px] text-text-2 hover:text-text">
+          <ArrowLeft className="h-3.5 w-3.5" /> Monthly payroll
         </Link>
-        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Weekly Payroll (Part-Timers)</h1>
+        <h1 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Weekly pay</h1>
       </div>
-      <p className="text-sm text-muted-foreground">
+      <p className="-mt-4 text-sm text-text-2">
         Part-time payroll runs Mon–Sun, paid the following week. Gross = clocked hours
         (from the staff app clock-in/out, break excluded) × hourly rate. Flat rate, no OT premium.
       </p>
 
       {/* Compute Controls */}
-      <div className="rounded-xl border bg-card p-5">
+      <div className="rounded-xl border border-line bg-surface p-5">
         <h2 className="mb-4 flex items-center gap-2 font-semibold">
           <Bot className="h-5 w-5 text-brand-text" />
-          Compute Weekly Payroll
+          Compute weekly payroll
         </h2>
         <div className="flex flex-wrap items-end gap-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">Week starting (Monday)</span>
+            <span className="mb-1 block text-xs font-medium text-text-2">Week starting (Monday)</span>
             <input
               type="date"
               value={weekStart}
@@ -231,7 +231,7 @@ export default function WeeklyPayrollPage() {
                 const d = new Date(`${e.target.value}T00:00:00Z`);
                 setWeekStart(mondayOf(d));
               }}
-              className="rounded-lg border bg-background px-3 py-2 text-sm"
+              className="rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             />
           </label>
           <button
@@ -248,16 +248,16 @@ export default function WeeklyPayrollPage() {
         <WeeklyPreflightPanel weekStart={weekStart} />
 
         {result && (
-          <div className="mt-4 rounded-lg bg-muted/50 p-3 text-sm">
+          <div className="mt-4 rounded-lg bg-sunken p-3 text-sm">
             {result.notes.map((n, i) => (
-              <p key={i} className="text-muted-foreground">{n}</p>
+              <p key={i} className="text-text-2">{n}</p>
             ))}
           </div>
         )}
       </div>
 
       {bankFileError && (
-        <div className="whitespace-pre-line rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="whitespace-pre-line rounded-lg border border-warn/30 bg-warn-soft p-3 text-sm text-warn-text">
           {bankFileError}
         </div>
       )}
@@ -270,32 +270,32 @@ export default function WeeklyPayrollPage() {
           const isViewing = viewRunId === run.id;
 
           return (
-            <div key={run.id} className="rounded-xl border bg-card shadow-sm">
+            <div key={run.id} className="rounded-xl border border-line bg-surface shadow-sm">
               <div className="flex items-center justify-between p-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    <CalendarDays className="h-4 w-4 text-text-2" />
                     <p className="font-semibold">{formatWeek(run.period_start, run.period_end)}</p>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                         isConfirmed
-                          ? "bg-green-100 text-green-700"
+                          ? "bg-ok-soft text-ok-text"
                           : isComputed
-                          ? "bg-blue-100 text-blue-700"
+                          ? "bg-info-soft text-info-text"
                           : "bg-sunken text-text-2"
                       }`}
                     >
-                      {run.status.replace("_", " ")}
+                      {({ ai_computed: "Computed", confirmed: "Confirmed", paid: "Paid", draft: "Draft" } as Record<string, string>)[run.status] ?? run.status.replace("_", " ")}
                     </span>
                   </div>
-                  <div className="mt-1 flex gap-4 text-sm text-muted-foreground">
+                  <div className="mt-1 flex gap-4 text-sm text-text-2">
                     <span>Gross: {fmt(run.total_gross)}</span>
                   </div>
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setViewRunId(isViewing ? null : run.id)}
-                    className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                    className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium hover:bg-sunken"
                   >
                     <FileText className="inline h-3 w-3 mr-1" />
                     {isViewing ? "Hide" : "Details"}
@@ -305,7 +305,7 @@ export default function WeeklyPayrollPage() {
                       onClick={() => handleDelete(run)}
                       disabled={deleting === run.id}
                       title="Delete this run so the week can be recomputed"
-                      className="flex items-center gap-1 rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      className="flex items-center gap-1 rounded-lg border border-danger/30 px-3 py-1.5 text-xs font-medium text-danger-text hover:bg-danger-soft disabled:opacity-50"
                     >
                       {deleting === run.id ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -319,7 +319,7 @@ export default function WeeklyPayrollPage() {
                     <button
                       onClick={() => handleConfirm(run.id)}
                       disabled={confirming === run.id}
-                      className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                      className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
                     >
                       {confirming === run.id ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -333,7 +333,7 @@ export default function WeeklyPayrollPage() {
                     <>
                       <button
                         onClick={() => handleBankFile(run.id)}
-                        className="flex items-center gap-1 rounded-lg border border-blue-600 px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                        className="flex items-center gap-1 rounded-lg border border-info px-3 py-1.5 text-xs font-medium text-info-text hover:bg-info-soft"
                         title="Per-person bulk transfer CSV — requires every PT shift confirmed at HR → PT Hours"
                       >
                         <Download className="h-3 w-3" />
@@ -341,14 +341,14 @@ export default function WeeklyPayrollPage() {
                       </button>
                       <button
                         onClick={() => handleMarkPaid(run.id)}
-                        className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                        className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover"
                       >
                         <DollarSign className="h-3 w-3" />
                         Mark paid
                       </button>
                     </>
                   )}
-                  {run.status === "paid" && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                  {run.status === "paid" && <CheckCircle2 className="h-5 w-5 text-ok-text" />}
                 </div>
               </div>
 
@@ -357,7 +357,7 @@ export default function WeeklyPayrollPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b text-left text-muted-foreground">
+                        <tr className="border-b text-left text-text-2">
                           <th className="pb-2 pr-3">Employee</th>
                           <th className="pb-2 pr-3 text-right">Rate</th>
                           <th className="pb-2 pr-3 text-right">Hours</th>
@@ -376,34 +376,34 @@ export default function WeeklyPayrollPage() {
                               <td className="py-2 pr-3 font-medium">
                                 {item.fullName || item.name || item.user_id.slice(0, 8) + "…"}
                                 {item.computation_details?.manually_adjusted && (
-                                  <span className="ml-2 text-[10px] text-amber-600">✎ edited</span>
+                                  <span className="ml-2 text-[10px] text-warn-text">✎ edited</span>
                                 )}
                                 {item.bankName && item.bankAccountNumber && (
                                   <div className="text-[10px] text-text-3">{item.bankName} · {item.bankAccountNumber}</div>
                                 )}
                                 {(!item.bankName || !item.bankAccountNumber) && (
-                                  <div className="text-[10px] text-red-500">⚠ no bank details</div>
+                                  <div className="text-[10px] text-danger-text">⚠ no bank details</div>
                                 )}
                               </td>
                               <td className="py-2 pr-3 text-right">
                                 {isEditing ? (
                                   <input type="number" step="0.01" value={editing!.rate}
                                     onChange={(e) => setEditing({ ...editing!, rate: e.target.value })}
-                                    className="w-16 border rounded px-1 text-right" />
+                                    className="w-16 border border-line rounded px-1 text-right" />
                                 ) : displayRate > 0 ? `RM ${displayRate}/h` : "—"}
                               </td>
                               <td className="py-2 pr-3 text-right">
                                 {isEditing ? (
                                   <input type="number" step="0.5" value={editing!.hours}
                                     onChange={(e) => setEditing({ ...editing!, hours: e.target.value })}
-                                    className="w-16 border rounded px-1 text-right" />
+                                    className="w-16 border border-line rounded px-1 text-right" />
                                 ) : `${Number(item.total_regular_hours).toFixed(2)}h`}
                               </td>
                               <td className="py-2 pr-3 text-right">
                                 {isEditing ? (
                                   <input type="number" step="0.5" value={editing!.ot}
                                     onChange={(e) => setEditing({ ...editing!, ot: e.target.value })}
-                                    className="w-14 border rounded px-1 text-right" />
+                                    className="w-14 border border-line rounded px-1 text-right" />
                                 ) : Number(item.total_ot_hours) > 0 ? `${item.total_ot_hours}h` : "—"}
                               </td>
                               <td className="py-2 pr-3 text-right">{item.computation_details?.attendance_records ?? 0}</td>
@@ -412,17 +412,17 @@ export default function WeeklyPayrollPage() {
                                 {isEditing ? (
                                   <div className="flex gap-1 justify-end">
                                     <button onClick={saveEdit} disabled={savingEdit}
-                                      className="rounded bg-green-600 text-white px-2 py-0.5 text-[10px]">
+                                      className="rounded bg-ok-soft text-ok-text px-2 py-0.5 text-[10px]">
                                       {savingEdit ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                                     </button>
                                     <button onClick={() => setEditing(null)}
-                                      className="rounded border px-2 py-0.5 text-[10px]">
+                                      className="rounded border border-line px-2 py-0.5 text-[10px]">
                                       <X className="h-3 w-3" />
                                     </button>
                                   </div>
                                 ) : (
                                   <button onClick={() => startEdit(item)}
-                                    className="rounded border px-2 py-0.5 text-[10px] hover:bg-sunken">
+                                    className="rounded border border-line px-2 py-0.5 text-[10px] hover:bg-sunken">
                                     <Edit2 className="h-3 w-3" />
                                   </button>
                                 )}
@@ -437,17 +437,17 @@ export default function WeeklyPayrollPage() {
               )}
 
               {run.ai_notes && !isViewing && (
-                <p className="border-t px-4 py-2 text-xs text-muted-foreground">{run.ai_notes}</p>
+                <p className="border-t px-4 py-2 text-xs text-text-2">{run.ai_notes}</p>
               )}
             </div>
           );
         })}
 
         {runs.length === 0 && (
-          <div className="rounded-xl border bg-card py-16 text-center">
+          <div className="rounded-xl border border-line bg-surface py-16 text-center">
             <Banknote className="mx-auto mb-3 h-12 w-12 text-text-3" />
             <p className="text-lg font-semibold">No weekly payroll runs yet</p>
-            <p className="text-sm text-muted-foreground">Pick a Monday and compute above</p>
+            <p className="text-sm text-text-2">Pick a Monday and compute above</p>
           </div>
         )}
       </div>
@@ -491,7 +491,7 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
 
   if (!data) {
     return (
-      <div className="mt-4 rounded-md border bg-sunken p-3 text-xs text-text-2">
+      <div className="mt-4 rounded-md border border-line bg-sunken p-3 text-xs text-text-2">
         <Loader2 className="mr-2 inline h-3 w-3 animate-spin" />
         Checking clock-ins + readiness…
       </div>
@@ -503,9 +503,9 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
   const noClockData = summary.total_logged_shifts === 0;
 
   return (
-    <div className="mt-4 rounded-md border bg-sunken p-3">
+    <div className="mt-4 rounded-md border border-line bg-sunken p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-semibold uppercase tracking-wide text-text-2">Pre-run check</span>
+        <span className="font-semibold text-text">Pre-run check</span>
         <Pill color="blue" label={`${summary.total_logged_shifts} clocked shifts · ${summary.total_logged_hours}h`} />
         <Pill color="emerald" label={`${summary.payable} payable`} />
         {summary.warning > 0 && <Pill color="amber" label={`${summary.warning} warning`} />}
@@ -520,15 +520,15 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
       </div>
 
       {noClockData ? (
-        <p className="mt-1 text-xs font-medium text-red-700">
+        <p className="mt-1 text-xs font-medium text-danger-text">
           ⚠ No part-timer has clocked in this week yet. Compute will produce zero rows.
         </p>
       ) : summary.payable === 0 ? (
-        <p className="mt-1 text-xs text-amber-700">
+        <p className="mt-1 text-xs text-warn-text">
           Part-timers clocked in, but none are payable (check hourly rates). Compute will produce zero rows.
         </p>
       ) : issuesOnly.length === 0 ? (
-        <p className="mt-1 text-xs text-emerald-700">
+        <p className="mt-1 text-xs text-ok-text">
           ✓ {summary.payable} part-timer{summary.payable === 1 ? "" : "s"} ready
           ({summary.total_logged_shifts} shift{summary.total_logged_shifts === 1 ? "" : "s"}, {summary.total_logged_hours}h).
         </p>
@@ -541,20 +541,20 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
           </p>
           <button
             onClick={() => setShowAll((v) => !v)}
-            className="mt-1 text-[11px] font-medium text-blue-600 hover:underline"
+            className="mt-1 text-[11px] font-medium text-info-text hover:underline"
           >
             {showAll ? "Hide details" : `Show ${issuesOnly.length} issue${issuesOnly.length === 1 ? "" : "s"}`}
           </button>
           {showAll && (
             <ul className="mt-2 space-y-1.5">
               {issuesOnly.map((r) => (
-                <li key={r.user_id} className="rounded border bg-surface px-2 py-1.5 text-[11px]">
+                <li key={r.user_id} className="rounded border border-line bg-surface px-2 py-1.5 text-[11px]">
                   <div className="flex items-center gap-2">
                     <Pill
                       color={r.status === "blocked" ? "red" : "amber"}
                       label={r.status}
                     />
-                    <Link href={`/hr/employees/${r.user_id}`} className="font-medium text-blue-600 hover:underline">
+                    <Link href={`/hr/employees/${r.user_id}`} className="font-medium text-info-text hover:underline">
                       {r.name}
                     </Link>
                     <span className="text-text-3">· {r.logged_shifts} shift{r.logged_shifts === 1 ? "" : "s"} · {r.logged_hours}h</span>
@@ -581,11 +581,11 @@ function Pill({
   label: string;
 }) {
   const cls = {
-    emerald: "bg-emerald-100 text-emerald-700",
-    amber: "bg-amber-100 text-amber-800",
-    red: "bg-red-100 text-red-700",
+    emerald: "bg-ok-soft text-ok-text",
+    amber: "bg-warn-soft text-warn-text",
+    red: "bg-danger-soft text-danger-text",
     gray: "bg-sunken text-text-2",
-    blue: "bg-blue-100 text-blue-700",
+    blue: "bg-info-soft text-info-text",
   }[color];
-  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase ${cls}`}>{label}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{label}</span>;
 }

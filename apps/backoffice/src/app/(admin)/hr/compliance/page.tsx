@@ -115,22 +115,22 @@ export default function CompliancePage() {
     <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
       <HrPageHeader
-        title="Compliance Calendar"
+        title="Compliance calendar"
         icon={<ShieldAlert className="h-6 w-6 text-brand-text" />}
-        description="LHDN, KWSP, PERKESO, HRDF deadlines. Work-permit and license renewals. Recurring events auto-schedule the next occurrence on completion."
+        description="Statutory deadlines (LHDN, KWSP, PERKESO, HRDF) and permit renewals: what is due soon and what is late. Repeating items schedule the next one when marked done."
         action={
           <>
             <button
               onClick={bootstrap}
               disabled={bootstrapping}
-              className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+              className="inline-flex h-10 items-center gap-1.5 whitespace-nowrap rounded-ctl border border-line px-3 text-sm font-medium hover:bg-sunken disabled:opacity-50"
               title="Seed standard MY statutory events (KWSP, PERKESO, CP39, HRDF, Form E, CP8D)"
             >
               {bootstrapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
-              Seed standard MY events
+              Add standard deadlines
             </button>
             {!showAdd && (
-              <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ink-hover">
+              <button onClick={() => setShowAdd(true)} className="inline-flex h-10 items-center gap-1.5 whitespace-nowrap rounded-ctl bg-ink px-3 text-sm font-medium text-on-ink hover:bg-ink-hover">
                 <Plus className="h-4 w-4" /> Add event
               </button>
             )}
@@ -139,26 +139,26 @@ export default function CompliancePage() {
       />
 
       {showAdd && (
-        <div className="rounded-xl border bg-card p-5">
-          <h2 className="mb-3 font-semibold">New Event</h2>
+        <div className="rounded-xl border border-line bg-surface p-5">
+          <h2 className="mb-3 font-semibold">New event</h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-muted-foreground">Category</span>
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded border bg-background px-3 py-2 text-sm">
+              <span className="mb-1 block text-xs font-medium text-text-2">Category</span>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded border border-line bg-surface px-3 py-2 text-sm">
                 {CATEGORIES.map((c) => <option key={c.v} value={c.v}>{c.l}</option>)}
               </select>
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-muted-foreground">Title</span>
-              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. KWSP Form A — Apr 2026" className="w-full rounded border px-3 py-2 text-sm" />
+              <span className="mb-1 block text-xs font-medium text-text-2">Title</span>
+              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. KWSP Form A — Apr 2026" className="w-full rounded border border-line px-3 py-2 text-sm" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-muted-foreground">Due Date</span>
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full rounded border px-3 py-2 text-sm" />
+              <span className="mb-1 block text-xs font-medium text-text-2">Due date</span>
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full rounded border border-line px-3 py-2 text-sm" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-muted-foreground">Recurrence</span>
-              <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)} className="w-full rounded border bg-background px-3 py-2 text-sm">
+              <span className="mb-1 block text-xs font-medium text-text-2">Recurrence</span>
+              <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)} className="w-full rounded border border-line bg-surface px-3 py-2 text-sm">
                 <option value="one_off">One off</option>
                 <option value="monthly">Monthly</option>
                 <option value="quarterly">Quarterly</option>
@@ -166,17 +166,17 @@ export default function CompliancePage() {
               </select>
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-muted-foreground">Reminder days before</span>
-              <input type="number" min={0} value={reminderDays} onChange={(e) => setReminderDays(Number(e.target.value))} className="w-full rounded border px-3 py-2 text-sm" />
+              <span className="mb-1 block text-xs font-medium text-text-2">Reminder days before</span>
+              <input type="number" min={0} value={reminderDays} onChange={(e) => setReminderDays(Number(e.target.value))} className="w-full rounded border border-line px-3 py-2 text-sm" />
             </label>
             <label className="block md:col-span-2">
-              <span className="mb-1 block text-xs font-medium text-muted-foreground">Notes</span>
-              <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full rounded border px-3 py-2 text-sm" />
+              <span className="mb-1 block text-xs font-medium text-text-2">Notes</span>
+              <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full rounded border border-line px-3 py-2 text-sm" />
             </label>
           </div>
-          {err && <p className="mt-3 text-xs text-red-600">{err}</p>}
+          {err && <p className="mt-3 text-xs text-danger-text">{err}</p>}
           <div className="mt-4 flex justify-end gap-2">
-            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-sm hover:bg-sunken">Cancel</button>
+            <button onClick={reset} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-sunken">Cancel</button>
             <button onClick={submit} disabled={saving} className="flex items-center gap-2 rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save
@@ -187,19 +187,19 @@ export default function CompliancePage() {
 
       {/* Overdue */}
       {overdue.length > 0 && (
-        <Section title="Overdue" icon={<AlertTriangle className="h-5 w-5 text-red-600" />} color="red">
+        <Section title="Overdue" icon={<AlertTriangle className="h-5 w-5 text-danger-text" />} color="red">
           {overdue.map((e) => <EventRow key={e.id} event={e} onDone={markDone} onDelete={handleDelete} />)}
         </Section>
       )}
 
-      <Section title={`Upcoming (${upcoming.length})`} icon={<Calendar className="h-5 w-5 text-blue-600" />} color="blue">
+      <Section title={`Upcoming (${upcoming.length})`} icon={<Calendar className="h-5 w-5 text-info-text" />} color="blue">
         {upcoming.length === 0 ? (
-          <p className="px-4 py-6 text-center text-xs text-muted-foreground">Nothing scheduled.</p>
+          <p className="px-4 py-6 text-center text-xs text-text-2">Nothing scheduled.</p>
         ) : upcoming.map((e) => <EventRow key={e.id} event={e} onDone={markDone} onDelete={handleDelete} />)}
       </Section>
 
       {recentlyDone.length > 0 && (
-        <Section title="Recently completed" icon={<CheckCircle2 className="h-5 w-5 text-emerald-600" />} color="emerald">
+        <Section title="Recently completed" icon={<CheckCircle2 className="h-5 w-5 text-ok-text" />} color="emerald">
           {recentlyDone.map((e) => <EventRow key={e.id} event={e} onDone={markDone} onDelete={handleDelete} />)}
         </Section>
       )}
@@ -211,9 +211,9 @@ function Section({ title, icon, children, color }: {
   title: string; icon: React.ReactNode; children: React.ReactNode;
   color: "red" | "blue" | "emerald";
 }) {
-  const headerCls = color === "red" ? "bg-red-50 text-red-900" : color === "blue" ? "bg-blue-50 text-blue-900" : "bg-emerald-50 text-emerald-900";
+  const headerCls = color === "red" ? "bg-danger-soft text-danger-text" : color === "blue" ? "bg-info-soft text-info-text" : "bg-ok-soft text-ok-text";
   return (
-    <div className="overflow-hidden rounded-xl border bg-card">
+    <div className="overflow-hidden rounded-xl border border-line bg-surface">
       <div className={`flex items-center gap-2 border-b px-4 py-2 text-sm font-semibold ${headerCls}`}>
         {icon} {title}
       </div>
@@ -226,18 +226,18 @@ function EventRow({ event, onDone, onDelete }: { event: Event; onDone: (id: stri
   const cat = CATEGORIES.find((c) => c.v === event.category)?.l || event.category;
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 text-sm">
-      <span className="font-mono text-xs text-text-2 w-24">{event.due_date}</span>
+      <span className="w-24 shrink-0 font-mono text-xs text-text-2">{new Date(event.due_date + "T00:00:00").toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}</span>
       <div className="min-w-0 flex-1">
         <div className="font-medium">{event.title}</div>
-        <div className="mt-0.5 text-[10px] text-muted-foreground">{cat} · {event.recurrence}</div>
+        <div className="mt-0.5 text-[12px] text-text-3">{cat} · {event.recurrence}</div>
       </div>
       {event.status !== "done" && (
-        <button onClick={() => onDone(event.id)} className="rounded border bg-surface px-2 py-1 text-[10px] hover:bg-emerald-50">
+        <button onClick={() => onDone(event.id)} className="inline-flex h-9 shrink-0 items-center rounded-ctl border border-line bg-surface px-3 text-xs hover:bg-sunken">
           Mark done
         </button>
       )}
-      <button onClick={() => onDelete(event.id)} className="rounded border border-red-200 bg-red-50 p-1 text-red-600 hover:bg-red-100">
-        <Trash2 className="h-3 w-3" />
+      <button onClick={() => onDelete(event.id)} aria-label="Delete" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-ctl border border-line text-text-3 hover:bg-danger-soft hover:text-danger-text">
+        <Trash2 className="h-4 w-4" />
       </button>
     </div>
   );

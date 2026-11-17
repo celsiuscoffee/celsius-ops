@@ -69,9 +69,9 @@ type Override = {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const TIER_STYLE: Record<string, string> = {
-  perform: "bg-green-100 text-green-700",
-  ok: "bg-amber-100 text-amber-700",
-  under: "bg-red-100 text-red-700",
+  perform: "bg-ok-soft text-ok-text",
+  ok: "bg-warn-soft text-warn-text",
+  under: "bg-danger-soft text-danger-text",
 };
 const KIND_LABEL: Record<Deduction["kind"], string> = {
   late: "Late", absent: "Absent", review: "Review",
@@ -197,14 +197,14 @@ export default function PerformancePage() {
         description={
           activeTab === "allowance"
             ? "What the levers scored, what was deducted, and what we actually pay. Waive a single deduction, or replace the month outright."
-            : "Attendance, hours, leave, ops compliance & customer feedback — composite monthly score per staff."
+            : "Each person's monthly score from attendance, hours, leave, checklists and customer feedback."
         }
         action={
           <div className="flex gap-2">
-            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="rounded-lg border bg-background px-3 py-2 text-sm">
+            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
               {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-lg border bg-background px-3 py-2 text-sm">
+            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
               {[now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2].map((y) => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
@@ -220,7 +220,7 @@ export default function PerformancePage() {
               className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
                 activeTab === t.id
                   ? "border-text bg-raised font-semibold text-text"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  : "border-transparent text-text-2 hover:text-text"
               }`}
             >
               {t.icon}
@@ -235,7 +235,7 @@ export default function PerformancePage() {
       {activeTab === "allowance" && (
       <div className="space-y-6">
       {locked && (
-        <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50/60 px-4 py-3.5 text-sm text-red-900">
+        <div className="flex items-start gap-3 rounded-xl border border-danger/30 bg-danger-soft px-4 py-3.5 text-sm text-danger-text">
           <Lock className="mt-0.5 h-4 w-4 shrink-0" />
           <span className="leading-relaxed">
             The {MONTHS[month - 1]} {year} payroll run is <strong>{locked.status}</strong> — it has gone to
@@ -245,7 +245,7 @@ export default function PerformancePage() {
       )}
 
       {editedCount > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3.5 text-sm text-amber-900">
+        <div className="flex items-start gap-3 rounded-xl border border-warn/30 bg-warn-soft px-4 py-3.5 text-sm text-warn-text">
           <PencilLine className="mt-0.5 h-4 w-4 shrink-0" />
           <span className="leading-relaxed">
             <strong>{editedCount}</strong> line{editedCount === 1 ? "" : "s"} set by hand for
@@ -255,22 +255,22 @@ export default function PerformancePage() {
         </div>
       )}
 
-      <section className="rounded-xl border bg-card">
+      <section className="rounded-xl border border-line bg-surface">
         <h2 className="flex items-center gap-2 border-b px-5 py-4 font-semibold">
           <Trophy className="h-4 w-4" />
           {MONTHS[month - 1]} {year}
-          <span className="text-sm font-normal text-muted-foreground">· {staff.length} staff</span>
+          <span className="text-sm font-normal text-text-2">· {staff.length} staff</span>
         </h2>
 
         {isLoading ? (
-          <div className="flex justify-center py-14"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          <div className="flex justify-center py-14"><Loader2 className="h-5 w-5 animate-spin text-text-2" /></div>
         ) : staff.length === 0 ? (
-          <p className="p-8 text-center text-sm text-muted-foreground">No eligible staff for this period.</p>
+          <p className="p-8 text-center text-sm text-text-2">No eligible staff for this period.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[880px] text-sm">
               <thead>
-                <tr className="border-b bg-muted/30 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr className="border-b border-line bg-sunken text-left text-xs text-text-2">
                   <th className="px-5 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Levers</th>
                   <th className="px-4 py-3 text-right font-medium">Earned</th>
@@ -284,43 +284,43 @@ export default function PerformancePage() {
                   const deductions = (s.attendanceDeducted || 0) + (s.reviewPenaltyTotal || 0);
                   const edits = s.levers.filter((l) => l.edited).length + s.deductions.filter((d) => d.edited).length;
                   return (
-                    <tr key={s.userId} className={`border-b align-top last:border-0 ${edits > 0 ? "bg-amber-50/40" : ""}`}>
+                    <tr key={s.userId} className={`border-b align-top last:border-0 ${edits > 0 ? "bg-warn-soft" : ""}`}>
                       <td className="px-5 py-3.5">
                         <div className="font-medium">{s.name}</div>
-                        <div className="mt-0.5 text-xs text-muted-foreground">{s.outletName || "—"}</div>
+                        <div className="mt-0.5 text-xs text-text-2">{s.outletName || "—"}</div>
                       </td>
                       <td className="px-4 py-3.5">
                         <div className="flex max-w-[240px] flex-wrap gap-1.5">
                           {s.levers.filter((l) => l.applicable || l.edited).map((l) => (
                             <span key={l.key} title={l.detail}
-                              className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${l.edited ? "bg-amber-100 text-amber-800" : TIER_STYLE[l.tier]}`}>
+                              className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${l.edited ? "bg-warn-soft text-warn-text" : TIER_STYLE[l.tier]}`}>
                               {l.label.split(" ")[0]} {l.edited ? rm(l.earned) : `${l.score}%`}
                             </span>
                           ))}
                           {s.levers.every((l) => !l.applicable && !l.edited) && (
-                            <span className="text-xs text-muted-foreground">not scored</span>
+                            <span className="text-xs text-text-2">not scored</span>
                           )}
                         </div>
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono tabular-nums">{rm(s.performanceEarned)}</td>
                       <td className="px-4 py-3.5 text-right font-mono tabular-nums">
                         {deductions > 0 ? (
-                          <span className="text-red-600" title={`${s.lateCount} late, ${s.absentCount} absent`}>
+                          <span className="text-danger-text" title={`${s.lateCount} late, ${s.absentCount} absent`}>
                             −{rm(deductions)}
                           </span>
-                        ) : <span className="text-muted-foreground">—</span>}
+                        ) : <span className="text-text-2">—</span>}
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono tabular-nums">
                         {rm(s.totalEarned)}
                         {edits > 0 && (
-                          <div className="mt-0.5 text-[11px] font-normal text-amber-700">
+                          <div className="mt-0.5 text-[11px] font-normal text-warn-text">
                             {edits} line{edits === 1 ? "" : "s"} by hand
                           </div>
                         )}
                       </td>
                       <td className="px-5 py-3.5 text-right">
                         <button onClick={() => open(s)}
-                          className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted">
+                          className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium hover:bg-sunken">
                           Review
                         </button>
                       </td>
@@ -337,19 +337,19 @@ export default function PerformancePage() {
 
       {editing && activeTab === "allowance" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex max-h-[88vh] w-full max-w-2xl flex-col rounded-xl border bg-card shadow-xl">
+          <div className="flex max-h-[88vh] w-full max-w-2xl flex-col rounded-xl border border-line bg-surface shadow-xl">
             {/* header */}
             <div className="flex items-start justify-between gap-4 border-b px-6 py-5">
               <div>
                 <h3 className="font-semibold">{editing.name}</h3>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-1 text-xs text-text-2">
                   {MONTHS[month - 1]} {year} · paying <strong>{rm(editing.totalEarned)}</strong>
                   {" "}({rm(editing.performanceEarned)} earned
                   {(editing.attendanceDeducted + editing.reviewPenaltyTotal) > 0 &&
                     <> less {rm(editing.attendanceDeducted + editing.reviewPenaltyTotal)} deductions</>})
                 </p>
               </div>
-              <button onClick={() => setEditingId(null)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted">
+              <button onClick={() => setEditingId(null)} className="rounded-lg p-1.5 text-text-2 hover:bg-sunken">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -357,21 +357,21 @@ export default function PerformancePage() {
             {/* body */}
             <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
               <section className="space-y-2.5">
-                <h4 className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <h4 className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-text-2">
                   Levers
                   <span className="font-normal normal-case tracking-normal">— set any lever by hand when the score isn&apos;t fair</span>
                 </h4>
-                <ul className="divide-y rounded-lg border">
+                <ul className="divide-y rounded-lg border border-line">
                   {editing.levers.map((l) => (
-                    <li key={l.key} className={`px-3.5 py-3 ${l.edited ? "bg-amber-50/50" : ""}`}>
+                    <li key={l.key} className={`px-3.5 py-3 ${l.edited ? "bg-warn-soft" : ""}`}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <div className={l.applicable || l.edited ? "text-sm font-medium" : "text-sm text-muted-foreground"}>
+                          <div className={l.applicable || l.edited ? "text-sm font-medium" : "text-sm text-text-2"}>
                             {l.label}
                           </div>
-                          <div className="mt-0.5 text-xs text-muted-foreground">{l.detail}</div>
+                          <div className="mt-0.5 text-xs text-text-2">{l.detail}</div>
                           {l.edited && (
-                            <div className="mt-1 text-xs text-amber-700">
+                            <div className="mt-1 text-xs text-warn-text">
                               Engine scored {rm(l.originalEarned)}
                               {l.applicable && l.slice > 0 && <> of {rm(l.slice)}</>}
                             </div>
@@ -379,7 +379,7 @@ export default function PerformancePage() {
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           <div className="flex items-center gap-1">
-                            <span className="text-xs text-muted-foreground">RM</span>
+                            <span className="text-xs text-text-2">RM</span>
                             <input
                               type="number" step="0.01" min={0}
                               value={draftAmount[l.lineKey] ?? l.earned.toFixed(2)}
@@ -391,7 +391,7 @@ export default function PerformancePage() {
                           {l.edited ? (
                             <button onClick={() => resetLine(editing, l.lineKey)} disabled={busy !== null || !!locked}
                               title="Hand this lever back to the engine"
-                              className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs hover:bg-muted disabled:opacity-50">
+                              className="flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs hover:bg-sunken disabled:opacity-50">
                               {busy === l.lineKey ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />}
                               Reset
                             </button>
@@ -402,7 +402,7 @@ export default function PerformancePage() {
                                 amount: Number(draftAmount[l.lineKey] ?? l.earned), computed: l.originalEarned,
                               })}
                               disabled={busy !== null || !!locked}
-                              className="rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
+                              className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium hover:bg-sunken disabled:opacity-50">
                               {busy === l.lineKey ? <Loader2 className="h-3 w-3 animate-spin" /> : "Set"}
                             </button>
                           )}
@@ -422,40 +422,40 @@ export default function PerformancePage() {
               </section>
 
               <section className="space-y-2.5">
-                <h4 className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <h4 className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-text-2">
                   Deductions
                   {editing.deductions.length > 0 && (
                     <span className="font-normal normal-case tracking-normal">— waive any line that shouldn&apos;t count</span>
                   )}
                 </h4>
                 {editing.deductions.length === 0 ? (
-                  <p className="rounded-lg border bg-muted/20 px-3.5 py-3 text-sm text-muted-foreground">
+                  <p className="rounded-lg border border-line bg-sunken px-3.5 py-3 text-sm text-text-2">
                     Nothing deducted this month.
                   </p>
                 ) : (
-                  <ul className="divide-y rounded-lg border">
+                  <ul className="divide-y rounded-lg border border-line">
                     {editing.deductions.map((d) => (
-                      <li key={d.key} className={`px-3.5 py-3 ${d.edited ? "bg-amber-50/50" : ""}`}>
+                      <li key={d.key} className={`px-3.5 py-3 ${d.edited ? "bg-warn-soft" : ""}`}>
                         <div className="flex items-start justify-between gap-4">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              <span className="rounded bg-sunken px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-2">
                                 {KIND_LABEL[d.kind]}
                               </span>
-                              {d.date && <span className="text-xs text-muted-foreground">{d.date}</span>}
+                              {d.date && <span className="text-xs text-text-2">{d.date}</span>}
                             </div>
                             <div className="mt-1 truncate text-sm">{d.label}</div>
                             {d.edited && d.editReason && (
-                              <div className="mt-1 text-xs text-amber-700">Waived — {d.editReason}</div>
+                              <div className="mt-1 text-xs text-warn-text">Waived — {d.editReason}</div>
                             )}
                           </div>
                           <div className="flex shrink-0 items-center gap-3">
-                            <span className={`font-mono text-sm tabular-nums ${d.edited ? "text-muted-foreground line-through" : "text-red-600"}`}>
+                            <span className={`font-mono text-sm tabular-nums ${d.edited ? "text-text-2 line-through" : "text-danger-text"}`}>
                               −{rm(d.originalAmount)}
                             </span>
                             {d.edited ? (
                               <button onClick={() => resetLine(editing, d.key)} disabled={busy !== null || !!locked}
-                                className="flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs hover:bg-muted disabled:opacity-50">
+                                className="flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs hover:bg-sunken disabled:opacity-50">
                                 {busy === d.key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />}
                                 Restore
                               </button>
@@ -463,7 +463,7 @@ export default function PerformancePage() {
                               <button
                                 onClick={() => saveLine(editing, { lineKey: d.key, label: d.label, amount: 0, computed: d.originalAmount })}
                                 disabled={busy !== null || !!locked}
-                                className="rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
+                                className="rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium hover:bg-sunken disabled:opacity-50">
                                 {busy === d.key ? <Loader2 className="h-3 w-3 animate-spin" /> : "Waive"}
                               </button>
                             )}
@@ -485,7 +485,7 @@ export default function PerformancePage() {
                 )}
               </section>
 
-              <p className="flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground">
+              <p className="flex items-start gap-2 text-[11px] leading-relaxed text-text-2">
                 <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                 Every edit needs a reason and applies to this month only — next month goes back to the levers.
                 A lever can be set up to the {rm(editing.totalMax)} pool; a deduction can only be reduced.
@@ -494,11 +494,11 @@ export default function PerformancePage() {
 
             {/* footer */}
             <div className="flex items-center justify-between gap-3 border-t px-6 py-4">
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
+              <p className="text-[11px] leading-relaxed text-text-2">
                 Changes reach a payslip only when the run is recomputed. A confirmed or paid run can&apos;t be changed.
               </p>
               <button onClick={() => setEditingId(null)}
-                className="shrink-0 rounded-lg border px-3.5 py-2 text-xs font-medium hover:bg-muted">
+                className="shrink-0 rounded-lg border border-line px-3.5 py-2 text-xs font-medium hover:bg-sunken">
                 Done
               </button>
             </div>

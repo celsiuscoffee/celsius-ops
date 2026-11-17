@@ -208,8 +208,8 @@ export default function PayrollRunPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div>
-            <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Run Payroll</h1>
-            <p className="text-sm text-muted-foreground">Single-screen wizard — compute, review, approve.</p>
+            <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Run payroll</h1>
+            <p className="text-sm text-text-2">Compute a month, check every line, then approve it.</p>
           </div>
         </div>
         {/* Status progress bar */}
@@ -217,18 +217,18 @@ export default function PayrollRunPage() {
       </div>
 
       {/* Pane 1 — Cycle Setup */}
-      <section className="rounded-lg border bg-card p-5">
+      <section className="rounded-lg border border-line bg-surface p-5">
         <div className="mb-3 flex items-center gap-2">
-          <CalendarDays className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Cycle Setup</h2>
+          <CalendarDays className="h-4 w-4 text-text-2" />
+          <h2 className="text-[15px] font-semibold text-text">Cycle setup</h2>
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          <Field label="Period — Month">
+          <Field label="Month">
             <select
               value={month}
               onChange={(e) => setMonth(Number(e.target.value))}
               disabled={step !== "setup"}
-              className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-60"
+              className="w-full rounded-md border border-line px-3 py-2 text-sm disabled:opacity-60"
             >
               {/* A cycle that has not ended cannot be computed — basic salary
                   would compute in full against attendance that does not exist
@@ -248,7 +248,7 @@ export default function PayrollRunPage() {
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
               disabled={step !== "setup"}
-              className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-60"
+              className="w-full rounded-md border border-line px-3 py-2 text-sm disabled:opacity-60"
             >
               {[year - 1, year, year + 1].map((y) => (
                 <option key={y} value={y}>{y}</option>
@@ -261,11 +261,11 @@ export default function PayrollRunPage() {
               value={payday}
               onChange={(e) => setPayday(e.target.value)}
               disabled={step !== "setup"}
-              className="w-full rounded-md border px-3 py-2 text-sm disabled:opacity-60"
+              className="w-full rounded-md border border-line px-3 py-2 text-sm disabled:opacity-60"
             />
           </Field>
-          <Field label="Cycle Period">
-            <div className="rounded-md border bg-sunken px-3 py-2 text-sm font-mono text-text-2">
+          <Field label="Pay period">
+            <div className="rounded-md border border-line bg-sunken px-3 py-2 text-sm font-mono text-text-2">
               {cycleStart} → {cycleEnd}
             </div>
           </Field>
@@ -282,29 +282,29 @@ export default function PayrollRunPage() {
               className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
             >
               {computing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              {computing ? "Computing…" : "Preview Compute"}
+              {computing ? "Computing…" : "Preview the run"}
             </button>
           ) : (
             <button
               onClick={() => { setStep("setup"); setRun(null); setItems([]); }}
-              className="rounded-lg border px-4 py-2 text-sm hover:bg-sunken"
+              className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-sunken"
             >
               Edit setup
             </button>
           )}
         </div>
         {err && (
-          <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>
+          <div className="mt-3 rounded-md border border-danger/30 bg-danger-soft p-3 text-sm text-danger-text">{err}</div>
         )}
       </section>
 
       {/* Pane 2 — Employees table (only after compute) */}
       {step !== "setup" && (
-        <section className="rounded-lg border bg-card p-5">
+        <section className="rounded-lg border border-line bg-surface p-5">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              <Users className="h-4 w-4 text-text-2" />
+              <h2 className="text-[15px] font-semibold text-text">
                 Employees <span className="ml-1 text-text-3">({items.length})</span>
               </h2>
             </div>
@@ -312,14 +312,14 @@ export default function PayrollRunPage() {
               placeholder="Search staff…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="rounded-md border px-3 py-1.5 text-sm"
+              className="rounded-md border border-line px-3 py-1.5 text-sm"
             />
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
+                <tr className="border-b text-left text-xs text-text-2">
                   <th className="py-2 pr-3"></th>
                   <th className="py-2 pr-3">Employee</th>
                   <th className="py-2 pr-3 text-right">Basic</th>
@@ -348,7 +348,7 @@ export default function PayrollRunPage() {
                         <td className="py-2.5 pr-3 font-medium">
                           {item.employee_name ?? item.user_id.slice(0, 8)}
                           {item.prorate_reason && (
-                            <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                            <span className="ml-2 rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-medium text-warn-text">
                               Prorated {item.prorate_days_worked}/{item.prorate_days_total}d
                             </span>
                           )}
@@ -363,9 +363,9 @@ export default function PayrollRunPage() {
                           {flags.length > 0 && (
                             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
                               flags.some((f) => f.severity === "block")
-                                ? "bg-red-100 text-red-800"
+                                ? "bg-danger-soft text-danger-text"
                                 : flags.some((f) => f.severity === "warn")
-                                  ? "bg-amber-100 text-amber-800"
+                                  ? "bg-warn-soft text-warn-text"
                                   : "bg-sunken text-text-2"
                             }`}>
                               <AlertTriangle className="h-2.5 w-2.5" />
@@ -398,7 +398,7 @@ export default function PayrollRunPage() {
                 })}
                 {filteredItems.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-sm text-muted-foreground">No employees match your search.</td>
+                    <td colSpan={9} className="py-8 text-center text-sm text-text-2">No employees match your search.</td>
                   </tr>
                 )}
               </tbody>
@@ -409,33 +409,33 @@ export default function PayrollRunPage() {
 
       {/* Pane 3 — Anomalies + Totals + Approve */}
       {step === "review" && run && (
-        <section className="rounded-lg border bg-card p-5">
+        <section className="rounded-lg border border-line bg-surface p-5">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {/* Anomalies */}
             <div>
               <div className="mb-2 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-muted-foreground" />
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                <Sparkles className="h-4 w-4 text-text-2" />
+                <h2 className="text-[15px] font-semibold text-text">
                   Anomalies
                   {totalAnomalies > 0 && (
-                    <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-800">{totalAnomalies}</span>
+                    <span className="ml-2 rounded-full bg-warn-soft px-2 py-0.5 text-[10px] text-warn-text">{totalAnomalies}</span>
                   )}
                 </h2>
               </div>
               {totalAnomalies === 0 ? (
-                <p className="text-sm text-emerald-700">✓ No anomalies detected. Ready to approve.</p>
+                <p className="text-sm text-ok-text">✓ No anomalies detected. Ready to approve.</p>
               ) : (
                 <ul className="space-y-1.5 text-xs">
                   {Array.from(anomaliesByItem.values()).flat().slice(0, 8).map((f, i) => (
                     <li key={i} className="flex items-start gap-2">
                       <span className={`mt-0.5 shrink-0 rounded px-1 text-[9px] font-bold uppercase ${
-                        f.severity === "block" ? "bg-red-100 text-red-800"
-                        : f.severity === "warn" ? "bg-amber-100 text-amber-800"
+                        f.severity === "block" ? "bg-danger-soft text-danger-text"
+                        : f.severity === "warn" ? "bg-warn-soft text-warn-text"
                         : "bg-sunken text-text-2"
                       }`}>{f.severity}</span>
                       <span>
                         {f.message}
-                        {f.fixUrl && <Link href={f.fixUrl} className="ml-2 text-blue-600 hover:underline">Fix →</Link>}
+                        {f.fixUrl && <Link href={f.fixUrl} className="ml-2 text-info-text hover:underline">Fix →</Link>}
                       </span>
                     </li>
                   ))}
@@ -449,15 +449,15 @@ export default function PayrollRunPage() {
             {/* Totals */}
             <div>
               <div className="mb-2 flex items-center gap-2">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Totals</h2>
+                <h2 className="text-[15px] font-semibold text-text">Totals</h2>
               </div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
                 <span className="text-text-2">Gross</span>
                 <span className="text-right font-mono">RM {run.total_gross.toFixed(2)}</span>
                 <span className="text-text-2">Deductions</span>
-                <span className="text-right font-mono text-red-700">− RM {run.total_deductions.toFixed(2)}</span>
+                <span className="text-right font-mono text-danger-text">− RM {run.total_deductions.toFixed(2)}</span>
                 <span className="text-text-2 font-medium">Net payout</span>
-                <span className="text-right font-mono font-semibold text-emerald-700">RM {run.total_net.toFixed(2)}</span>
+                <span className="text-right font-mono font-semibold text-ok-text">RM {run.total_net.toFixed(2)}</span>
                 <span className="text-text-2">Employer statutory</span>
                 <span className="text-right font-mono text-text-2">+ RM {run.total_employer_cost.toFixed(2)}</span>
                 <span className="col-span-2 mt-1 border-t pt-1 text-xs text-text-3">Total company outflow: RM {(run.total_net + run.total_employer_cost).toFixed(2)}</span>
@@ -470,13 +470,13 @@ export default function PayrollRunPage() {
               {canApprove ? "All checks passed. Safe to approve." : blockingCount > 0 ? `${blockingCount} blocking issue${blockingCount === 1 ? "" : "s"} must be fixed first.` : "Cycle is empty."}
             </div>
             <div className="flex items-center gap-2">
-              <Link href="/hr/payroll" className="rounded-lg border px-4 py-2 text-sm hover:bg-sunken">
-                Save Draft & Exit
+              <Link href="/hr/payroll" className="rounded-lg border border-line px-4 py-2 text-sm hover:bg-sunken">
+                Save draft and exit
               </Link>
               <button
                 onClick={approve}
                 disabled={!canApprove || confirming}
-                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {confirming ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 Approve & Generate
@@ -487,10 +487,10 @@ export default function PayrollRunPage() {
       )}
 
       {step === "approved" && (
-        <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-8 text-center">
-          <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
-          <p className="mt-2 text-lg font-semibold text-emerald-900">Cycle approved. Redirecting…</p>
-          <p className="text-sm text-emerald-700">Payslips are generating. You can send them from the payroll dashboard.</p>
+        <section className="rounded-lg border border-ok/30 bg-ok-soft p-8 text-center">
+          <CheckCircle2 className="mx-auto h-10 w-10 text-ok-text" />
+          <p className="mt-2 text-lg font-semibold text-ok-text">Cycle approved. Redirecting…</p>
+          <p className="text-sm text-ok-text">Payslips are generating. You can send them from the payroll dashboard.</p>
         </section>
       )}
     </div>
@@ -502,7 +502,7 @@ export default function PayrollRunPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-text-2">{label}</span>
       {children}
     </label>
   );
@@ -523,7 +523,7 @@ function StepIndicator({ step }: { step: Step }) {
         return (
           <div key={s.key} className="flex items-center gap-1.5">
             <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
-              done ? "bg-emerald-500 text-on-ink"
+              done ? "bg-ok-soft text-ok-text"
               : active ? "bg-ink text-on-ink"
               : "bg-line text-text-2"
             }`}>
@@ -586,7 +586,7 @@ function EmployeeBreakdown({
       <div className="grid grid-cols-1 gap-4 text-xs md:grid-cols-3">
         {/* Earnings */}
         <div>
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-text-2">Earnings</p>
+          <p className="mb-1 text-[12px] font-semibold text-text-2">Earnings</p>
           <EditableRow
             label={earnLines[0].label}
             detail={earnLines[0].detail}
@@ -632,7 +632,7 @@ function EmployeeBreakdown({
             ))}
           <Row label="Gross" value={item.total_gross} bold />
           {item.prorate_reason && (
-            <p className="mt-1 text-[10px] italic text-amber-700">
+            <p className="mt-1 text-[10px] italic text-warn-text">
               Prorated ({item.prorate_reason}): {item.prorate_days_worked}/{item.prorate_days_total} days
             </p>
           )}
@@ -640,7 +640,7 @@ function EmployeeBreakdown({
 
         {/* Deductions */}
         <div>
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-text-2">Deductions (Employee)</p>
+          <p className="mb-1 text-[12px] font-semibold text-text-2">Deductions (employee)</p>
           <EditableRow label="EPF" value={item.epf_employee} field="epf_employee" item={item} editable={editable} onItemUpdated={onItemUpdated} />
           <EditableRow label="SOCSO" value={item.socso_employee} field="socso_employee" item={item} editable={editable} onItemUpdated={onItemUpdated} />
           <EditableRow label="EIS" value={item.eis_employee} field="eis_employee" item={item} editable={editable} onItemUpdated={onItemUpdated} />
@@ -662,9 +662,9 @@ function EmployeeBreakdown({
               ) : null;
             })}
           <Row label="Total" value={item.total_deductions} bold />
-          <p className="mt-2 font-semibold text-emerald-700">Net: RM {item.net_pay.toFixed(2)}</p>
+          <p className="mt-2 font-semibold text-ok-text">Net: RM {item.net_pay.toFixed(2)}</p>
           {statutoryStale && (
-            <p className="mt-1 rounded bg-amber-50 p-1.5 text-[10px] text-amber-800">
+            <p className="mt-1 rounded bg-warn-soft p-1.5 text-[10px] text-warn-text">
               ⚠ Statutory stale — re-run cycle Recompute to refresh EPF/SOCSO/EIS/PCB.
             </p>
           )}
@@ -672,15 +672,15 @@ function EmployeeBreakdown({
 
         {/* Employer + flags */}
         <div>
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-text-2">Employer Contributions</p>
+          <p className="mb-1 text-[12px] font-semibold text-text-2">Employer contributions</p>
           <EditableRow label="EPF" value={item.epf_employer} field="epf_employer" item={item} editable={editable} onItemUpdated={onItemUpdated} />
           <EditableRow label="SOCSO" value={item.socso_employer} field="socso_employer" item={item} editable={editable} onItemUpdated={onItemUpdated} />
           <EditableRow label="EIS" value={item.eis_employer} field="eis_employer" item={item} editable={editable} onItemUpdated={onItemUpdated} />
           {flags.length > 0 && (
             <div className="mt-2 space-y-1">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-700">Flags</p>
+              <p className="text-[12px] font-semibold text-warn-text">Flags</p>
               {flags.map((f, i) => (
-                <p key={i} className="rounded bg-amber-50 p-1.5 text-[10px] text-amber-900">
+                <p key={i} className="rounded bg-warn-soft p-1.5 text-[10px] text-warn-text">
                   {f.message}
                 </p>
               ))}
@@ -690,14 +690,14 @@ function EmployeeBreakdown({
       </div>
 
       {/* Ad-hoc adjustments + per-employee payslip */}
-      <div className="rounded-md border bg-surface p-3">
+      <div className="rounded-md border border-line bg-surface p-3">
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-2">
+          <p className="text-[12px] font-semibold text-text-2">
             Ad-hoc Adjustments
           </p>
           <a
             href={`/api/hr/payroll/payslip?run_id=${runId}&user_id=${item.user_id}`}
-            className="flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-medium text-text-2 hover:bg-muted"
+            className="flex items-center gap-1 rounded border border-line px-2 py-1 text-[10px] font-medium text-text-2 hover:bg-sunken"
           >
             <FileText className="h-3 w-3" /> Download payslip
           </a>
@@ -757,11 +757,11 @@ function EmployeeBreakdown({
 
 function prettyLabel(code: string): string {
   const map: Record<string, string> = {
-    attendance: "Attendance Allowance",
-    performance: "Performance Allowance",
-    unpaid_leave: "Unpaid Leave",
+    attendance: "Attendance allowance",
+    performance: "Performance allowance",
+    unpaid_leave: "Unpaid leave",
     zakat: "Zakat",
-    review_penalty: "Review Penalty",
+    review_penalty: "Review penalty",
   };
   return map[code] || code.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -831,9 +831,9 @@ function AdjustmentRow({
   };
 
   return (
-    <li className="flex items-center gap-2 rounded border bg-sunken/60 px-2 py-1.5 text-[11px]">
+    <li className="flex items-center gap-2 rounded border border-line bg-sunken/60 px-2 py-1.5 text-[11px]">
       <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
-        kind === "allowance" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+        kind === "allowance" ? "bg-ok-soft text-ok-text" : "bg-danger-soft text-danger-text"
       }`}>{kind === "allowance" ? "+" : "−"}</span>
       <span className="min-w-0 flex-1 truncate">{label} <span className="text-text-3">· {code}</span></span>
       {editing ? (
@@ -851,19 +851,19 @@ function AdjustmentRow({
               if (e.key === "Escape") setEditing(false);
             }}
             disabled={saving}
-            className="w-20 rounded border bg-surface px-1 py-0.5 text-right font-mono text-[10px]"
+            className="w-20 rounded border border-line bg-surface px-1 py-0.5 text-right font-mono text-[10px]"
           />
           <button
             onClick={save}
             disabled={saving}
-            className="rounded bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-emerald-700"
+            className="rounded bg-ink px-1.5 py-0.5 text-[9px] font-bold text-on-ink hover:bg-ink-hover"
           >
             {saving ? "…" : "✓"}
           </button>
           <button
             onClick={() => setEditing(false)}
             disabled={saving}
-            className="rounded border px-1.5 py-0.5 text-[9px] text-text-2"
+            className="rounded border border-line px-1.5 py-0.5 text-[9px] text-text-2"
           >
             ✕
           </button>
@@ -872,7 +872,7 @@ function AdjustmentRow({
         <button
           onClick={() => editable && setEditing(true)}
           disabled={!editable}
-          className="rounded px-1 font-mono font-semibold tabular-nums hover:bg-amber-50 disabled:cursor-default disabled:hover:bg-transparent"
+          className="rounded px-1 font-mono font-semibold tabular-nums hover:bg-warn-soft disabled:cursor-default disabled:hover:bg-transparent"
           title={editable ? "Click to edit" : ""}
         >
           RM {amount.toFixed(2)}
@@ -881,7 +881,7 @@ function AdjustmentRow({
       {editable && !editing && (
         <button
           onClick={onRemove}
-          className="rounded border border-red-200 bg-red-50 p-0.5 text-red-600 hover:bg-red-100"
+          className="rounded border border-danger/30 bg-danger-soft p-0.5 text-danger-text hover:bg-danger-soft"
           title="Remove"
         >
           <Trash2 className="h-3 w-3" />
@@ -920,7 +920,7 @@ function PreflightPanel({ month, year }: { month: number; year: number }) {
 
   if (!data) {
     return (
-      <div className="mt-4 rounded-md border bg-sunken p-3 text-xs text-text-2">
+      <div className="mt-4 rounded-md border border-line bg-sunken p-3 text-xs text-text-2">
         <Loader2 className="mr-2 inline h-3 w-3 animate-spin" />
         Checking employee readiness…
       </div>
@@ -932,10 +932,10 @@ function PreflightPanel({ month, year }: { month: number; year: number }) {
   const allClean = summary.blocked === 0 && summary.warning === 0;
 
   return (
-    <div className="mt-4 rounded-md border bg-sunken p-3">
+    <div className="mt-4 rounded-md border border-line bg-sunken p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-semibold uppercase tracking-wide text-text-2">Pre-run check</span>
-        <span className="rounded bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">Full-timers only</span>
+        <span className="font-semibold text-text">Pre-run check</span>
+        <span className="rounded bg-info-soft px-2 py-0.5 text-[10px] font-medium text-info-text">Full-timers only</span>
         <Pill color="emerald" label={`${summary.ready} ready`} />
         {summary.warning > 0 && <Pill color="amber" label={`${summary.warning} warning`} />}
         {summary.blocked > 0 && <Pill color="red" label={`${summary.blocked} blocked`} />}
@@ -945,13 +945,13 @@ function PreflightPanel({ month, year }: { month: number; year: number }) {
         )}
         {(summary.excluded_non_full_time ?? 0) > 0 && (
           <span className="rounded-full bg-sunken px-2 py-0.5 text-[10px] text-text-2">
-            {summary.excluded_non_full_time} non-full-time → <Link href="/hr/payroll/weekly" className="text-blue-600 hover:underline">weekly</Link>
+            {summary.excluded_non_full_time} non-full-time → <Link href="/hr/payroll/weekly" className="text-info-text hover:underline">weekly</Link>
           </span>
         )}
       </div>
 
       {allClean ? (
-        <p className="mt-1 text-xs text-emerald-700">
+        <p className="mt-1 text-xs text-ok-text">
           ✓ All {summary.ready} eligible employees have complete data. Safe to compute.
         </p>
       ) : (
@@ -963,20 +963,20 @@ function PreflightPanel({ month, year }: { month: number; year: number }) {
           </p>
           <button
             onClick={() => setShowAll((v) => !v)}
-            className="mt-1 text-[11px] font-medium text-blue-600 hover:underline"
+            className="mt-1 text-[11px] font-medium text-info-text hover:underline"
           >
             {showAll ? "Hide details" : `Show ${issuesOnly.length} issue${issuesOnly.length === 1 ? "" : "s"}`}
           </button>
           {showAll && (
             <ul className="mt-2 space-y-1.5">
               {issuesOnly.map((r) => (
-                <li key={r.user_id} className="rounded border bg-surface px-2 py-1.5 text-[11px]">
+                <li key={r.user_id} className="rounded border border-line bg-surface px-2 py-1.5 text-[11px]">
                   <div className="flex items-center gap-2">
                     <Pill
                       color={r.status === "blocked" ? "red" : "amber"}
                       label={r.status}
                     />
-                    <Link href={`/hr/employees/${r.user_id}`} className="font-medium text-blue-600 hover:underline">
+                    <Link href={`/hr/employees/${r.user_id}`} className="font-medium text-info-text hover:underline">
                       {r.name}
                     </Link>
                     <span className="text-text-3">· {r.employment_type}</span>
@@ -998,12 +998,12 @@ function PreflightPanel({ month, year }: { month: number; year: number }) {
 
 function Pill({ color, label }: { color: "emerald" | "amber" | "red" | "gray"; label: string }) {
   const cls = {
-    emerald: "bg-emerald-100 text-emerald-700",
-    amber: "bg-amber-100 text-amber-800",
-    red: "bg-red-100 text-red-700",
+    emerald: "bg-ok-soft text-ok-text",
+    amber: "bg-warn-soft text-warn-text",
+    red: "bg-danger-soft text-danger-text",
     gray: "bg-sunken text-text-2",
   }[color];
-  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase ${cls}`}>{label}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{label}</span>;
 }
 
 function AdjustmentForm({
@@ -1081,7 +1081,7 @@ function AdjustmentForm({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="mt-1 flex items-center gap-1 rounded border border-dashed px-2 py-1 text-[10px] text-text-2 hover:bg-muted"
+        className="mt-1 flex items-center gap-1 rounded border border-dashed px-2 py-1 text-[10px] text-text-2 hover:bg-sunken"
       >
         <Plus className="h-3 w-3" /> Add adjustment
       </button>
@@ -1089,9 +1089,9 @@ function AdjustmentForm({
   }
 
   return (
-    <div className="mt-2 space-y-2 rounded border bg-muted/20 p-2">
+    <div className="mt-2 space-y-2 rounded border border-line bg-sunken p-2">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <select value={code} onChange={(e) => setCode(e.target.value)} className="rounded border bg-background px-2 py-1.5 text-xs">
+        <select value={code} onChange={(e) => setCode(e.target.value)} className="rounded border border-line bg-surface px-2 py-1.5 text-xs">
           <option value="">Select item…</option>
           {catalog.map((c) => (
             <option key={c.code} value={c.code}>
@@ -1106,18 +1106,18 @@ function AdjustmentForm({
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="Amount (RM)"
-          className="rounded border bg-background px-2 py-1.5 text-xs"
+          className="rounded border border-line bg-surface px-2 py-1.5 text-xs"
         />
         <input
           type="text"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Note (optional)"
-          className="rounded border bg-background px-2 py-1.5 text-xs"
+          className="rounded border border-line bg-surface px-2 py-1.5 text-xs"
         />
       </div>
       {isArrears && kind === "allowance" && (
-        <label className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+        <label className="flex flex-wrap items-center gap-2 text-[10px] text-text-2">
           For a previous year?
           <input
             type="number"
@@ -1126,20 +1126,20 @@ function AdjustmentForm({
             value={relatesToYear}
             onChange={(e) => setRelatesToYear(e.target.value)}
             placeholder="e.g. 2025"
-            className="w-20 rounded border bg-background px-2 py-1 text-xs"
+            className="w-20 rounded border border-line bg-surface px-2 py-1 text-xs"
           />
           <span>Fill only if these arrears are pay for an earlier year (reported in EA B.2). Leave blank for this year&apos;s months.</span>
         </label>
       )}
       {selected && (
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-[10px] text-text-2">
           Will record as <strong>{kind === "allowance" ? "Earning" : "Post-tax Deduction"}</strong>.
           Statutory totals stay untouched — re-run Recompute if PCB needs to follow.
         </p>
       )}
-      {err && <p className="text-[10px] text-red-600">{err}</p>}
+      {err && <p className="text-[10px] text-danger-text">{err}</p>}
       <div className="flex justify-end gap-2">
-        <button onClick={reset} className="rounded border px-2 py-1 text-[10px] hover:bg-sunken">Cancel</button>
+        <button onClick={reset} className="rounded border border-line px-2 py-1 text-[10px] hover:bg-sunken">Cancel</button>
         <button
           onClick={submit}
           disabled={saving}
@@ -1247,7 +1247,7 @@ function EditableRow({
         {wasOverridden && (
           <span
             title="Manually overridden"
-            className="rounded bg-amber-100 px-1 py-0.5 text-[8px] font-bold uppercase text-amber-800"
+            className="rounded bg-warn-soft px-1 py-0.5 text-[8px] font-bold uppercase text-warn-text"
           >
             edit
           </span>
@@ -1268,19 +1268,19 @@ function EditableRow({
               if (e.key === "Escape") cancel();
             }}
             disabled={saving}
-            className="w-20 rounded border bg-surface px-1 py-0.5 text-right font-mono text-[11px] disabled:opacity-50"
+            className="w-20 rounded border border-line bg-surface px-1 py-0.5 text-right font-mono text-[11px] disabled:opacity-50"
           />
           <button
             onClick={save}
             disabled={saving}
-            className="rounded bg-emerald-600 px-1.5 py-0.5 text-[9px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+            className="rounded bg-ink px-1.5 py-0.5 text-[9px] font-bold text-on-ink hover:bg-ink-hover disabled:opacity-50"
           >
             {saving ? "…" : "✓"}
           </button>
           <button
             onClick={cancel}
             disabled={saving}
-            className="rounded border px-1.5 py-0.5 text-[9px] text-text-2 hover:bg-sunken"
+            className="rounded border border-line px-1.5 py-0.5 text-[9px] text-text-2 hover:bg-sunken"
           >
             ✕
           </button>
@@ -1288,7 +1288,7 @@ function EditableRow({
       ) : (
         <button
           onClick={startEdit}
-          className="rounded px-1 font-mono text-text hover:bg-amber-50"
+          className="rounded px-1 font-mono text-text hover:bg-warn-soft"
           title="Click to edit"
         >
           RM {value.toFixed(2)}
