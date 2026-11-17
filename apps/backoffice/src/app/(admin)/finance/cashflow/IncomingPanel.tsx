@@ -33,7 +33,7 @@ type Forecast = {
 const ENTITY_LABEL: Record<string, string> = {
   celsius: "Shah Alam + Nilai",
   celsiusconezion: "Putrajaya",
-  celsiustamarind: "Cyberjaya",
+  celsiustamarind: "Tamarind",
 };
 const CHANNEL_LABEL: Record<Channel, string> = { online: "Online", card: "Card", qr: "QR", consignment: "Consignment", grab: "Grab" };
 const CHANNEL_ORDER: Channel[] = ["card", "online", "qr", "consignment", "grab"];

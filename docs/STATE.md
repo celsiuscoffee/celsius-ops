@@ -11,6 +11,13 @@ current month.
 
 ## Verified facts
 
+- 2026-11-17 — **Owner approved the pay, Money and Payment requests redesign** (layout and
+  words only) for merge. Outlet labels that said "Cyberjaya" for Tamarind now say "Tamarind"
+  (Cash flow incoming panel, Reports entity label, cash-in recon agent, the three fallback
+  shift template labels; ids unchanged). "Cyberjaya" stays where it is the city: ad and
+  geogrid targeting (`OUTLET_CITIES`, geogrid keywords), review-reply area names, and the AI
+  prompts that tell agents staff call the outlet "Cyberjaya".
+
 - 2026-11-17 — **Money, pay pages and Payment requests on the page pattern, layout and words
   only** (PR celsiuscoffee/celsius-ops#1278). Built by two forks in separate git worktrees (no
   clashes this time). Checked the diff: no calculation, API, approval or payment change. Owner

@@ -2782,7 +2782,7 @@ type CashInReport = { from: string; to: string; rows: CashInRow[]; totals: { rev
 const CASHIN_ENTITY: Record<string, string> = {
   celsius: "Shah Alam + Nilai (SB)",
   celsiusconezion: "Putrajaya (Conezion)",
-  celsiustamarind: "Cyberjaya (Tamarind)",
+  celsiustamarind: "Tamarind",
   group: "Group",
 };
 const CASHIN_CHANNEL: Record<string, string> = { card: "Card", qr: "DuitNow QR", online: "Online (RM)", grab: "GrabFood", consignment: "Consignment" };
