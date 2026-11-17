@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { Search, MoreHorizontal, X, Download, Eye, Pencil, Trash2, Store, AlertTriangle, Filter, ChevronDown, ChevronLeft, ChevronRight, Plus, Tag, Save, Bookmark, MessageSquare, Send, Phone, Loader2, Coins, Crown } from "lucide-react";
+import { Search, MoreHorizontal, X, Download, Eye, Pencil, Trash2, Store, AlertTriangle, Filter, ChevronDown, ChevronLeft, ChevronRight, Plus, Tag, Save, Bookmark, MessageSquare, Phone, Loader2, Coins, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchMembers, fetchMembersPage, fetchRewards } from "@/lib/loyalty/api";
 import type { MemberWithBrand, Reward } from "@/lib/loyalty/types";
@@ -13,6 +13,8 @@ import {
 } from "@/lib/loyalty/utils";
 import { exportToCSV } from "@/lib/loyalty/export";
 import { toast } from "@celsius/ui";
+import { useRouter } from "next/navigation";
+import { savePickedPhones } from "@/lib/sms-handoff";
 
 // ─── Segment helpers ────────────────────────────────────
 type Segment = "all" | "returning" | "new" | "eligible";
@@ -175,6 +177,7 @@ function mapMember(m: MemberWithBrand): MappedMember {
 }
 
 export default function MembersPage() {
+  const router = useRouter();
   // Server-side paginated data (fast default view)
   const [serverMembers, setServerMembers] = useState<MappedMember[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
@@ -250,10 +253,6 @@ export default function MembersPage() {
   const [pageSize, setPageSize] = useState(50);
 
   // Bulk SMS
-  const [showSmsModal, setShowSmsModal] = useState(false);
-  const [smsMessage, setSmsMessage] = useState("");
-  const [smsSending, setSmsSending] = useState(false);
-  const [smsResult, setSmsResult] = useState<{ sent: number; failed: number } | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkTagModal, setShowBulkTagModal] = useState(false);
@@ -735,31 +734,14 @@ export default function MembersPage() {
     setEditingMember(null);
   }
 
-  // ─── Bulk SMS handler ──────────────────────────────
-  async function handleBulkSms() {
-    if (!smsMessage.trim() || selectedRows.size === 0) return;
-    setSmsSending(true);
-    setSmsResult(null);
+  // ─── Send SMS: hand the picked members to Marketing › Messages ───────
+  // One SMS tool (step 5): Messages applies the PDPA opt-out filter, credit
+  // check, sender name and confirm step (lib/sms-handoff.ts).
+  function handleSendSms() {
+    if (selectedRows.size === 0) return;
     const source = allLoaded ? allMembers : serverMembers;
-    const phones = source
-      .filter((m) => selectedRows.has(m.id))
-      .map((m) => m.phone);
-    try {
-      const res = await fetch("/api/loyalty/sms/blast", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brand_id: "brand-celsius", phones, message: smsMessage }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSmsResult({ sent: data.sent, failed: data.failed });
-      } else {
-        toast.error(data.error || "Failed to send SMS");
-      }
-    } catch {
-      toast.error("Failed to send SMS. Please try again.");
-    }
-    setSmsSending(false);
+    savePickedPhones(source.filter((m) => selectedRows.has(m.id)).map((m) => m.phone));
+    router.push("/loyalty/engage?tab=sms&audience=picked");
   }
 
   // ─── Bulk delete handler ──────────────────────────
@@ -1496,7 +1478,7 @@ export default function MembersPage() {
           )}
           <div className="h-4 w-px bg-gray-200 dark:bg-neutral-700" />
           <button
-            onClick={() => { setShowSmsModal(true); setSmsMessage(""); setSmsResult(null); }}
+            onClick={handleSendSms}
             className="inline-flex items-center gap-1.5 rounded-lg bg-[#C2452D] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#A33822] transition-colors"
           >
             <MessageSquare className="h-3.5 w-3.5" />
@@ -2283,79 +2265,6 @@ export default function MembersPage() {
           </div>
         </div>
       )}
-      {/* ── SMS Blast Modal ──────────────────────────── */}
-      {showSmsModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 pt-10 pb-10">
-          <div className="relative w-full max-w-md md:max-w-2xl rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl">
-            <button
-              onClick={() => setShowSmsModal(false)}
-              className="absolute right-4 top-4 rounded-lg p-1 text-gray-400 dark:text-neutral-500 hover:bg-gray-100 dark:hover:bg-neutral-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <div className="flex items-center gap-2 mb-4">
-              <MessageSquare className="h-5 w-5 text-[#C2452D]" />
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Send SMS</h2>
-            </div>
-
-            <p className="text-sm text-gray-500 dark:text-neutral-400 mb-4">
-              Sending to <span className="font-medium text-gray-900 dark:text-white">{selectedRows.size}</span> member{selectedRows.size > 1 ? "s" : ""}
-            </p>
-
-            {smsResult ? (
-              <div className="space-y-3">
-                <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 text-center">
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{smsResult.sent.toLocaleString()}</p>
-                  <p className="text-sm text-green-700 dark:text-green-300">SMS sent successfully</p>
-                  {smsResult.failed > 0 && (
-                    <p className="mt-1 text-xs text-red-500">{smsResult.failed.toLocaleString()} failed</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => { setShowSmsModal(false); setSelectedRows(new Set()); }}
-                  className="w-full rounded-lg bg-gray-100 dark:bg-neutral-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-600"
-                >
-                  Done
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-neutral-300">Message</label>
-                  <textarea
-                    rows={4}
-                    value={smsMessage}
-                    onChange={(e) => setSmsMessage(e.target.value)}
-                    placeholder="Type your message here..."
-                    className="w-full rounded-lg border border-gray-300 dark:border-neutral-600 px-3 py-2 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D] dark:bg-neutral-700 dark:text-white"
-                  />
-                  <p className="mt-1 text-xs text-gray-400 dark:text-neutral-500">
-                    {smsMessage.length} characters · ~{Math.ceil(smsMessage.length / 160) || 1} SMS per recipient · {selectedRows.size * (Math.ceil(smsMessage.length / 160) || 1)} credits total
-                  </p>
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    onClick={() => setShowSmsModal(false)}
-                    className="rounded-lg border border-gray-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleBulkSms}
-                    disabled={smsSending || !smsMessage.trim()}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[#C2452D] px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#A33822] disabled:opacity-50"
-                  >
-                    {smsSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    {smsSending ? "Sending..." : `Send to ${selectedRows.size}`}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── Bulk Delete Confirmation ───────────────────── */}
       {bulkDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !bulkDeleting && setBulkDeleteConfirm(false)}>

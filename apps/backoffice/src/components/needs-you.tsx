@@ -19,7 +19,7 @@ export function NeedsYou() {
   const { data, isLoading } = useInbox();
   const items = sortInbox(data?.items ?? []);
   const top = items.slice(0, 5);
-  const now = data?.counts.now ?? 0;
+  const now = data?.counts?.now ?? 0;
 
   return (
     <section aria-label="Needs you" className="flex flex-col overflow-hidden rounded-card border border-line bg-surface">

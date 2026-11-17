@@ -166,6 +166,8 @@ export const NAV_SECTIONS: NavSection[] = [
           // Per-cashier till numbers (docs/design/cashier-performance-dashboard.md);
           // the till's own cashier scorecard reads the same metrics.
           { label: "Cashier Performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,     moduleKey: "sales:reports" },
+          // Pickup app orders, revenue and engagement (the old /pickup dashboard redirects here).
+          { label: "Pickup App",          href: "/pickup/analytics",        icon: <ShoppingBag className={ICON_SIZE} />, moduleKey: "sales:reports" },
         ],
       },
     ],
@@ -465,6 +467,9 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "SOPs",
         items: [
           { label: "SOPs", href: "/ops/sops", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "ops:sops" },
+          // Recurring SOP checklists per outlet and staff, with Coverage on top
+          // (the old /ops/compliance page redirects here).
+          { label: "Schedules", href: "/ops/schedules", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "ops:checklists" },
         ],
       },
       {

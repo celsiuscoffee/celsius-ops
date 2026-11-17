@@ -34,6 +34,7 @@ import { fetchMembers } from "@/lib/loyalty/api";
 import Link from "next/link";
 import type { MemberWithBrand } from "@/lib/loyalty/types";
 import PushRemindersTab from "./_components/PushRemindersTab";
+import { clearPickedPhones, readPickedPhones } from "@/lib/sms-handoff";
 
 // ---------------------------------------------------------------------------
 // Top-level surfaces inside Engage. Push reminders is the auto/triggered
@@ -237,6 +238,8 @@ export default function NotificationsPage() {
   const [formChannel, setFormChannel] = useState<Channel>("sms");
   const [formSenderId, setFormSenderId] = useState("CelsiusCoffee");
   const [formAudience, setFormAudience] = useState("all");
+  // Members picked on Customers › Members and handed over here (lib/sms-handoff.ts).
+  const [pickedPhones, setPickedPhones] = useState<string[]>([]);
   const [formMessage, setFormMessage] = useState("");
   const [formScheduleType, setFormScheduleType] = useState<"now" | "later">(
     "now"
@@ -365,12 +368,26 @@ export default function NotificationsPage() {
       .catch(() => setSmsRecipientPhones(new Set()));
   }, [activeSmsFilter?.value]);
 
+  // Arriving from Members with picked customers: open the composer on them.
+  useEffect(() => {
+    if (searchParams?.get("audience") !== "picked") return;
+    const phones = readPickedPhones();
+    if (phones.length === 0) return;
+    setPickedPhones(phones);
+    setTopTab("sms");
+    setFormChannel("sms");
+    setFormAudience("picked");
+    setShowComposeModal(true);
+  }, [searchParams]);
+  const pickedSet = useMemo(() => new Set(pickedPhones), [pickedPhones]);
+
   // Get target phones based on audience
   function getTargetMembers() {
     return allMembers
       .filter((m) => {
         // PDPA: Exclude members who opted out of SMS marketing
         if (m.sms_opt_out === true) return false;
+        if (formAudience === "picked") return pickedSet.has(m.phone);
         if (formAudience === "all") return true;
         if (formAudience === "new") return (m.brand_data?.total_visits ?? 0) <= 1;
         if (formAudience === "returning") return (m.brand_data?.total_visits ?? 0) >= 3;
@@ -489,13 +506,14 @@ export default function NotificationsPage() {
       const result = await res.json();
       if (res.ok) {
         setSmsSentThisMonth((prev) => prev + result.sent);
+        if (formAudience === "picked") { clearPickedPhones(); setPickedPhones([]); setFormAudience("all"); }
         refreshSmsBalance();
         // Add to messages list
         const newMsg: NotificationMessage = {
           id: `msg-${Date.now()}`,
           message: formMessage.trim(),
           channel: formChannel as Channel,
-          audience: audienceOptions.find((o) => o.value === formAudience)?.label ?? formAudience,
+          audience: formAudience === "picked" ? `Members you picked (${phones.length})` : audienceOptions.find((o) => o.value === formAudience)?.label ?? formAudience,
           sent: result.sent,
           delivered: result.sent - result.failed,
           status: "sent",
@@ -1235,6 +1253,9 @@ export default function NotificationsPage() {
                       }}
                       className="w-full appearance-none rounded-lg border border-gray-300 px-3 py-2 pr-8 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
                     >
+                      {pickedPhones.length > 0 && (
+                        <option value="picked">Members you picked ({pickedPhones.length})</option>
+                      )}
                       {audienceOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}

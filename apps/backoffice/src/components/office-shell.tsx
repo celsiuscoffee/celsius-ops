@@ -81,7 +81,7 @@ export function Rail({ user, onLogout, extra }: { user: UserProfile; onLogout: (
   const settingsOn = settings ? pathMatchesSection(pathname, settings) : false;
   const visibleRail = rail.filter((s) => getVisibleItems(s, user)[0]);
   const { data: inbox } = useInbox();
-  const inboxCount = inbox?.counts.total ?? 0;
+  const inboxCount = inbox?.counts?.total ?? 0;
 
   return (
     <>
@@ -303,7 +303,7 @@ export function PhoneTabBar({ user }: { user: UserProfile }) {
   };
   const sales = sectionHref("Sales");
   const { data: inbox } = useInbox();
-  const inboxCount = inbox?.counts.total ?? 0;
+  const inboxCount = inbox?.counts?.total ?? 0;
   const item = (on: boolean) =>
     "flex flex-1 flex-col items-center gap-[3px] pt-2 text-[11px] " + (on ? "font-semibold text-text" : "text-text-2");
 

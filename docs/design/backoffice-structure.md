@@ -135,7 +135,7 @@ Peachi wordmark, Space Grotesk, Geist Mono) and approved this order:
 | 3 | Today + Inbox (one queue of decisions) | **Done 12 Nov** (v1 read-only) |
 | 4 | HR › Roster (replaces Schedules, Attendance, Roster attendance, Overtime, Leave, Shift swaps) + staff-app shift card with Clock in | **Done 16 Nov** (A. Roster; B. staff-app shift on the Today clock card) |
 | 4½ | Declutter: menu regrouped by first principles (87 links → 36 pages), page-visit tracking (§2c) | **Done 17 Nov** |
-| 5 | Merges (list B): Perishables → Items, Pickup landing/analytics, SOP compliance, Monthly cashflow, one SMS tool | |
+| 5 | Merges (list B): Perishables → Items, Pickup landing/analytics, SOP compliance, Monthly cashflow, one SMS tool | **Done 17 Nov** (§2d) |
 | 6 | Remaining sections moved to the new UI | |
 
 **List A, removed 12 Nov** (each old URL redirects; no feature lived only there):
@@ -239,6 +239,16 @@ change). Settings › System › Office Usage shows views, people, phone share a
 the menu pages nobody opened in 30 days. **Around 17 Dec 2026: remove or
 re-home what nobody opened.** Pinned by `lib/nav-structure.test.ts` (≤ 36 menu
 pages) and `lib/usage.test.ts`.
+
+## 2d. Step 5: merges (17 Nov 2026)
+
+| Merge | What changed | Why |
+|---|---|---|
+| Perishables → Ingredients | One editor, `components/inventory/items-page.tsx` (`ItemsPage kind`); both URLs and grants kept | Perishables was a 1,058-line drifted copy: no supplier search, no package-linked supplier prices, and its edit form opened with an empty supplier list, so saving dropped the item's suppliers |
+| Pickup dashboard → Pickup app | `/pickup` redirects to `/pickup/analytics`, now Sales › Reports › Pickup App (`sales:reports`) | Its charts repeated analytics; its other cards (live orders, low stock, new members) already live in Sales › Orders, Stock › Overview, Customers › Members |
+| SOP Compliance → SOP Schedules | Coverage panel on top of `/ops/schedules` (gaps first, covered on request; refreshes after each schedule change); `/ops/compliance` redirects; Schedules is now Standards › SOPs › Schedules (`ops:checklists`, which had no menu home) | Both were linked from nowhere; the gaps are fixed on Schedules |
+| Monthly cash flow | Already a tab under Money › Cash Flow (step 4½) | — |
+| One SMS tool | Customers › Members "Send SMS" hands the picked phones to Marketing › Messages (`lib/sms-handoff.ts`, sessionStorage, 30 min); the Members blast composer is gone | The Members sender skipped the PDPA opt-out filter, the credit check, the sender name and the confirm step that Messages applies |
 
 ## 3. Every page, sorted into its section
 

@@ -11,6 +11,13 @@ current month.
 
 ## Verified facts
 
+- 2026-11-17 — **Restructure step 5 (list B merges) built**, PR celsiuscoffee/celsius-ops#1278,
+  `docs/design/backoffice-structure.md` §2d: Perishables shares the Ingredients editor (fixes the
+  old copy dropping suppliers on edit), `/pickup` → Pickup App under Sales › Reports, SOP
+  Compliance → Coverage panel on SOP Schedules (Standards › SOPs › Schedules), one SMS tool
+  (Members hands picked phones to Messages, which applies the PDPA opt-out filter the Members
+  sender skipped). Rail/Inbox counts read `counts?.` defensively. Not yet tried on live data.
+
 - 2026-11-17 — **Backoffice declutter built** (PR celsiuscoffee/celsius-ops#1278,
   `docs/design/backoffice-structure.md` §2c): menu regrouped by first principles, 87 links →
   36 pages (sections Sales · Customers · Marketing · Menu · Stock · Procurement · Team · Money ·

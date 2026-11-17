@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Loader2, Trash2, Calendar, User, Clock, CalendarDays } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
+import { mutate as refreshKey } from "swr";
+import { SopCoverage } from "./_coverage";
 
 type Sop = { id: string; title: string; category: { name: string } };
 type Outlet = { id: string; code: string; name: string };
@@ -119,6 +121,7 @@ export default function SchedulesPage() {
       }
       setDialogOpen(false);
       mutate();
+      refreshKey("/api/ops/compliance");
     } catch {
       setError("Connection error");
     } finally {
@@ -130,6 +133,7 @@ export default function SchedulesPage() {
     if (!confirm("Remove this schedule?")) return;
     await fetch(`/api/ops/schedules/${id}`, { method: "DELETE" });
     mutate();
+    refreshKey("/api/ops/compliance");
   };
 
   const toggleActive = async (schedule: Schedule) => {
@@ -139,6 +143,7 @@ export default function SchedulesPage() {
       body: JSON.stringify({ isActive: !schedule.isActive }),
     });
     mutate();
+    refreshKey("/api/ops/compliance");
   };
 
   // Filter staff by selected outlet
@@ -160,6 +165,8 @@ export default function SchedulesPage() {
           <Plus className="mr-2 h-4 w-4" />New Schedule
         </Button>
       </div>
+
+      <SopCoverage />
 
       {isLoading ? (
         <div className="flex justify-center py-12">
