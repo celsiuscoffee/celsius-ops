@@ -328,10 +328,10 @@ times, phone fit) on the rest. New tested helpers: `lib/orders-summary.ts`,
 `lib/reviews-summary.ts`. Untouched until the owner decides: payroll and pay
 pages (payroll, allowances, PT rates, performance, review penalties,
 compliance), Payment requests, the Money section, and the Invoices payment
-pop-ups. Thresholds that are guesses for the owner: food cost amber above
+pop-ups. Thresholds approved by the owner (17 Nov 2026), along with waste over +10%, in transit over 2 days and count match under 90%: food cost amber above
 35% (Recipes), order waiting amber over 15 minutes (Orders), outlets under 80%
 of round target (Sales dashboard). Prep recipes' "Central Prep price" is now
-"Listed price" (the field is still `transferPrice`; Celsius has no central
+"Listed price" (owner approved, 17 Nov) (the field is still `transferPrice`; Celsius has no central
 kitchen). Tidy-up done the same day: `pos/_ReportsTabs.tsx` uses underline tabs,
 `components/hr/page-header.tsx` uses the page title style (back link reads
 "Team"), `EditOrderModal.tsx` is on tokens with an espresso save button, and
