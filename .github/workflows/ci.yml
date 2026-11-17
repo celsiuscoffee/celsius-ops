@@ -6,12 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-# The backoffice outgrew the runner's default ~2 GB Node heap: next build
-# aborts at 2 GB (reproduced locally, builds at 4 GB) and tsc --noEmit
-# aborts intermittently (passed on a3eef4e, OOM on 6e500bf).
-env:
-  NODE_OPTIONS: --max-old-space-size=4096
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -62,7 +56,12 @@ jobs:
       # Prisma generate happens via the apps' own postinstall hooks
       # (where present). Run typecheck from the app directory so
       # tsconfig.json paths resolve correctly.
+      # backoffice's program outgrew Node's default ~2 GB heap (OOM on
+      # 2026-11-16, PRs #1278 and #1279, same crash locally); the runner
+      # has 16 GB, so give tsc 6 GB.
       - run: cd apps/${{ matrix.app }} && npx tsc --noEmit
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
 
   # Typecheck the Expo apps still OUTSIDE the npm workspaces (each has
   # its own package-lock.json), so they need their own install step.
@@ -221,4 +220,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # next build runs its own TypeScript pass; backoffice OOMs it at the
+      # default ~2 GB heap just like the typecheck job above.
       - run: cd apps/${{ matrix.app }} && npx next build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144

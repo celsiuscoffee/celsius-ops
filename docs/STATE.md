@@ -19,8 +19,8 @@ current month.
   17 Dec: read Office Usage and remove what nobody opened.** Checked "redundant" claims before
   deleting: Cashier Performance, Area Scorecard, Perishables and the ops-reminders job are NOT
   duplicates and were kept (nested). CI: GitHub runners came back 16 Nov; backoffice `next
-  build` and `tsc` OOM at the runner's default ~2 GB heap — `ci.yml` now sets
-  `NODE_OPTIONS=--max-old-space-size=4096` for every job (reproduced: 2 GB aborts, 4 GB builds).
+  build` and `tsc` OOM at the runner's default ~2 GB heap — main's #1279 gives both steps a
+  6 GB heap (this branch's 4 GB workflow-wide setting was dropped in the merge).
 
 - 2026-11-16 — **Restructure step 4 built** (PR celsiuscoffee/celsius-ops#1278): `/hr/roster`
   (backoffice, existing APIs only; leave and swaps decided in place, overtime and clock-ins
@@ -73,6 +73,16 @@ current month.
   Staff & Access grant cards (`lib/modules.ts`) to the new section names. Local tsc of
   backoffice needs NODE_OPTIONS=--max-old-space-size=8192 (OOMs at the default).
 
+- 2026-11-16 — **EA export: prior-year arrears now go to B.2.** An allowance
+  line with `relates_to_year < form year` (new, set via the run page's ad-hoc
+  adjustment form for ARREARS codes, validated in `/api/hr/payroll/adjustments`)
+  is carved out of B.1(c) into new CSV columns "B.2 Prior-Year Arrears" /
+  "B.2 Relates To Year" (`priorYearArrears()` in `lib/hr/statutory/annual.ts`).
+  CP8D/Form E gross unchanged (still paid that year). Untagged lines are never
+  guessed. **Backfilled 2026-11-16 (owner approved):** all 19 "Arrears Of
+  Salary" lines in the Jan-2026 monthly run (RM10,755.14, Dec-2025 pay) now
+  carry `relates_to_year: 2025` — only that key added; amounts untouched. Hand-made EA PDF for Nur Hidayat
+  bin Jamalolail produced this session (not stored in repo — PII).
 - 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
   PO send mints a placeholder bill; when the real bill is recorded via Quick
   Upload (pay-and-claim) or the invoices page it lands on a NEW order and the

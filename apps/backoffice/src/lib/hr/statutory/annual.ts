@@ -12,10 +12,12 @@ export type EARecord = {
   ceasedDate: string | null;
   cp8dStatus: string | null;          // Permanent / Contract / Trainee / Other
   // YTD totals from payroll runs
-  grossRemuneration: number;          // B.1(a) - basic + OT + paid leave + arrears
+  grossRemuneration: number;          // B.1(a) - basic + OT + paid leave + current-year arrears
   feesCommissions: number;            // B.1(b) - director fee + bonus + commission + profit sharing
   otherAllowances: number;            // B.1(c) - taxable fixed allowances + perquisites
   esopBenefit: number;                // B.1(e)
+  priorYearArrears: number;           // B.2 - arrears for an earlier year paid in this year
+  priorYearArrearsYears: number[];    // B.2 - the year(s) those arrears relate to
   bikValue: number;                   // B.3
   livingAccommodation: number;        // B.4
   epfEmployee: number;                // D.4 (a)
@@ -30,6 +32,32 @@ export type EAFormData = EARecord & {
   year: number;
 };
 
+type AllowanceLine = { amount?: unknown; relates_to_year?: unknown } | null | undefined;
+
+// EA B.2: arrears (or other pay) for an EARLIER year that was paid in the
+// form's year. A payroll allowance line is B.2 only when it carries
+// relates_to_year < formYear (set via the run page's ad-hoc adjustment form,
+// or a backfill). Arrears for an earlier month of the SAME year stay in B.1 —
+// LHDN only wants prior-year amounts split out, because the employee declares
+// them in the year they relate to. Lines without relates_to_year are never
+// guessed into B.2: an "Arrears Of Salary" paid in January is usually, but not
+// always, December's pay.
+export function priorYearArrears(
+  allowances: Record<string, AllowanceLine> | null | undefined,
+  formYear: number,
+): { amount: number; years: number[] } {
+  let amount = 0;
+  const years = new Set<number>();
+  for (const v of Object.values(allowances || {})) {
+    const y = Number(v?.relates_to_year);
+    const amt = Number(v?.amount || 0);
+    if (!Number.isInteger(y) || y >= formYear || amt <= 0) continue;
+    amount += amt;
+    years.add(y);
+  }
+  return { amount: Math.round(amount * 100) / 100, years: [...years].sort() };
+}
+
 // EA form CSV — one row per employee, easy to import into Excel or print as PDF template
 export function generateEAFormCSV(
   year: number,
@@ -38,7 +66,8 @@ export function generateEAFormCSV(
 ): { content: string; filename: string; mime: string; summary: { count: number } } {
   const header = [
     "Employee Name","IC","Tax No","EPF No","SOCSO No","Position Status",
-    "B.1(a) Gross","B.1(b) Fees & Commissions","B.1(c) Allowances","B.1(e) ESOS","B.3 BIK","B.4 Living Accommodation",
+    "B.1(a) Gross","B.1(b) Fees & Commissions","B.1(c) Allowances","B.1(e) ESOS",
+    "B.2 Prior-Year Arrears","B.2 Relates To Year","B.3 BIK","B.4 Living Accommodation",
     "D.1 PCB","D.2 CP38","D.3 Zakat","D.4(a) EPF Employee","D.4(b) SOCSO Employee",
     "Commencement","Ceased",
   ];
@@ -55,6 +84,8 @@ export function generateEAFormCSV(
       e.feesCommissions.toFixed(2),
       e.otherAllowances.toFixed(2),
       e.esopBenefit.toFixed(2),
+      e.priorYearArrears.toFixed(2),
+      csv(e.priorYearArrearsYears.join(" ")),
       e.bikValue.toFixed(2),
       e.livingAccommodation.toFixed(2),
       e.pcbTax.toFixed(2),
@@ -99,7 +130,11 @@ export function generateFormE_CP8D(
     gross: 0, bik: 0, epf: 0, socso: 0, zakat: 0, pcb: 0, cp38: 0,
   };
   for (const e of employees) {
-    const totalGross = e.grossRemuneration + e.feesCommissions + e.otherAllowances + e.esopBenefit;
+    // B.2 arrears were still paid (and PCB'd) in this year, so they stay in
+    // the employer's gross for the year — moving them to B.2 only changes
+    // which EA box they sit in, not the CP8D / Form E totals.
+    const totalGross = e.grossRemuneration + e.feesCommissions + e.otherAllowances + e.esopBenefit
+      + e.priorYearArrears;
     cp8dRows.push([
       String(i++),
       csv(e.fullName || e.name),
