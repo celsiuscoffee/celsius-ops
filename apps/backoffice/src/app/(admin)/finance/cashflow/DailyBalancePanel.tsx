@@ -25,7 +25,7 @@ export type DailyBalance = {
   minPoint: { date: string; balance: number } | null;
 };
 
-const PALETTE = ["#C2452D", "#3B82F6", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16"];
+const PALETTE = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)", "var(--color-info-text)", "var(--color-ok-text)", "var(--color-warn-text)"];
 const fmtRM = (n: number) => `RM ${n.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtRMk = (n: number) => (Math.abs(n) >= 1000 ? `${(n / 1000).toFixed(0)}K` : `${n}`);
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -121,7 +121,7 @@ export default function DailyBalancePanel({
       if (p.date < start || p.date > end) continue;
       byDate.set(p.date, { date: p.date, actual: p.balance, projected: null });
     }
-    const series = [{ key: "actual", name: source === "combined" ? "Actual" : source, color: "#C2452D", dashed: false }];
+    const series = [{ key: "actual", name: source === "combined" ? "Actual" : source, color: "var(--color-chart-1)", dashed: false }];
     // Projection only meaningful for the combined position.
     if (showProjection && source === "combined" && activeSeries.length && db.projected.length) {
       const lastActual = activeSeries[activeSeries.length - 1];
@@ -131,7 +131,7 @@ export default function DailyBalancePanel({
         row.projected = p.balance;
         byDate.set(p.date, row);
       }
-      series.push({ key: "projected", name: "Projected", color: "#9CA3AF", dashed: true });
+      series.push({ key: "projected", name: "Projected", color: "var(--color-text-3)", dashed: true });
     }
     const rows = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
     return { rows, series, projectedMin: null };
@@ -255,12 +255,12 @@ export default function DailyBalancePanel({
         <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-text-2">
           <span>Latest: <span className="font-mono font-semibold text-text">{fmtRM(stats.latest.balance)}</span></span>
           <span>
-            Lowest: <span className={`font-mono font-semibold ${stats.min.balance < 10000 ? "text-amber-600" : "text-text"}`}>{fmtRM(stats.min.balance)}</span>{" "}
+            Lowest: <span className={`font-mono font-semibold ${stats.min.balance < 10000 ? "text-warn-text" : "text-text"}`}>{fmtRM(stats.min.balance)}</span>{" "}
             <span className="text-text-3">({fmtDay(stats.min.date)})</span>
           </span>
           <span className="flex items-center gap-1">
             Change:
-            <span className={`font-mono font-semibold ${stats.change >= 0 ? "text-green-600" : "text-red-600"}`}>
+            <span className={`font-mono font-semibold ${stats.change >= 0 ? "text-ok-text" : "text-danger-text"}`}>
               {stats.change >= 0 ? <TrendingUp className="inline h-3 w-3" /> : <TrendingDown className="inline h-3 w-3" />} {stats.change >= 0 ? "+" : ""}{fmtRM(stats.change)}
             </span>
           </span>
@@ -272,26 +272,26 @@ export default function DailyBalancePanel({
       ) : mode === "timeline" ? (
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={timeline.rows} margin={{ top: 5, right: 12, left: 4, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
             <XAxis dataKey="date" tickFormatter={(d) => fmtDay(String(d))} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={36} />
             <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={52} tickFormatter={(v) => fmtRMk(Number(v))} />
-            <Tooltip labelFormatter={(l) => fmtDay(String(l))} formatter={(v, n) => [v == null ? "—" : fmtRM(v as number), n]} contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }} />
+            <Tooltip labelFormatter={(l) => fmtDay(String(l))} formatter={(v, n) => [v == null ? "—" : fmtRM(v as number), n]} contentStyle={{ borderRadius: 10, border: "1px solid var(--color-line)", background: "var(--color-raised)", color: "var(--color-text)", fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
             {timeline.series.map((s) => (
               <Line key={s.key} type="monotone" dataKey={s.key} name={s.name} stroke={s.color} strokeWidth={2} strokeDasharray={s.dashed ? "5 4" : undefined} dot={false} connectNulls />
             ))}
             {source === "combined" && db.minPoint && (
-              <ReferenceDot x={db.minPoint.date} y={db.minPoint.balance} r={4} fill={db.minPoint.balance < 0 ? "#dc2626" : "#F59E0B"} stroke="white" strokeWidth={1.5} />
+              <ReferenceDot x={db.minPoint.date} y={db.minPoint.balance} r={4} fill={db.minPoint.balance < 0 ? "var(--color-danger-text)" : "var(--color-warn-text)"} stroke="var(--color-surface)" strokeWidth={1.5} />
             )}
           </LineChart>
         </ResponsiveContainer>
       ) : (
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={compare.rows} margin={{ top: 5, right: 12, left: 4, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
             <XAxis dataKey="idx" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={12} />
             <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={52} tickFormatter={(v) => fmtRMk(Number(v))} />
-            <Tooltip formatter={(v, n) => [v == null ? "—" : fmtRM(v as number), n]} contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }} />
+            <Tooltip formatter={(v, n) => [v == null ? "—" : fmtRM(v as number), n]} contentStyle={{ borderRadius: 10, border: "1px solid var(--color-line)", background: "var(--color-raised)", color: "var(--color-text)", fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
             {compare.periods.map((p) => (
               <Line key={p.label} type="monotone" dataKey={p.label} name={p.label} stroke={p.color} strokeWidth={2} dot={false} connectNulls />

@@ -133,12 +133,12 @@ export default function CashTrackingPage() {
     <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <Link href="/finance/cashflow" className="inline-flex items-center gap-1 text-xs text-text-2 hover:text-text-2">
-            <ChevronLeft className="h-3 w-3" /> Cashflow
+          <Link href="/finance/cashflow" className="inline-flex items-center gap-1 text-[13px] text-text-2 hover:text-text">
+            <ChevronLeft className="h-3.5 w-3.5" /> Cash flow
           </Link>
-          <h2 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Cash Tracking</h2>
-          <p className="mt-0.5 text-xs sm:text-sm text-text-2">
-            Per-outlet × category × month breakdown. Sourced from classified bank statement lines — values mirror Finance&rsquo;s cash-tracking spreadsheet.
+          <h1 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Cash tracking</h1>
+          <p className="mt-0.5 text-sm text-text-2">
+            Money in and out for each outlet, by category and month, from the classified bank lines. Same figures as the finance cash-tracking sheet.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -249,8 +249,8 @@ export default function CashTrackingPage() {
                   }
                   if (!anyNonZero) return null;
                   return (
-                    <tr className="border-t border-line bg-amber-50/40 italic text-amber-900">
-                      <td className="sticky left-0 z-10 bg-amber-50/40 px-3 py-1.5">
+                    <tr className="border-t border-line bg-warn-soft italic text-warn-text">
+                      <td className="sticky left-0 z-10 bg-warn-soft px-3 py-1.5">
                         <span className="text-[11px] font-medium">Uncategorized · needs review</span>
                       </td>
                       {data.months.map((m) => (
@@ -273,7 +273,7 @@ export default function CashTrackingPage() {
                       ? totalForOutletMonth(data, activeOutletId, m)
                       : (data.bsMonthNet[m] ?? 0);
                     return (
-                      <td key={m} className={`px-3 py-2 text-right tabular-nums ${total >= 0 ? "text-green-700" : "text-red-700"}`}>
+                      <td key={m} className={`px-3 py-2 text-right tabular-nums ${total >= 0 ? "text-ok-text" : "text-danger-text"}`}>
                         {fmtMYR(total, { showZero: true })}
                       </td>
                     );
@@ -324,12 +324,12 @@ function BandSection({
 }) {
   return (
     <>
-      <tr className={`${band.tone === "in" ? "bg-green-50" : "bg-red-50"}`}>
-        <td className={`sticky left-0 z-10 ${band.tone === "in" ? "bg-green-50" : "bg-red-50"} px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${band.tone === "in" ? "text-green-800" : "text-red-800"}`}>
+      <tr className={`${band.tone === "in" ? "bg-ok-soft" : "bg-danger-soft"}`}>
+        <td className={`sticky left-0 z-10 ${band.tone === "in" ? "bg-ok-soft" : "bg-danger-soft"} px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${band.tone === "in" ? "text-ok-text" : "text-danger-text"}`}>
           {band.label}
         </td>
         {months.map((m) => (
-          <td key={m} className={`px-3 py-1 text-right text-[11px] font-semibold tabular-nums ${band.tone === "in" ? "text-green-800" : "text-red-800"}`}>
+          <td key={m} className={`px-3 py-1 text-right text-[11px] font-semibold tabular-nums ${band.tone === "in" ? "text-ok-text" : "text-danger-text"}`}>
             {fmtMYR(subtotal[m] ?? 0)}
           </td>
         ))}
@@ -348,7 +348,7 @@ function BandSection({
               for (const o of outlets) v += cells[`${c}|${o.id}|${m}`] ?? 0;
             }
             return (
-              <td key={m} className={`px-3 py-1.5 text-right tabular-nums ${v === 0 ? "text-text-3" : v > 0 ? "text-green-700" : "text-red-700"}`}>
+              <td key={m} className={`px-3 py-1.5 text-right tabular-nums ${v === 0 ? "text-text-3" : v > 0 ? "text-ok-text" : "text-danger-text"}`}>
                 {fmtMYR(v)}
               </td>
             );

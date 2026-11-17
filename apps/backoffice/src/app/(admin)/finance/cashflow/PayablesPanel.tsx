@@ -47,9 +47,9 @@ const CATEGORY_LABEL: Record<Category, string> = {
   payroll: "Payroll", other: "Other",
 };
 const CATEGORY_DOT: Record<Category, string> = {
-  ingredients: "bg-amber-500", asset: "bg-teal-500", maintenance: "bg-orange-500",
-  rent: "bg-violet-500", utilities: "bg-sky-500", software: "bg-blue-500",
-  payroll: "bg-rose-500", other: "bg-gray-400",
+  ingredients: "bg-warn", asset: "bg-ok", maintenance: "bg-warn",
+  rent: "bg-info", utilities: "bg-info", software: "bg-info",
+  payroll: "bg-danger", other: "bg-line-2",
 };
 
 const RM0 = (n: number) => `RM${Math.round(n).toLocaleString("en-MY")}`;
@@ -135,7 +135,7 @@ export default function PayablesPanel() {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-text">
-            <ArrowUpFromLine className="h-4 w-4 text-red-600" />
+            <ArrowUpFromLine className="h-4 w-4 text-danger-text" />
             Outgoing payables
           </h3>
           <p className="mt-0.5 text-xs text-text-2">
@@ -148,7 +148,7 @@ export default function PayablesPanel() {
               <button
                 key={d}
                 onClick={() => { setDays(d); setCustom(null); }}
-                className={`rounded px-2 py-1 text-xs ${!custom && days === d ? "bg-gray-900 text-white" : "text-text-2 hover:bg-sunken"}`}
+                className={`rounded px-2 py-1 text-xs ${!custom && days === d ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"}`}
               >
                 {d}d
               </button>
@@ -172,10 +172,10 @@ export default function PayablesPanel() {
               <p className="text-[11px] text-text-2">Due {windowLabel}</p>
               <p className="mt-0.5 text-lg font-bold text-text">{RM0(filtered.total)}</p>
             </div>
-            <div className="rounded-lg bg-red-50 px-3 py-2">
-              <p className="text-[11px] text-red-700">Overdue</p>
-              <p className="mt-0.5 text-lg font-bold text-red-700">{RM0(filtered.overdueTotal)}</p>
-              <p className="text-[10px] text-red-600/70">{filtered.overdueItems.length} invoice{filtered.overdueItems.length === 1 ? "" : "s"} past due or undated</p>
+            <div className="rounded-lg bg-danger-soft px-3 py-2">
+              <p className="text-[11px] text-danger-text">Overdue</p>
+              <p className="mt-0.5 text-lg font-bold text-danger-text">{RM0(filtered.overdueTotal)}</p>
+              <p className="text-[10px] text-danger-text">{filtered.overdueItems.length} invoice{filtered.overdueItems.length === 1 ? "" : "s"} past due or undated</p>
             </div>
             <div className="rounded-lg bg-sunken px-3 py-2">
               <p className="text-[11px] text-text-2">Invoices / recurring</p>
@@ -197,7 +197,7 @@ export default function PayablesPanel() {
                 <button
                   key={c}
                   onClick={() => toggleCategory(c)}
-                  className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${active ? "border-gray-900 bg-gray-900 text-white" : "border-line text-text-2 hover:bg-sunken"}`}
+                  className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${active ? "border-text bg-ink text-on-ink" : "border-line text-text-2 hover:bg-sunken"}`}
                 >
                   <span className={`h-1.5 w-1.5 rounded-full ${CATEGORY_DOT[c]}`} />
                   {CATEGORY_LABEL[c]}
@@ -205,7 +205,7 @@ export default function PayablesPanel() {
               );
             })}
             {categories.length > 0 && (
-              <button onClick={() => setCategories([])} className="rounded-full px-2 py-0.5 text-[11px] text-blue-600 hover:underline">
+              <button onClick={() => setCategories([])} className="rounded-full px-2 py-0.5 text-[11px] text-info-text hover:underline">
                 Clear
               </button>
             )}
@@ -214,19 +214,19 @@ export default function PayablesPanel() {
           {/* Standing overdue block — always relative to today, so late money
               stays visible whatever window is selected. */}
           {filtered.overdueItems.length > 0 && (
-            <div className="mt-3 rounded-lg border border-red-200 bg-red-50/60">
+            <div className="mt-3 rounded-lg border border-danger/30 bg-danger-soft">
               <button
                 onClick={() => setOverdueOpen((v) => !v)}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left"
               >
-                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-600" />
-                <span className="flex-1 text-xs font-medium text-red-800">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-danger-text" />
+                <span className="flex-1 text-xs font-medium text-danger-text">
                   {RM0(filtered.overdueTotal)} already payable — {filtered.overdueItems.length} invoice{filtered.overdueItems.length === 1 ? "" : "s"} past due or without a due date
                 </span>
-                {overdueOpen ? <ChevronDown className="h-3.5 w-3.5 text-red-400" /> : <ChevronRight className="h-3.5 w-3.5 text-red-400" />}
+                {overdueOpen ? <ChevronDown className="h-3.5 w-3.5 text-danger-text" /> : <ChevronRight className="h-3.5 w-3.5 text-danger-text" />}
               </button>
               {overdueOpen && (
-                <div className="border-t border-red-100 px-3 py-1.5">
+                <div className="border-t border-danger/30 px-3 py-1.5">
                   {filtered.overdueItems.map((it) => (
                     <div key={it.id} className="flex items-center gap-2 py-1 text-xs">
                       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${CATEGORY_DOT[it.category]}`} />
@@ -234,7 +234,7 @@ export default function PayablesPanel() {
                         {it.payee}
                         {it.ref && <span className="ml-1 text-text-3">{it.ref}</span>}
                       </span>
-                      <span className="shrink-0 text-[10px] text-red-600">{it.dueDate ? `due ${fmtDueShort(it.dueDate)}` : "no due date"}</span>
+                      <span className="shrink-0 text-[10px] text-danger-text">{it.dueDate ? `due ${fmtDueShort(it.dueDate)}` : "no due date"}</span>
                       <span className="w-20 shrink-0 text-right font-semibold tabular-nums text-text">{RM2(it.amount)}</span>
                     </div>
                   ))}
@@ -260,11 +260,11 @@ export default function PayablesPanel() {
                       title="Click for the payee breakdown"
                     >
                       <div className="w-20 shrink-0 text-xs">
-                        <span className={`font-medium ${l.isToday ? "text-red-700" : "text-text-2"}`}>{l.dow}</span>{" "}
+                        <span className={`font-medium ${l.isToday ? "text-danger-text" : "text-text-2"}`}>{l.dow}</span>{" "}
                         <span className="text-text-3">{l.date}</span>
                       </div>
                       <div className="relative h-4 flex-1 overflow-hidden rounded bg-sunken">
-                        <div className="absolute inset-y-0 left-0 bg-red-400/80" style={{ width: `${(d.total / maxDay) * 100}%` }} />
+                        <div className="absolute inset-y-0 left-0 bg-danger/80" style={{ width: `${(d.total / maxDay) * 100}%` }} />
                       </div>
                       <div className="w-20 shrink-0 text-right text-xs font-semibold tabular-nums text-text">{RM0(d.total)}</div>
                     </button>
@@ -308,7 +308,7 @@ export default function PayablesPanel() {
             <p className="text-[11px] text-text-3">
               Click a day for its payee list. Recurring rows are the same entries the weekly projection fires.
             </p>
-            <Link href="/inventory/invoices" className="inline-flex shrink-0 items-center gap-1 text-[11px] text-blue-600 hover:underline">
+            <Link href="/inventory/invoices" className="inline-flex shrink-0 items-center gap-1 text-[11px] text-info-text hover:underline">
               Unpaid invoice list <ArrowRight className="h-3 w-3" />
             </Link>
           </div>

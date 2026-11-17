@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
+import { KeyNumber } from "@/components/ui/key-number";
 import { OUTFLOW_CATEGORIES, INFLOW_CATEGORIES, categoryLabel } from "@/lib/finance/cash-categories";
-import { Loader2, CheckCircle2, AlertTriangle, HelpCircle, Copy, ArrowDownCircle, Paperclip, History } from "lucide-react";
+import { Loader2, CheckCircle2, Paperclip, History } from "lucide-react";
 
 type ApMatch = {
   invoiceId: string; invoiceNumber: string | null; payee: string; amount: number; issueDate: string;
@@ -78,16 +79,16 @@ export default function ReconPage() {
     <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Reconciliation</h2>
-          <p className="mt-0.5 text-xs sm:text-sm text-text-2">
-            Cash out AND cash in: payments matched to invoices, receipts matched to their source. The loop auto-applies high-confidence matches; the rest is your queue — every manual pick books straight to the chart of accounts.
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Bank match</h1>
+          <p className="mt-0.5 text-sm text-text-2">
+            Every bank line matched to an invoice or a source. Sure matches clear on their own; the rest waits for you here.
           </p>
         </div>
         <div className="flex rounded-lg border border-line bg-surface p-0.5">
           {[30, 90, 180].map((d) => (
             <button key={d} onClick={() => setDays(d)}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${days === d ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"}`}>
-              {d}d
+              {d} days
             </button>
           ))}
         </div>
@@ -97,14 +98,25 @@ export default function ReconPage() {
         <div className="mt-6 flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-text-3" /></div>
       ) : (
         <>
-          {/* Summary tiles — click to jump to that queue */}
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-6 gap-2 sm:gap-3">
-            <Tile icon={<ArrowDownCircle className="h-4 w-4 text-text-2" />} label="Unmatched out" value={data.summary.unmatchedOutflows} sub={fmtRM0(data.summary.unmatchedOutflowValue)} tone="gray" onClick={() => setTab("categorise")} active={tab === "categorise"} />
-            <Tile icon={<ArrowDownCircle className="h-4 w-4 rotate-180 text-text-2" />} label="Unmatched in" value={data.summary.unmatchedInflows} sub={fmtRM0(data.summary.unmatchedInflowValue)} tone="gray" onClick={() => setTab("categorise")} active={tab === "categorise"} />
-            <Tile icon={<HelpCircle className="h-4 w-4 text-amber-600" />} label="Needs review" value={data.summary.review} tone="amber" onClick={() => setTab("review")} active={tab === "review"} />
-            <Tile icon={<Copy className="h-4 w-4 text-red-600" />} label="Double payments" value={data.summary.doublePayments} tone={data.summary.doublePayments ? "red" : "gray"} onClick={() => setTab("review")} active={tab === "review"} />
-            <Tile icon={<CheckCircle2 className="h-4 w-4 text-green-600" />} label="Auto-matched" value={data.summary.auto} tone="green" onClick={() => setTab("review")} active={tab === "review"} />
-            <Tile icon={<AlertTriangle className="h-4 w-4 text-text-2" />} label="Open invoices" value={data.summary.unmatchedInvoices} tone="gray" onClick={() => setTab("invoices")} active={tab === "invoices"} />
+          {/* Key numbers — tap one to open that queue */}
+          <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <button type="button" className="flex text-left [&>*]:flex-1" onClick={() => setTab("categorise")}>
+              <KeyNumber label="To categorise" value={String(data.summary.unmatchedOutflows + data.summary.unmatchedInflows)}
+                tone={data.summary.unmatchedOutflows + data.summary.unmatchedInflows > 0 ? "warn" : undefined}
+                note={<>{fmtRM0(data.summary.unmatchedOutflowValue)} out · {fmtRM0(data.summary.unmatchedInflowValue)} in</>} />
+            </button>
+            <button type="button" className="flex text-left [&>*]:flex-1" onClick={() => setTab("review")}>
+              <KeyNumber label="Needs review" value={String(data.summary.review)} tone={data.summary.review > 0 ? "warn" : undefined}
+                note={<><b className="font-semibold text-text-2">{data.summary.auto}</b> cleared on their own</>} />
+            </button>
+            <button type="button" className="flex text-left [&>*]:flex-1" onClick={() => setTab("review")}>
+              <KeyNumber label="Possible double payments" value={String(data.summary.doublePayments)} tone={data.summary.doublePayments > 0 ? "warn" : undefined}
+                note={data.summary.doublePayments > 0 ? "invoice already paid once" : "none found"} />
+            </button>
+            <button type="button" className="flex text-left [&>*]:flex-1" onClick={() => setTab("invoices")}>
+              <KeyNumber label="Open invoices" value={String(data.summary.unmatchedInvoices)}
+                note="no bank payment found yet" />
+            </button>
           </div>
 
           {/* Queue switcher — one focused table at a time */}
@@ -114,7 +126,7 @@ export default function ReconPage() {
               ["review", "To review", data.summary.review + data.summary.doublePayments + data.summary.split],
               ["matched", "Matched", null],
               ["invoices", "Open invoices", data.summary.unmatchedInvoices],
-              ["cashin", "Cash-in", null],
+              ["cashin", "Cash in", null],
               ["bankrecon", "Bank recon", null],
             ] as [ReconTab, string, number | null][]).map(([id, label, count]) => (
               <button key={id} onClick={() => setTab(id)}
@@ -146,7 +158,7 @@ export default function ReconPage() {
             {tab === "review" && (
               <div className="space-y-4">
                 {data.doublePayments.length > 0 && (
-                  <QueueCard title="⚠ Possible double payments" desc="Invoice already settled but another bank payment matches it.">
+                  <QueueCard title="Possible double payments" desc="Invoice already settled but another bank payment matches it.">
                     <MatchTable rows={data.doublePayments} />
                   </QueueCard>
                 )}
@@ -181,7 +193,7 @@ export default function ReconPage() {
                 <div className="grid grid-cols-3 gap-3 px-4 py-3">
                   <div><p className="text-[11px] text-text-2">Sales rung up</p><p className="font-mono text-sm font-semibold text-text">{fmtRM(data.cashIn.salesGross)}</p></div>
                   <div><p className="text-[11px] text-text-2">Settled to bank</p><p className="font-mono text-sm font-semibold text-text">{fmtRM(data.cashIn.settlementsTotal)}</p></div>
-                  <div><p className="text-[11px] text-text-2">Gap</p><p className={`font-mono text-sm font-semibold ${Math.abs(data.cashIn.gapPct ?? 0) > 12 ? "text-red-600" : "text-amber-600"}`}>{fmtRM(data.cashIn.gap)}{data.cashIn.gapPct != null && <span className="text-[11px] font-normal text-text-3"> ({data.cashIn.gapPct}%)</span>}</p></div>
+                  <div><p className="text-[11px] text-text-2">Gap</p><p className={`font-mono text-sm font-semibold ${Math.abs(data.cashIn.gapPct ?? 0) > 12 ? "text-danger-text" : "text-warn-text"}`}>{fmtRM(data.cashIn.gap)}{data.cashIn.gapPct != null && <span className="text-[11px] font-normal text-text-3"> ({data.cashIn.gapPct}%)</span>}</p></div>
                 </div>
                 <div className="overflow-x-auto border-t border-line">
                   <table className="w-full min-w-[480px] text-sm">
@@ -192,7 +204,7 @@ export default function ReconPage() {
                       {data.cashIn.settlementsByChannel.map((c) => (
                         <tr key={c.channel} className="hover:bg-sunken">
                           <td className="px-3 py-1.5 text-xs text-text-2">{c.channel}</td>
-                          <td className="px-3 py-1.5 text-right font-mono text-xs text-green-700">+{fmtRM(c.amount)}</td>
+                          <td className="px-3 py-1.5 text-right font-mono text-xs text-ok-text">+{fmtRM(c.amount)}</td>
                           <td className="px-3 py-1.5 text-right text-[11px] text-text-3">{c.n}</td>
                         </tr>
                       ))}
@@ -200,7 +212,7 @@ export default function ReconPage() {
                   </table>
                 </div>
                 {data.cashIn.grab.deductionPct != null && (
-                  <p className={`border-t border-line px-4 py-2 text-[11px] ${data.cashIn.grab.deductionPct > 45 ? "text-red-600" : "text-text-2"}`}>
+                  <p className={`border-t border-line px-4 py-2 text-[11px] ${data.cashIn.grab.deductionPct > 45 ? "text-danger-text" : "text-text-2"}`}>
                     Grab: gross {fmtRM(data.cashIn.grab.gross)} vs settled {fmtRM(data.cashIn.grab.settled)} → <strong>{data.cashIn.grab.deductionPct}% deducted</strong> at source (commission + promos + timing){data.cashIn.grab.deductionPct > 45 ? " — high, review" : ""}.
                   </p>
                 )}
@@ -265,7 +277,7 @@ function BankReconPanel() {
 
   return (
     <div className="space-y-4">
-      {note && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">{note}</p>}
+      {note && <p className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-[11px] text-danger-text">{note}</p>}
       {data.accounts.map(({ account, months }) => (
         <QueueCard key={account} title={`Bank recon: ${account}`} desc="Opening balance plus the month's ledger lines must equal the statement close. Sign off each month once the delta is zero.">
           <div className="overflow-x-auto">
@@ -297,7 +309,7 @@ function BankReconPanel() {
                       <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{m.opening == null ? <span className="text-text-3">no prior statement</span> : fmtRM(m.opening)}</td>
                       <td className="px-3 py-2 text-right font-mono text-xs text-text-2">
                         {fmtRM(m.linesTotal)}
-                        {m.unclassified > 0 && <div className="text-[10px] font-sans text-amber-600">{m.unclassified} unclassified</div>}
+                        {m.unclassified > 0 && <div className="text-[10px] font-sans text-warn-text">{m.unclassified} unclassified</div>}
                       </td>
                       <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{m.computedClose == null ? "" : fmtRM(m.computedClose)}</td>
                       <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{m.statedClose == null ? "" : fmtRM(m.statedClose)}</td>
@@ -305,18 +317,18 @@ function BankReconPanel() {
                         {m.delta == null ? (
                           <span className="text-[11px] text-text-3">n/a</span>
                         ) : reconciled ? (
-                          <CheckCircle2 className="ml-auto h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="ml-auto h-4 w-4 text-ok-text" />
                         ) : (
-                          <span className="font-mono text-xs text-rose-600" title="lines missing or duplicated, or statement balance wrong">
+                          <span className="font-mono text-xs text-danger-text" title="lines missing or duplicated, or statement balance wrong">
                             {fmtRM(m.delta)}
-                            <div className="text-[10px] font-sans text-rose-400">lines missing or duplicated, or statement balance wrong</div>
+                            <div className="text-[10px] font-sans text-danger-text">lines missing or duplicated, or statement balance wrong</div>
                           </span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2">
                         {m.signedOffBy ? (
                           <span className="inline-flex items-center gap-1.5">
-                            <span className="rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700">
+                            <span className="rounded bg-ok-soft px-1.5 py-0.5 text-[11px] font-medium text-ok-text">
                               Reconciled by {m.signedOffBy}{m.signedOffAt ? ` on ${fmtDay(m.signedOffAt)}` : ""}
                             </span>
                             <button onClick={() => signOff(account, m.month, true)} disabled={busy === key}
@@ -326,7 +338,7 @@ function BankReconPanel() {
                           </span>
                         ) : reconciled ? (
                           <button onClick={() => signOff(account, m.month, false)} disabled={busy === key}
-                            className="rounded border border-green-600/30 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+                            className="rounded border border-ok bg-ok-soft px-2 py-0.5 text-[11px] font-medium text-ok-text hover:bg-ok-soft disabled:opacity-50">
                             {busy === key ? "Signing off" : "Sign off"}
                           </button>
                         ) : (
@@ -579,17 +591,17 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
         <td className="px-3 py-2 text-xs text-text-2 whitespace-nowrap align-top">
           {row.date}
           {row.expenseMonth && (
-            <div className="text-[10px] text-amber-600" title="Expense month override: this line sits in this month on the P&L">
+            <div className="text-[10px] text-warn-text" title="Expense month override: this line sits in this month on the P&L">
               → {row.expenseMonth}
             </div>
           )}
         </td>
         <td className="px-3 py-2 text-xs text-text-2 align-top">
           {row.desc}
-          {note && <div className="mt-0.5 text-[10px] text-red-600">{note}</div>}
+          {note && <div className="mt-0.5 text-[10px] text-danger-text">{note}</div>}
         </td>
         <td className="px-3 py-2 text-[11px] text-text-3 align-top">{row.category ?? "Unclassified"}</td>
-        <td className={`px-3 py-2 text-right font-mono text-xs align-top ${direction === "DR" ? "text-red-700" : "text-green-700"}`}>{direction === "DR" ? "−" : "+"}{fmtRM(row.amount)}</td>
+        <td className={`px-3 py-2 text-right font-mono text-xs align-top ${direction === "DR" ? "text-danger-text" : "text-ok-text"}`}>{direction === "DR" ? "−" : "+"}{fmtRM(row.amount)}</td>
         <td className="px-3 py-2 align-top">
           <div className="flex items-center gap-1.5">
             <select
@@ -650,10 +662,10 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
                     <span className="text-xs text-text-2">{c.payee}{c.invoiceNumber ? <span className="text-text-3"> · {c.invoiceNumber}</span> : ""}</span>
                     <span className="font-mono text-[11px] text-text-2">{fmtRM(c.amount)}</span>
                     <span className="text-[10px] text-text-3">{c.issueDate}</span>
-                    {c.amountExact && <span className="rounded bg-green-50 px-1 text-[10px] text-green-700">amount exact</span>}
-                    {c.refHit && <span className="rounded bg-green-50 px-1 text-[10px] text-green-700">invoice no in line</span>}
-                    {c.nameHit && <span className="rounded bg-green-50 px-1 text-[10px] text-green-700">name hit</span>}
-                    {c.linkOnly && <span className="rounded bg-amber-50 px-1 text-[10px] text-amber-700">already paid — link only</span>}
+                    {c.amountExact && <span className="rounded bg-ok-soft px-1 text-[10px] text-ok-text">amount exact</span>}
+                    {c.refHit && <span className="rounded bg-ok-soft px-1 text-[10px] text-ok-text">invoice no in line</span>}
+                    {c.nameHit && <span className="rounded bg-ok-soft px-1 text-[10px] text-ok-text">name hit</span>}
+                    {c.linkOnly && <span className="rounded bg-warn-soft px-1 text-[10px] text-warn-text">already paid — link only</span>}
                     <button
                       onClick={() => applyMatch(c.invoiceId)}
                       disabled={busy}
@@ -758,26 +770,11 @@ function eventLabel(e: LineEvent): string {
   }
 }
 
-function Tile({ icon, label, value, sub, tone, onClick, active }: { icon: React.ReactNode; label: string; value: number; sub?: string; tone: "green" | "amber" | "red" | "gray"; onClick: () => void; active?: boolean }) {
-  const ring = tone === "green" ? "border-green-200" : tone === "amber" ? "border-amber-200" : tone === "red" ? "border-red-200" : "border-line";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-lg border bg-surface px-3 py-2.5 text-left transition-shadow cursor-pointer hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand/40 ${active ? "border-ink ring-1 ring-brand/30" : `${ring} hover:border-ink/40`}`}
-    >
-      <div className="flex items-center gap-1.5 text-xs text-text-2">{icon}{label}</div>
-      <p className="mt-0.5 text-lg font-bold text-text">{value}</p>
-      {sub && <p className="text-[10px] text-text-3">{sub}</p>}
-    </button>
-  );
-}
-
 function QueueCard({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-line bg-surface">
       <div className="border-b border-line px-4 py-2.5">
-        <p className="text-xs font-semibold uppercase tracking-wide text-text-2">{title}</p>
+        <p className="text-sm font-semibold text-text">{title}</p>
         <p className="mt-0.5 text-[11px] text-text-3">{desc}</p>
       </div>
       {children}
@@ -867,7 +864,7 @@ function ExpenseMonthControl({ bankLineId, txnMonth, override, onDone }: {
 
   return (
     <span className="flex items-center gap-1" title="Expense month: which month this payment's cost sits in on the P&L. Cash flow keeps the payment date.">
-      {override && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" title="Expense month overridden" />}
+      {override && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warn" title="Expense month overridden" />}
       <input
         type="month"
         key={override ?? "auto"}
@@ -884,7 +881,7 @@ function ExpenseMonthControl({ bankLineId, txnMonth, override, onDone }: {
         </button>
       )}
       {busy && <Loader2 className="h-3 w-3 animate-spin text-text-3" />}
-      {err && <span className="text-[10px] text-red-600">{err}</span>}
+      {err && <span className="text-[10px] text-danger-text">{err}</span>}
     </span>
   );
 }
@@ -972,7 +969,7 @@ function MatchTable({ rows, showReasons, actionable, onDone }: { rows: ApMatch[]
         <div className="flex flex-wrap items-center gap-2 border-b border-ink/30 bg-brand-soft px-4 py-2">
           <span className="text-xs font-medium text-text-2">{sel.size} selected</span>
           <button onClick={() => bulk("confirm")} disabled={bulkBusy}
-            className="rounded border border-green-600/30 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+            className="rounded border border-ok bg-ok-soft px-2.5 py-1 text-xs font-medium text-ok-text hover:bg-ok-soft disabled:opacity-50">
             Confirm selected
           </button>
           <button onClick={() => bulk("reject")} disabled={bulkBusy}
@@ -1002,14 +999,14 @@ function MatchTable({ rows, showReasons, actionable, onDone }: { rows: ApMatch[]
               <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{fmtRM(m.amount)}</td>
               <td className="px-3 py-2 text-xs text-text-2">{m.bankDesc}<div className="text-[10px] text-text-3">{m.bankDate}</div></td>
               <td className="px-3 py-2 text-[11px] text-text-3">{m.bankCategory ?? "—"}</td>
-              <td className="px-3 py-2 text-right font-mono text-xs"><span className={m.score >= 0.85 ? "text-green-700" : "text-amber-700"}>{m.score.toFixed(2)}</span></td>
+              <td className="px-3 py-2 text-right font-mono text-xs"><span className={m.score >= 0.85 ? "text-ok-text" : "text-warn-text"}>{m.score.toFixed(2)}</span></td>
               {showReasons && <td className="px-3 py-2 text-[10px] text-text-3">{m.reasons.join(", ")}</td>}
               {actionable && (
                 <td className="whitespace-nowrap px-3 py-2">
-                  {notes[key] ? <span className="text-[10px] text-rose-600">{notes[key]}</span> : (
+                  {notes[key] ? <span className="text-[10px] text-danger-text">{notes[key]}</span> : (
                     <span className="flex items-center gap-1.5">
                       <button onClick={() => act(m, "confirm")} disabled={busy === key || bulkBusy}
-                        className="rounded border border-green-600/30 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+                        className="rounded border border-ok bg-ok-soft px-2 py-0.5 text-[11px] font-medium text-ok-text hover:bg-ok-soft disabled:opacity-50">
                         Confirm
                       </button>
                       <button onClick={() => act(m, "reject")} disabled={busy === key || bulkBusy}
@@ -1086,16 +1083,16 @@ function SplitTable({ rows, onDone }: { rows: ApSplitMatch[]; onDone?: () => voi
               </td>
               <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{fmtRM(m.legsTotal)}</td>
               <td className="px-3 py-2 text-[11px]">
-                <span className={m.settles ? "text-green-700" : "text-amber-700"}>
+                <span className={m.settles ? "text-ok-text" : "text-warn-text"}>
                   {m.linkOnly ? (m.settles ? "link legs (already PAID)" : "PAID on register, bank short") : m.settles ? "→ PAID" : `→ partial, RM ${(m.amount - m.previouslyPaid - m.legsTotal).toFixed(2)} outstanding`}
                 </span>
                 <div className="text-[10px] text-text-3">{m.reasons.join(", ")}</div>
               </td>
               <td className="whitespace-nowrap px-3 py-2">
-                {notes[m.invoiceId] ? <span className="text-[10px] text-rose-600">{notes[m.invoiceId]}</span> : (
+                {notes[m.invoiceId] ? <span className="text-[10px] text-danger-text">{notes[m.invoiceId]}</span> : (
                   <span className="flex items-center gap-1.5">
                     <button onClick={() => act(m, "confirm")} disabled={busy === m.invoiceId}
-                      className="rounded border border-green-600/30 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+                      className="rounded border border-ok bg-ok-soft px-2 py-0.5 text-[11px] font-medium text-ok-text hover:bg-ok-soft disabled:opacity-50">
                       Confirm
                     </button>
                     <button onClick={() => act(m, "reject")} disabled={busy === m.invoiceId}
@@ -1174,7 +1171,7 @@ function MatchedTable() {
               <tr key={r.bankLineId} className="hover:bg-sunken">
                 <td className="px-3 py-2 text-xs text-text-2">{r.desc}<div className="text-[10px] text-text-3">{r.date}</div></td>
                 <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{fmtRM(r.amount)}</td>
-                <td className="px-3 py-2 text-xs text-text-2">{r.payee}{r.invoiceNumber ? <span className="text-text-3"> · {r.invoiceNumber}</span> : ""}{r.invoiceAmount !== null && Math.abs(r.invoiceAmount - r.amount) > 0.01 && <span className="ml-1 text-[10px] text-amber-600">(invoice {fmtRM(r.invoiceAmount)})</span>}</td>
+                <td className="px-3 py-2 text-xs text-text-2">{r.payee}{r.invoiceNumber ? <span className="text-text-3"> · {r.invoiceNumber}</span> : ""}{r.invoiceAmount !== null && Math.abs(r.invoiceAmount - r.amount) > 0.01 && <span className="ml-1 text-[10px] text-warn-text">(invoice {fmtRM(r.invoiceAmount)})</span>}</td>
                 <td className="px-3 py-2 text-[11px] text-text-3">{r.category ?? "—"}</td>
                 <td className="px-3 py-2 text-[10px] text-text-3">{r.paidByMatch ? "match paid the invoice" : "link-only (paid elsewhere)"}{r.matchedAt ? ` · ${r.matchedAt}` : ""}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-right">

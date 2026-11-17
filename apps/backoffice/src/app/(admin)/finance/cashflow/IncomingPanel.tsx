@@ -38,7 +38,7 @@ const ENTITY_LABEL: Record<string, string> = {
 const CHANNEL_LABEL: Record<Channel, string> = { online: "Online", card: "Card", qr: "QR", consignment: "Consignment", grab: "Grab" };
 const CHANNEL_ORDER: Channel[] = ["card", "online", "qr", "consignment", "grab"];
 const CHANNEL_DOT: Record<Channel, string> = {
-  card: "bg-blue-500", online: "bg-violet-500", qr: "bg-emerald-500", consignment: "bg-amber-500", grab: "bg-green-600",
+  card: "bg-info", online: "bg-info", qr: "bg-ok", consignment: "bg-warn", grab: "bg-ok",
 };
 
 const RM0 = (n: number) => `RM${Math.round(n).toLocaleString("en-MY")}`;
@@ -77,7 +77,7 @@ export default function IncomingPanel() {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-text">
-            <ArrowDownToLine className="h-4 w-4 text-emerald-600" />
+            <ArrowDownToLine className="h-4 w-4 text-ok-text" />
             Incoming settlements
           </h3>
           <p className="mt-0.5 text-xs text-text-2">
@@ -90,7 +90,7 @@ export default function IncomingPanel() {
               <button
                 key={d}
                 onClick={() => { setDays(d); setCustom(null); }}
-                className={`rounded px-2 py-1 text-xs ${!custom && days === d ? "bg-gray-900 text-white" : "text-text-2 hover:bg-sunken"}`}
+                className={`rounded px-2 py-1 text-xs ${!custom && days === d ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"}`}
               >
                 {d}d
               </button>
@@ -116,10 +116,10 @@ export default function IncomingPanel() {
               </p>
               <p className="mt-0.5 text-lg font-bold text-text">{RM0(f.total)}</p>
             </div>
-            <div className="rounded-lg bg-emerald-50 px-3 py-2">
-              <p className="text-[11px] text-emerald-700">Booked</p>
-              <p className="mt-0.5 text-lg font-bold text-emerald-700">{RM0(f.bookedTotal)}</p>
-              <p className="text-[10px] text-emerald-600/70">already rung, awaiting settlement</p>
+            <div className="rounded-lg bg-ok-soft px-3 py-2">
+              <p className="text-[11px] text-ok-text">Booked</p>
+              <p className="mt-0.5 text-lg font-bold text-ok-text">{RM0(f.bookedTotal)}</p>
+              <p className="text-[10px] text-ok-text">already rung, awaiting settlement</p>
             </div>
             <div className="rounded-lg bg-sunken px-3 py-2">
               <p className="text-[11px] text-text-2">Projected</p>
@@ -131,12 +131,12 @@ export default function IncomingPanel() {
           {/* Discounts given over the trailing window of the same length. The
               settlement figures above are already net of discount — this shows
               how much revenue was given away to bring it in. */}
-          <div className="mt-2 flex items-center justify-between rounded-lg bg-amber-50 px-3 py-1.5">
-            <p className="text-[11px] text-amber-700">
-              Discounts given <span className="text-amber-600/70">(prior {f.discounts.from === f.discounts.to ? "day" : "period"})</span>
+          <div className="mt-2 flex items-center justify-between rounded-lg bg-warn-soft px-3 py-1.5">
+            <p className="text-[11px] text-warn-text">
+              Discounts given <span className="text-warn-text">(prior {f.discounts.from === f.discounts.to ? "day" : "period"})</span>
             </p>
-            <p className="text-sm font-semibold text-amber-700">
-              {RM0(f.discounts.total)} <span className="text-[11px] font-normal text-amber-600/70">· {f.discounts.pct}% of gross</span>
+            <p className="text-sm font-semibold text-warn-text">
+              {RM0(f.discounts.total)} <span className="text-[11px] font-normal text-warn-text">· {f.discounts.pct}% of gross</span>
             </p>
           </div>
 
@@ -148,11 +148,11 @@ export default function IncomingPanel() {
                 <div key={d.date} className="rounded-md px-1.5 py-1 hover:bg-sunken">
                   <div className="flex items-center gap-2">
                     <div className="w-20 shrink-0 text-xs">
-                      <span className={`font-medium ${l.isToday ? "text-emerald-700" : "text-text-2"}`}>{l.dow}</span>{" "}
+                      <span className={`font-medium ${l.isToday ? "text-ok-text" : "text-text-2"}`}>{l.dow}</span>{" "}
                       <span className="text-text-3">{l.date}</span>
                     </div>
                     <div className="relative h-4 flex-1 overflow-hidden rounded bg-sunken">
-                      <div className="absolute inset-y-0 left-0 bg-emerald-500/80" style={{ width: `${(d.net / maxNet) * bookedPct}%` }} />
+                      <div className="absolute inset-y-0 left-0 bg-ok/80" style={{ width: `${(d.net / maxNet) * bookedPct}%` }} />
                       <div
                         className="absolute inset-y-0 bg-line"
                         style={{ left: `${(d.net / maxNet) * bookedPct}%`, width: `${(d.net / maxNet) * (100 - bookedPct)}%` }}
@@ -175,7 +175,7 @@ export default function IncomingPanel() {
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-2 text-[11px] text-text-2">
-            <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-emerald-500/80" /> booked</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-ok/80" /> booked</span>
             <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-line" /> projected</span>
             {f.byEntity.map((e) => (
               <span key={e.entity} className="ml-auto sm:ml-0">
@@ -192,7 +192,7 @@ export default function IncomingPanel() {
           <p className="mt-1.5 text-[10px] leading-relaxed text-text-3">
             Grab is included above at its trailing bank run-rate ({RM0(f.reconcile.grabPerDay)}/day, pools into HQ 4384).
             {f.reconcile.otherPerDay > 0 && (
-              <> A further ~{RM0(f.reconcile.otherPerDay)}/day of non-sales credits (meetings, refunds, misc) hits the bank but isn&apos;t forecast here — that&apos;s the gap between this panel and total &ldquo;Avg cash in&rdquo;.</>
+              <> A further ~{RM0(f.reconcile.otherPerDay)}/day of non-sales credits (meetings, refunds, misc) hits the bank but isn&apos;t forecast here — that&apos;s the gap between this panel and &ldquo;Average cash in&rdquo;.</>
             )}
           </p>
         </>

@@ -57,20 +57,20 @@ export default function DailyRunRateStrip({ account }: { account?: string }) {
           {/* Headline: the three per-day numbers. Cash in is the ~RM10.6k the
               owner reads off the bank; net is the true daily cash generation. */}
           <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
-            <div className="rounded-lg bg-emerald-50 px-3 py-2">
-              <p className="text-[11px] text-emerald-700">Avg cash in / day</p>
-              <p className="mt-0.5 text-xl font-bold text-emerald-700">{RM0(r.overall.avgIn)}</p>
+            <div className="rounded-lg bg-ok-soft px-3 py-2">
+              <p className="text-[11px] text-ok-text">Average cash in a day</p>
+              <p className="mt-0.5 text-xl font-bold text-ok-text">{RM0(r.overall.avgIn)}</p>
             </div>
-            <div className="rounded-lg bg-red-50 px-3 py-2">
-              <p className="text-[11px] text-red-700">Avg cash out / day</p>
-              <p className="mt-0.5 text-xl font-bold text-red-700">{RM0(r.overall.avgOut)}</p>
+            <div className="rounded-lg bg-danger-soft px-3 py-2">
+              <p className="text-[11px] text-danger-text">Average cash out a day</p>
+              <p className="mt-0.5 text-xl font-bold text-danger-text">{RM0(r.overall.avgOut)}</p>
             </div>
-            <div className={`rounded-lg px-3 py-2 ${r.overall.avgNet >= 0 ? "bg-emerald-50" : "bg-amber-50"}`}>
-              <p className={`flex items-center gap-1 text-[11px] ${r.overall.avgNet >= 0 ? "text-emerald-700" : "text-amber-700"}`}>
+            <div className={`rounded-lg px-3 py-2 ${r.overall.avgNet >= 0 ? "bg-ok-soft" : "bg-warn-soft"}`}>
+              <p className={`flex items-center gap-1 text-[11px] ${r.overall.avgNet >= 0 ? "text-ok-text" : "text-warn-text"}`}>
                 {r.overall.avgNet >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                Avg net / day
+                Average net a day
               </p>
-              <p className={`mt-0.5 text-xl font-bold ${r.overall.avgNet >= 0 ? "text-emerald-700" : "text-amber-700"}`}>
+              <p className={`mt-0.5 text-xl font-bold ${r.overall.avgNet >= 0 ? "text-ok-text" : "text-warn-text"}`}>
                 {signed(r.overall.avgNet)}
               </p>
             </div>
@@ -85,13 +85,13 @@ export default function DailyRunRateStrip({ account }: { account?: string }) {
               <div key={label} className="rounded-lg border border-line bg-sunken/60 px-3 py-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-text-2">{label}</span>
-                  <span className={`text-xs font-semibold ${leg.avgNet >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                  <span className={`text-xs font-semibold ${leg.avgNet >= 0 ? "text-ok-text" : "text-danger-text"}`}>
                     net {signed(leg.avgNet)}/day
                   </span>
                 </div>
                 <div className="mt-1 flex items-center gap-3 text-[11px] text-text-2">
-                  <span>in <span className="font-medium text-emerald-700">{RM0(leg.avgIn)}</span></span>
-                  <span>out <span className="font-medium text-red-600">{RM0(leg.avgOut)}</span></span>
+                  <span>in <span className="font-medium text-ok-text">{RM0(leg.avgIn)}</span></span>
+                  <span>out <span className="font-medium text-danger-text">{RM0(leg.avgOut)}</span></span>
                   <span className="ml-auto text-text-3">{leg.days}d</span>
                 </div>
               </div>

@@ -85,12 +85,12 @@ export default function MonthlyCashflowPage() {
     <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <Link href="/finance/cashflow" className="inline-flex items-center gap-1 text-xs text-text-2 hover:text-text-2">
-            <ChevronLeft className="h-3 w-3" /> Cashflow
+          <Link href="/finance/cashflow" className="inline-flex items-center gap-1 text-[13px] text-text-2 hover:text-text">
+            <ChevronLeft className="h-3.5 w-3.5" /> Cash flow
           </Link>
-          <h2 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Monthly Cash Flow</h2>
-          <p className="mt-0.5 text-xs sm:text-sm text-text-2">
-            Consolidated net cash flow from Maybank statements (gross — includes inter-company transfers between entities, matching the cash-tracking spreadsheet). Group bank balance is the sum of each entity&rsquo;s month-end balance.
+          <h1 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Monthly cash flow</h1>
+          <p className="mt-0.5 text-sm text-text-2">
+            Net cash in and out each month across all companies, from the Maybank statements. Transfers between our own companies are included, as in the cash-tracking sheet; the group balance adds up each company&rsquo;s month-end balance.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -171,14 +171,14 @@ export default function MonthlyCashflowPage() {
                 {data.monthly.map((m) => (
                   <tr key={m.month} className="border-t border-line hover:bg-sunken">
                     <td className="px-3 py-2 font-medium text-text">{monthLabel(m.month)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-green-700">{fmtMYR(m.inflow)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-red-700">{fmtMYR(m.outflow)}</td>
-                    <td className={`px-3 py-2 text-right font-semibold tabular-nums ${m.net >= 0 ? "text-green-700" : "text-red-700"}`}>{fmtMYR(m.net)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-ok-text">{fmtMYR(m.inflow)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-danger-text">{fmtMYR(m.outflow)}</td>
+                    <td className={`px-3 py-2 text-right font-semibold tabular-nums ${m.net >= 0 ? "text-ok-text" : "text-danger-text"}`}>{fmtMYR(m.net)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-text">{fmtMYR(m.closingBalance)}</td>
                     <td className="hidden px-3 py-2 sm:table-cell">
                       <div className="flex h-3 w-40 overflow-hidden rounded-sm bg-sunken">
-                        <div className="bg-green-400" style={{ width: `${(m.inflow / maxBar) * 50}%` }} />
-                        <div className="bg-red-400" style={{ width: `${(m.outflow / maxBar) * 50}%` }} />
+                        <div className="bg-ok" style={{ width: `${(m.inflow / maxBar) * 50}%` }} />
+                        <div className="bg-danger" style={{ width: `${(m.outflow / maxBar) * 50}%` }} />
                       </div>
                     </td>
                   </tr>
@@ -187,9 +187,9 @@ export default function MonthlyCashflowPage() {
               <tfoot>
                 <tr className="border-t-2 border-line-2 bg-sunken font-semibold">
                   <td className="px-3 py-2 text-text">Total</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-green-700">{fmtMYR(data.totals.inflow)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-red-700">{fmtMYR(data.totals.outflow)}</td>
-                  <td className={`px-3 py-2 text-right tabular-nums ${data.totals.net >= 0 ? "text-green-700" : "text-red-700"}`}>{fmtMYR(data.totals.net)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-ok-text">{fmtMYR(data.totals.inflow)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-danger-text">{fmtMYR(data.totals.outflow)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${data.totals.net >= 0 ? "text-ok-text" : "text-danger-text"}`}>{fmtMYR(data.totals.net)}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-text">{fmtMYR(data.totals.closingBalance)}</td>
                   <td className="hidden sm:table-cell" />
                 </tr>
@@ -223,7 +223,7 @@ function SummaryCard({
   tone: "in" | "out" | "net" | "bal";
   invertDelta?: boolean;
 }) {
-  const color = tone === "in" ? "text-green-700" : tone === "out" ? "text-red-700" : tone === "net" ? (value >= 0 ? "text-green-700" : "text-red-700") : "text-text";
+  const color = tone === "in" ? "text-ok-text" : tone === "out" ? "text-danger-text" : tone === "net" ? (value >= 0 ? "text-ok-text" : "text-danger-text") : "text-text";
   const delta = compare && prev != null && prev !== 0 ? ((value - prev) / Math.abs(prev)) * 100 : null;
   const good = delta == null ? false : invertDelta ? delta < 0 : delta > 0;
   return (
@@ -231,7 +231,7 @@ function SummaryCard({
       <div className="flex items-center gap-1.5 text-xs text-text-2">{icon}{label}</div>
       <div className={`mt-1 text-lg font-semibold tabular-nums ${color}`}>{fmtMYR(value)}</div>
       {delta != null && (
-        <div className={`mt-0.5 text-[11px] font-medium ${good ? "text-green-600" : "text-red-600"}`}>
+        <div className={`mt-0.5 text-[11px] font-medium ${good ? "text-ok-text" : "text-danger-text"}`}>
           {delta >= 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(0)}% vs prev
         </div>
       )}
@@ -248,7 +248,7 @@ function CategoryPanel({ title, rows, max, tone }: { title: string; rows: CatRow
           <div key={r.category} className="flex items-center gap-2">
             <div className="w-32 shrink-0 truncate text-xs text-text-2" title={catLabel(r.category)}>{catLabel(r.category)}</div>
             <div className="relative h-4 flex-1 overflow-hidden rounded-sm bg-sunken">
-              <div className={`h-full ${tone === "in" ? "bg-green-300" : "bg-red-300"}`} style={{ width: `${(r.amount / max) * 100}%` }} />
+              <div className={`h-full ${tone === "in" ? "bg-ok" : "bg-danger"}`} style={{ width: `${(r.amount / max) * 100}%` }} />
             </div>
             <div className="w-24 shrink-0 text-right text-xs tabular-nums text-text">{fmtMYR(r.amount)}</div>
           </div>

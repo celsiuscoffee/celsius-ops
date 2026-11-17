@@ -3,7 +3,8 @@
 import { Fragment, useState, useMemo } from "react";
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Loader2, AlertTriangle, Banknote, TrendingDown, TrendingUp, ChevronDown, X } from "lucide-react";
+import { Loader2, AlertTriangle, Banknote, ChevronDown, X } from "lucide-react";
+import { KeyNumber } from "@/components/ui/key-number";
 import DailyBalancePanel from "./DailyBalancePanel";
 import DailyRunRateStrip from "./DailyRunRateStrip";
 import IncomingPanel from "./IncomingPanel";
@@ -303,9 +304,9 @@ export default function CashflowPage() {
     <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Cashflow Projection</h2>
-          <p className="mt-0.5 text-xs sm:text-sm text-text-2">
-            Weekly cash position based on bank balance, sales forecast, and committed outflows.
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Cash flow</h1>
+          <p className="mt-0.5 text-sm text-text-2">
+            How much cash is in the bank, what is coming in and going out, and how low it gets.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -338,7 +339,7 @@ export default function CashflowPage() {
                 <div className="absolute right-0 z-20 mt-1 w-64 rounded-lg border border-line bg-surface shadow-lg">
                   <div className="flex items-center justify-between border-b border-line px-3 py-2">
                     <span className="text-xs font-medium text-text-2">Filter by outlet</span>
-                    <button onClick={clearOutlets} className="text-[11px] text-blue-600 hover:underline">Clear</button>
+                    <button onClick={clearOutlets} className="text-[11px] text-info-text hover:underline">Clear</button>
                   </div>
                   <div className="max-h-[280px] overflow-y-auto p-1">
                     {(outlets ?? []).map((o) => {
@@ -364,7 +365,7 @@ export default function CashflowPage() {
             ))}
           </div>
           <Link href="/finance/bank-statements" className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-sunken">
-            <Banknote className="h-3.5 w-3.5" /> Bank Statements
+            <Banknote className="h-3.5 w-3.5" /> Bank statements
           </Link>
         </div>
       </div>
@@ -377,7 +378,7 @@ export default function CashflowPage() {
           BELOW them inside the table toolbar — so nothing told you what window
           you were looking at. */}
       <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-line bg-sunken/60 px-3 py-2">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-text-3">Period</span>
+        <span className="text-[12px] font-medium text-text-3">Period</span>
         <div className="flex rounded-lg border border-line bg-surface p-0.5">
           {PERIODS.map((p) => (
             <button
@@ -398,7 +399,7 @@ export default function CashflowPage() {
 
         <span className="mx-1 hidden h-4 w-px bg-line sm:block" />
 
-        <span className="text-[11px] font-medium uppercase tracking-wide text-text-3">Scope</span>
+        <span className="text-[12px] font-medium text-text-3">Scope</span>
         <select
           value={account}
           onChange={(e) => setAccount(e.target.value)}
@@ -422,7 +423,7 @@ export default function CashflowPage() {
 
         <span className="mx-1 hidden h-4 w-px bg-line sm:block" />
 
-        <span className="text-[11px] font-medium uppercase tracking-wide text-text-3">Grain</span>
+        <span className="text-[12px] font-medium text-text-3">Grain</span>
         <div className="flex rounded-lg border border-line bg-surface p-0.5">
           {CADENCES.map((c) => (
             <button
@@ -434,6 +435,29 @@ export default function CashflowPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Headline KPIs, computed over the FILTERED cash-generated rows,
+          so they move with the control bar above. The scope is echoed
+          underneath the heading because the single most confusing thing
+          about the old layout was not knowing what window a number covered. */}
+      <p className="mt-4 text-[12px] text-text-3">
+        Showing <span className="font-medium text-text-2">{periodLabel}</span>
+        {" · "}{account ? (ACCOUNTS.find((a) => a.code === account)?.name ?? account) : "all accounts"}
+        {" · "}interco {includeInterco ? "on" : "off"}
+        {" · "}per {cadenceUnit}
+      </p>
+      <div className="mt-1.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label="Average cash in" value={cashGenSummary ? fmtMYR2(cashGenSummary.avgIn) : null}
+          note={<>per {cadenceUnit}{cashGenSummary ? ` · ${cashGenSummary.n} ${cadenceUnit}s` : ""}</>} />
+        <KeyNumber label="Average cash out" value={cashGenSummary ? fmtMYR2(cashGenSummary.avgOut) : null}
+          note={<>per {cadenceUnit}</>} />
+        <KeyNumber label="Lowest balance" value={cashGenSummary ? (cashGenSummary.minBal == null ? "–" : fmtMYR2(cashGenSummary.minBal)) : null}
+          tone={cashGenSummary?.minBal != null && cashGenSummary.minBal < 10000 ? "warn" : undefined}
+          note={cashGenSummary?.minBalRow?.minBalanceDate ? `on ${cashGenSummary.minBalRow.minBalanceDate}` : "lowest in range"} />
+        <KeyNumber label="Cash generated" value={cashGenSummary ? fmtMYR2(cashGenSummary.net) : null}
+          tone={cashGenSummary && cashGenSummary.net < 0 ? "warn" : undefined}
+          note={<>net over {cashGen ? cashGen.rangeLabel : "range"}{includeInterco ? "" : ", interco off"}</>} />
       </div>
 
       {isLoading || !data ? (
@@ -463,52 +487,6 @@ export default function CashflowPage() {
           <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <IncomingPanel />
             <PayablesPanel />
-          </div>
-
-          {/* Headline KPIs, computed over the FILTERED cash-generated rows,
-              so they move with the control bar above. The scope is echoed
-              underneath the heading because the single most confusing thing
-              about the old layout was not knowing what window a number covered. */}
-          <p className="mt-4 text-[11px] text-text-3">
-            Showing <span className="font-medium text-text-2">{periodLabel}</span>
-            {" · "}{account ? (ACCOUNTS.find((a) => a.code === account)?.name ?? account) : "all accounts"}
-            {" · "}interco {includeInterco ? "on" : "off"}
-            {" · "}per {cadenceUnit}
-          </p>
-          <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-            <div className="rounded-lg border border-line bg-surface px-3 py-2.5">
-              <p className="text-xs text-text-2">Avg cash in</p>
-              <p className="mt-0.5 text-lg font-bold text-green-600">
-                {cashGenSummary ? fmtMYR2(cashGenSummary.avgIn) : "—"}
-              </p>
-              <p className="text-[10px] text-text-3">per {cadenceUnit}{cashGenSummary ? ` · ${cashGenSummary.n} ${cadenceUnit}s` : ""}</p>
-            </div>
-            <div className="rounded-lg border border-line bg-surface px-3 py-2.5">
-              <p className="text-xs text-text-2">Avg cash out</p>
-              <p className="mt-0.5 text-lg font-bold text-red-600">
-                {cashGenSummary ? fmtMYR2(cashGenSummary.avgOut) : "—"}
-              </p>
-              <p className="text-[10px] text-text-3">per {cadenceUnit}</p>
-            </div>
-            <div className="rounded-lg border border-line bg-surface px-3 py-2.5">
-              <p className="text-xs text-text-2">Min balance</p>
-              <p className={`mt-0.5 text-lg font-bold ${cashGenSummary?.minBal == null ? "text-text-3" : cashGenSummary.minBal < 0 ? "text-red-600" : cashGenSummary.minBal < 10000 ? "text-amber-600" : "text-text"}`}>
-                {cashGenSummary?.minBal == null ? "—" : fmtMYR2(cashGenSummary.minBal)}
-              </p>
-              <p className="text-[10px] text-text-3">
-                {cashGenSummary?.minBalRow?.minBalanceDate
-                  ? `lowest, ${cashGenSummary.minBalRow.minBalanceDate}`
-                  : "lowest in range"}
-              </p>
-            </div>
-            <div className="rounded-lg border border-line bg-surface px-3 py-2.5">
-              <p className="text-xs text-text-2">Cash generated</p>
-              <p className={`mt-0.5 flex items-center gap-1 text-lg font-bold ${!cashGenSummary ? "text-text-3" : cashGenSummary.net >= 0 ? "text-green-600" : "text-red-600"}`}>
-                {cashGenSummary && (cashGenSummary.net >= 0 ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />)}
-                {cashGenSummary ? fmtMYR2(cashGenSummary.net) : "—"}
-              </p>
-              <p className="text-[10px] text-text-3">net over {cashGen ? cashGen.rangeLabel : "range"}{includeInterco ? "" : ", interco off"}</p>
-            </div>
           </div>
 
           {/* Cash generated (actuals from bank statements). Daily / Weekly /
@@ -554,8 +532,8 @@ export default function CashflowPage() {
                       <tr className="border-b bg-sunken/50 text-left text-text-2">
                         {([
                           { col: "period" as const, label: cadence === "DAILY" ? "Day" : cadence === "WEEKLY" ? "Week" : "Month", align: "left" },
-                          { col: "cashIn" as const, label: "Cash in", align: "right", cls: "text-green-600" },
-                          { col: "cashOut" as const, label: "Cash out", align: "right", cls: "text-red-600" },
+                          { col: "cashIn" as const, label: "Cash in", align: "right", cls: "text-ok-text" },
+                          { col: "cashOut" as const, label: "Cash out", align: "right", cls: "text-danger-text" },
                           { col: "netGenerated" as const, label: "Net generated", align: "right" },
                           { col: "minBalance" as const, label: "Min balance", align: "right" },
                         ]).map((h) => (
@@ -575,14 +553,14 @@ export default function CashflowPage() {
                         const expectedAccounts = cashGen.accountsInScope;
                         const incomplete = cashGen.account == null && m.accountsReporting < expectedAccounts;
                         return (
-                          <tr key={m.period} className={`hover:bg-sunken ${m.netGenerated < 0 ? "bg-red-50/30" : ""}`}>
+                          <tr key={m.period} className={`hover:bg-sunken ${m.netGenerated < 0 ? "bg-danger-soft" : ""}`}>
                             <td className="px-4 py-2 text-xs font-medium text-text-2">{fmtCashGenLabel(m, cadence)}</td>
-                            <td className="px-4 py-2 text-right font-mono text-xs text-green-700">+{fmtMYR(m.cashIn)}</td>
-                            <td className="px-4 py-2 text-right font-mono text-xs text-red-700">−{fmtMYR(m.cashOut)}</td>
-                            <td className={`px-4 py-2 text-right font-mono text-xs font-bold ${m.netGenerated >= 0 ? "text-green-700" : "text-red-700"}`}>
+                            <td className="px-4 py-2 text-right font-mono text-xs text-ok-text">+{fmtMYR(m.cashIn)}</td>
+                            <td className="px-4 py-2 text-right font-mono text-xs text-danger-text">−{fmtMYR(m.cashOut)}</td>
+                            <td className={`px-4 py-2 text-right font-mono text-xs font-bold ${m.netGenerated >= 0 ? "text-ok-text" : "text-danger-text"}`}>
                               {m.netGenerated >= 0 ? "+" : ""}{fmtMYR(m.netGenerated)}
                             </td>
-                            <td className={`px-4 py-2 text-right font-mono text-xs ${m.minBalance == null ? "text-text-3" : m.minBalance < 0 ? "text-red-600 font-semibold" : m.minBalance < 10000 ? "text-amber-600" : "text-text-2"}`}>
+                            <td className={`px-4 py-2 text-right font-mono text-xs ${m.minBalance == null ? "text-text-3" : m.minBalance < 0 ? "text-danger-text font-semibold" : m.minBalance < 10000 ? "text-warn-text" : "text-text-2"}`}>
                               {m.minBalance == null ? "-" : fmtMYR(m.minBalance)}
                               {m.minBalanceDate && (
                                 <span className="ml-1 text-[10px] text-text-3">({m.minBalanceDate.slice(8, 10)}/{m.minBalanceDate.slice(5, 7)})</span>
@@ -591,7 +569,7 @@ export default function CashflowPage() {
                             {cashGen.account == null && (
                               <td className="px-4 py-2 text-[11px]">
                                 {incomplete
-                                  ? <span className="text-amber-600">{m.accountsReporting}/{expectedAccounts} accounts ⚠</span>
+                                  ? <span className="text-warn-text">{m.accountsReporting}/{expectedAccounts} accounts ⚠</span>
                                   : <span className="text-text-2">{m.accountsReporting}/{expectedAccounts} accounts</span>}
                               </td>
                             )}
@@ -634,32 +612,32 @@ export default function CashflowPage() {
                   <thead>
                     <tr className="border-b bg-sunken/50 text-left text-text-2">
                       <th className="px-3 py-2 font-medium">Month</th>
-                      <th className="px-3 py-2 text-right font-medium text-green-600">Sales</th>
-                      <th className="px-3 py-2 text-right font-medium text-red-600">Payroll</th>
-                      <th className="px-3 py-2 text-right font-medium text-red-600">COGS</th>
-                      <th className="px-3 py-2 text-right font-medium text-red-600">Rent</th>
-                      <th className="px-3 py-2 text-right font-medium text-red-600">Utilities</th>
-                      <th className="px-3 py-2 text-right font-medium text-red-600">Marketing</th>
-                      <th className="px-3 py-2 text-right font-medium text-red-600">Software</th>
-                      <th className="px-3 py-2 text-right font-medium text-red-600">Tax/Comp.</th>
-                      <th className="px-3 py-2 text-right font-medium text-red-600">Maint.</th>
+                      <th className="px-3 py-2 text-right font-medium text-ok-text">Sales</th>
+                      <th className="px-3 py-2 text-right font-medium text-danger-text">Payroll</th>
+                      <th className="px-3 py-2 text-right font-medium text-danger-text">COGS</th>
+                      <th className="px-3 py-2 text-right font-medium text-danger-text">Rent</th>
+                      <th className="px-3 py-2 text-right font-medium text-danger-text">Utilities</th>
+                      <th className="px-3 py-2 text-right font-medium text-danger-text">Marketing</th>
+                      <th className="px-3 py-2 text-right font-medium text-danger-text">Software</th>
+                      <th className="px-3 py-2 text-right font-medium text-danger-text">Tax/Comp.</th>
+                      <th className="px-3 py-2 text-right font-medium text-danger-text">Maint.</th>
                       <th className="px-3 py-2 text-right font-medium">Operating net</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {data.operatingCashFlow.map((m) => (
-                      <tr key={m.month} className={`hover:bg-sunken ${m.operatingNet < 0 ? "bg-red-50/30" : ""}`}>
+                      <tr key={m.month} className={`hover:bg-sunken ${m.operatingNet < 0 ? "bg-danger-soft" : ""}`}>
                         <td className="px-3 py-2 text-xs font-medium text-text-2">{m.month}</td>
-                        <td className="px-3 py-2 text-right font-mono text-xs text-green-700" title={`Card ${fmtMYR(m.sales.card)} · QR ${fmtMYR(m.sales.qr)} · StoreHub ${fmtMYR(m.sales.storehub)} · Grab ${fmtMYR(m.sales.grab)} · FoodPanda ${fmtMYR(m.sales.foodpanda)} · GastroHub ${fmtMYR(m.sales.gastrohub)} · Meetings ${fmtMYR(m.sales.meetings)}`}>+{fmtMYR(m.sales.total)}</td>
-                        <td className="px-3 py-2 text-right font-mono text-xs text-red-700">{m.costs.payroll > 0 ? `−${fmtMYR(m.costs.payroll)}` : "—"}</td>
-                        <td className="px-3 py-2 text-right font-mono text-xs text-red-700">{m.costs.cogs > 0 ? `−${fmtMYR(m.costs.cogs)}` : "—"}</td>
-                        <td className="px-3 py-2 text-right font-mono text-xs text-red-700">{m.costs.rent > 0 ? `−${fmtMYR(m.costs.rent)}` : "—"}</td>
-                        <td className="px-3 py-2 text-right font-mono text-xs text-red-700">{m.costs.utilities > 0 ? `−${fmtMYR(m.costs.utilities)}` : "—"}</td>
-                        <td className="px-3 py-2 text-right font-mono text-xs text-red-700">{m.costs.marketing > 0 ? `−${fmtMYR(m.costs.marketing)}` : "—"}</td>
-                        <td className="px-3 py-2 text-right font-mono text-xs text-red-700">{m.costs.software > 0 ? `−${fmtMYR(m.costs.software)}` : "—"}</td>
-                        <td className="px-3 py-2 text-right font-mono text-xs text-red-700">{m.costs.taxCompliance > 0 ? `−${fmtMYR(m.costs.taxCompliance)}` : "—"}</td>
-                        <td className="px-3 py-2 text-right font-mono text-xs text-red-700">{m.costs.maintenance > 0 ? `−${fmtMYR(m.costs.maintenance)}` : "—"}</td>
-                        <td className={`px-3 py-2 text-right font-mono text-xs font-bold ${m.operatingNet >= 0 ? "text-green-700" : "text-red-700"}`}>
+                        <td className="px-3 py-2 text-right font-mono text-xs text-ok-text" title={`Card ${fmtMYR(m.sales.card)} · QR ${fmtMYR(m.sales.qr)} · StoreHub ${fmtMYR(m.sales.storehub)} · Grab ${fmtMYR(m.sales.grab)} · FoodPanda ${fmtMYR(m.sales.foodpanda)} · GastroHub ${fmtMYR(m.sales.gastrohub)} · Meetings ${fmtMYR(m.sales.meetings)}`}>+{fmtMYR(m.sales.total)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-xs text-danger-text">{m.costs.payroll > 0 ? `−${fmtMYR(m.costs.payroll)}` : "—"}</td>
+                        <td className="px-3 py-2 text-right font-mono text-xs text-danger-text">{m.costs.cogs > 0 ? `−${fmtMYR(m.costs.cogs)}` : "—"}</td>
+                        <td className="px-3 py-2 text-right font-mono text-xs text-danger-text">{m.costs.rent > 0 ? `−${fmtMYR(m.costs.rent)}` : "—"}</td>
+                        <td className="px-3 py-2 text-right font-mono text-xs text-danger-text">{m.costs.utilities > 0 ? `−${fmtMYR(m.costs.utilities)}` : "—"}</td>
+                        <td className="px-3 py-2 text-right font-mono text-xs text-danger-text">{m.costs.marketing > 0 ? `−${fmtMYR(m.costs.marketing)}` : "—"}</td>
+                        <td className="px-3 py-2 text-right font-mono text-xs text-danger-text">{m.costs.software > 0 ? `−${fmtMYR(m.costs.software)}` : "—"}</td>
+                        <td className="px-3 py-2 text-right font-mono text-xs text-danger-text">{m.costs.taxCompliance > 0 ? `−${fmtMYR(m.costs.taxCompliance)}` : "—"}</td>
+                        <td className="px-3 py-2 text-right font-mono text-xs text-danger-text">{m.costs.maintenance > 0 ? `−${fmtMYR(m.costs.maintenance)}` : "—"}</td>
+                        <td className={`px-3 py-2 text-right font-mono text-xs font-bold ${m.operatingNet >= 0 ? "text-ok-text" : "text-danger-text"}`}>
                           {m.operatingNet >= 0 ? "+" : ""}{fmtMYR(m.operatingNet)}
                         </td>
                       </tr>
@@ -675,9 +653,9 @@ export default function CashflowPage() {
 
           {/* Warnings */}
           {data.warnings.length > 0 && (
-            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+            <div className="mt-3 rounded-lg border border-warn/30 bg-warn-soft px-3 py-2">
               {data.warnings.map((w, i) => (
-                <p key={i} className="flex items-start gap-1.5 text-xs text-amber-800">
+                <p key={i} className="flex items-start gap-1.5 text-xs text-warn-text">
                   <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   <span>{w}</span>
                 </p>
@@ -694,13 +672,13 @@ export default function CashflowPage() {
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-text-2">
               {data.projectedDailyMin && (
                 <span title="Lowest point on the day-by-day projection — the real intra-week dip when salary/rent clear before receipts land.">
-                  Lowest day: <span className={`font-mono ${data.projectedDailyMin.balance < 0 ? "text-red-600" : data.projectedDailyMin.balance < 10000 ? "text-amber-600" : "text-text-2"}`}>{fmtMYR(data.projectedDailyMin.balance)}</span>{" "}
+                  Lowest day: <span className={`font-mono ${data.projectedDailyMin.balance < 0 ? "text-danger-text" : data.projectedDailyMin.balance < 10000 ? "text-warn-text" : "text-text-2"}`}>{fmtMYR(data.projectedDailyMin.balance)}</span>{" "}
                   ({fmtDay(data.projectedDailyMin.date)})
                 </span>
               )}
               {lowestWeek && (
                 <span>
-                  Lowest week-end: <span className={`font-mono ${lowestWeek.closing < 0 ? "text-red-600" : "text-amber-600"}`}>{fmtMYR(lowestWeek.closing)}</span>{" "}
+                  Lowest week-end: <span className={`font-mono ${lowestWeek.closing < 0 ? "text-danger-text" : "text-warn-text"}`}>{fmtMYR(lowestWeek.closing)}</span>{" "}
                   ({shortRange(lowestWeek.weekStart, lowestWeek.weekEnd)})
                 </span>
               )}
@@ -710,7 +688,7 @@ export default function CashflowPage() {
                 return (
                   <span>
                     Net change over {weeks}w:{" "}
-                    <span className={`font-mono ${delta >= 0 ? "text-green-600" : "text-red-600"}`}>{delta >= 0 ? "+" : ""}{fmtMYR(delta)}</span>
+                    <span className={`font-mono ${delta >= 0 ? "text-ok-text" : "text-danger-text"}`}>{delta >= 0 ? "+" : ""}{fmtMYR(delta)}</span>
                   </span>
                 );
               })()}
@@ -782,12 +760,12 @@ function WeeklyModelTable({ buckets, lowestWeekStart }: { buckets: CashflowBucke
   };
   const cellCls = (kind: Row["kind"], v: number): string => {
     switch (kind) {
-      case "in": return "text-green-700";
-      case "subtotal-in": return "font-semibold text-green-700";
-      case "out": return "text-red-700";
-      case "subtotal-out": return "font-semibold text-red-700";
-      case "net": return `font-semibold ${v >= 0 ? "text-green-700" : "text-red-700"}`;
-      default: return `font-bold ${v < 0 ? "text-red-600" : "text-text"}`;
+      case "in": return "text-ok-text";
+      case "subtotal-in": return "font-semibold text-ok-text";
+      case "out": return "text-danger-text";
+      case "subtotal-out": return "font-semibold text-danger-text";
+      case "net": return `font-semibold ${v >= 0 ? "text-ok-text" : "text-danger-text"}`;
+      default: return `font-bold ${v < 0 ? "text-danger-text" : "text-text"}`;
     }
   };
 
@@ -800,7 +778,7 @@ function WeeklyModelTable({ buckets, lowestWeekStart }: { buckets: CashflowBucke
             {buckets.map((b, i) => (
               <th
                 key={b.weekStart}
-                className={`whitespace-nowrap px-3 py-2 text-right font-medium ${b.weekStart === lowestWeekStart ? "bg-amber-50 text-amber-700" : ""}`}
+                className={`whitespace-nowrap px-3 py-2 text-right font-medium ${b.weekStart === lowestWeekStart ? "bg-warn-soft text-warn-text" : ""}`}
               >
                 <span className="block text-[10px] text-text-3">W{i + 1}</span>
                 {shortRange(b.weekStart, b.weekEnd)}
@@ -829,7 +807,7 @@ function WeeklyModelTable({ buckets, lowestWeekStart }: { buckets: CashflowBucke
                   return (
                     <td
                       key={b.weekStart}
-                      className={`whitespace-nowrap px-3 py-1.5 text-right font-mono text-xs ${cellCls(row.kind, v)} ${b.weekStart === lowestWeekStart ? "bg-amber-50/60" : ""}`}
+                      className={`whitespace-nowrap px-3 py-1.5 text-right font-mono text-xs ${cellCls(row.kind, v)} ${b.weekStart === lowestWeekStart ? "bg-warn-soft" : ""}`}
                     >
                       {cellText(row.kind, v)}
                     </td>
@@ -868,18 +846,18 @@ function Sparkline({ points, max, min }: { points: { label: string; value: numbe
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[180px]" preserveAspectRatio="none">
       {/* Zero line */}
       {min < 0 && (
-        <line x1={PAD} x2={W - PAD} y1={zeroY} y2={zeroY} stroke="#fca5a5" strokeWidth={1} strokeDasharray="4 4" />
+        <line x1={PAD} x2={W - PAD} y1={zeroY} y2={zeroY} stroke="var(--color-danger-text)" strokeWidth={1} strokeDasharray="4 4" />
       )}
       {/* Negative shaded area */}
-      {negativeArea && <path d={negativeArea} fill="#fee2e2" />}
+      {negativeArea && <path d={negativeArea} fill="var(--color-danger-soft)" />}
       {/* Line */}
-      <path d={d} fill="none" stroke="#C2714F" strokeWidth={2.5} strokeLinejoin="round" />
+      <path d={d} fill="none" stroke="var(--color-chart-1)" strokeWidth={2.5} strokeLinejoin="round" />
       {/* Dots + labels */}
       {points.map((p, i) => (
         <g key={i}>
-          <circle cx={x(i)} cy={y(p.value)} r={3} fill={p.value < 0 ? "#dc2626" : "#C2714F"} />
+          <circle cx={x(i)} cy={y(p.value)} r={3} fill={p.value < 0 ? "var(--color-danger-text)" : "var(--color-chart-1)"} />
           {i === 0 || i === points.length - 1 || i % Math.max(1, Math.floor(points.length / 6)) === 0 ? (
-            <text x={x(i)} y={H - 6} textAnchor="middle" fontSize={9} fill="#9ca3af">{p.label}</text>
+            <text x={x(i)} y={H - 6} textAnchor="middle" fontSize={9} fill="var(--color-text-3)">{p.label}</text>
           ) : null}
         </g>
       ))}

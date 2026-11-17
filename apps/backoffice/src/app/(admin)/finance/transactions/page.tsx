@@ -91,7 +91,7 @@ function monthOptions(): { value: string; label: string; from: string; to: strin
 
 type SortKey = "txnDate" | "description" | "category" | "account" | "amount";
 
-const SELECT_CLASS = "h-8 rounded-md border bg-background px-2 text-xs sm:text-sm shrink-0 max-w-[40vw]";
+const SELECT_CLASS = "h-8 rounded-md border border-line bg-surface text-text px-2 text-xs sm:text-sm shrink-0 max-w-[40vw]";
 
 function SortTh({
   label, sortField, sortKey, sortDir, onSort, className = "", align = "left",
@@ -105,7 +105,7 @@ function SortTh({
       <button
         type="button"
         onClick={() => onSort(sortField)}
-        className={`inline-flex items-center gap-1 font-medium uppercase tracking-wide hover:text-foreground ${align === "right" ? "flex-row-reverse" : ""}`}
+        className={`inline-flex items-center gap-1 font-medium uppercase tracking-wide hover:text-text ${align === "right" ? "flex-row-reverse" : ""}`}
       >
         {label}
         {active ? (
@@ -278,23 +278,23 @@ export default function FinanceLedgerPage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Ledger</h1>
           {view === "bank" ? (
-            <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
-              Real cash ledger from the bank statements, every deposit and payment, classified. Sort any column; filter like a spreadsheet.
+            <p className="mt-0.5 text-sm text-text-2">
+              Every deposit and payment from the bank statements, with its category. Sort or filter any column.
               {data && <span className="ml-1">Showing from {data.from}{data.to ? ` to ${data.to}` : ""}.</span>}
             </p>
           ) : (
-            <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
-              Double-entry journals behind the books, from the finance agents and manual adjusting entries. Click a journal to see its lines or reverse it.
+            <p className="mt-0.5 text-sm text-text-2">
+              The journals behind the books, from the finance agents and adjusting entries. Open a journal to see its lines or reverse it.
             </p>
           )}
         </div>
-        <div className="flex shrink-0 rounded-lg border bg-card p-0.5">
+        <div className="flex shrink-0 rounded-lg border border-line bg-surface p-0.5">
           {([["bank", "Bank lines"], ["journals", "Journals"]] as const).map(([id, label]) => (
             <button
               key={id}
               type="button"
               onClick={() => setView(id)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${view === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/40"}`}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${view === id ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"}`}
             >
               {label}
             </button>
@@ -306,15 +306,15 @@ export default function FinanceLedgerPage() {
 
       {view === "bank" && <>
       {/* Filter toolbar */}
-      <div className="space-y-2 rounded-lg border bg-card p-3">
+      <div className="space-y-2 rounded-lg border bg-surface p-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[180px] flex-1">
-            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-2" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search description, reference, category…"
-              className="h-8 w-full rounded-md border bg-background pl-7 pr-2 text-sm"
+              className="h-8 w-full rounded-md border border-line bg-surface text-text pl-7 pr-2 text-sm"
             />
           </div>
 
@@ -355,9 +355,9 @@ export default function FinanceLedgerPage() {
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-text-2">
           <label className="flex items-center gap-1">Period
-            <select value={periodSel} onChange={(e) => applyPeriod(e.target.value)} className="h-8 rounded-md border bg-background px-2 text-xs sm:text-sm" title="Period">
+            <select value={periodSel} onChange={(e) => applyPeriod(e.target.value)} className="h-8 rounded-md border border-line bg-surface text-text px-2 text-xs sm:text-sm" title="Period">
               <optgroup label="Quick ranges">
                 <option value="thisMonth">This month</option>
                 <option value="lastMonth">Last month</option>
@@ -374,10 +374,10 @@ export default function FinanceLedgerPage() {
           </label>
           <DateRangePicker size="xs" start={dateFrom} end={dateTo} onChange={(s, e) => { setDateFrom(s); setDateTo(e); setPeriodSel("custom"); }} />
           <label className="flex items-center gap-1">Min RM
-            <input type="number" inputMode="decimal" value={amountMin} onChange={(e) => setAmountMin(e.target.value)} className="h-8 w-24 rounded-md border bg-background px-2 text-xs tabular-nums" />
+            <input type="number" inputMode="decimal" value={amountMin} onChange={(e) => setAmountMin(e.target.value)} className="h-8 w-24 rounded-md border border-line bg-surface text-text px-2 text-xs tabular-nums" />
           </label>
           <label className="flex items-center gap-1">Max RM
-            <input type="number" inputMode="decimal" value={amountMax} onChange={(e) => setAmountMax(e.target.value)} className="h-8 w-24 rounded-md border bg-background px-2 text-xs tabular-nums" />
+            <input type="number" inputMode="decimal" value={amountMax} onChange={(e) => setAmountMax(e.target.value)} className="h-8 w-24 rounded-md border border-line bg-surface text-text px-2 text-xs tabular-nums" />
           </label>
           <Button variant="outline" size="sm" className="h-8" onClick={exportCsv} disabled={filtered.length === 0} title="Export the filtered rows to CSV (opens in Excel)">
             <Download className="mr-1 h-3 w-3" /> Export
@@ -389,32 +389,32 @@ export default function FinanceLedgerPage() {
           )}
           <span className="ml-auto flex flex-wrap items-center gap-x-3 tabular-nums">
             <span>{filtered.length} {filtered.length === 1 ? "line" : "lines"}</span>
-            <span className="text-green-700">In {RM(totals.inn)}</span>
-            <span className="text-red-700">Out {RM(totals.out)}</span>
-            <span className={totals.net >= 0 ? "font-semibold text-green-700" : "font-semibold text-red-700"}>
+            <span className="text-ok-text">In {RM(totals.inn)}</span>
+            <span className="text-danger-text">Out {RM(totals.out)}</span>
+            <span className={totals.net >= 0 ? "font-semibold text-ok-text" : "font-semibold text-danger-text"}>
               Net {totals.net >= 0 ? "+" : ""}{RM(totals.net)}
             </span>
           </span>
         </div>
       </div>
 
-      {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+      {isLoading && <Loader2 className="h-5 w-5 animate-spin text-text-2" />}
       {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+        <div className="rounded-lg border border-transparent bg-danger-soft p-3 text-sm text-danger-text">
           Failed to load: {String(error)}
         </div>
       )}
 
       {data && lines.length === 0 && (
-        <div className="rounded-lg border border-dashed p-12 text-center text-sm text-muted-foreground">
+        <div className="rounded-lg border border-dashed p-12 text-center text-sm text-text-2">
           No bank-statement lines in this range. Upload statements on the Bank Statements page, or widen the date range.
         </div>
       )}
 
       {data && lines.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border bg-card">
+        <div className="overflow-x-auto rounded-lg border bg-surface">
           <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <thead className="bg-sunken text-left text-xs uppercase tracking-wide text-text-2">
               <tr>
                 <SortTh label="Date" sortField="txnDate" sortKey={sortKey} sortDir={sortDir} onSort={onSort} className="whitespace-nowrap" />
                 <SortTh label="Description" sortField="description" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
@@ -427,39 +427,39 @@ export default function FinanceLedgerPage() {
               {rendered.map((l) => (
                 <tr
                   key={l.id}
-                  className="cursor-pointer border-t transition hover:bg-muted/30"
+                  className="cursor-pointer border-t transition hover:bg-sunken"
                   onClick={() => setOpenLine(l)}
                 >
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums align-top">{l.txnDate}</td>
                   <td className="max-w-[340px] px-3 py-2">
                     <div className="truncate">{l.description}</div>
-                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <div className="flex items-center gap-1 text-[11px] text-text-2">
                       {l.reference && <span className="truncate">{l.reference}</span>}
                       <span className="sm:hidden">· {humanCat(l.category)}</span>
-                      {l.isInterCo && <span className="rounded bg-amber-500/15 px-1 text-amber-700">inter-co</span>}
+                      {l.isInterCo && <span className="rounded bg-warn-soft px-1 text-warn-text">inter-co</span>}
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 hidden sm:table-cell align-top">
                     <Badge variant="outline" className="font-normal">{humanCat(l.category)}</Badge>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 hidden md:table-cell align-top text-xs text-muted-foreground">
+                  <td className="whitespace-nowrap px-3 py-2 hidden md:table-cell align-top text-xs text-text-2">
                     {companyOf(l.account)}
                   </td>
-                  <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums align-top font-medium ${l.direction === "CR" ? "text-green-700" : "text-red-700"}`}>
+                  <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums align-top font-medium ${l.direction === "CR" ? "text-ok-text" : "text-danger-text"}`}>
                     {l.direction === "CR" ? "+" : "−"}{RM(l.amount)}
                   </td>
                 </tr>
               ))}
               {filtered.length > MAX_RENDER && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-3 text-center text-xs text-muted-foreground">
+                  <td colSpan={5} className="px-3 py-3 text-center text-xs text-text-2">
                     Showing first {MAX_RENDER} of {filtered.length.toLocaleString()} lines — narrow with filters or the date range. Totals above reflect all {filtered.length.toLocaleString()}.
                   </td>
                 </tr>
               )}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-10 text-center text-sm text-muted-foreground">
+                  <td colSpan={5} className="px-3 py-10 text-center text-sm text-text-2">
                     No lines match your filters.
                   </td>
                 </tr>
@@ -477,46 +477,46 @@ export default function FinanceLedgerPage() {
           {openLine && (
             <div className="space-y-5 overflow-y-auto p-6 text-sm">
               <section className="space-y-1">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Description</div>
+                <div className="text-xs uppercase tracking-wide text-text-2">Description</div>
                 <div className="break-words">{openLine.description}</div>
                 {openLine.reference && (
-                  <div className="break-all text-xs text-muted-foreground">Ref: {openLine.reference}</div>
+                  <div className="break-all text-xs text-text-2">Ref: {openLine.reference}</div>
                 )}
               </section>
               <section className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Date</div>
+                  <div className="text-xs uppercase tracking-wide text-text-2">Date</div>
                   <div className="tabular-nums">{openLine.txnDate}</div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Amount</div>
-                  <div className={`font-medium tabular-nums ${openLine.direction === "CR" ? "text-green-700" : "text-red-700"}`}>
+                  <div className="text-xs uppercase tracking-wide text-text-2">Amount</div>
+                  <div className={`font-medium tabular-nums ${openLine.direction === "CR" ? "text-ok-text" : "text-danger-text"}`}>
                     {openLine.direction === "CR" ? "+" : "−"}{RM(openLine.amount)} ({openLine.direction === "CR" ? "in" : "out"})
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Category</div>
+                  <div className="text-xs uppercase tracking-wide text-text-2">Category</div>
                   <Badge variant="outline" className="font-normal">{humanCat(openLine.category)}</Badge>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Company</div>
+                  <div className="text-xs uppercase tracking-wide text-text-2">Company</div>
                   <div className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5 shrink-0" />{companyOf(openLine.account)}</div>
                 </div>
                 {openLine.outlet && (
                   <div>
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Outlet</div>
+                    <div className="text-xs uppercase tracking-wide text-text-2">Outlet</div>
                     <div>{openLine.outlet}</div>
                   </div>
                 )}
                 {openLine.isInterCo && (
                   <div>
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Inter-company</div>
-                    <div className="text-amber-700">Yes</div>
+                    <div className="text-xs uppercase tracking-wide text-text-2">Inter-company</div>
+                    <div className="text-warn-text">Yes</div>
                   </div>
                 )}
               </section>
               {(openLine.classifiedBy || openLine.ruleName) && (
-                <section className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
+                <section className="rounded-md border bg-sunken p-3 text-xs text-text-2">
                   Classified by {openLine.classifiedBy ?? "—"}
                   {openLine.ruleName && <> · rule <span className="font-mono">{openLine.ruleName}</span></>}
                 </section>
