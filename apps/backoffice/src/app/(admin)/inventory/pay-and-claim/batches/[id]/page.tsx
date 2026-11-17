@@ -112,7 +112,7 @@ export default function BatchDetailPage() {
     : "bg-line text-text-2";
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <Link
         href="/inventory/pay-and-claim/batches"
         className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
@@ -123,7 +123,7 @@ export default function BatchDetailPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold font-mono">{batch.batchNumber}</h1>
+            <h1 className="font-mono text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{batch.batchNumber}</h1>
             <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${statusPill}`}>
               {batch.status}
             </span>

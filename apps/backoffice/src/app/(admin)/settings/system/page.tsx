@@ -14,9 +14,9 @@ import { ArrowRight, Percent, Coins, ShoppingBag } from "lucide-react";
  */
 export default function SystemSettingsPage() {
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-text">System Settings</h2>
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">System Settings</h2>
         <p className="mt-0.5 text-sm text-text-2">
           These settings now live closer to where they apply — follow the links below.
         </p>

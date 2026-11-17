@@ -218,7 +218,7 @@ export default function PayrollPage() {
   const fmt = (n: number) => `RM ${Number(n || 0).toLocaleString("en-MY", { minimumFractionDigits: 2 })}`;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <HrPageHeader
         title="Payroll (Monthly · Full-Timers)"
         action={

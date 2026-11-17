@@ -573,7 +573,7 @@ export default function NotificationsPage() {
 
       {/* ── Page header + tab switcher ───────────────────────── */}
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-text flex items-center gap-2">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           <MessageSquare className="h-5 w-5 text-amber-600" />
           Engage
         </h1>

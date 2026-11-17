@@ -287,7 +287,7 @@ export default function SalesDashboard() {
     <div className="p-3 sm:p-6 pb-10 min-h-0 w-full">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-text">Sales Dashboard</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Sales Dashboard</h1>
         <p className="mt-1 text-sm text-text-2">Sales performance by time round</p>
       </div>
 

@@ -767,11 +767,11 @@ export default function PayAndClaimPage() {
   ];
 
   return (
-    <div className="p-3 sm:p-6 space-y-4 sm:space-y-5">
+    <div className="space-y-4 sm:space-y-5 px-4 pt-6 pb-10 md:px-8">
       {/* ── Header ── */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-lg sm:text-xl font-semibold text-text">Payment Requests</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Payment Requests</h1>
           <p className="mt-0.5 text-xs sm:text-sm text-text-2">Staff claims and direct vendor payment requests</p>
         </div>
         <div className="flex items-center gap-2">

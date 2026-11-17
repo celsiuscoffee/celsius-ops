@@ -263,6 +263,11 @@ overrides of the old greys were dropped (the tokens already adapt). Signals
 (red, amber, green, blue) are untouched. `components/ui` (shadcn) already read
 the tokens. `lib/celsius-ui-palette.test.ts` keeps the old classes out.
 
+**Part 2 (17 Nov):** one page title style on 138 pages (`text-2xl font-semibold
+leading-[30px] tracking-[-0.01em] text-text`) and one page margin on 135 pages
+(`px-4 pt-6 pb-10 md:px-8`, the same as Inbox and Roster; cards, pop-ups and
+centred loading states untouched).
+
 Still to do in step 6: page-by-page layout (title + one line, at most four key
 numbers each against a reference, one list), section by section, starting with
 the most-used pages once Office Usage has data.

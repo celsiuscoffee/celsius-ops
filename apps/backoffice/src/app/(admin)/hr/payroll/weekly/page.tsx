@@ -203,12 +203,12 @@ export default function WeeklyPayrollPage() {
     `RM ${Number(n || 0).toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <div className="flex items-center gap-3">
         <Link href="/hr/payroll" className="text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="inline h-4 w-4" /> Monthly
         </Link>
-        <h1 className="text-2xl font-bold">Weekly Payroll (Part-Timers)</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Weekly Payroll (Part-Timers)</h1>
       </div>
       <p className="text-sm text-muted-foreground">
         Part-time payroll runs Mon–Sun, paid the following week. Gross = clocked hours

@@ -102,13 +102,13 @@ export default function StaffAllowancesPage() {
   const defaults = data?.defaults;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <BackToHR />
       <AllowanceTabs />
 
       <div className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold">Flat Allowances (Per Staff)</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Flat Allowances (Per Staff)</h2>
           <p className="text-sm text-muted-foreground">
             A value here pays <strong>flat</strong> — the full amount every month, with no KPI
             scoring and no lateness/absence or review deductions. Meant for roles the levers

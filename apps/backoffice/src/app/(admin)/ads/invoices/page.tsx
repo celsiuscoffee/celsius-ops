@@ -213,10 +213,10 @@ export default function StatementsPage() {
   }
 
   return (
-    <div className="space-y-4 p-3 sm:p-4 lg:p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
         <div>
-          <h1 className="text-lg sm:text-xl font-semibold">Ads Claims</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Ads Claims</h1>
           <p className="text-xs text-text-2">Pay-and-claim tracking per outlet per month (8% SST on digital services)</p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">

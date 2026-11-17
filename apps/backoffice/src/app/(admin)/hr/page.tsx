@@ -184,10 +184,10 @@ export default function HRDashboardPage() {
   ];
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">HR Dashboard</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">HR Dashboard</h1>
           <p className="text-sm text-muted-foreground">AI-managed, human-reviewed</p>
         </div>
         <button

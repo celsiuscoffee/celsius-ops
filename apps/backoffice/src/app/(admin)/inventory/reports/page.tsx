@@ -15,8 +15,8 @@ const REPORTS = [
 
 export default function ReportsPage() {
   return (
-    <div className="p-3 sm:p-6">
-      <h2 className="text-xl font-semibold text-text">Reports</h2>
+    <div className="px-4 pt-6 pb-10 md:px-8">
+      <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Reports</h2>
       <p className="mt-0.5 text-sm text-text-2">{REPORTS.length} reports for Celsius Coffee operations</p>
 
       <div className="mt-6 space-y-3">

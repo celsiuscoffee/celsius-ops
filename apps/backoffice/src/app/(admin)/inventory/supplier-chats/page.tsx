@@ -737,7 +737,7 @@ export default function SupplierChatsPage() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-64px)] gap-3 p-3 text-foreground lg:min-h-[560px]">
+    <div className="flex h-[calc(100dvh-64px)] gap-3 text-foreground lg:min-h-[560px] px-4 pt-6 pb-10 md:px-8">
       {/* ── Thread list ─────────────────────────────── */}
       <div className={`${selected ? "hidden lg:flex" : "flex"} w-full lg:w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm`}>
         <div className="border-b border-border p-3">

@@ -131,11 +131,11 @@ export default function StoreMenuStatusPage() {
   const totalSnoozed = data?.snoozedItems.length ?? 0;
 
   return (
-    <div className="p-3 sm:p-6 space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-text">Store / Menu Status</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Store / Menu Status</h1>
           <p className="text-sm text-text-2">
             Live: who&rsquo;s open, who&rsquo;s selling, and what&rsquo;s 86&rsquo;d — across all outlets.
           </p>

@@ -114,11 +114,11 @@ export default function AuditTemplatesPage() {
   const totalItems = (t: AuditTemplate) => t.sections.reduce((s, sec) => s + sec.items.length, 0);
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <SopNav />
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-text">Audit Templates</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Audit Templates</h2>
           <p className="mt-0.5 text-sm text-text-2">
             {templates?.length ?? 0} template{(templates?.length ?? 0) !== 1 ? "s" : ""}
           </p>

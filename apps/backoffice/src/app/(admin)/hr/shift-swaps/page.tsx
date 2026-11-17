@@ -81,7 +81,7 @@ export default function ShiftSwapsPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <PromptDialog />
       <HrPageHeader
         title="Shift Swap Requests"

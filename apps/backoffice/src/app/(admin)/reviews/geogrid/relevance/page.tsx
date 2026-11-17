@@ -105,7 +105,7 @@ export default function RelevanceAuditPage() {
       <Link href="/reviews/geogrid" className="mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" /> Back to Geogrid
       </Link>
-      <h1 className="font-heading text-2xl font-bold text-foreground">Keyword Relevance Audit</h1>
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Keyword Relevance Audit</h1>
       <p className="text-sm text-muted-foreground">
         Your live Google Business Profile vs the target keywords. Reviews widen how far you rank; <em>these</em> fields decide whether you rank for a term at all.
       </p>

@@ -124,13 +124,13 @@ export default function StaffSkillsDetailPage({ params }: { params: Promise<{ us
   const { auditee, templates } = data;
 
   return (
-    <div className="space-y-4 p-6 max-w-4xl">
+    <div className="space-y-4 max-w-4xl px-4 pt-6 pb-10 md:px-8">
       <Link href="/ops/staff-skills" className="inline-flex items-center gap-1 text-sm text-text-2 hover:text-text-2">
         <ArrowLeft className="h-4 w-4" />Back to Staff Skills
       </Link>
 
       <div>
-        <h2 className="text-xl font-semibold text-text">{auditee.name}</h2>
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{auditee.name}</h2>
         <p className="text-sm text-text-2">
           {templates.length} skill template{templates.length !== 1 ? "s" : ""} audited
         </p>

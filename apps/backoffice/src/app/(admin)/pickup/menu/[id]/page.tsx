@@ -40,7 +40,7 @@ export default function EditProductPage() {
 
   if (notFound || !product) {
     return (
-      <div className="p-6 max-w-3xl mx-auto space-y-4">
+      <div className="max-w-3xl mx-auto space-y-4 px-4 pt-6 pb-10 md:px-8">
         <Link href="/pickup/menu" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-text">
           <ArrowLeft className="h-4 w-4" /> Back to products
         </Link>

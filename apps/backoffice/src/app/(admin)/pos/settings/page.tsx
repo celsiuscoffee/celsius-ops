@@ -137,15 +137,15 @@ export default function POSSettingsPage() {
 
   if (!editing) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold text-text">POS Settings</h1>
+      <div className="px-4 pt-6 pb-10 md:px-8">
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">POS Settings</h1>
         <p className="mt-2 text-sm text-text-2">No outlets configured.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-5xl">
+    <div className="space-y-5 max-w-5xl px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>

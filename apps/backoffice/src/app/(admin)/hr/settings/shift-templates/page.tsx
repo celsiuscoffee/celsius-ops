@@ -85,9 +85,9 @@ export default function ShiftTemplatesPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <div>
-        <h1 className="text-2xl font-bold">HR Settings</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">HR Settings</h1>
         <p className="text-sm text-muted-foreground">Configure how leave, payroll, and scheduling work for your team</p>
       </div>
       <SettingsNav />

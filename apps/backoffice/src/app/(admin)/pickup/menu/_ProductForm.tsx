@@ -205,7 +205,7 @@ export function ProductForm({ product, categories }: Props) {
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-text">
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
             {isEditing ? "Edit Product" : "Add Product"}
           </h1>
           {isEditing && (

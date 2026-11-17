@@ -49,7 +49,7 @@ export default function InboxPage() {
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-text-3">
             {isLoading ? "Loading…" : `${items.length} waiting${nowCount ? ` · ${nowCount} need you now` : ""}`}
           </p>
-          <h1 className="mt-1 text-2xl font-semibold leading-[30px] text-text">Everything waiting on you, in one place</h1>
+          <h1 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Everything waiting on you, in one place</h1>
           <p className="mt-1.5 text-sm text-text-2">Approvals from across the office. Open one to decide it on its own page.</p>
         </div>
         <button

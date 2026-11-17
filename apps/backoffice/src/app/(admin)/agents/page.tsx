@@ -222,10 +222,10 @@ export default function AgentsPage() {
   const actual30d = agents.reduce((sum, a) => sum + (a.actualCost30d ?? 0), 0);
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h2 className="flex items-center gap-2 text-xl font-semibold text-text">
+          <h2 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
             <Bot className="h-5 w-5 text-text-2" /> AI Agents
           </h2>
           <p className="mt-0.5 text-sm text-text-2">

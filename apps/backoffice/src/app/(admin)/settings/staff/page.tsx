@@ -324,11 +324,11 @@ export default function StaffPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-text">Staff</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Staff</h2>
           <p className="mt-0.5 text-sm text-text-2">{filtered.length === staff.length ? staff.length : `${filtered.length} of ${staff.length}`} members across {new Set(staff.map((s) => s.outlet).filter(Boolean)).size} locations</p>
         </div>
         <Button onClick={openAdd} className="bg-ink hover:bg-ink-hover"><Plus className="mr-1.5 h-4 w-4" />Add User</Button>

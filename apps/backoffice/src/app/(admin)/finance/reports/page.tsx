@@ -3005,9 +3005,9 @@ export default function FinanceReportsPage() {
   }, [glHydrated, tab, glAccounts, controls.start, controls.end]);
 
   return (
-    <div className="space-y-4 p-3 sm:p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <header>
-        <h1 className="text-xl sm:text-2xl font-semibold">Reports</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Reports</h1>
         <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
           P&L is source-driven (sales, procurement, ads, bank). Balance Sheet &amp; Cash Flow are ledger-based and fill in as journals post.
         </p>

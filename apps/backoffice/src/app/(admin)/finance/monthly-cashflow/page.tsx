@@ -82,13 +82,13 @@ export default function MonthlyCashflowPage() {
   );
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Link href="/finance/cashflow" className="inline-flex items-center gap-1 text-xs text-text-2 hover:text-text-2">
             <ChevronLeft className="h-3 w-3" /> Cashflow
           </Link>
-          <h2 className="mt-1 text-lg sm:text-xl font-semibold text-text">Monthly Cash Flow</h2>
+          <h2 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Monthly Cash Flow</h2>
           <p className="mt-0.5 text-xs sm:text-sm text-text-2">
             Consolidated net cash flow from Maybank statements (gross — includes inter-company transfers between entities, matching the cash-tracking spreadsheet). Group bank balance is the sum of each entity&rsquo;s month-end balance.
           </p>

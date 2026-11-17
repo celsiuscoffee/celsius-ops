@@ -293,7 +293,7 @@ export default function POSTableQRPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-6xl print:p-0 print:m-0 print:space-y-0 print:max-w-none">
+    <div className="space-y-5 max-w-6xl print:p-0 print:m-0 print:space-y-0 print:max-w-none px-4 pt-6 pb-10 md:px-8">
       {/* Print rules. Designed view → one print-ready sticker per page (page sized
           to the chosen sticker + bleed + crop-mark slug). Plain view → A4 sheet. */}
       <style
@@ -319,7 +319,7 @@ export default function POSTableQRPage() {
       />
 
       <div className="print:hidden">
-        <h1 className="text-2xl font-bold text-text">Table QR Codes</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Table QR Codes</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           Auto-generated from each outlet&rsquo;s floor plan. Customer scans → menu → order + pay on their phone.
         </p>

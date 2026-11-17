@@ -119,7 +119,7 @@ export default function AdsOverviewPage() {
   }
   if (error || !data) {
     return (
-      <div className="p-6">
+      <div className="px-4 pt-6 pb-10 md:px-8">
         <Card className="p-6 text-center text-sm text-text-2">
           <Megaphone className="mx-auto mb-3 h-8 w-8 text-text-3" />
           No ads data yet. Go to <Link href="/ads/settings" className="text-brand-text underline">Settings</Link> and run a manual sync.
@@ -134,9 +134,9 @@ export default function AdsOverviewPage() {
   const convDelta = pctDelta(data.mtd.conversions, data.prev.conversions);
 
   return (
-    <div className="space-y-4 p-4 lg:p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Ads Overview</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Ads Overview</h1>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={outletId}

@@ -333,11 +333,11 @@ export default function ParLevelsPage() {
   const productsWithoutParCount = products.filter((p) => !getParLevel(p.id)).length;
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-text">Par Levels</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Par Levels</h2>
           <p className="mt-0.5 text-sm text-text-2">
             Manage reorder points and target stock levels per product
           </p>

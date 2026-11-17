@@ -588,11 +588,11 @@ export default function IntegrationsPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6 max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-6 px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-text">Integrations</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Integrations</h1>
           <p className="text-sm text-text-2 mt-0.5">Payment gateways, accounting, and connected services</p>
         </div>
         <button

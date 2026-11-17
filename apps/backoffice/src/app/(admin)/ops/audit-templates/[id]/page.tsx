@@ -158,14 +158,14 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
   const totalItems = sections.reduce((s, sec) => s + sec.items.length, 0);
 
   return (
-    <div className="p-3 sm:p-6 max-w-3xl">
+    <div className="max-w-3xl px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="mb-6">
         <Link href="/ops/audit-templates" className="inline-flex items-center gap-1 text-sm text-text-2 hover:text-text-2 mb-3">
           <ArrowLeft className="h-4 w-4" />Back to Templates
         </Link>
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-text">Edit Template</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Edit Template</h2>
           <Button onClick={handleSave} disabled={saving || !name.trim()} className="bg-ink hover:bg-ink-hover">
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Save className="h-4 w-4 mr-1.5" />}
             Save

@@ -136,7 +136,7 @@ export default function AdsOptimizerPage() {
       <Link href="/ads" className="mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" /> Back to Google Ads
       </Link>
-      <h1 className="font-heading text-2xl font-bold text-foreground">Budget Optimizer</h1>
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Budget Optimizer</h1>
       <p className="text-sm text-muted-foreground">
         How much ad spend you can safely reclaim and move to other marketing. Two tiers: <strong>waste</strong> (terms you
         already own on the map — near-zero conversion loss) and <strong>efficiency trims</strong> on the least cost-efficient

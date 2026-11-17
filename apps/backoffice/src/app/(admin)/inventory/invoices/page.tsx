@@ -1167,11 +1167,11 @@ export default function InvoicesPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-text">Invoices</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Invoices</h2>
           <p className="mt-0.5 text-xs sm:text-sm text-text-2">{invoices.length} invoices &middot; Track and reconcile supplier invoices</p>
         </div>
         <Button

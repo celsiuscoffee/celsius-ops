@@ -453,12 +453,12 @@ export default function AllRewardsPage() {
   }
 
   return (
-    <div className="px-6 py-6 max-w-[1400px] mx-auto">
+    <div className="max-w-[1400px] mx-auto px-4 pt-6 pb-10 md:px-8">
 
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div>
-          <h1 className="text-2xl font-bold text-text">Rewards</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Rewards</h1>
           <p className="text-sm text-text-2 mt-1">
             Every reward template across every channel. One template, many triggers.
           </p>

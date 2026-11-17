@@ -239,10 +239,10 @@ export default function PrepRecipesPage() {
     .slice(0, 8);
 
   return (
-    <div className="space-y-5 p-6">
+    <div className="space-y-5 px-4 pt-6 pb-10 md:px-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold text-text">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
             <ChefHat className="h-5 w-5 text-brand-text" /> Prep Recipes
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-text-2">

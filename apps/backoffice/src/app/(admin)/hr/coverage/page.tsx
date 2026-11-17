@@ -93,7 +93,7 @@ export default function CoveragePage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <HrPageHeader
         title="Outlet Coverage Rules"
         description="Minimum staffing needs per outlet per day/slot. Scheduling flags slots that don't hit the minimum."

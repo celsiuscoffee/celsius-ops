@@ -763,7 +763,7 @@ export default function CreateOrderPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -773,7 +773,7 @@ export default function CreateOrderPage() {
             </Button>
           </Link>
           <div>
-            <h2 className="text-xl font-semibold text-text">Smart Order</h2>
+            <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Smart Order</h2>
             <p className="text-sm text-text-2">Create purchase orders based on stock levels</p>
           </div>
         </div>

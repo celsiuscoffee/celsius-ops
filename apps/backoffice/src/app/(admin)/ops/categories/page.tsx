@@ -59,10 +59,10 @@ export default function CategoriesPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-text">SOP Categories</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">SOP Categories</h2>
           <p className="mt-0.5 text-sm text-text-2">Organize SOPs by category</p>
         </div>
         <Button onClick={openCreate} className="bg-ink hover:bg-ink-hover">

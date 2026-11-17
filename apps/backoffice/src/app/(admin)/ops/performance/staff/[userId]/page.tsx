@@ -50,12 +50,12 @@ export default function StaffPerformancePage({ params }: { params: Promise<{ use
   const staff = data?.staffBreakdown?.[0];
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="mb-6">
         <Link href="/ops/performance" className="inline-flex items-center gap-1 text-sm text-text-2 hover:text-text-2 mb-3">
           <ArrowLeft className="h-4 w-4" />Back to Performance
         </Link>
-        <h2 className="text-xl font-semibold text-text">
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           {staff?.name ?? "Staff"} — Performance
         </h2>
         {staff && (

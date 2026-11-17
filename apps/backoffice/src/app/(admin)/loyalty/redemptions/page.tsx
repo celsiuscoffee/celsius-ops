@@ -92,11 +92,11 @@ export default function AdminRedemptionsPage() {
   ).length;
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text dark:text-white">
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
             Redemptions
           </h1>
           <p className="mt-1 text-sm text-text-2">

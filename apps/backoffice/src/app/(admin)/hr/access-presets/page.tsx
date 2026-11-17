@@ -49,9 +49,9 @@ export default function AccessPresetsPage() {
   const ok = data ? data.total - data.deviating : 0;
 
   return (
-    <div className="p-3 sm:p-6 max-w-4xl">
+    <div className="max-w-4xl px-4 pt-6 pb-10 md:px-8">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-text flex items-center gap-2">
+        <h2 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           <ShieldCheck className="h-5 w-5 text-brand-text" /> Staff app access
         </h2>
         <p className="mt-1 text-sm text-text-2">

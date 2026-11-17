@@ -47,11 +47,11 @@ export default function ScoreboardPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-6xl p-4 sm:p-6">
+    <div className="mx-auto max-w-6xl px-4 pt-6 pb-10 md:px-8">
       <Link href="/reviews/geogrid" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Local Rank Geogrid
       </Link>
-      <h1 className="font-heading text-2xl font-bold text-foreground">Daily Rank Scoreboard</h1>
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Daily Rank Scoreboard</h1>
       <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
         The daily lever: reviews acquired per day vs the rate needed to out-review the nearest prominent
         competitor. Reviews are the only local-rank input that moves daily. The geogrid confirms the rings

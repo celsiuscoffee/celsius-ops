@@ -61,11 +61,11 @@ export default function SopsPage() {
   };
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <SopNav />
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-text">SOPs</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">SOPs</h2>
           <p className="mt-0.5 text-sm text-text-2">{sops?.length ?? 0} standard operating procedures</p>
         </div>
         <Link href="/ops/sops/new">

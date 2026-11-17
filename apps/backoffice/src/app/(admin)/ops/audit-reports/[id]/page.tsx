@@ -126,7 +126,7 @@ export default function AuditReportDetailPage({
 
   if (!report) {
     return (
-      <div className="p-6">
+      <div className="px-4 pt-6 pb-10 md:px-8">
         <Card>
           <CardContent className="py-12 text-center">
             <AlertCircle className="mx-auto h-10 w-10 text-text-3" />
@@ -146,7 +146,7 @@ export default function AuditReportDetailPage({
   const isDone = report.status === "COMPLETED";
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
@@ -157,7 +157,7 @@ export default function AuditReportDetailPage({
             <ArrowLeft className="h-3 w-3" /> All audit reports
           </Link>
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-xl font-semibold text-text">
+            <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
               {report.template.name}
             </h2>
             <Badge className={`text-[10px] ${ROLE_COLORS[report.template.roleType]}`}>

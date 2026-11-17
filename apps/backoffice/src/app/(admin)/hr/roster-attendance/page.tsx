@@ -109,7 +109,7 @@ export default function RosterAttendancePage() {
   const s = data?.summary;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <HrPageHeader
         title="Roster Attendance"
         description="Who's rostered vs. who actually showed up — tap any shift for the clock-in details"

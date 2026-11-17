@@ -601,7 +601,7 @@ export default function EmployeeDetailPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
       <div className="flex items-center gap-3">
         <Link href="/hr/employees" className="rounded-lg p-1 hover:bg-sunken">
@@ -620,7 +620,7 @@ export default function EmployeeDetailPage() {
           </div>
         )}
         <div>
-          <h1 className="text-2xl font-bold">{employee.fullName || employee.name}</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{employee.fullName || employee.name}</h1>
           <p className="text-sm text-muted-foreground">
             {employee.role} · {employee.outlet?.name || "No outlet"}
           </p>

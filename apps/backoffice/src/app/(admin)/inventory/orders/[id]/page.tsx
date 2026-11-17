@@ -195,7 +195,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
 
   if (error || !order) {
     return (
-      <div className="p-6">
+      <div className="px-4 pt-6 pb-10 md:px-8">
         <p className="text-sm text-red-500">{error || "Order not found"}</p>
         <Link href="/inventory/orders" className="mt-2 text-sm text-brand-text hover:underline">
           Back to orders
@@ -209,7 +209,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   const statusConfig = STATUS_LABELS[order.status];
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -220,7 +220,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold text-text">{order.orderNumber}</h2>
+              <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{order.orderNumber}</h2>
               {statusConfig && <Badge className={`text-xs ${statusConfig.color}`}>{statusConfig.label}</Badge>}
             </div>
             <p className="text-sm text-text-2">

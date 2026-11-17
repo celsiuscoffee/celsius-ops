@@ -84,12 +84,12 @@ export default function AllowanceSettingsPage() {
   const leverSum = form.perf_lever_checklist + form.perf_lever_phone + form.perf_lever_serving + form.perf_lever_audit;
 
   return (
-    <div className="p-3 sm:p-6 max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6 px-4 pt-6 pb-10 md:px-8">
       <BackToHR />
       <AllowanceTabs />
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Allowance Rules</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Allowance Rules</h1>
           <p className="text-sm text-text-2">Performance allowance (v2): one pool, four KPI levers, minus attendance and review deductions.</p>
         </div>
         <button onClick={save} disabled={saving}

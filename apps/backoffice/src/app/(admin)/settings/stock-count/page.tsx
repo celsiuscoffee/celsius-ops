@@ -72,9 +72,9 @@ export default function StockCountSettingsPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6 max-w-2xl">
+    <div className="max-w-2xl px-4 pt-6 pb-10 md:px-8">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-text">Stock Count Schedule</h2>
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Stock Count Schedule</h2>
         <p className="mt-1 text-sm text-text-2">
           Set which days staff should do stock counts
         </p>

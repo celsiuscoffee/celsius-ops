@@ -44,10 +44,10 @@ export default function ClaimBatchesPage() {
     : <XCircle className="h-3 w-3" />;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Claim Batches</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Claim Batches</h1>
           <p className="text-sm text-muted-foreground">
             Group multiple small staff claims into a single bank transfer per payee.
             One POP settles the whole batch.

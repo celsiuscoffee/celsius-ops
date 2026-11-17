@@ -233,7 +233,7 @@ export default function PickupMenu() {
   const unavailableCount = products.filter((p) => !p.is_available).length;
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-4xl">
+    <div className="space-y-5 max-w-4xl px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
       {/* Tabs */}
       <div className="flex gap-1 bg-surface rounded-xl p-1 w-fit border border-border/40">
@@ -266,7 +266,7 @@ export default function PickupMenu() {
         <>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-text">Products</h1>
+              <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Products</h1>
               <p className="text-sm text-muted-foreground mt-0.5">
                 {products.length} {products.length === 1 ? 'item' : 'items'} · {unavailableCount} unavailable
               </p>

@@ -90,14 +90,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   if (!order) {
     return (
-      <div className="p-6">
+      <div className="px-4 pt-6 pb-10 md:px-8">
         <p className="text-muted-foreground">Order not found.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-2xl">
+    <div className="space-y-5 max-w-2xl px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
@@ -107,7 +107,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-text">#{order.order_number}</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">#{order.order_number}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {new Date(order.created_at).toLocaleString("en-MY", {
               weekday: "short", day: "numeric", month: "short",

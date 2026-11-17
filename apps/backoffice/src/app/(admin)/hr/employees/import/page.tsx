@@ -175,13 +175,13 @@ export default function LoeImportPage() {
   const allCreated = results.length > 0 && results.every((r) => r.status === "created");
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <Link href="/hr/employees" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Back to employees
       </Link>
 
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           <Sparkles className="h-6 w-6 text-brand-text" /> Import Employees from LoE
         </h1>
         <p className="text-sm text-muted-foreground">

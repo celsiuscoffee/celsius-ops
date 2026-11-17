@@ -72,7 +72,7 @@ export default function CogsReportPage() {
   const { data, error, isLoading: loading } = useFetch<CogsData>(url);
 
   return (
-    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6 px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link
@@ -82,7 +82,7 @@ export default function CogsReportPage() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold">COGS Report</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">COGS Report</h1>
           <p className="text-sm text-text-2">
             Cost of Goods Sold analysis by menu item
           </p>

@@ -69,12 +69,12 @@ export default function NewSopPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="mb-6">
         <Link href="/ops/sops" className="inline-flex items-center gap-1 text-sm text-text-2 hover:text-text-2 mb-3">
           <ArrowLeft className="h-4 w-4" />Back to SOPs
         </Link>
-        <h2 className="text-xl font-semibold text-text">Create SOP</h2>
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Create SOP</h2>
       </div>
 
       <div className="max-w-3xl space-y-6">

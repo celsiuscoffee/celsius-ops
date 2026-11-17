@@ -165,7 +165,7 @@ export default function NewBatchPage() {
     : null;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <Link
         href="/inventory/pay-and-claim/batches"
         className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
@@ -174,7 +174,7 @@ export default function NewBatchPage() {
       </Link>
 
       <div>
-        <h1 className="text-2xl font-bold">New Claim Batch</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">New Claim Batch</h1>
         <p className="text-sm text-muted-foreground">
           Pick which staff claims to pay together. All selected invoices must belong to the same payee and the same outlet.
         </p>

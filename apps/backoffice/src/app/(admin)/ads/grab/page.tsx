@@ -68,11 +68,11 @@ export default function GrabMarketingPage() {
   }
 
   return (
-    <div className="space-y-4 p-4 lg:p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <Megaphone className="h-5 w-5 text-emerald-600" />
-          <h1 className="text-xl font-semibold">GrabFood Marketing</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">GrabFood Marketing</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm">

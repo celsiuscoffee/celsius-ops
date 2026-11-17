@@ -159,10 +159,10 @@ export default function ZReportPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-7xl">
+    <div className="space-y-5 max-w-7xl px-4 pt-6 pb-10 md:px-8">
       <ReportsTabs />
       <div>
-        <h1 className="text-2xl font-bold text-text">Daily Report (Shift Close)</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Daily Report (Shift Close)</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           Per-shift sales totals. Click any row to view detail and print the daily slip.
         </p>

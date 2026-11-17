@@ -106,9 +106,9 @@ export default function MaybankQrOrdersPage() {
   }
 
   return (
-    <div className="px-6 py-6 max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto px-4 pt-6 pb-10 md:px-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-text flex items-center gap-2">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           <QrCode className="h-6 w-6 text-emerald-600" />
           Maybank QR — pending payments
         </h1>

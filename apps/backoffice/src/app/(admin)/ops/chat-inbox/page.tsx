@@ -33,10 +33,10 @@ export default function OpsWorkspacePage() {
   ];
 
   return (
-    <div className="p-4">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="mb-4 flex items-center gap-2">
         <LayoutGrid className="h-5 w-5 text-brand-text" />
-        <h1 className="text-lg font-semibold">Ops Workspace</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Ops Workspace</h1>
         <span className="hidden text-xs text-muted-foreground sm:inline">
           Chats, pulse, reminders, instructions &amp; a live monitor of every message
         </span>

@@ -584,7 +584,7 @@ export default function GeogridPage() {
         <ArrowLeft className="h-3.5 w-3.5" /> Back to Reviews
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="font-heading text-2xl font-bold text-foreground">Local Rank Geogrid</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Local Rank Geogrid</h1>
         <div className="flex gap-2">
           <Link
             href="/reviews/geogrid/progress"

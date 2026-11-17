@@ -49,10 +49,10 @@ export default function StaffSkillsOverviewPage() {
   }
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <AuditNav />
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-text">Staff Skills</h2>
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Staff Skills</h2>
         <p className="mt-0.5 text-sm text-text-2">
           Audited staff and their latest skill scores. Click a person to see improvement over time.
         </p>

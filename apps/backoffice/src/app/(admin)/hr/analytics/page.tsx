@@ -37,7 +37,7 @@ export default function HrAnalyticsPage() {
   const maxOutflow = Math.max(...data.payroll_trend_monthly.map((m) => m.total_outflow), 1);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <HrPageHeader
         title="Analytics"
         description={`Headcount, turnover, attendance health, payroll cost trend. Year-to-date from ${data.ytd_start}.`}

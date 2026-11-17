@@ -144,11 +144,11 @@ export default function TaxReportPage() {
   }, [from, to]);
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-6xl">
+    <div className="space-y-5 max-w-6xl px-4 pt-6 pb-10 md:px-8">
       <ReportsTabs />
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-text">Tax Report</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Tax Report</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Completed POS sales grouped by outlet and tax rate. {subtitle}
           </p>

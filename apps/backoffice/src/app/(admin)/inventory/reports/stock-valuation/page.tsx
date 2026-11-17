@@ -54,14 +54,14 @@ export default function StockValuationPage() {
 
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/inventory/reports" className="rounded-lg p-1.5 text-text-3 hover:bg-sunken hover:text-text-2">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h2 className="text-xl font-semibold text-text">Stock Valuation</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Stock Valuation</h2>
           <p className="text-sm text-text-2">System qty vs last count, with RM values</p>
         </div>
       </div>

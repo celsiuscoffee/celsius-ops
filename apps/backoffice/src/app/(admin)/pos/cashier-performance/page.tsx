@@ -142,10 +142,10 @@ export default function CashierPerformancePage() {
   const filtersActive = search.trim() !== "" || quick !== "all";
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-5xl">
+    <div className="space-y-5 max-w-5xl px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text">Cashier Performance</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Cashier Performance</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Phone-number collection per cashier — the loyalty top-of-funnel. Counter-rung
             orders only (Grab / pickup / QR self-orders excluded). Target {target}%.

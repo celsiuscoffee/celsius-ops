@@ -241,11 +241,11 @@ export default function BankStatementsPage() {
   const latest = items[0];
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-text">Bank Statements</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Bank Statements</h2>
           <p className="mt-0.5 text-xs sm:text-sm text-text-2">
             Upload weekly statement (CSV/Excel/PDF). The latest closing balance is the cashflow opening balance, and the period inflows/outflows feed the &ldquo;Other (from bank)&rdquo; column on the projection.
           </p>

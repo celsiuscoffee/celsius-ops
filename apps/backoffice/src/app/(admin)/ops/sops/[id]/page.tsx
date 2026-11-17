@@ -193,7 +193,7 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
   if (!sop) return <div className="p-6 text-center"><p className="text-text-2">SOP not found</p><Link href="/ops/sops" className="mt-2 text-sm text-brand-text hover:underline">Back</Link></div>;
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="mb-6">
         <Link href="/ops/sops" className="inline-flex items-center gap-1 text-sm text-text-2 hover:text-text-2 mb-3">
@@ -202,7 +202,7 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-semibold text-text">{sop.title}</h2>
+              <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{sop.title}</h2>
               <Badge className={`text-xs ${STATUS_COLORS[sop.status]}`}>{sop.status}</Badge>
             </div>
             <p className="mt-1 text-sm text-text-2">

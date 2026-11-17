@@ -955,7 +955,7 @@ export default function MembersPage() {
     return (
       <div className="p-6 space-y-0 pb-20 md:pb-0">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-text dark:text-white">Members</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Members</h1>
           <p className="mt-1 text-sm text-text-2">
             Manage your rewards program members
           </p>

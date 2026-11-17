@@ -68,13 +68,13 @@ export default function PrepLabourPage() {
   const short = s ? s.gapHours < 0 : false;
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex items-center gap-3">
         <Link href="/inventory/reports" className="rounded-lg p-1.5 text-text-3 hover:bg-sunken hover:text-text-2">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h2 className="text-xl font-semibold text-text">Prep Manhours</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Prep Manhours</h2>
           <p className="text-sm text-text-2">Prep hours the period demanded (sales × recipes × prep time) vs rostered hours</p>
         </div>
       </div>

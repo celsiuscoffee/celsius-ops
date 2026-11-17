@@ -260,10 +260,10 @@ export default function PickupAnalyticsPage() {
   const peakHour = hourSeries.reduce((m, h) => h.count > m.count ? h : m, hourSeries[0] ?? { hour: 0, count: 0, label: "" });
 
   return (
-    <div className="p-3 sm:p-6 space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl px-4 pt-6 pb-10 md:px-8">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-text">Pickup app</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Pickup app</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Orders, revenue and engagement from the Celsius Coffee app</p>
         </div>
         <div className="flex gap-1 bg-surface rounded-xl p-1">

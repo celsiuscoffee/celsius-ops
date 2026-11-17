@@ -156,7 +156,7 @@ export default function SchedulesPage() {
     <div className="p-3 sm:p-6 lg:p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Schedules</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Schedules</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Assign SOPs to staff with recurring schedules
           </p>

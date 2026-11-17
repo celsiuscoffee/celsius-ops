@@ -161,7 +161,7 @@ export default function ReviewSettingsPage() {
         <Link href="/reviews" className="rounded-lg p-1.5 hover:bg-muted transition-colors">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="font-heading text-xl font-bold">Review settings</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Review settings</h1>
       </div>
 
       {/* Outlet selector */}

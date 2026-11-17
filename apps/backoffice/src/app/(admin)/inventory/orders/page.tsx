@@ -228,11 +228,11 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-text">PO Lists</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">PO Lists</h2>
           <p className="mt-0.5 text-xs sm:text-sm text-text-2">
             {summary.total} {summary.total === 1 ? 'order' : 'orders'} &middot; {summary.active} active
           </p>

@@ -152,10 +152,10 @@ export default function POSPrintersPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-5xl">
+    <div className="space-y-5 max-w-5xl px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text">POS Printers</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">POS Printers</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Physical printers per outlet. Each docket printer serves one station; receipt printers handle the customer slip.
           </p>

@@ -69,7 +69,7 @@ export default function CompanySettingsPage() {
 
   if (!settings) {
     return (
-      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
         <SettingsNav />
         <div className="rounded-lg border bg-muted/10 p-12 text-center">
           {data ? (
@@ -159,11 +159,11 @@ export default function CompanySettingsPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <SettingsNav />
 
       <div className="flex items-center justify-between">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           <Building2 className="h-6 w-6 text-brand-text" />
           Company Settings
         </h1>

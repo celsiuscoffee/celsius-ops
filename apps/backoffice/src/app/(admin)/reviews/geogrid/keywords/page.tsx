@@ -128,7 +128,7 @@ export default function KeywordStrategyPage() {
       <Link href="/reviews/geogrid" className="mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" /> Back to Geogrid
       </Link>
-      <h1 className="font-heading text-2xl font-bold text-foreground">Keyword Strategy</h1>
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Keyword Strategy</h1>
       <p className="max-w-3xl text-sm text-muted-foreground">
         Seeding picks target keywords by ad demand; this tunes that set by what the scans have since measured. Each tracked
         term is bucketed by where the ROI is — <b>own</b> (stop paying), <b>focus</b> (winnable, push relevance + reviews),

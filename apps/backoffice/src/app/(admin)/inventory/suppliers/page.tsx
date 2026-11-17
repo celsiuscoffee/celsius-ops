@@ -281,12 +281,12 @@ export default function SuppliersPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-text">Suppliers</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Suppliers</h2>
           <p className="mt-0.5 text-sm text-text-2">{suppliers.length} suppliers with product pricing</p>
         </div>
         <Button onClick={openAdd} className="bg-ink hover:bg-ink-hover">

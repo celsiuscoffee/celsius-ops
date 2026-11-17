@@ -119,7 +119,7 @@ export default function ReviewPenaltiesPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto px-4 pt-6 pb-10 md:px-8">
       <div className="mb-6">
         <HrPageHeader
           title="Review Penalties"

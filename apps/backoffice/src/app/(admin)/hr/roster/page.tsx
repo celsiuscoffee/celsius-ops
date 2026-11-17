@@ -138,7 +138,7 @@ export default function RosterPage() {
           <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-text-3">
             {outletName || "Roster"} · {dayWords(weekStart)} – {dayWords(addDays(weekStart, 6))}
           </p>
-          <h1 className="mt-1 text-2xl font-semibold leading-[30px] text-text">Roster</h1>
+          <h1 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Roster</h1>
           <p className="mt-1.5 text-sm text-text-2 max-md:hidden">The week&apos;s shifts, who came, and what waits on you, in one place.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

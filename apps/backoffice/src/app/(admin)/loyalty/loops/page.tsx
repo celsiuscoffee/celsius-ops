@@ -227,7 +227,7 @@ export default function LoopsPage() {
 
       <div className="mb-1 flex items-center gap-2">
         <Repeat className="h-6 w-6 text-[#A2492C]" />
-        <h1 className="text-2xl font-semibold">Win-back loops</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Win-back loops</h1>
       </div>
       <p className="mb-4 text-sm text-text-2">
         Every campaign is a loop: the engine proposes each round&apos;s offers against a holdout and learns which logic wins — the setup sharpens over time. Pick an objective:

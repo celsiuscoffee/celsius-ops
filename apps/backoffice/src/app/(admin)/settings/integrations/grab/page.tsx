@@ -287,11 +287,11 @@ export default function GrabIntegrationPage() {
   const isProd = data.env === "production";
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-text">GrabFood Integration</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">GrabFood Integration</h1>
           <p className="mt-1 text-sm text-text-2">
             Outlet linkage, sync activity, and operational status for the GrabFood Partner API integration.
           </p>

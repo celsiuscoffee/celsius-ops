@@ -119,7 +119,7 @@ export default function ReconciliationPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-foreground">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           <Scale className="h-5 w-5" />
           Supplier Reconciliation
         </h1>

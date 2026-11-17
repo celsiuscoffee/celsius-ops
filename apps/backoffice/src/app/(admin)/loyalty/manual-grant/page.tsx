@@ -79,9 +79,9 @@ export default function ManualGrantPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-3xl px-4 pt-6 pb-10 md:px-8">
       <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           <HandCoins className="w-6 h-6" />
           Manual Voucher Grant
         </h1>

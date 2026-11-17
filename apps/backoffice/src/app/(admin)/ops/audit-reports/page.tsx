@@ -108,11 +108,11 @@ export default function AuditReportsPage() {
       : null;
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <AuditNav />
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-text">Audit Reports</h2>
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Audit Reports</h2>
         <p className="mt-0.5 text-sm text-text-2">
           Manager audits submitted by Area Managers, Heads of Chef & Barista
         </p>

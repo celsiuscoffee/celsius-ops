@@ -212,11 +212,11 @@ export default function AreaScorecardPage() {
   const s = data?.summary;
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+    <div className="overflow-x-hidden px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="mb-5 flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="font-heading text-xl sm:text-2xl font-bold text-foreground">Area Scorecard</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Area Scorecard</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             Which outlets are hitting KPI — live from the POS &amp; apps
           </p>

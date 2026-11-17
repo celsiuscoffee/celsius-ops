@@ -200,7 +200,7 @@ export default function PayrollRunPage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -208,7 +208,7 @@ export default function PayrollRunPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold">Run Payroll</h1>
+            <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Run Payroll</h1>
             <p className="text-sm text-muted-foreground">Single-screen wizard — compute, review, approve.</p>
           </div>
         </div>

@@ -128,7 +128,7 @@ export default function GeogridProgressPage() {
       <Link href="/reviews/geogrid" className="mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" /> Back to Geogrid
       </Link>
-      <h1 className="font-heading text-2xl font-bold text-foreground">Local Rank Progress</h1>
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Local Rank Progress</h1>
       <p className="text-sm text-muted-foreground">
         Movement after each scan, per keyword: did the rank climb toward #1, and did the top-3 radius grow?
       </p>

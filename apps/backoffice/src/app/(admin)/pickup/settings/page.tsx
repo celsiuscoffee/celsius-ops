@@ -264,9 +264,9 @@ export default function PickupSettingsPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-text">Pickup App Settings</h2>
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Pickup App Settings</h2>
         <p className="mt-0.5 text-sm text-text-2">
           Settings consumed by the customer-facing pickup app and order endpoint.
           Org-wide settings (SST, loyalty earn rate, staff PIN) live under

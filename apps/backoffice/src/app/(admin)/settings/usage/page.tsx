@@ -49,7 +49,7 @@ export default function OfficeUsagePage() {
         <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-text-3">
           {data ? `Last 30 days · ${dayMonth(data.from)} – ${dayMonth(data.to)}` : "Last 30 days"}
         </p>
-        <h1 className="mt-1 text-2xl font-semibold leading-[30px] text-text">Office usage</h1>
+        <h1 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Office usage</h1>
         <p className="mt-1.5 max-w-[640px] text-sm text-text-2">
           Which pages people open, how many people open each, and on which device. Counted inside the back office only; nothing is sent anywhere else.
         </p>

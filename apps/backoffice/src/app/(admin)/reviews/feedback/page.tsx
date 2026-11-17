@@ -165,7 +165,7 @@ export default function FeedbackManagementPage() {
           <Link href="/reviews" className="mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Reviews
           </Link>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Feedback Management</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Feedback Management</h1>
           <p className="text-sm text-muted-foreground">Every negative Google review and QR feedback, worked through to a compensated customer.</p>
         </div>
         <button

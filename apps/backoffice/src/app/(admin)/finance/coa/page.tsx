@@ -72,9 +72,9 @@ export default function CoaPage() {
   }
 
   return (
-    <div className="space-y-5 p-3 sm:p-6">
+    <div className="space-y-5 px-4 pt-6 pb-10 md:px-8">
       <header>
-        <h1 className="text-xl sm:text-2xl font-semibold">Chart of Accounts</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Chart of Accounts</h1>
         <p className="mt-0.5 text-xs sm:text-sm text-text-2">
           Seeded from Bukku, owned here. Bank categories book to these accounts; add one when a spend type needs its own line.
         </p>

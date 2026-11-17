@@ -66,9 +66,9 @@ export default function ProcurementDashboardPage() {
   const { data: stats } = useFetch<InventoryStats>("/api/inventory/admin/stats");
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+    <div className="overflow-x-hidden px-4 pt-6 pb-10 md:px-8">
       <div className="mb-6">
-        <h1 className="font-heading text-xl sm:text-2xl font-bold text-foreground flex items-center gap-2">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           <Boxes className="h-6 w-6 text-brand-text" /> Procurement
         </h1>
         <p className="mt-0.5 text-sm text-muted-foreground">Stock value, purchasing, invoices, and waste at a glance.</p>

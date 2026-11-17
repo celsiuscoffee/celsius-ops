@@ -63,7 +63,7 @@ export default function AuditPage() {
   const toggle = (id: string) => setExpandedId(expandedId === id ? null : id);
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <AuditNav />
       {/* Photo preview overlay */}
       {photoPreview && (
@@ -74,7 +74,7 @@ export default function AuditPage() {
       )}
 
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-text">Checklist Audit</h2>
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Checklist Audit</h2>
         <p className="mt-0.5 text-sm text-text-2">Review completed checklists and photo evidence</p>
       </div>
 

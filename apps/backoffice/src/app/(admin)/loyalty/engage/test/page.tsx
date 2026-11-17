@@ -137,7 +137,7 @@ export default function SmsTestPage() {
           <ArrowLeft className="h-5 w-5 text-text-2" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-text">SMS Test Console</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">SMS Test Console</h1>
           <p className="text-sm text-text-2 mt-0.5">
             Diagnose the active SMS gateway and send test messages
           </p>

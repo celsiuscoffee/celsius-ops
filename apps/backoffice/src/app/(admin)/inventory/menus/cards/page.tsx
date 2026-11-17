@@ -380,7 +380,7 @@ export default function RecipeCardsPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6 print:p-0">
+    <div className="print:p-0 px-4 pt-6 pb-10 md:px-8">
       {/* Print rules: A4 portrait, 2-up cards, espresso header forced to print. */}
       <style
         dangerouslySetInnerHTML={{
@@ -401,7 +401,7 @@ export default function RecipeCardsPage() {
           <Link href="/inventory/menus" className="text-text-3 hover:text-brand-text">
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <h2 className="text-xl font-semibold text-text">Recipe Cards</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Recipe Cards</h2>
         </div>
         <p className="mt-0.5 text-sm text-text-2">
           Barista recipe cards from the Bill of Materials — reference photo, Hot &amp; Iced recipes, and plating notes. {filtered.length} of {menus.length} shown.

@@ -273,10 +273,10 @@ export default function FinanceLedgerPage() {
   }
 
   return (
-    <div className="space-y-4 p-3 sm:p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <header className="flex min-w-0 flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold">Ledger</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Ledger</h1>
           {view === "bank" ? (
             <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
               Real cash ledger from the bank statements, every deposit and payment, classified. Sort any column; filter like a spreadsheet.

@@ -266,7 +266,7 @@ export default function RewardForm({ mode, initial }: Props) {
             <ChevronLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-text">
+            <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
               {mode === "create" ? "New Reward" : "Edit Reward"}
             </h1>
             <p className="text-sm text-text-2 mt-0.5">

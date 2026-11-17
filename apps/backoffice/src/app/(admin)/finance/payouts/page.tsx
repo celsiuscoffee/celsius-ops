@@ -175,9 +175,9 @@ export default function FinancePayoutsPage() {
   }
 
   return (
-    <div className="space-y-4 p-3 sm:p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <header className="min-w-0">
-        <h1 className="text-xl sm:text-2xl font-semibold">Payouts</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Payouts</h1>
         <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
           Revenue Monster settlements paid to your bank accounts — open one to see every transaction it settled, linked to its order.
           {data && <span className="ml-1">Showing from {data.from}{data.to ? ` to ${data.to}` : ""}.</span>}

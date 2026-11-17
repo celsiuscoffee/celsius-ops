@@ -46,8 +46,8 @@ export default function AdsSettingsPage() {
   }
 
   return (
-    <div className="space-y-4 p-4 lg:p-6">
-      <h1 className="text-xl font-semibold">Ads Settings</h1>
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Ads Settings</h1>
 
       {toast && (
         <Card className={`flex items-center gap-2 p-3 text-sm ${

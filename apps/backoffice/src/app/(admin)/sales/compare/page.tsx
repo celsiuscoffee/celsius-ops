@@ -651,7 +651,7 @@ export default function SalesComparePage() {
           <ArrowLeftRight className="w-5 h-5 text-brand-text" />
         </div>
         <div className="min-w-0">
-          <h1 className="text-xl font-bold text-text">Sales Compare</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Sales Compare</h1>
           <p className="text-sm text-text-2">Compare sales across different periods</p>
         </div>
       </div>

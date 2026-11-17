@@ -133,10 +133,10 @@ export default function PickupOrders() {
     .reduce((s, o) => s + o.total, 0);
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-6xl">
+    <div className="space-y-5 max-w-6xl px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text">Orders</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Orders</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {filtered.length} {filtered.length === 1 ? 'order' : 'orders'} · RM {(totalRevenue / 100).toFixed(2)} total
           </p>

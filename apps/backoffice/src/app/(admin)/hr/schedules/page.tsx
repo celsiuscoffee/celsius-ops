@@ -842,7 +842,7 @@ export default function SchedulesPage() {
   }, 0);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 p-4 sm:p-6 lg:p-8">
+    <div className="flex h-full min-h-0 flex-col gap-4 px-4 pt-6 pb-10 md:px-8">
       <HrPageHeader
         title="Schedules"
         description="Click a cell to assign a shift"
