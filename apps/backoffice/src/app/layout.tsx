@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { Geist_Mono, Space_Grotesk } from "next/font/google";
+import { Space_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 import { ServiceWorkerRegister } from "@/components/sw-register";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@celsius/ui";
@@ -13,10 +14,11 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 // Numbers in tables, codes and timers (Celsius UI: mono with tabular figures).
-// globals.css referenced --font-geist-mono but nothing loaded it until now.
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+// Bundled (SIL OFL) rather than fetched from Google at build time: a failed
+// Google Fonts download broke the CI build on 17 Nov 2026.
+const geistMono = localFont({
+  src: "../fonts/GeistMono-Variable.woff2",
+  weight: "100 900",
   variable: "--font-geist-mono",
   display: "swap",
 });
