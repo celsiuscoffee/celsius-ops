@@ -11,6 +11,13 @@ current month.
 
 ## Verified facts
 
+- 2026-11-17 — **Money, pay pages and Payment requests on the page pattern, layout and words
+  only** (PR celsiuscoffee/celsius-ops#1278). Built by two forks in separate git worktrees (no
+  clashes this time). Checked the diff: no calculation, API, approval or payment change. Owner
+  approved thresholds and "Listed price"; pay/Money/Payment requests still need the owner's OK
+  before merge. Open question: Cash flow's IncomingPanel labels the celsiustamarind entity
+  "Cyberjaya". Review page: claude.ai/artifact/6f68jduMc67wtzfeuR4vJs (75 screens).
+
 - 2026-11-17 — **Step 6 done for every non-pay page** (PR celsiuscoffee/celsius-ops#1278,
   `backoffice-structure.md` §2e). Built by 4 parallel forks; one ran `git stash` mid-run and
   everyone's edits were restored by hand (local stash@{0} kept as backup in that container).
