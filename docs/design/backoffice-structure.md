@@ -297,6 +297,17 @@ The review is now a full page (back link, one banner saying what is left to
 do, gaps first as a list with the reason picker under each, Save reasons /
 Approve and close), replacing the modal whose table was cut off on a phone.
 
+**Stock › Transfers rebuilt (17 Nov)**: "Stock moving between outlets: what is
+stuck, and for how long." Four key numbers: waiting for approval (oldest age),
+in transit (late when over 2 days since approval, amber), received in 30 days
+(item lines moved), cancelled in 30 days of those created. Filters cut from 7
+statuses to 5 plain ones. One list; a late transfer says "In transit 4 days".
+The detail is a full page with a banner naming the next step and the same
+actions; the small colour-coded action icons on each row are gone (actions
+live on the detail page). Maths in `lib/inventory/transfer-summary.ts`
+(tested). Still a modal: New transfer and Smart transfer (multi-row forms;
+should become full pages next).
+
 Still to do in step 6: page-by-page layout (title + one line, at most four key
 numbers each against a reference, one list), section by section, starting with
 the most-used pages once Office Usage has data.

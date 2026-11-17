@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Badge } from "@/components/ui/badge";
+import { KeyNumber } from "@/components/ui/key-number";
+import { summariseTransfers, LATE_DAYS } from "@/lib/inventory/transfer-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  ArrowLeftRight, Loader2, Search, ArrowRight,
-  CheckCircle2, Package, Eye, Truck, Plus, X, Ban, Trash2,
-  Clock, ShieldCheck, Send, PackageCheck, Sparkles, Zap,
+  ArrowLeft, ArrowLeftRight, Loader2, Search, ArrowRight,
+  CheckCircle2, Truck, Plus, Ban, Trash2,
+  ShieldCheck, Send, PackageCheck, Sparkles, Zap,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -46,21 +47,41 @@ type Product = { id: string; name: string; sku: string; baseUom: string; categor
 type CartItem = { productId: string; name: string; sku: string; uom: string; quantity: number; productPackageId: string | null; conversionFactor: number; availableStock: number };
 
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-sunken text-text-2 border-line",
-  PENDING_APPROVAL: "bg-amber-50 text-amber-700 border-amber-200",
-  APPROVED: "bg-blue-50 text-blue-700 border-blue-200",
-  IN_TRANSIT: "bg-purple-50 text-purple-700 border-purple-200",
-  RECEIVED: "bg-green-50 text-green-700 border-green-200",
-  COMPLETED: "bg-green-50 text-green-700 border-green-200",
-  CANCELLED: "bg-red-50 text-red-500 border-red-200",
-  PENDING: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  DRAFT: "bg-sunken text-text-2",
+  PENDING_APPROVAL: "bg-warn-soft text-warn-text",
+  APPROVED: "bg-info-soft text-info-text",
+  IN_TRANSIT: "bg-info-soft text-info-text",
+  RECEIVED: "bg-ok-soft text-ok-text",
+  COMPLETED: "bg-ok-soft text-ok-text",
+  CANCELLED: "bg-sunken text-text-3",
+  PENDING: "bg-warn-soft text-warn-text",
+};
+
+const FILTERS: { key: string; label: string; match: (s: string) => boolean }[] = [
+  { key: "PENDING_APPROVAL", label: "Waiting for approval", match: (s) => s === "PENDING_APPROVAL" || s === "PENDING" },
+  { key: "transit", label: "In transit", match: (s) => s === "APPROVED" || s === "IN_TRANSIT" },
+  { key: "received", label: "Received", match: (s) => s === "RECEIVED" || s === "COMPLETED" },
+  { key: "DRAFT", label: "Draft", match: (s) => s === "DRAFT" },
+  { key: "CANCELLED", label: "Cancelled", match: (s) => s === "CANCELLED" },
+];
+
+/** What the next person has to do, in words, for the detail page banner. */
+const NEXT_STEP: Record<string, string> = {
+  DRAFT: "Not sent yet. Submit it for approval when the list is right.",
+  PENDING_APPROVAL: "Waiting for a manager to approve or reject.",
+  PENDING: "Waiting to be completed or cancelled.",
+  APPROVED: "Approved. Mark it in transit when the stock leaves.",
+  IN_TRANSIT: "On its way. The receiving outlet confirms when it arrives.",
+  RECEIVED: "Received. Stock has moved.",
+  COMPLETED: "Completed. Stock has moved.",
+  CANCELLED: "Cancelled. No stock moved.",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft",
-  PENDING_APPROVAL: "Pending Approval",
+  PENDING_APPROVAL: "Waiting for approval",
   APPROVED: "Approved",
-  IN_TRANSIT: "In Transit",
+  IN_TRANSIT: "In transit",
   RECEIVED: "Received",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
@@ -72,7 +93,7 @@ function formatDate(iso: string) {
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kuala_Lumpur" });
 }
 
 export default function TransfersPage() {
@@ -295,7 +316,7 @@ export default function TransfersPage() {
 
   const filtered = useMemo(() => {
     return data.filter((t) => {
-      if (statusFilter !== "all" && t.status !== statusFilter) return false;
+      if (statusFilter !== "all" && !(FILTERS.find((f) => f.key === statusFilter)?.match(t.status) ?? true)) return false;
       if (search) {
         const q = search.toLowerCase();
         return t.fromOutlet.toLowerCase().includes(q) || t.toOutlet.toLowerCase().includes(q) || t.transferredBy.toLowerCase().includes(q);
@@ -304,16 +325,8 @@ export default function TransfersPage() {
     });
   }, [data, search, statusFilter]);
 
-  const stats = useMemo(() => ({
-    total: data.length,
-    draft: data.filter((t) => t.status === "DRAFT").length,
-    pendingApproval: data.filter((t) => t.status === "PENDING_APPROVAL").length,
-    approved: data.filter((t) => t.status === "APPROVED").length,
-    inTransit: data.filter((t) => t.status === "IN_TRANSIT").length,
-    received: data.filter((t) => t.status === "RECEIVED" || t.status === "COMPLETED").length,
-    cancelled: data.filter((t) => t.status === "CANCELLED").length,
-    pending: data.filter((t) => t.status === "PENDING").length,
-  }), [data]);
+  const [now] = useState(() => Date.now());
+  const summary = useMemo(() => summariseTransfers(data, now), [data, now]);
 
   async function updateTransferStatus(id: string, status: string, extra?: { rejectionReason?: string }) {
     if (status === "RECEIVED") {
@@ -361,95 +374,6 @@ export default function TransfersPage() {
     setRejectionReason("");
   };
 
-  const renderActionButtons = (t: Transfer, size: "sm" | "md" = "sm") => {
-    const iconSize = size === "sm" ? "h-3 w-3" : "h-4 w-4";
-
-    switch (t.status) {
-      case "DRAFT":
-        return (
-          <button
-            onClick={() => updateTransferStatus(t.id, "PENDING_APPROVAL")}
-            disabled={actionLoading}
-            className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-amber-500 hover:bg-amber-600"
-            title="Submit for Approval"
-          >
-            <Send className={iconSize} />
-          </button>
-        );
-      case "PENDING_APPROVAL":
-        return (
-          <>
-            <button
-              onClick={() => updateTransferStatus(t.id, "IN_TRANSIT")}
-              disabled={actionLoading}
-              className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-purple-500 hover:bg-purple-600"
-              title="Approve & Dispatch"
-            >
-              <Truck className={iconSize} />
-            </button>
-            <button
-              onClick={() => openRejectDialog(t.id)}
-              disabled={actionLoading}
-              className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50"
-              title="Reject"
-            >
-              <Ban className={iconSize} />
-            </button>
-          </>
-        );
-      case "APPROVED":
-        return (
-          <button
-            onClick={() => updateTransferStatus(t.id, "IN_TRANSIT")}
-            disabled={actionLoading}
-            className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-purple-500 hover:bg-purple-600"
-            title="Mark In Transit"
-          >
-            <Truck className={iconSize} />
-          </button>
-        );
-      case "IN_TRANSIT":
-        return (
-          <button
-            onClick={() => updateTransferStatus(t.id, "RECEIVED")}
-            disabled={actionLoading}
-            className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-green-500 hover:bg-green-600"
-            title="Confirm Received"
-          >
-            <PackageCheck className={iconSize} />
-          </button>
-        );
-      case "PENDING":
-        return (
-          <>
-            <button
-              onClick={() => updateTransferStatus(t.id, "COMPLETED")}
-              disabled={actionLoading}
-              className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-green-500 hover:bg-green-600"
-              title="Complete"
-            >
-              <CheckCircle2 className={iconSize} />
-            </button>
-            <button
-              onClick={() => { if (confirm("Cancel this transfer?")) updateTransferStatus(t.id, "CANCELLED"); }}
-              disabled={actionLoading}
-              className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50"
-              title="Cancel"
-            >
-              <Ban className={iconSize} />
-            </button>
-          </>
-        );
-      case "RECEIVED":
-      case "COMPLETED":
-        return <CheckCircle2 className={`${iconSize} text-green-500`} />;
-      case "CANCELLED":
-        return <Ban className={`${iconSize} text-text-3`} />;
-      default:
-        return null;
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
@@ -458,273 +382,163 @@ export default function TransfersPage() {
     );
   }
 
+  const days = (n: number | null) => (n == null ? "" : n === 0 ? "today" : n === 1 ? "1 day" : `${n} days`);
+  const inTransitDays = (t: Transfer) => Math.floor((now - Date.parse(t.approvedAt ?? t.createdAt)) / 86_400_000);
+
   return (
     <div className="px-4 pt-6 pb-10 md:px-8">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Transfers</h2>
+      {selected ? (
+        // ── Detail: a full page, not a modal ──
+        <div className="max-w-[960px]">
+          <button onClick={() => setSelected(null)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+            <ArrowLeft className="h-4 w-4" /> All transfers
+          </button>
+          <h1 className="mt-3 flex flex-wrap items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
+            {selected.fromOutlet} <ArrowRight className="h-5 w-5 text-text-3" /> {selected.toOutlet}
+          </h1>
           <p className="mt-0.5 text-sm text-text-2">
-            {stats.total} transfers — {stats.draft} draft, {stats.pendingApproval} pending approval, {stats.inTransit} in transit, {stats.received} received
+            {formatDate(selected.createdAt)} at {formatTime(selected.createdAt)} · by {selected.transferredBy} · {selected.items.length} {selected.items.length === 1 ? "item" : "items"}
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={loadSmartTransfers} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
-            <Sparkles className="mr-1.5 h-4 w-4" />Smart Transfer
-          </Button>
-          <Button onClick={openCreate} className="bg-ink hover:bg-ink-hover">
-            <Plus className="mr-1.5 h-4 w-4" />New Transfer
-          </Button>
-        </div>
-      </div>
 
-      {/* Filters */}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
-          <Input placeholder="Search outlet or staff..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
-        <div className="flex gap-1.5 flex-wrap">
-          {[
-            { key: "all", label: `All (${stats.total})` },
-            { key: "DRAFT", label: `Draft (${stats.draft})` },
-            { key: "PENDING_APPROVAL", label: `Pending Approval (${stats.pendingApproval})` },
-            { key: "APPROVED", label: `Approved (${stats.approved})` },
-            { key: "IN_TRANSIT", label: `In Transit (${stats.inTransit})` },
-            { key: "RECEIVED", label: `Received (${stats.received})` },
-            { key: "CANCELLED", label: `Cancelled (${stats.cancelled})` },
-          ].map((t) => (
-            <button key={t.key} onClick={() => setStatusFilter(t.key)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === t.key ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2"}`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
+          <div className={`mt-5 rounded-card px-4 py-3 ${STATUS_STYLES[selected.status] ?? "bg-sunken text-text-2"}`}>
+            <p className="text-sm font-semibold">{STATUS_LABELS[selected.status] ?? selected.status}</p>
+            <p className="text-[13px] opacity-90">
+              {selected.status === "CANCELLED" && selected.rejectionReason ? `Rejected: ${selected.rejectionReason}` : NEXT_STEP[selected.status] ?? ""}
+            </p>
+          </div>
 
-      {/* Table */}
-      <div className="mt-4 rounded-xl border border-line bg-surface overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm min-w-[720px]">
-          <thead>
-            <tr className="border-b border-line bg-sunken/50">
-              <th className="px-4 py-3 text-left font-medium text-text-2">Date</th>
-              <th className="px-4 py-3 text-left font-medium text-text-2">Route</th>
-              <th className="px-4 py-3 text-left font-medium text-text-2">Items</th>
-              <th className="px-4 py-3 text-left font-medium text-text-2">Created By</th>
-              <th className="px-4 py-3 text-left font-medium text-text-2">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-text-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-text-3">
-                {data.length === 0 ? "No transfers yet. Click 'New Transfer' to move stock between outlets." : "No transfers match your filter."}
-              </td></tr>
-            )}
-            {filtered.map((t) => (
-              <tr key={t.id} className="border-b border-line hover:bg-sunken/50">
-                <td className="px-4 py-3">
-                  <p className="font-medium text-text">{formatDate(t.createdAt)}</p>
-                  <p className="text-[10px] text-text-3">{formatTime(t.createdAt)}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-text">{t.fromOutlet}</span>
-                    <ArrowRight className="h-3.5 w-3.5 text-text-3" />
-                    <span className="font-medium text-text">{t.toOutlet}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    <Package className="h-3.5 w-3.5 text-text-3" />
-                    <span className="font-medium">{t.items.length}</span>
-                    <span className="text-text-3 text-xs">{t.items.length === 1 ? "item" : "items"}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-text-2">{t.transferredBy}</td>
-                <td className="px-4 py-3">
-                  <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[t.status] ?? ""}`}>
-                    {STATUS_LABELS[t.status] ?? t.status}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSelected(t)}>
-                      <Eye className="h-3 w-3 mr-1" />View
-                    </Button>
-                    {renderActionButtons(t)}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Detail Dialog */}
-      <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
-          {selected && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <ArrowLeftRight className="h-5 w-5 text-brand-text" />
-                  Transfer Details
-                </DialogTitle>
-              </DialogHeader>
-
-              <div className="grid grid-cols-2 gap-3 mt-2">
-                <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-text-2 uppercase">From</p>
-                  <p className="text-sm font-semibold">{selected.fromOutlet}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-text-2 uppercase">To</p>
-                  <p className="text-sm font-semibold">{selected.toOutlet}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-text-2 uppercase">Created By</p>
-                  <p className="text-sm font-semibold">{selected.transferredBy}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-text-2 uppercase">Status</p>
-                  <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[selected.status] ?? ""}`}>
-                    {STATUS_LABELS[selected.status] ?? selected.status}
-                  </Badge>
-                </div>
-              </div>
-
-              {selected.notes && (
-                <p className="text-xs text-text-2 mt-2 bg-sunken rounded-lg px-3 py-2">Note: {selected.notes}</p>
-              )}
-
-              {/* Approval info */}
-              {selected.approvedBy && selected.approvedAt && (
-                <p className="text-xs text-blue-600 mt-2 bg-blue-50 rounded-lg px-3 py-2">
-                  Approved by: {selected.approvedBy} on {formatDate(selected.approvedAt)} at {formatTime(selected.approvedAt)}
-                </p>
-              )}
-
-              {/* Received info */}
-              {selected.receivedBy && selected.receivedAt && (
-                <p className="text-xs text-green-600 mt-2 bg-green-50 rounded-lg px-3 py-2">
-                  Received by: {selected.receivedBy} on {formatDate(selected.receivedAt)} at {formatTime(selected.receivedAt)}
-                </p>
-              )}
-
-              {/* Rejection reason */}
-              {selected.status === "CANCELLED" && selected.rejectionReason && (
-                <p className="text-xs text-red-600 mt-2 bg-red-50 rounded-lg px-3 py-2">
-                  Rejection reason: {selected.rejectionReason}
-                </p>
-              )}
-
-              <div className="mt-3 rounded-lg border overflow-hidden overflow-x-auto">
-                <table className="w-full text-xs min-w-[720px]">
-                  <thead>
-                    <tr className="bg-sunken border-b">
-                      <th className="px-3 py-2 text-left font-medium text-text-2">Product</th>
-                      <th className="px-3 py-2 text-left font-medium text-text-2">SKU</th>
-                      <th className="px-3 py-2 text-left font-medium text-text-2">Package</th>
-                      <th className="px-3 py-2 text-right font-medium text-text-2">Quantity</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selected.items.map((item) => (
-                      <tr key={item.id} className="border-b border-line">
-                        <td className="px-3 py-2 font-medium text-text">{item.product}</td>
-                        <td className="px-3 py-2 text-text-2">{item.sku}</td>
-                        <td className="px-3 py-2 text-text-2">{item.package || "—"}</td>
-                        <td className="px-3 py-2 text-right font-mono font-medium">{item.quantity}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Action buttons in detail dialog */}
-              {(selected.status === "DRAFT" || selected.status === "PENDING_APPROVAL" || selected.status === "APPROVED" || selected.status === "IN_TRANSIT" || selected.status === "PENDING") && (
-                <div className="mt-4 flex justify-end gap-2">
-                  {selected.status === "DRAFT" && (
-                    <Button
-                      onClick={() => updateTransferStatus(selected.id, "PENDING_APPROVAL")}
-                      disabled={actionLoading}
-                      className="bg-amber-500 hover:bg-amber-600"
-                    >
-                      {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
-                      Submit for Approval
-                    </Button>
-                  )}
-                  {selected.status === "PENDING_APPROVAL" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() => openRejectDialog(selected.id)}
-                        disabled={actionLoading}
-                        className="border-red-200 text-red-600 hover:bg-red-50"
-                      >
-                        <Ban className="h-4 w-4 mr-1" />Reject
-                      </Button>
-                      <Button
-                        onClick={() => updateTransferStatus(selected.id, "APPROVED")}
-                        disabled={actionLoading}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-1" />}
-                        Approve
-                      </Button>
-                    </>
-                  )}
-                  {selected.status === "APPROVED" && (
-                    <Button
-                      onClick={() => updateTransferStatus(selected.id, "IN_TRANSIT")}
-                      disabled={actionLoading}
-                      className="bg-purple-600 hover:bg-purple-700"
-                    >
-                      {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Truck className="h-4 w-4 mr-1" />}
-                      Mark In Transit
-                    </Button>
-                  )}
-                  {selected.status === "IN_TRANSIT" && (
-                    <Button
-                      onClick={() => updateTransferStatus(selected.id, "RECEIVED")}
-                      disabled={actionLoading}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <PackageCheck className="h-4 w-4 mr-1" />}
-                      Confirm Received
-                    </Button>
-                  )}
-                  {selected.status === "PENDING" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() => { if (confirm("Cancel this transfer?")) updateTransferStatus(selected.id, "CANCELLED"); }}
-                        disabled={actionLoading}
-                        className="border-red-200 text-red-600 hover:bg-red-50"
-                      >
-                        <Ban className="h-4 w-4 mr-1" />Cancel
-                      </Button>
-                      <Button
-                        onClick={() => updateTransferStatus(selected.id, "COMPLETED")}
-                        disabled={actionLoading}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Truck className="h-4 w-4 mr-1" />}
-                        Mark as Completed
-                      </Button>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {selected.completedAt && (
-                <p className="text-xs text-green-600 mt-2 text-right">
-                  Completed on {formatDate(selected.completedAt)} at {formatTime(selected.completedAt)}
-                </p>
-              )}
-            </>
+          {(selected.approvedBy || selected.receivedBy || selected.completedAt || selected.notes) && (
+            <ul className="mt-4 space-y-1 text-[13px] text-text-2">
+              {selected.notes && <li>Note: {selected.notes}</li>}
+              {selected.approvedBy && selected.approvedAt && <li>Approved by {selected.approvedBy}, {formatDate(selected.approvedAt)} at {formatTime(selected.approvedAt)}</li>}
+              {selected.receivedBy && selected.receivedAt && <li>Received by {selected.receivedBy}, {formatDate(selected.receivedAt)} at {formatTime(selected.receivedAt)}</li>}
+              {selected.completedAt && <li>Completed {formatDate(selected.completedAt)} at {formatTime(selected.completedAt)}</li>}
+            </ul>
           )}
-        </DialogContent>
-      </Dialog>
+
+          <div className="mt-5 overflow-hidden rounded-card border border-line bg-surface">
+            <p className="border-b border-line px-4 py-3 text-sm font-semibold text-text">Items</p>
+            {selected.items.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-text">{item.product}</p>
+                  <p className="mt-0.5 truncate text-[12px] text-text-3">{item.package || "No package"} · {item.sku}</p>
+                </div>
+                <p className="shrink-0 font-mono text-sm font-semibold text-text">{item.quantity}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            {selected.status === "DRAFT" && (
+              <Button onClick={() => updateTransferStatus(selected.id, "PENDING_APPROVAL")} disabled={actionLoading} className="bg-ink text-on-ink hover:bg-ink-hover">
+                {actionLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}Submit for approval
+              </Button>
+            )}
+            {selected.status === "PENDING_APPROVAL" && (
+              <>
+                <Button variant="outline" onClick={() => openRejectDialog(selected.id)} disabled={actionLoading} className="text-danger-text">
+                  <Ban className="mr-1.5 h-4 w-4" />Reject
+                </Button>
+                <Button onClick={() => updateTransferStatus(selected.id, "APPROVED")} disabled={actionLoading} className="bg-ink text-on-ink hover:bg-ink-hover">
+                  {actionLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-1.5 h-4 w-4" />}Approve
+                </Button>
+              </>
+            )}
+            {selected.status === "APPROVED" && (
+              <Button onClick={() => updateTransferStatus(selected.id, "IN_TRANSIT")} disabled={actionLoading} className="bg-ink text-on-ink hover:bg-ink-hover">
+                {actionLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Truck className="mr-1.5 h-4 w-4" />}Mark in transit
+              </Button>
+            )}
+            {selected.status === "IN_TRANSIT" && (
+              <Button onClick={() => updateTransferStatus(selected.id, "RECEIVED")} disabled={actionLoading} className="bg-ink text-on-ink hover:bg-ink-hover">
+                {actionLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <PackageCheck className="mr-1.5 h-4 w-4" />}Confirm received
+              </Button>
+            )}
+            {selected.status === "PENDING" && (
+              <>
+                <Button variant="outline" onClick={() => { if (confirm("Cancel this transfer?")) updateTransferStatus(selected.id, "CANCELLED"); }} disabled={actionLoading} className="text-danger-text">
+                  <Ban className="mr-1.5 h-4 w-4" />Cancel transfer
+                </Button>
+                <Button onClick={() => updateTransferStatus(selected.id, "COMPLETED")} disabled={actionLoading} className="bg-ink text-on-ink hover:bg-ink-hover">
+                  {actionLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}Mark as completed
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Transfers</h1>
+              <p className="mt-0.5 text-sm text-text-2">Stock moving between outlets: what is stuck, and for how long.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={loadSmartTransfers} variant="outline">
+                <Sparkles className="mr-1.5 h-4 w-4" />Smart transfer
+              </Button>
+              <Button onClick={openCreate} className="bg-ink text-on-ink hover:bg-ink-hover">
+                <Plus className="mr-1.5 h-4 w-4" />New transfer
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KeyNumber label="Waiting for approval" value={String(summary.approval.count)} tone={summary.approval.count > 0 ? "warn" : undefined}
+              note={summary.approval.count > 0 ? <>oldest <b className="font-semibold text-text-2">{days(summary.approval.oldestDays)}</b></> : "nothing waiting"} />
+            <KeyNumber label="In transit" value={String(summary.transit.count)} tone={summary.transit.late > 0 ? "warn" : undefined}
+              note={summary.transit.count === 0 ? "nothing on the road" : summary.transit.late > 0
+                ? <><b className="font-semibold text-text-2">{summary.transit.late}</b> over {LATE_DAYS} days, oldest {days(summary.transit.oldestDays)}</>
+                : <>oldest <b className="font-semibold text-text-2">{days(summary.transit.oldestDays)}</b></>} />
+            <KeyNumber label="Received, 30 days" value={String(summary.moved.count)}
+              note={<><b className="font-semibold text-text-2">{summary.moved.lines}</b> item lines moved</>} />
+            <KeyNumber label="Cancelled, 30 days" value={String(summary.cancelled.count)}
+              note={<>of <b className="font-semibold text-text-2">{summary.cancelled.of}</b> created</>} />
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <div className="relative w-full sm:max-w-sm sm:flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
+              <Input placeholder="Search outlet or staff..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {[{ key: "all", label: "All", match: () => true }, ...FILTERS].map((f) => (
+                <button key={f.key} onClick={() => setStatusFilter(f.key)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === f.key ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2"}`}>
+                  {f.label} ({data.filter((t) => f.match(t.status)).length})
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+            {filtered.length === 0 && (
+              <p className="px-4 py-12 text-center text-sm text-text-3">
+                {data.length === 0 ? "No transfers yet. Use New transfer to move stock between outlets." : "No transfers match your filter."}
+              </p>
+            )}
+            {filtered.map((t) => {
+              const late = (t.status === "IN_TRANSIT" || t.status === "APPROVED") && inTransitDays(t) > LATE_DAYS;
+              return (
+                <button key={t.id} onClick={() => { setSelected(t); window.scrollTo(0, 0); }}
+                  className="flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 hover:bg-sunken/50">
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 truncate text-sm font-medium text-text">
+                      {t.fromOutlet} <ArrowRight className="h-3.5 w-3.5 shrink-0 text-text-3" /> {t.toOutlet}
+                    </p>
+                    <p className="mt-0.5 truncate text-[12px] text-text-3">
+                      {formatDate(t.createdAt)} · {formatTime(t.createdAt)} · by {t.transferredBy} · {t.items.length} {t.items.length === 1 ? "item" : "items"}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] ${late ? "bg-warn-soft text-warn-text" : STATUS_STYLES[t.status] ?? "bg-sunken text-text-2"}`}>
+                    {late ? `In transit ${days(inTransitDays(t))}` : STATUS_LABELS[t.status] ?? t.status}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* Reject Dialog */}
       {/* Smart Transfer Dialog */}
