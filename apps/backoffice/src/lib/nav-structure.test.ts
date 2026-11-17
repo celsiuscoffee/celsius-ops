@@ -10,7 +10,7 @@ const MAX_TABS = 6;
 
 describe("backoffice nav structure", () => {
   it("every section fits in one row of tabs", () => {
-    const tooWide = NAV_SECTIONS.filter((s) => s.label !== "HR") // HR has its own module tabs
+    const tooWide = NAV_SECTIONS.filter((s) => s.label !== "Team") // Team (HR) has its own module tabs
       .map((s) => ({ label: s.label, tabs: s.subgroups ? s.subgroups.length : (s.items ?? []).filter((i) => !i.hidden).length }))
       .filter((s) => s.tabs > MAX_TABS);
     expect(tooWide, `sections with more than ${MAX_TABS} tabs`).toEqual([]);
@@ -58,7 +58,7 @@ describe("shell placement", () => {
 
   it("a page links to its first view the user can open", () => {
     const pages = railPages(section("Procurement"), owner);
-    expect(pages.map((p) => p.label)).toEqual(["Purchase Orders", "PO List", "Invoices", "Payments", "Suppliers"]);
+    expect(pages.map((p) => p.label)).toEqual(["Purchase Orders", "PO List", "Invoices", "Payment Requests", "Suppliers"]);
     expect(pages.find((p) => p.label === "Invoices")?.href).toBe("/inventory/invoices");
   });
 
@@ -66,7 +66,33 @@ describe("shell placement", () => {
     const manager: UserProfile = { id: "m", name: "Mgr", role: "MANAGER", outletId: "x", moduleAccess: ["inventory:invoices"] };
     const pages = railPages(section("Procurement"), manager);
     expect(pages.map((p) => p.label)).toEqual(["Invoices"]);
-    expect(railPages(section("Finance"), manager)).toEqual([]); // finance:* is owner/admin only
+    expect(railPages(section("Money"), manager)).toEqual([]); // finance:* is owner/admin only
+  });
+
+  it("the menu stays decluttered: one question per section, few pages each", () => {
+    // 17 Nov 2026 declutter (docs/design/backoffice-structure.md §2c): 87 menu
+    // links became 36 pages; the rest are views inside a page or set-up behind
+    // the gear. Adding a page means taking one away, or a reason here.
+    const rail = NAV_SECTIONS.filter((s) => s.placement !== "footer");
+    const pages = rail.reduce((n, s) => n + railPages(s, owner).length, 0);
+    expect(pages).toBeLessThanOrEqual(36);
+    expect(rail.map((s) => s.label)).toEqual([
+      "Sales", "Customers", "Marketing", "Menu", "Stock", "Procurement", "Team", "Money", "Standards", "Agents",
+    ]);
+  });
+
+  it("set-up pages live behind the gear, not in the menu", () => {
+    for (const href of ["/loyalty/missions", "/loyalty/mystery", "/loyalty/admin-claimables", "/pickup/splash-posters", "/inventory/groups", "/finance/coa"]) {
+      expect(locate(href, owner)?.section.label, href).toBe("Settings");
+    }
+  });
+
+  it("related views share one page", () => {
+    expect(locate("/reviews/geogrid", owner)?.page?.label).toBe("Reviews");
+    expect(locate("/ads/grab", owner)?.page?.label).toBe("Ads");
+    expect(locate("/inventory/packaging", owner)?.page?.label).toBe("Recipes");
+    expect(locate("/inventory/perishables", owner)?.page?.label).toBe("Ingredients");
+    expect(locate("/finance/transactions", owner)?.page?.label).toBe("Reports");
   });
 
   it("the home page belongs to no section", () => {

@@ -7,6 +7,7 @@ import { Sidebar, SidebarInset, SidebarProvider, SidebarRail } from "@/component
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { CommandPalette } from "@/components/command-palette";
 import { OfficeHeader, PageTabs, PhoneTabBar, Rail } from "@/components/office-shell";
+import { useUsageTracking } from "@/components/usage-tracker";
 
 import {
   Dialog,
@@ -158,6 +159,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
 
   const { data: user, isLoading } = useFetch<UserProfile>("/api/auth/me");
+  // Settings › Office Usage: one view per page, once signed in.
+  useUsageTracking(user ? pathname : null);
 
   // Redirect to login if not authenticated, or if a STAFF session somehow
   // reached the backoffice (login API only issues sessions to OWNER/ADMIN/

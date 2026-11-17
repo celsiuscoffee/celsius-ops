@@ -134,6 +134,7 @@ Peachi wordmark, Space Grotesk, Geist Mono) and approved this order:
 | 2 | Celsius UI foundation: tokens, fonts, rail (open section's pages nested), header; phone layout checked on every change | **Done 12 Nov** |
 | 3 | Today + Inbox (one queue of decisions) | **Done 12 Nov** (v1 read-only) |
 | 4 | HR › Roster (replaces Schedules, Attendance, Roster attendance, Overtime, Leave, Shift swaps) + staff-app shift card with Clock in | **Done 16 Nov** (A. Roster; B. staff-app shift on the Today clock card) |
+| 4½ | Declutter: menu regrouped by first principles (87 links → 36 pages), page-visit tracking (§2c) | **Done 17 Nov** |
 | 5 | Merges (list B): Perishables → Items, Pickup landing/analytics, SOP compliance, Monthly cashflow, one SMS tool | |
 | 6 | Remaining sections moved to the new UI | |
 
@@ -200,6 +201,44 @@ see the ota-release skill). The clock-in itself (selfie, location, optional biom
 unchanged.
 
 ---
+
+## 2c. Declutter (owner, 16–17 Nov 2026)
+
+Owner: "declutter based on the functions used and needed only … check Gosamē
+Office as ref … use first principle to group them together better … remove the
+ones redundant."
+
+**No usage data existed** (Vercel Web Analytics off for the backoffice, no
+Celsius DB access from the cloud session, `ActivityLog` held actions only), so
+pages were judged by job, and page-visit tracking was added to decide the rest.
+
+**Grouping.** Each section answers one manager question and follows the life of
+one thing: a customer is sold to and kept (Sales · Customers · Marketing); an
+ingredient becomes an item, is held, bought and paid for (Menu · Stock ·
+Procurement); a person is rostered, paid and scored (Team, was HR); money
+(Money, was Finance); an outlet is held to standard (Standards, was Ops).
+Moves: Store/Menu Status → Menu; Local Rank + Rank Scoreboard → Customers ›
+Reviews; Google and GrabFood ads → one Ads page; Prep Recipes + Packaging →
+Recipes; Manual Grant → Members; Leave/Clock-ins/Overtime/Shift swaps/Edit
+schedules → the Roster tab strip; HR overview → People strip. Set-up behind ⚙:
+Challenges, Mystery Pool, Admin Claimables, Splash Posters, Groups & Storage,
+Chart of Accounts. Procurement keeps its name (the team's word).
+
+**Redundancy, checked before removing.** Of the candidates in the owner's
+picture, only push reminders and the pickup Customers page were true
+duplicates, and both already redirected. Kept, because they are not duplicates:
+Cashier Performance (per-cashier till metrics, also read by the till's own
+scorecard; now under Sales › Reports), Area Scorecard (`/api/scorecard`, the
+data the ops scoreboard job sends; now under Standards › Outlet Scorecard),
+Perishables (separate editor; under Ingredients until list B merges it), the ops
+reminders job (live Ops Workspace feature with WhatsApp ack; just unused so far).
+
+**Usage tracking.** `components/usage-tracker.tsx` → `POST /api/usage` →
+`ActivityLog` (module `usage`, action `view`, one per page per 30 s, no schema
+change). Settings › System › Office Usage shows views, people, phone share and
+the menu pages nobody opened in 30 days. **Around 17 Dec 2026: remove or
+re-home what nobody opened.** Pinned by `lib/nav-structure.test.ts` (≤ 36 menu
+pages) and `lib/usage.test.ts`.
 
 ## 3. Every page, sorted into its section
 

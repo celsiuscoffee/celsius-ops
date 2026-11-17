@@ -10,16 +10,16 @@ import { TAB_GROUPS } from "@/components/hr/module-tabs";
 // must be a page the sidebar knows — so a new page is added to both or CI
 // says which one was forgotten.
 
-const hrSection = NAV_SECTIONS.find((s) => s.label === "HR");
+const hrSection = NAV_SECTIONS.find((s) => s.label === "Team");
 const navHrefs = new Set((hrSection?.items ?? []).map((i) => i.href));
 
-// Pages that deliberately have no tab strip: the hub itself, analytics
+// Pages that deliberately have no tab strip: analytics
 // (linked from the hub), and the settings tree (own SettingsNav).
-const NO_TAB = new Set(["/hr", "/hr/analytics"]);
+const NO_TAB = new Set(["/hr/analytics"]);
 const isSettings = (href: string) => href.startsWith("/hr/settings");
 
 describe("HR navigation sources agree", () => {
-  it("the sidebar has an HR section", () => {
+  it("the sidebar has a Team (HR) section", () => {
     expect(hrSection).toBeDefined();
     expect(navHrefs.size).toBeGreaterThan(10);
   });

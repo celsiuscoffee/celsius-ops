@@ -259,8 +259,8 @@ export function PageTabs({ user }: { user: UserProfile }) {
   const placement = locate(pathname, user);
   if (!placement) return null;
   const { section, page, href, pages } = placement;
-  // HR keeps its own module tabs (components/hr/module-tabs.tsx).
-  const isHr = section.label === "HR";
+  // Team (HR) keeps its own module tabs (components/hr/module-tabs.tsx).
+  const isHr = section.label === "Team";
   const footer = section.placement === "footer";
   const tabs = !isHr && page && page.tabs.length > 1 ? page.tabs : [];
   // On a phone the rail is hidden, so the section's pages scroll above the

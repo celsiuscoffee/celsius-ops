@@ -11,6 +11,17 @@ current month.
 
 ## Verified facts
 
+- 2026-11-17 — **Backoffice declutter built** (PR celsiuscoffee/celsius-ops#1278,
+  `docs/design/backoffice-structure.md` §2c): menu regrouped by first principles, 87 links →
+  36 pages (sections Sales · Customers · Marketing · Menu · Stock · Procurement · Team · Money ·
+  Standards · Agents; HR/Finance/Ops renamed, URLs and moduleKeys unchanged). Page-visit
+  tracking added: `ActivityLog` module `usage`, Settings › System › Office Usage. **Around
+  17 Dec: read Office Usage and remove what nobody opened.** Checked "redundant" claims before
+  deleting: Cashier Performance, Area Scorecard, Perishables and the ops-reminders job are NOT
+  duplicates and were kept (nested). CI: GitHub runners came back 16 Nov; backoffice `next
+  build` and `tsc` OOM at the runner's default ~2 GB heap — `ci.yml` now sets
+  `NODE_OPTIONS=--max-old-space-size=4096` for every job (reproduced: 2 GB aborts, 4 GB builds).
+
 - 2026-11-16 — **Restructure step 4 built** (PR celsiuscoffee/celsius-ops#1278): `/hr/roster`
   (backoffice, existing APIs only; leave and swaps decided in place, overtime and clock-ins
   link to their payroll-aware pages) and the staff-native Today clock card shows today's shift
