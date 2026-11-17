@@ -11,6 +11,11 @@ current month.
 
 ## Verified facts
 
+- 2026-11-17 — **Stock › Stock Count on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
+  4 key numbers from `lib/inventory/count-summary.ts`, list instead of table, shared
+  `components/ui/key-number.tsx` (Overview + Wastage moved onto it). Review modal unchanged
+  (next: full-page review). Then Transfers, Menu.
+
 - 2026-11-17 — **Stock › Wastage on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
   4 key numbers from `lib/inventory/waste-summary.ts`, one list. Preview mocks must answer
   `/api/inventory/ai-decisions` (AIInsightBanner crashes on `[]`). Next: Stock Count, Transfers, Menu.

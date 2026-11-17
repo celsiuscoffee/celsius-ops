@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
+import { KeyNumber } from "@/components/ui/key-number";
+import { countedInBase, summariseCounts, unresolvedIn } from "@/lib/inventory/count-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ClipboardCheck, Loader2, Search,
-  CheckCircle2, Clock, AlertTriangle, Eye, Save,
+  CheckCircle2, AlertTriangle, Save,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -52,24 +53,12 @@ const VARIANCE_REASONS = [
   "Other",
 ];
 
-const STATUS_STYLES: Record<string, string> = {
-  SUBMITTED: "bg-yellow-50 text-yellow-700 border-yellow-200",
-  REVIEWED: "bg-green-50 text-green-700 border-green-200",
-  DRAFT: "bg-sunken text-text-2 border-line",
-};
-
-const STATUS_ICON: Record<string, typeof Clock> = {
-  SUBMITTED: Clock,
-  REVIEWED: CheckCircle2,
-  DRAFT: AlertTriangle,
-};
-
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kuala_Lumpur" });
 }
 
 // A count was auto-approved when it went straight to REVIEWED at submit time —
@@ -82,24 +71,6 @@ function isAutoApproved(sc: { status: string; submittedAt: string | null; review
   return Math.abs(new Date(sc.reviewedAt).getTime() - new Date(sc.submittedAt).getTime()) < 3000;
 }
 
-// Counted vs expected live in different units (package vs base UOM) — convert
-// before comparing, same as finalize does before writing balances.
-function countedInBase(i: StockCountItem) {
-  return i.countedQty! * (i.packageConversion > 0 ? i.packageConversion : 1);
-}
-
-// Discrepancies still waiting for a manager's reason code. Counts auto-approve
-// at finalize, so this — not the SUBMITTED status — is what "needs attention"
-// means on this screen.
-function unresolvedIn(sc: StockCount) {
-  return sc.items.filter(
-    (i) =>
-      i.countedQty != null &&
-      i.expectedQty != null &&
-      countedInBase(i) !== i.expectedQty &&
-      !i.varianceReason,
-  ).length;
-}
 
 export default function StockCountPage() {
   const [data, setData] = useState<StockCount[]>([]);
@@ -150,6 +121,9 @@ export default function StockCountPage() {
       return true;
     });
   }, [data, search, statusFilter]);
+
+  const [now] = useState(() => Date.now());
+  const summary = useMemo(() => summariseCounts(data, now), [data, now]);
 
   const stats = useMemo(() => ({
     total: data.length,
@@ -270,22 +244,28 @@ export default function StockCountPage() {
 
   return (
     <div className="px-4 pt-6 pb-10 md:px-8">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Stock Count</h2>
-          <p className="mt-0.5 text-sm text-text-2">
-            {stats.total} counts — {stats.flagged} with unresolved discrepancies, {stats.reviewed} reviewed
-          </p>
-        </div>
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Stock Count</h1>
+      <p className="mt-0.5 text-sm text-text-2">Whether outlets count, whether the shelf matches the system, and every gap explained.</p>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label="Counts, last 7 days" value={String(summary.week.counts)}
+          note={<><b className="font-semibold text-text-2">{summary.week.outlets}</b> {summary.week.outlets === 1 ? "outlet" : "outlets"} counted</>} />
+        <KeyNumber label="Waiting for a reason" value={String(summary.waiting.counts)} tone={summary.waiting.counts > 0 ? "warn" : undefined}
+          note={summary.waiting.counts > 0 ? <><b className="font-semibold text-text-2">{summary.waiting.items}</b> {summary.waiting.items === 1 ? "gap has" : "gaps have"} no reason yet</> : "every gap has a reason"} />
+        <KeyNumber label="Matched the system, 30 days" value={summary.accuracy.share == null ? "–" : `${Math.round(summary.accuracy.share * 100)}%`}
+          tone={summary.accuracy.share != null && summary.accuracy.share < 0.9 ? "warn" : undefined}
+          note={<><b className="font-semibold text-text-2">{summary.accuracy.matched}</b> of {summary.accuracy.compared} items</>} />
+        <KeyNumber label="Not checked, 30 days" value={String(summary.unchecked.items)} tone={summary.unchecked.items > 0 ? "warn" : undefined}
+          note={summary.unchecked.items > 0 ? "counted, but no expected stock to compare" : "every counted item was compared"} />
       </div>
 
       {/* Filters */}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <div className="relative w-full sm:max-w-sm sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <Input placeholder="Search outlet or staff..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {(["all", "flagged", "SUBMITTED", "REVIEWED"] as const).map((t) => (
             <button key={t} onClick={() => setStatusFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${statusFilter === t ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2"}`}>
               {t === "all" ? `All (${stats.total})`
@@ -298,103 +278,44 @@ export default function StockCountPage() {
       </div>
 
       {error && (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="mt-4 rounded-card bg-danger-soft px-4 py-3 text-sm text-danger-text">{error}</div>
       )}
 
-      {/* Table */}
-      <div className="mt-4 rounded-xl border border-line bg-surface overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm min-w-[720px]">
-          <thead>
-            <tr className="border-b border-line bg-sunken/50">
-              <th className="px-4 py-3 text-left font-medium text-text-2">Date</th>
-              <th className="px-4 py-3 text-left font-medium text-text-2">Outlet</th>
-              <th className="px-4 py-3 text-left font-medium text-text-2">Type</th>
-              <th className="px-4 py-3 text-left font-medium text-text-2">Counted By</th>
-              <th className="px-4 py-3 text-left font-medium text-text-2">Items</th>
-              <th className="px-4 py-3 text-left font-medium text-text-2">Discrepancies</th>
-              <th className="px-4 py-3 text-left font-medium text-text-2">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-text-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-text-3">No stock counts found</td></tr>
-            )}
-            {filtered.map((sc) => {
-              const comparable = sc.items.filter(
-                (i) => i.countedQty != null && i.expectedQty != null,
-              );
-              const countedItems = sc.items.filter((i) => i.countedQty != null).length;
-              const discrepancies = comparable.filter(
-                (i) => countedInBase(i) !== i.expectedQty,
-              ).length;
-              const unresolvedDiscrepancies = comparable.filter(
-                (i) => countedInBase(i) !== i.expectedQty && !i.varianceReason,
-              ).length;
-              // Counted but never compared — distinct from "compared and clean".
-              const uncheckedItems = countedItems - comparable.length;
-              const StatusIcon = STATUS_ICON[sc.status] ?? Clock;
-              return (
-                <tr key={sc.id} className="border-b border-line hover:bg-sunken/50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-text">{formatDate(sc.countDate)}</p>
-                    <p className="text-[10px] text-text-3">{formatTime(sc.createdAt)}</p>
-                  </td>
-                  <td className="px-4 py-3 font-medium text-text">{sc.outlet}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant="outline" className="text-[10px] capitalize">{sc.frequency.toLowerCase()}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-text-2">{sc.countedBy}</td>
-                  <td className="px-4 py-3">
-                    <span className="text-text font-medium">{sc.items.filter((i) => i.countedQty != null).length}</span>
-                    <span className="text-text-3 text-xs ml-1">/ {sc.items.length}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {discrepancies > 0 ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-red-600 font-semibold">{discrepancies}</span>
-                        {unresolvedDiscrepancies > 0 && (
-                          <Badge variant="outline" className="text-[10px] border-red-200 bg-red-50 text-red-600">
-                            {unresolvedDiscrepancies} unresolved
-                          </Badge>
-                        )}
-                      </div>
-                    ) : comparable.length === 0 && countedItems > 0 ? (
-                      <span className="text-amber-700 text-xs" title="No expected stock was recorded, so nothing was compared">
-                        Not checked
-                      </span>
-                    ) : uncheckedItems > 0 ? (
-                      <span className="text-amber-700 text-xs" title={`${comparable.length} compared, ${uncheckedItems} had no expected stock`}>
-                        {uncheckedItems} unchecked
-                      </span>
-                    ) : (
-                      <span className="text-green-600 text-xs">All OK</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[sc.status] ?? ""}`}>
-                        <StatusIcon className="h-3 w-3 mr-1" />
-                        {sc.status === "SUBMITTED" ? "Pending" : sc.status.toLowerCase()}
-                      </Badge>
-                      {isAutoApproved(sc) && (
-                        <span className="text-[9px] uppercase tracking-wide text-text-3" title="Auto-approved at finalize">
-                          auto
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSelected(sc)}>
-                      <Eye className="h-3 w-3 mr-1" />
-                      {sc.status === "SUBMITTED" ? "Review" : unresolvedDiscrepancies > 0 ? "Manage" : "View"}
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* One list: newest first, gaps waiting for a reason signalled */}
+      <div className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+        {filtered.length === 0 && <p className="px-4 py-12 text-center text-sm text-text-3">No stock counts found</p>}
+        {filtered.map((sc) => {
+          const comparable = sc.items.filter((i) => i.countedQty != null && i.expectedQty != null);
+          const countedItems = sc.items.filter((i) => i.countedQty != null).length;
+          const discrepancies = comparable.filter((i) => countedInBase(i) !== i.expectedQty).length;
+          const unresolved = unresolvedIn(sc);
+          // Counted but never compared — distinct from "compared and clean".
+          const uncheckedItems = countedItems - comparable.length;
+          const signal = unresolved > 0
+            ? { text: `${unresolved} need a reason`, cls: "bg-warn-soft text-warn-text" }
+            : comparable.length === 0 && countedItems > 0
+              ? { text: "Not checked", cls: "bg-warn-soft text-warn-text" }
+              : discrepancies > 0
+                ? { text: `${discrepancies} explained`, cls: "bg-sunken text-text-2" }
+                : uncheckedItems > 0
+                  ? { text: `${uncheckedItems} unchecked`, cls: "bg-warn-soft text-warn-text" }
+                  : { text: "All matched", cls: "bg-ok-soft text-ok-text" };
+          return (
+            <button key={sc.id} onClick={() => setSelected(sc)}
+              className="flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 hover:bg-sunken/50">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-text">
+                  {sc.outlet} <span className="font-normal text-text-3">· {sc.frequency.toLowerCase()}</span>
+                </p>
+                <p className="mt-0.5 truncate text-[12px] text-text-3">
+                  {formatDate(sc.countDate)} · {formatTime(sc.createdAt)} · by {sc.countedBy} · {countedItems} of {sc.items.length} items
+                  {sc.status === "SUBMITTED" ? " · waiting for review" : isAutoApproved(sc) ? " · auto-approved" : ""}
+                </p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] ${signal.cls}`}>{signal.text}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Review Dialog ── */}

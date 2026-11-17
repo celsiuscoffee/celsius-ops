@@ -1,5 +1,6 @@
 "use client";
 
+import { KeyNumber } from "@/components/ui/key-number";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { summariseWaste } from "@/lib/inventory/waste-summary";
 import { Button } from "@/components/ui/button";
@@ -38,18 +39,6 @@ type UserSession = {
 };
 
 const rmText = (v: number) => `RM ${v.toLocaleString("en-MY", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-
-function WasteKpi({ label, value, note, tone, word }: { label: string; value: string | null; note: React.ReactNode; tone?: "warn"; word?: boolean }) {
-  return (
-    <div className="rounded-card border border-line bg-surface p-4">
-      <p className="text-[12px] font-medium text-text-2">{label}</p>
-      {value === null
-        ? <div className="mt-1.5 h-8 w-24 animate-pulse rounded bg-sunken" />
-        : <p className={"mt-1 truncate text-[21px] font-semibold leading-8 sm:text-[26px] " + (word ? "" : "font-mono ") + (tone === "warn" ? "text-warn-text" : "text-text")} title={value}>{value}</p>}
-      <p className="mt-1 text-[12px] text-text-3">{note}</p>
-    </div>
-  );
-}
 
 export default function WastagePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -192,14 +181,14 @@ export default function WastagePage() {
       <div className="space-y-5">
         {/* Key numbers, each against a reference (Celsius UI page pattern) */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <WasteKpi label="Last 7 days" value={loading ? null : rmText(summary.last7)}
+          <KeyNumber label="Last 7 days" value={loading ? null : rmText(summary.last7)}
             tone={summary.change7 !== null && summary.change7 > 0.1 ? "warn" : undefined}
             note={summary.change7 === null ? "nothing in the 7 days before" : <><b className="text-text-2">{summary.change7 > 0 ? "+" : ""}{Math.round(summary.change7 * 100)}%</b> vs {rmText(summary.prev7)} the 7 days before</>} />
-          <WasteKpi label="This month" value={loading ? null : rmText(summary.thisMonth)}
+          <KeyNumber label="This month" value={loading ? null : rmText(summary.thisMonth)}
             note={<>last month: <b className="text-text-2">{rmText(summary.lastMonth)}</b></>} />
-          <WasteKpi label="Top reason, 7 days" word value={loading ? null : (summary.topReason?.reason ?? "None")}
+          <KeyNumber label="Top reason, 7 days" word value={loading ? null : (summary.topReason?.reason ?? "None")}
             note={summary.topReason ? <><b className="text-text-2">{Math.round(summary.topReason.share * 100)}%</b> of the cost, {rmText(summary.topReason.amount)}</> : "no costed waste this week"} />
-          <WasteKpi label="Most wasted, 7 days" word value={loading ? null : (summary.topItem?.product ?? "None")}
+          <KeyNumber label="Most wasted, 7 days" word value={loading ? null : (summary.topItem?.product ?? "None")}
             note={summary.topItem ? <><b className="text-text-2">{rmText(summary.topItem.amount)}</b> thrown away</> : "no costed waste this week"} />
         </div>
 

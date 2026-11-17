@@ -1,5 +1,6 @@
 "use client";
 
+import { KeyNumber } from "@/components/ui/key-number";
 // Stock › Overview (restructure step 6, 17 Nov 2026): what we hold, what it
 // cost this month, and where it leaks. Celsius UI page pattern: title + one
 // line, at most four key numbers each with a reference, a "needs you" strip,
@@ -46,18 +47,6 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   CANCELLED: { label: "Cancelled", cls: "bg-danger-soft text-danger-text" },
 };
 
-function Kpi({ href, label, value, note, tone, word }: { href: string; label: string; value: string | null; note: React.ReactNode; tone?: "warn" | "ok"; word?: boolean }) {
-  return (
-    <Link href={href} className="group rounded-card border border-line bg-surface p-4 transition-colors hover:border-line-2">
-      <p className="text-[12px] font-medium text-text-2">{label}</p>
-      {value === null
-        ? <div className="mt-1.5 h-8 w-24 animate-pulse rounded bg-sunken" />
-        : <p className={"mt-1 whitespace-nowrap text-[21px] font-semibold leading-8 sm:text-[26px] " + (word ? "" : "font-mono ") + (tone === "warn" ? "text-warn-text" : "text-text")}>{value}</p>}
-      <p className="mt-1 text-[12px] text-text-3">{note}</p>
-    </Link>
-  );
-}
-
 export default function StockOverviewPage() {
   const { data: dash } = useFetch<InventoryDashboard>("/api/inventory/dashboard");
   const { data: stats } = useFetch<InventoryStats>("/api/inventory/admin/stats");
@@ -81,14 +70,14 @@ export default function StockOverviewPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi href="/inventory/reports" label="Stock value" value={stats ? rm(stats.inventoryValue) : null}
+        <KeyNumber href="/inventory/reports" label="Stock value" value={stats ? rm(stats.inventoryValue) : null}
           note={daysCover !== null ? <>about <b className="text-text-2">{Math.round(daysCover)} days</b> of use at this month&apos;s rate</> : "across all outlets"} />
-        <Kpi href="/inventory/reports" label="Cost of goods, this month" value={stats ? rm(stats.cogsThisMonth) : null}
+        <KeyNumber href="/inventory/reports" label="Cost of goods, this month" value={stats ? rm(stats.cogsThisMonth) : null}
           note={stats ? <><b className="text-text-2">{rm(cogsPerDay)}</b> a day over {day} {day === 1 ? "day" : "days"}</> : "—"} />
-        <Kpi href="/inventory/wastage" label="Waste, last 7 days" value={dash ? rm(dash.wasteTotal) : null}
+        <KeyNumber href="/inventory/wastage" label="Waste, last 7 days" value={dash ? rm(dash.wasteTotal) : null}
           tone={wastePct !== null && wastePct > 3 ? "warn" : undefined}
           note={wastePct !== null ? <><b className="text-text-2">{wastePct.toFixed(1)}%</b> of {rm(dash?.weeklySpending)} bought in the same 7 days</> : "of the last 7 days' purchases"} />
-        <Kpi word href="/inventory/stock-count" label="Stock count, today" value={dash ? (dash.stockCheckDone ? "Done" : "Not yet") : null}
+        <KeyNumber word href="/inventory/stock-count" label="Stock count, today" value={dash ? (dash.stockCheckDone ? "Done" : "Not yet") : null}
           tone={dash && !dash.stockCheckDone ? "warn" : undefined}
           note={dash ? (dash.stockCheckDone ? "today's count is in" : "no outlet has counted today") : "—"} />
       </div>

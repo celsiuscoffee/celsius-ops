@@ -285,6 +285,17 @@ up more than 10%), this month against last month, top reason by cost with its
 share, and the most-wasted item. One list, newest first. Maths in
 `lib/inventory/waste-summary.ts` (Malaysia time, tested); same API.
 
+**Stock › Stock Count rebuilt (17 Nov)**: "Whether outlets count, whether the
+shelf matches the system, and every gap explained." Four key numbers: counts in
+the last 7 days with outlets covered; counts waiting for a variance reason
+(amber); share of compared items that matched the system over 30 days (amber
+under 90%); items counted with no expected stock to compare (amber, the
+Tamarind blind spot). The table became one list with one signal per count;
+tapping a row opens the same review. Maths in `lib/inventory/count-summary.ts`
+(tested). The key-number tile is now shared: `components/ui/key-number.tsx`.
+Still to do: the review is a modal with a wide table; it should become a
+full-page view (no cramped containers for data-dense detail).
+
 Still to do in step 6: page-by-page layout (title + one line, at most four key
 numbers each against a reference, one list), section by section, starting with
 the most-used pages once Office Usage has data.
