@@ -37,7 +37,7 @@ export default function ClaimBatchesPage() {
       ? "bg-emerald-100 text-emerald-700"
       : s === "OPEN"
         ? "bg-amber-100 text-amber-700"
-        : "bg-gray-200 text-gray-600";
+        : "bg-line text-text-2";
   const statusIcon = (s: Batch["status"]) =>
     s === "PAID" ? <CheckCircle2 className="h-3 w-3" />
     : s === "OPEN" ? <Clock className="h-3 w-3" />
@@ -55,7 +55,7 @@ export default function ClaimBatchesPage() {
         </div>
         <Link
           href="/inventory/pay-and-claim/batches/new"
-          className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90"
+          className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink/90"
         >
           <Plus className="h-4 w-4" /> New Batch
         </Link>
@@ -67,7 +67,7 @@ export default function ClaimBatchesPage() {
             key={s}
             onClick={() => setStatus(s)}
             className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-              status === s ? "border-terracotta bg-terracotta text-white" : "bg-background hover:bg-muted"
+              status === s ? "border-ink bg-ink text-on-ink" : "bg-background hover:bg-muted"
             }`}
           >
             {s}
@@ -128,7 +128,7 @@ export default function ClaimBatchesPage() {
                   <td className="px-4 py-3 text-right">
                     <Link
                       href={`/inventory/pay-and-claim/batches/${b.id}`}
-                      className="text-xs font-medium text-terracotta hover:underline"
+                      className="text-xs font-medium text-brand-text hover:underline"
                     >
                       Open →
                     </Link>

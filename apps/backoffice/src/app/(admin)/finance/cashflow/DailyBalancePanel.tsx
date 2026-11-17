@@ -201,24 +201,24 @@ export default function DailyBalancePanel({
   }, [activeSeries, startDate, endDate]);
 
   const segBtn = (active: boolean) =>
-    `rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active ? "bg-terracotta text-white" : "text-gray-600 hover:bg-gray-50"}`;
+    `rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${active ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"}`;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       {/* Title + mode */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-terracotta/10">
-            <Wallet className="h-4 w-4 text-terracotta" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-soft">
+            <Wallet className="h-4 w-4 text-brand-text" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">Daily bank balance</h3>
-            <p className="text-[11px] text-gray-400">
+            <h3 className="text-sm font-semibold text-text">Daily bank balance</h3>
+            <p className="text-[11px] text-text-3">
               Reconstructed end-of-day cash position{db.asOf ? `, actuals through ${fmtDay(db.asOf)}` : ""}. Follows the account and period above; bank-account level, so the outlet filter doesn&apos;t apply.
             </p>
           </div>
         </div>
-        <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
+        <div className="flex rounded-lg border border-line bg-surface p-0.5">
           <button onClick={() => setMode("timeline")} className={segBtn(mode === "timeline")}>Timeline</button>
           <button onClick={() => setMode("compare")} className={segBtn(mode === "compare")}>Compare</button>
         </div>
@@ -235,14 +235,14 @@ export default function DailyBalancePanel({
               </button>
             )}
             {source === "combined" && (
-              <label className="flex items-center gap-1.5 text-xs text-gray-600">
-                <input type="checkbox" checked={showProjection} onChange={(e) => setShowProjection(e.target.checked)} className="rounded border-gray-300 text-terracotta focus:ring-terracotta" />
+              <label className="flex items-center gap-1.5 text-xs text-text-2">
+                <input type="checkbox" checked={showProjection} onChange={(e) => setShowProjection(e.target.checked)} className="rounded border-line-2 text-brand-text focus:ring-brand" />
                 Projection
               </label>
             )}
           </>
         ) : (
-          <div className="flex flex-wrap rounded-lg border border-gray-200 bg-white p-0.5">
+          <div className="flex flex-wrap rounded-lg border border-line bg-surface p-0.5">
             {COMPARES.map((c) => (
               <button key={c.key} onClick={() => setCompareKey(c.key)} className={segBtn(compareKey === c.key)}>{c.label}</button>
             ))}
@@ -252,11 +252,11 @@ export default function DailyBalancePanel({
 
       {/* Summary chips */}
       {stats && (
-        <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-gray-500">
-          <span>Latest: <span className="font-mono font-semibold text-gray-800">{fmtRM(stats.latest.balance)}</span></span>
+        <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-text-2">
+          <span>Latest: <span className="font-mono font-semibold text-text">{fmtRM(stats.latest.balance)}</span></span>
           <span>
-            Lowest: <span className={`font-mono font-semibold ${stats.min.balance < 10000 ? "text-amber-600" : "text-gray-800"}`}>{fmtRM(stats.min.balance)}</span>{" "}
-            <span className="text-gray-400">({fmtDay(stats.min.date)})</span>
+            Lowest: <span className={`font-mono font-semibold ${stats.min.balance < 10000 ? "text-amber-600" : "text-text"}`}>{fmtRM(stats.min.balance)}</span>{" "}
+            <span className="text-text-3">({fmtDay(stats.min.date)})</span>
           </span>
           <span className="flex items-center gap-1">
             Change:
@@ -268,7 +268,7 @@ export default function DailyBalancePanel({
       )}
 
       {!hasData ? (
-        <div className="py-12 text-center text-sm text-gray-400">No bank-statement data yet.</div>
+        <div className="py-12 text-center text-sm text-text-3">No bank-statement data yet.</div>
       ) : mode === "timeline" ? (
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={timeline.rows} margin={{ top: 5, right: 12, left: 4, bottom: 0 }}>

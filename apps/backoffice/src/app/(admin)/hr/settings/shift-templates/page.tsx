@@ -95,10 +95,10 @@ export default function ShiftTemplatesPage() {
       <div className="rounded-xl border bg-card p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold">
-            <Clock className="h-5 w-5 text-terracotta" />
+            <Clock className="h-5 w-5 text-brand-text" />
             Shift Templates ({templates.length})
           </h2>
-          <button onClick={() => setEditing({ ...BLANK })} className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark">
+          <button onClick={() => setEditing({ ...BLANK })} className="flex items-center gap-1 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover">
             <Plus className="h-4 w-4" /> New Template
           </button>
         </div>
@@ -113,23 +113,23 @@ export default function ShiftTemplatesPage() {
               </h3>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {list.map((t) => (
-                  <div key={t.id} className="rounded-lg border bg-white p-3">
+                  <div key={t.id} className="rounded-lg border bg-surface p-3">
                     <div className="mb-2 flex items-start justify-between">
                       <div className="flex items-center gap-2">
                         <div className="h-3 w-3 rounded-full" style={{ background: t.color || "#94a3b8" }} />
                         <h4 className="font-medium">{t.label}</h4>
                       </div>
                       <div className="flex gap-1">
-                        <button onClick={() => setEditing(t)} className="rounded p-1 text-xs hover:bg-gray-100">Edit</button>
-                        <button onClick={() => remove(t.id)} disabled={deleting === t.id} className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50">
+                        <button onClick={() => setEditing(t)} className="rounded p-1 text-xs hover:bg-sunken">Edit</button>
+                        <button onClick={() => remove(t.id)} disabled={deleting === t.id} className="rounded p-1 text-text-3 hover:bg-red-50 hover:text-red-600 disabled:opacity-50">
                           {deleting === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                         </button>
                       </div>
                     </div>
-                    <div className="space-y-0.5 text-xs text-gray-600">
+                    <div className="space-y-0.5 text-xs text-text-2">
                       <div>{t.start_time.slice(0, 5)} – {t.end_time.slice(0, 5)}</div>
                       <div>{calcHours(t.start_time, t.end_time, t.break_minutes)} worked · {t.break_minutes}m break</div>
-                      {!t.is_active && <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px]">INACTIVE</span>}
+                      {!t.is_active && <span className="inline-block rounded bg-sunken px-1.5 py-0.5 text-[10px]">INACTIVE</span>}
                     </div>
                   </div>
                 ))}
@@ -142,10 +142,10 @@ export default function ShiftTemplatesPage() {
 
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditing(null)}>
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold">{editing.id ? "Edit Shift" : "New Shift Template"}</h3>
-              <button onClick={() => setEditing(null)} className="rounded p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+              <button onClick={() => setEditing(null)} className="rounded p-1 hover:bg-sunken"><X className="h-4 w-4" /></button>
             </div>
 
             <div className="space-y-4">
@@ -185,7 +185,7 @@ export default function ShiftTemplatesPage() {
                   {COLORS.map((c) => (
                     <button key={c} type="button" onClick={() => setEditing({ ...editing, color: c })} className={"h-7 w-7 rounded-full border-2 " + (editing.color === c ? "border-gray-900" : "border-transparent")} style={{ background: c }} />
                   ))}
-                  <button type="button" onClick={() => setEditing({ ...editing, color: null })} className={"h-7 w-7 rounded-full border-2 bg-gray-200 " + (!editing.color ? "border-gray-900" : "border-transparent")}>—</button>
+                  <button type="button" onClick={() => setEditing({ ...editing, color: null })} className={"h-7 w-7 rounded-full border-2 bg-line " + (!editing.color ? "border-gray-900" : "border-transparent")}>—</button>
                 </div>
               </div>
 
@@ -196,7 +196,7 @@ export default function ShiftTemplatesPage() {
 
               <div className="flex justify-end gap-2 border-t pt-4">
                 <button onClick={() => setEditing(null)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button>
-                <button onClick={save} disabled={saving || !editing.label} className="flex items-center gap-1 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50">
+                <button onClick={save} disabled={saving || !editing.label} className="flex items-center gap-1 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save
                 </button>
               </div>

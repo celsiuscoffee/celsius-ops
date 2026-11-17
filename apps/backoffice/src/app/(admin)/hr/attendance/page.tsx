@@ -87,12 +87,12 @@ const fmtMins = (m: number) => {
 };
 
 const CLOCK_METHOD: Record<string, { label: string; icon: typeof Smartphone; color: string }> = {
-  app: { label: "GPS", icon: Smartphone, color: "text-gray-500" },
+  app: { label: "GPS", icon: Smartphone, color: "text-text-2" },
   app_nogps: { label: "No GPS", icon: WifiOff, color: "text-amber-600" },
   app_offsite: { label: "Off-site", icon: MapPinOff, color: "text-red-600" },
   manual: { label: "Manual", icon: Hand, color: "text-blue-600" },
-  pos: { label: "POS", icon: Smartphone, color: "text-gray-500" },
-  system: { label: "Auto", icon: Timer, color: "text-gray-500" },
+  pos: { label: "POS", icon: Smartphone, color: "text-text-2" },
+  system: { label: "Auto", icon: Timer, color: "text-text-2" },
 };
 
 // Every AI flag the processor writes, in the order a manager cares about.
@@ -102,9 +102,9 @@ const FLAGS: { key: string; label: string; color: string }[] = [
   { key: "overtime_detected", label: "OT", color: "text-blue-700 bg-blue-50" },
   { key: "early_clock_out", label: "Left early", color: "text-orange-700 bg-orange-50" },
   { key: "no_clock_out", label: "No clock-out", color: "text-red-700 bg-red-50" },
-  { key: "auto_closed_forgot_clockout", label: "Auto-closed", color: "text-gray-700 bg-gray-100" },
+  { key: "auto_closed_forgot_clockout", label: "Auto-closed", color: "text-text-2 bg-sunken" },
   { key: "outside_geofence", label: "Outside zone", color: "text-red-700 bg-red-50" },
-  { key: "no_gps_data", label: "No GPS", color: "text-gray-600 bg-gray-100" },
+  { key: "no_gps_data", label: "No GPS", color: "text-text-2 bg-sunken" },
   { key: "public_holiday", label: "Public holiday", color: "text-purple-700 bg-purple-50" },
 ];
 const FLAG_BY_KEY = new Map(FLAGS.map((f) => [f.key, f]));
@@ -116,13 +116,13 @@ function GeoChip({ label, lat, lng, distance, radius }: {
 }) {
   if (lat == null || lng == null) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-gray-50 px-2 py-0.5 text-[11px] text-gray-500">
+      <span className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-text-2">
         <MapPinOff className="h-3 w-3" /> {label}: no GPS
       </span>
     );
   }
   const outside = distance != null && radius != null && distance > radius;
-  const cls = outside ? "text-red-600 bg-red-50" : distance != null ? "text-green-700 bg-green-50" : "text-gray-600 bg-gray-50";
+  const cls = outside ? "text-red-600 bg-red-50" : distance != null ? "text-green-700 bg-green-50" : "text-text-2 bg-sunken";
   return (
     <a
       href={`https://maps.google.com/?q=${lat},${lng}`}
@@ -357,7 +357,7 @@ export default function AttendanceReviewPage() {
               <button
                 key={k}
                 onClick={() => { setReview(k); setSelected(new Set()); }}
-                className={`rounded-md px-3 py-1.5 font-medium ${review === k ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
+                className={`rounded-md px-3 py-1.5 font-medium ${review === k ? "bg-ink text-on-ink" : "text-text-2 hover:bg-muted"}`}
               >
                 {l}
               </button>
@@ -396,11 +396,11 @@ export default function AttendanceReviewPage() {
           {FLAGS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
         </select>
         <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm">
-          <input type="checkbox" checked={otOnly} onChange={(e) => setOtOnly(e.target.checked)} className="accent-terracotta" />
+          <input type="checkbox" checked={otOnly} onChange={(e) => setOtOnly(e.target.checked)} className="accent-ink" />
           With OT
         </label>
         {hasFilter && (
-          <button onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm text-gray-600 hover:bg-muted">
+          <button onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm text-text-2 hover:bg-muted">
             <X className="h-3.5 w-3.5" /> Reset
           </button>
         )}
@@ -411,14 +411,14 @@ export default function AttendanceReviewPage() {
 
       {/* Bulk action bar */}
       {review === "pending" && selectable.length > 0 && (
-        <div className={`sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border p-2.5 shadow-sm ${selected.size > 0 ? "border-terracotta/40 bg-orange-50" : "bg-card"}`}>
+        <div className={`sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border p-2.5 shadow-sm ${selected.size > 0 ? "border-ink/40 bg-orange-50" : "bg-card"}`}>
           <label className="inline-flex cursor-pointer items-center gap-2 px-1 text-sm">
             <input
               type="checkbox"
               checked={selected.size > 0 && selected.size === selectable.length}
               ref={(el) => { if (el) el.indeterminate = selected.size > 0 && selected.size < selectable.length; }}
               onChange={toggleAll}
-              className="h-4 w-4 accent-terracotta"
+              className="h-4 w-4 accent-ink"
             />
             {selected.size > 0
               ? <span className="font-medium">{selected.size} selected{selectedOt > 0 ? ` · ${selectedOt}h OT` : ""}</span>
@@ -436,7 +436,7 @@ export default function AttendanceReviewPage() {
               </button>
               <button onClick={bulkExcuse} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">Excuse</button>
               <button onClick={bulkReject} className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">Reject</button>
-              <button onClick={() => setSelected(new Set())} className="rounded-lg border px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-muted">Clear</button>
+              <button onClick={() => setSelected(new Set())} className="rounded-lg border px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-muted">Clear</button>
             </div>
           )}
         </div>
@@ -483,7 +483,7 @@ export default function AttendanceReviewPage() {
                               checked={selected.has(log.id)}
                               onChange={() => toggle(log.id)}
                               disabled={busy}
-                              className="mt-1.5 h-4 w-4 flex-shrink-0 accent-terracotta"
+                              className="mt-1.5 h-4 w-4 flex-shrink-0 accent-ink"
                               aria-label="Select log"
                             />
                           ) : <span className="mt-1.5 h-4 w-4 flex-shrink-0" />}
@@ -511,7 +511,7 @@ export default function AttendanceReviewPage() {
                               {log.ai_flags.map((f) => {
                                 const info = FLAG_BY_KEY.get(f);
                                 return (
-                                  <span key={f} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${info?.color ?? "text-gray-600 bg-gray-50"}`}>
+                                  <span key={f} className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${info?.color ?? "text-text-2 bg-sunken"}`}>
                                     {info?.label ?? f}
                                   </span>
                                 );
@@ -582,13 +582,13 @@ export default function AttendanceReviewPage() {
                               onClick={() => (editing?.id === log.id ? setEditing(null) : openEditor(log))}
                               disabled={busy}
                               title={log.clock_out ? "Correct the clock in / out times" : "Manually clock this staffer out"}
-                              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 ${log.ot_tail_suspicious || !log.clock_out ? "border-red-300 text-red-700" : "border-gray-300 text-gray-700"}`}
+                              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 ${log.ot_tail_suspicious || !log.clock_out ? "border-red-300 text-red-700" : "border-line-2 text-text-2"}`}
                             >
                               <PencilLine className="h-3 w-3" /> {log.clock_out ? "Fix times" : "Clock out"}
                             </button>
                             <button
                               onClick={() => toggleExpanded(log.id)}
-                              className="rounded-lg p-1.5 text-gray-500 hover:bg-muted"
+                              className="rounded-lg p-1.5 text-text-2 hover:bg-muted"
                               title={open ? "Hide details" : "Show location, method and photos"}
                               aria-label="Toggle details"
                             >
@@ -645,12 +645,12 @@ export default function AttendanceReviewPage() {
                                   <button
                                     onClick={saveTimes}
                                     disabled={busy || !editing.co}
-                                    className="inline-flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                                    className="inline-flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
                                   >
                                     {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                                     Save times
                                   </button>
-                                  <button onClick={() => setEditing(null)} disabled={busy} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-muted disabled:opacity-50">
+                                  <button onClick={() => setEditing(null)} disabled={busy} className="rounded-lg border border-line-2 bg-surface px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-muted disabled:opacity-50">
                                     Cancel
                                   </button>
                                   <span className="text-[11px] text-muted-foreground">Hours recompute automatically. Any OT in the new times is approved. Times are Malaysia time.</span>

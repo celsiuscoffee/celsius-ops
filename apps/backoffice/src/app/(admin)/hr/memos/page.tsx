@@ -36,7 +36,7 @@ const TYPE_META = {
   announcement: { label: "Announcement", icon: Megaphone, color: "bg-blue-100 text-blue-700" },
   reminder: { label: "Reminder", icon: Bell, color: "bg-amber-100 text-amber-700" },
   commendation: { label: "Commendation", icon: Award, color: "bg-green-100 text-green-700" },
-  note: { label: "Note", icon: FileText, color: "bg-gray-100 text-gray-700" },
+  note: { label: "Note", icon: FileText, color: "bg-sunken text-text-2" },
   verbal_warning: { label: "Verbal Warning", icon: AlertTriangle, color: "bg-orange-100 text-orange-700" },
   written_warning: { label: "Written Warning", icon: AlertTriangle, color: "bg-red-100 text-red-700" },
 } as const;
@@ -128,7 +128,7 @@ export default function MemosPage() {
         action={
           <button
             onClick={() => setCreating(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta/90"
+            className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink/90"
           >
             <Plus className="h-4 w-4" /> New Memo
           </button>
@@ -140,7 +140,7 @@ export default function MemosPage() {
           <button
             key={s}
             onClick={() => setStatus(s)}
-            className={`rounded-md px-3 py-1.5 font-medium capitalize ${status === s ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
+            className={`rounded-md px-3 py-1.5 font-medium capitalize ${status === s ? "bg-ink text-on-ink" : "text-text-2 hover:bg-muted"}`}
           >
             {s}
           </button>
@@ -148,11 +148,11 @@ export default function MemosPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-text-3" /></div>
       ) : memos.length === 0 ? (
         <div className="flex flex-col items-center rounded-xl border bg-card py-16">
-          <FileText className="mb-3 h-12 w-12 text-gray-300" />
-          <p className="font-semibold text-gray-500">No memos</p>
+          <FileText className="mb-3 h-12 w-12 text-text-3" />
+          <p className="font-semibold text-text-2">No memos</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -188,11 +188,11 @@ export default function MemosPage() {
                             : <>Acknowledged {m.acknowledged_count}/{m.recipient_count}</>}
                         </span>
                       )}
-                      {m.status === "rescinded" && <span className="flex items-center gap-1 text-xs text-gray-500"><XCircle className="h-3 w-3" /> Rescinded</span>}
+                      {m.status === "rescinded" && <span className="flex items-center gap-1 text-xs text-text-2"><XCircle className="h-3 w-3" /> Rescinded</span>}
                     </div>
                     <p className="font-semibold">{m.title}</p>
-                    <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{m.body}</p>
-                    <p className="mt-2 text-xs text-gray-500">
+                    <p className="mt-1 text-sm text-text-2 whitespace-pre-wrap">{m.body}</p>
+                    <p className="mt-2 text-xs text-text-2">
                       To{" "}
                       <strong>
                         {(m.user_names && m.user_names.length > 0)
@@ -207,7 +207,7 @@ export default function MemosPage() {
                   {m.status === "active" && (
                     <button
                       onClick={() => rescind(m.id)}
-                      className="text-xs text-gray-500 hover:text-red-600"
+                      className="text-xs text-text-2 hover:text-red-600"
                     >
                       Rescind
                     </button>
@@ -221,42 +221,42 @@ export default function MemosPage() {
 
       {creating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white p-5">
+          <div className="w-full max-w-lg rounded-xl bg-surface p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-lg font-bold">New Memo</h2>
-              <button onClick={() => setCreating(false)}><X className="h-5 w-5 text-gray-400" /></button>
+              <button onClick={() => setCreating(false)}><X className="h-5 w-5 text-text-3" /></button>
             </div>
             <div className="space-y-3">
               <div>
                 <label className="mb-1 block text-xs font-medium">
-                  Staff {form.user_ids.length > 0 && <span className="text-gray-500">({form.user_ids.length} selected)</span>}
+                  Staff {form.user_ids.length > 0 && <span className="text-text-2">({form.user_ids.length} selected)</span>}
                 </label>
                 <button
                   type="button"
                   onClick={() => setStaffPickerOpen((v) => !v)}
-                  className="flex w-full items-center justify-between rounded border border-gray-300 px-3 py-2 text-left text-sm hover:bg-gray-50"
+                  className="flex w-full items-center justify-between rounded border border-line-2 px-3 py-2 text-left text-sm hover:bg-sunken"
                 >
-                  <span className={form.user_ids.length === 0 ? "text-gray-400" : ""}>
+                  <span className={form.user_ids.length === 0 ? "text-text-3" : ""}>
                     {form.user_ids.length === 0
                       ? "— Select one or more —"
                       : form.user_ids.length === 1
                         ? employees.find((e) => e.id === form.user_ids[0])?.fullName || employees.find((e) => e.id === form.user_ids[0])?.name || "1 staff"
                         : `${form.user_ids.length} staff selected`}
                   </span>
-                  <span className="text-xs text-gray-400">{staffPickerOpen ? "▲" : "▼"}</span>
+                  <span className="text-xs text-text-3">{staffPickerOpen ? "▲" : "▼"}</span>
                 </button>
                 {staffPickerOpen && (
-                  <div className="mt-1 rounded border border-gray-200 bg-white p-2">
+                  <div className="mt-1 rounded border border-line bg-surface p-2">
                     <div className="mb-2 flex gap-2">
                       <input
                         type="text"
                         value={staffSearch}
                         onChange={(e) => setStaffSearch(e.target.value)}
                         placeholder="Search…"
-                        className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs"
+                        className="flex-1 rounded border border-line-2 px-2 py-1 text-xs"
                       />
-                      <button type="button" onClick={selectAllStaff} className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50">Select all</button>
-                      <button type="button" onClick={clearStaff} className="rounded border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50">Clear</button>
+                      <button type="button" onClick={selectAllStaff} className="rounded border border-line-2 px-2 py-1 text-xs hover:bg-sunken">Select all</button>
+                      <button type="button" onClick={clearStaff} className="rounded border border-line-2 px-2 py-1 text-xs hover:bg-sunken">Clear</button>
                     </div>
                     <div className="max-h-48 overflow-y-auto">
                       {employees
@@ -266,7 +266,7 @@ export default function MemosPage() {
                           return (e.fullName || e.name || "").toLowerCase().includes(q);
                         })
                         .map((e) => (
-                          <label key={e.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50">
+                          <label key={e.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-sunken">
                             <input
                               type="checkbox"
                               checked={form.user_ids.includes(e.id)}
@@ -282,7 +282,7 @@ export default function MemosPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-medium">Type</label>
-                  <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as Memo["type"] })} className="w-full rounded border border-gray-300 px-3 py-2">
+                  <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as Memo["type"] })} className="w-full rounded border border-line-2 px-3 py-2">
                     <optgroup label="General">
                       <option value="announcement">Announcement</option>
                       <option value="reminder">Reminder</option>
@@ -297,7 +297,7 @@ export default function MemosPage() {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium">Severity</label>
-                  <select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value as Memo["severity"] })} className="w-full rounded border border-gray-300 px-3 py-2">
+                  <select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value as Memo["severity"] })} className="w-full rounded border border-line-2 px-3 py-2">
                     <option value="info">Info</option>
                     <option value="minor">Minor</option>
                     <option value="major">Major</option>
@@ -306,16 +306,16 @@ export default function MemosPage() {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium">Title</label>
-                <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full rounded border border-gray-300 px-3 py-2" placeholder="e.g. Team meeting Wednesday · New POS procedure · Hari Raya schedule" />
+                <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="w-full rounded border border-line-2 px-3 py-2" placeholder="e.g. Team meeting Wednesday · New POS procedure · Hari Raya schedule" />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium">Body</label>
-                <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} rows={5} className="w-full rounded border border-gray-300 px-3 py-2" placeholder="Full message, context, what to do next…" />
+                <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} rows={5} className="w-full rounded border border-line-2 px-3 py-2" placeholder="Full message, context, what to do next…" />
               </div>
             </div>
             <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setCreating(false)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">Cancel</button>
-              <button onClick={submit} disabled={saving || form.user_ids.length === 0 || !form.title || !form.body} className="rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
+              <button onClick={() => setCreating(false)} className="rounded-lg border border-line-2 px-3 py-2 text-sm">Cancel</button>
+              <button onClick={submit} disabled={saving || form.user_ids.length === 0 || !form.title || !form.body} className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink disabled:opacity-50">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : `Issue Memo${form.user_ids.length > 1 ? ` to ${form.user_ids.length} staff` : ""}`}
               </button>
             </div>

@@ -319,20 +319,20 @@ export default function POSTableQRPage() {
       />
 
       <div className="print:hidden">
-        <h1 className="text-2xl font-bold text-[#160800]">Table QR Codes</h1>
+        <h1 className="text-2xl font-bold text-text">Table QR Codes</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           Auto-generated from each outlet&rsquo;s floor plan. Customer scans → menu → order + pay on their phone.
         </p>
       </div>
 
       {/* Controls */}
-      <div className="bg-white rounded-2xl p-4 flex flex-wrap items-end gap-3 print:hidden">
+      <div className="bg-surface rounded-2xl p-4 flex flex-wrap items-end gap-3 print:hidden">
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Outlet</label>
+          <label className="mb-1 block text-xs font-medium text-text-2">Outlet</label>
           <select
             value={selectedOutlet}
             onChange={(e) => setSelectedOutlet(e.target.value)}
-            className="rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none"
+            className="rounded-xl border border-line px-3 py-2 text-sm focus:border-ink focus:outline-none"
           >
             {OUTLETS.map((o) => (
               <option key={o.id} value={o.id}>{o.name}</option>
@@ -342,12 +342,12 @@ export default function POSTableQRPage() {
 
         {/* View toggle */}
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Style</label>
-          <div className="inline-flex rounded-xl border border-gray-200 p-0.5">
+          <label className="mb-1 block text-xs font-medium text-text-2">Style</label>
+          <div className="inline-flex rounded-xl border border-line p-0.5">
             <button
               onClick={() => setView("designed")}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                view === "designed" ? "bg-[#160800] text-white" : "text-gray-600 hover:bg-gray-50"
+                view === "designed" ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"
               }`}
             >
               <IdCard className="h-4 w-4" /> Designed cards
@@ -355,7 +355,7 @@ export default function POSTableQRPage() {
             <button
               onClick={() => setView("plain")}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                view === "plain" ? "bg-[#160800] text-white" : "text-gray-600 hover:bg-gray-50"
+                view === "plain" ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"
               }`}
             >
               <LayoutGrid className="h-4 w-4" /> Plain grid
@@ -366,11 +366,11 @@ export default function POSTableQRPage() {
         {/* Footer note (designed only) */}
         {view === "designed" && (
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">Footer note</label>
+            <label className="mb-1 block text-xs font-medium text-text-2">Footer note</label>
             <input
               value={foot}
               onChange={(e) => setFoot(e.target.value.toUpperCase().slice(0, 22))}
-              className="w-48 rounded-xl border border-gray-200 px-3 py-2 text-sm uppercase focus:border-[#160800] focus:outline-none"
+              className="w-48 rounded-xl border border-line px-3 py-2 text-sm uppercase focus:border-ink focus:outline-none"
             />
           </div>
         )}
@@ -378,7 +378,7 @@ export default function POSTableQRPage() {
         {/* Sticker size (designed only) — drives the print-ready output */}
         {view === "designed" && (
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">Sticker width (cm)</label>
+            <label className="mb-1 block text-xs font-medium text-text-2">Sticker width (cm)</label>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -387,9 +387,9 @@ export default function POSTableQRPage() {
                 step={0.5}
                 value={stickerW}
                 onChange={(e) => setStickerW(Math.max(5, Math.min(20, Number(e.target.value) || 10)))}
-                className="w-20 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none"
+                className="w-20 rounded-xl border border-line px-3 py-2 text-sm focus:border-ink focus:outline-none"
               />
-              <span className="text-xs text-gray-500 whitespace-nowrap">= {stickerW} × {stickerW * 2} cm finished</span>
+              <span className="text-xs text-text-2 whitespace-nowrap">= {stickerW} × {stickerW * 2} cm finished</span>
             </div>
           </div>
         )}
@@ -397,21 +397,21 @@ export default function POSTableQRPage() {
         {/* Output type (designed only): production vs. design-only */}
         {view === "designed" && (
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">Output</label>
-            <label className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm cursor-pointer select-none">
+            <label className="mb-1 block text-xs font-medium text-text-2">Output</label>
+            <label className="flex items-center gap-2 rounded-xl border border-line px-3 py-2 text-sm cursor-pointer select-none">
               <input type="checkbox" checked={marks} onChange={(e) => setMarks(e.target.checked)} className="accent-[#A2492C]" />
-              <span className="whitespace-nowrap">Print marks <span className="text-gray-400">(bleed, crop, die-cut)</span></span>
+              <span className="whitespace-nowrap">Print marks <span className="text-text-3">(bleed, crop, die-cut)</span></span>
             </label>
           </div>
         )}
 
         {/* Source: floor plan (auto) vs. manual fallback */}
         {loadingLayout ? (
-          <div className="text-sm text-gray-400">Loading floor plan…</div>
+          <div className="text-sm text-text-3">Loading floor plan…</div>
         ) : fromLayout ? (
           <div className="flex items-center gap-2 rounded-xl border border-[#A2492C]/20 bg-[#FBEBE8]/60 px-3 py-2">
             <LayoutGrid className="h-4 w-4 text-[#A2492C]" />
-            <span className="text-sm font-medium text-[#160800]">
+            <span className="text-sm font-medium text-text">
               {layoutTables.length} table{layoutTables.length === 1 ? "" : "s"} from your floor plan
             </span>
             <Link href="/pos/settings" className="flex items-center gap-0.5 text-xs font-semibold text-[#A2492C] hover:underline">
@@ -421,19 +421,19 @@ export default function POSTableQRPage() {
         ) : (
           <>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Number of tables</label>
+              <label className="mb-1 block text-xs font-medium text-text-2">Number of tables</label>
               <input
                 type="number"
                 min={1}
                 max={50}
                 value={manualCount}
                 onChange={(e) => { setManualCount(Math.max(1, Math.min(50, Number(e.target.value)))); setGenerated(false); }}
-                className="w-24 rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none"
+                className="w-24 rounded-xl border border-line px-3 py-2 text-sm focus:border-ink focus:outline-none"
               />
             </div>
             <button
               onClick={generate}
-              className="flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
+              className="flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
             >
               <Sparkles className="h-4 w-4" /> Generate
             </button>
@@ -443,7 +443,7 @@ export default function POSTableQRPage() {
         {show && (
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 border border-gray-200 px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 border border-line px-4 py-2 rounded-xl text-sm font-medium hover:bg-sunken transition-colors"
           >
             <Printer className="h-4 w-4" /> Print all
           </button>
@@ -465,7 +465,7 @@ export default function POSTableQRPage() {
       </div>
 
       {view === "designed" && show && (
-        <p className="text-xs text-gray-500 print:hidden">
+        <p className="text-xs text-text-2 print:hidden">
           {marks ? (
             <>
               <span className="font-semibold">Export PNG (ZIP)</span> or <span className="font-semibold">Print → Save as PDF</span> give the
@@ -487,7 +487,7 @@ export default function POSTableQRPage() {
       )}
 
       {!loadingLayout && !fromLayout && (
-        <p className="text-xs text-gray-500 print:hidden">
+        <p className="text-xs text-text-2 print:hidden">
           No floor plan set for this outlet yet — using a manual count.{" "}
           <Link href="/pos/settings" className="font-semibold text-[#A2492C] hover:underline">Set up tables in POS Settings → Table Layout</Link>{" "}
           (set seats per table for the &ldquo;TABLE FOR N&rdquo; badge) and they&rsquo;ll appear here automatically.
@@ -538,17 +538,17 @@ export default function POSTableQRPage() {
             return (
               <div
                 key={label}
-                className="flex flex-col items-center rounded-2xl border border-gray-200 bg-white p-4 print:break-inside-avoid print:border print:shadow-none"
+                className="flex flex-col items-center rounded-2xl border border-line bg-surface p-4 print:break-inside-avoid print:border print:shadow-none"
               >
                 <canvas
                   ref={(el) => { if (el) canvasRefs.current.set(label, el); }}
                   className="h-[200px] w-[200px]"
                 />
-                <p className="mt-3 text-xl font-bold text-[#160800]">{label}</p>
-                <p className="text-xs text-gray-500 text-center">
+                <p className="mt-3 text-xl font-bold text-text">{label}</p>
+                <p className="text-xs text-text-2 text-center">
                   {outletName}{floor ? ` · ${floor}` : ""}
                 </p>
-                <p className="mt-1 max-w-[180px] truncate text-[10px] text-gray-400">{url}</p>
+                <p className="mt-1 max-w-[180px] truncate text-[10px] text-text-3">{url}</p>
                 <button
                   onClick={() => downloadSingle(label)}
                   className="mt-2 flex items-center gap-1 text-xs text-[#A2492C] hover:underline print:hidden"

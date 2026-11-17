@@ -211,10 +211,10 @@ function SupplierCombobox({
         ref={triggerRef}
         onClick={() => setOpen(!open)}
         className={`flex cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-sm ${
-          open ? "border-blue-400 ring-1 ring-blue-400" : "border-gray-200"
+          open ? "border-blue-400 ring-1 ring-blue-400" : "border-line"
         }`}
       >
-        <span className={selectedName ? "text-gray-900" : "text-gray-400"}>
+        <span className={selectedName ? "text-text" : "text-text-3"}>
           {selectedName || "All Suppliers"}
         </span>
         <div className="flex items-center gap-1">
@@ -222,12 +222,12 @@ function SupplierCombobox({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onChange(""); setOpen(false); }}
-              className="rounded p-0.5 hover:bg-gray-100"
+              className="rounded p-0.5 hover:bg-sunken"
             >
-              <X className="h-3.5 w-3.5 text-gray-400" />
+              <X className="h-3.5 w-3.5 text-text-3" />
             </button>
           )}
-          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+          <ChevronDown className={`h-4 w-4 text-text-3 transition-transform ${open ? "rotate-180" : ""}`} />
         </div>
       </div>
       {open &&
@@ -235,7 +235,7 @@ function SupplierCombobox({
           <div
             ref={dropdownRef}
             style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 9999 }}
-            className="rounded-md border border-gray-200 bg-white shadow-lg"
+            className="rounded-md border border-line bg-surface shadow-lg"
           >
             <div className="border-b p-2">
               <input
@@ -244,15 +244,15 @@ function SupplierCombobox({
                 placeholder="Search supplier..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded border-0 bg-gray-50 px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-400"
+                className="w-full rounded border-0 bg-sunken px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-400"
               />
             </div>
             <div className="max-h-60 overflow-y-auto py-1">
               <button
                 type="button"
                 onClick={() => { onChange(""); setOpen(false); }}
-                className={`flex w-full items-center px-3 py-2 text-left text-sm hover:bg-gray-50 ${
-                  !value ? "bg-blue-50 font-medium text-blue-700" : "text-gray-700"
+                className={`flex w-full items-center px-3 py-2 text-left text-sm hover:bg-sunken ${
+                  !value ? "bg-blue-50 font-medium text-blue-700" : "text-text-2"
                 }`}
               >
                 All Suppliers
@@ -262,16 +262,16 @@ function SupplierCombobox({
                   key={s.id}
                   type="button"
                   onClick={() => { onChange(s.id); setOpen(false); }}
-                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50 ${
-                    value === s.id ? "bg-blue-50 font-medium text-blue-700" : "text-gray-700"
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-sunken ${
+                    value === s.id ? "bg-blue-50 font-medium text-blue-700" : "text-text-2"
                   }`}
                 >
                   <span>{s.name}</span>
-                  <span className="text-xs text-gray-400">{s.products.length} products</span>
+                  <span className="text-xs text-text-3">{s.products.length} products</span>
                 </button>
               ))}
               {filtered.length === 0 && (
-                <div className="px-3 py-4 text-center text-sm text-gray-400">No suppliers found</div>
+                <div className="px-3 py-4 text-center text-sm text-text-3">No suppliers found</div>
               )}
             </div>
           </div>,
@@ -757,7 +757,7 @@ export default function CreateOrderPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
@@ -773,8 +773,8 @@ export default function CreateOrderPage() {
             </Button>
           </Link>
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">Smart Order</h2>
-            <p className="text-sm text-gray-500">Create purchase orders based on stock levels</p>
+            <h2 className="text-xl font-semibold text-text">Smart Order</h2>
+            <p className="text-sm text-text-2">Create purchase orders based on stock levels</p>
           </div>
         </div>
       </div>
@@ -786,17 +786,17 @@ export default function CreateOrderPage() {
           <Card className="mb-4 p-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Outlet</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Outlet</label>
                 <select
                   value={selectedOutletId}
                   onChange={(e) => handleOutletChange(e.target.value)}
-                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-line px-3 py-2 text-sm"
                 >
                   {outlets.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Supplier</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Supplier</label>
                 <SupplierCombobox
                   value={supplierFilter}
                   onChange={setSupplierFilter}
@@ -804,14 +804,14 @@ export default function CreateOrderPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Search Products</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Search Products</label>
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
                   <Input placeholder="Search by name or SKU..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="pl-9" />
                 </div>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Notes</label>
                 <Input placeholder="Optional notes..." value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} />
               </div>
             </div>
@@ -830,13 +830,13 @@ export default function CreateOrderPage() {
                   key={tab.id}
                   onClick={() => setCreateTab(tab.id)}
                   className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    createTab === tab.id ? "bg-terracotta text-white" : "text-gray-500 hover:bg-gray-100"
+                    createTab === tab.id ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"
                   }`}
                 >
                   <Icon className="h-4 w-4" />
                   {tab.label}
                   {tab.count > 0 && (
-                    <span className={`ml-1 rounded-full px-2 py-0.5 text-xs ${createTab === tab.id ? "bg-white/20" : "bg-red-100 text-red-600"}`}>
+                    <span className={`ml-1 rounded-full px-2 py-0.5 text-xs ${createTab === tab.id ? "bg-surface/20" : "bg-red-100 text-red-600"}`}>
                       {tab.count}
                     </span>
                   )}
@@ -848,8 +848,8 @@ export default function CreateOrderPage() {
           {/* Loading */}
           {loadingStock && (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-terracotta" />
-              <span className="ml-2 text-sm text-gray-500">Loading stock levels...</span>
+              <Loader2 className="h-5 w-5 animate-spin text-brand-text" />
+              <span className="ml-2 text-sm text-text-2">Loading stock levels...</span>
             </div>
           )}
 
@@ -858,22 +858,22 @@ export default function CreateOrderPage() {
             <div className="space-y-3">
               {loadingAI || loadingStock ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-5 w-5 animate-spin text-terracotta" />
-                  <span className="ml-2 text-sm text-gray-500">Analyzing stock levels...</span>
+                  <Loader2 className="h-5 w-5 animate-spin text-brand-text" />
+                  <span className="ml-2 text-sm text-text-2">Analyzing stock levels...</span>
                 </div>
               ) : needsOrdering.length === 0 && (!aiData || aiData.transfers.length === 0) ? (
                 <Card className="py-12 text-center">
                   {stockLevels.every((i) => i.status === "no_par") ? (
                     <>
-                      <Package className="mx-auto h-8 w-8 text-gray-300" />
-                      <p className="mt-2 text-sm text-gray-500">No par levels set for this outlet</p>
-                      <p className="mt-1 text-xs text-gray-400">Set par levels in Settings → Par Levels, or use the <button onClick={() => setCreateTab("all")} className="text-terracotta underline">All Products</button> tab to order manually</p>
+                      <Package className="mx-auto h-8 w-8 text-text-3" />
+                      <p className="mt-2 text-sm text-text-2">No par levels set for this outlet</p>
+                      <p className="mt-1 text-xs text-text-3">Set par levels in Settings → Par Levels, or use the <button onClick={() => setCreateTab("all")} className="text-brand-text underline">All Products</button> tab to order manually</p>
                     </>
                   ) : (
                     <>
                       <CheckCircle2 className="mx-auto h-8 w-8 text-green-400" />
-                      <p className="mt-2 text-sm text-gray-500">All stock levels are healthy</p>
-                      <p className="mt-1 text-xs text-gray-400">Use the <button onClick={() => setCreateTab("all")} className="text-terracotta underline">All Products</button> tab to order manually</p>
+                      <p className="mt-2 text-sm text-text-2">All stock levels are healthy</p>
+                      <p className="mt-1 text-xs text-text-3">Use the <button onClick={() => setCreateTab("all")} className="text-brand-text underline">All Products</button> tab to order manually</p>
                     </>
                   )}
                 </Card>
@@ -881,12 +881,12 @@ export default function CreateOrderPage() {
                 <>
                   {/* Summary bar */}
                   {needsOrdering.length > 0 && (
-                    <Card className="px-4 py-3 border-terracotta/20 bg-terracotta/5">
+                    <Card className="px-4 py-3 border-ink/20 bg-brand-soft">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <Sparkles className="h-5 w-5 text-terracotta" />
+                          <Sparkles className="h-5 w-5 text-brand-text" />
                           <div>
-                            <p className="text-sm font-semibold text-gray-900">
+                            <p className="text-sm font-semibold text-text">
                               {needsOrdering.length} item{needsOrdering.length !== 1 ? "s" : ""} below par
                               {needsOrdering.filter((i) => i.status === "critical").length > 0 && (
                                 <span className="text-red-600"> ({needsOrdering.filter((i) => i.status === "critical").length} critical)</span>
@@ -896,14 +896,14 @@ export default function CreateOrderPage() {
                               )}
                             </p>
                             {aiData && aiData.summary.totalReorderValue > 0 && (
-                              <p className="text-xs text-gray-500">Estimated PO value: RM {aiData.summary.totalReorderValue.toLocaleString()}</p>
+                              <p className="text-xs text-text-2">Estimated PO value: RM {aiData.summary.totalReorderValue.toLocaleString()}</p>
                             )}
                           </div>
                         </div>
                         {needsOrdering.filter((i) => i.supplier && i.supplierProduct).length > 0 && (
                           <Button
                             size="sm"
-                            className="bg-terracotta hover:bg-terracotta-dark text-xs h-8"
+                            className="bg-ink hover:bg-ink-hover text-xs h-8"
                             onClick={() => {
                               const newItems: CartItem[] = [];
                               for (const item of needsOrdering) {
@@ -943,10 +943,10 @@ export default function CreateOrderPage() {
                         <Card key={idx} className="px-4 py-3 mb-2 border-blue-200 bg-blue-50/30">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="text-sm font-medium text-gray-900">
-                                {t.fromOutletName} <span className="text-gray-400 mx-1">&rarr;</span> {t.toOutletName}
+                              <p className="text-sm font-medium text-text">
+                                {t.fromOutletName} <span className="text-text-3 mx-1">&rarr;</span> {t.toOutletName}
                               </p>
-                              <p className="text-xs text-gray-500">{t.items.length} item{t.items.length !== 1 ? "s" : ""}</p>
+                              <p className="text-xs text-text-2">{t.items.length} item{t.items.length !== 1 ? "s" : ""}</p>
                             </div>
                             <button
                               onClick={() => router.push(`/inventory/transfers?from=${t.fromOutletId}&to=${selectedOutletId}`)}
@@ -957,9 +957,9 @@ export default function CreateOrderPage() {
                           </div>
                           <div className="mt-2 space-y-1">
                             {t.items.map((item) => (
-                              <div key={item.productId} className="flex items-center justify-between text-xs bg-white/60 rounded px-3 py-1.5">
-                                <span className="text-gray-700 font-medium">{item.productName}</span>
-                                <div className="flex items-center gap-3 text-gray-500">
+                              <div key={item.productId} className="flex items-center justify-between text-xs bg-surface/60 rounded px-3 py-1.5">
+                                <span className="text-text-2 font-medium">{item.productName}</span>
+                                <div className="flex items-center gap-3 text-text-2">
                                   <span>Surplus: {item.fromQty}</span>
                                   <span className="font-semibold text-blue-600">{item.transferQty} {item.packageName || item.baseUom}</span>
                                 </div>
@@ -976,8 +976,8 @@ export default function CreateOrderPage() {
                     <div>
                       {aiData && aiData.transfers.length > 0 && (
                         <div className="mb-2 flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-terracotta" />
-                          <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Order from Supplier</h3>
+                          <FileText className="h-4 w-4 text-brand-text" />
+                          <h3 className="text-xs font-semibold text-text-2 uppercase tracking-wide">Order from Supplier</h3>
                         </div>
                       )}
                       <div className="space-y-2">
@@ -994,7 +994,7 @@ export default function CreateOrderPage() {
                               <div className="flex items-center justify-between">
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2">
-                                    <p className="text-sm font-semibold text-gray-900">{item.name}</p>
+                                    <p className="text-sm font-semibold text-text">{item.name}</p>
                                     <Badge className={`text-[10px] ${(item.daysLeft ?? 0) < 0.1 ? "bg-red-600" : (item.daysLeft ?? 0) < 1 ? "bg-red-500" : "bg-amber-500"}`}>
                                       {(item.daysLeft ?? 0) < 0.1 ? "OUT" : `${(item.daysLeft ?? 0).toFixed(1)}d left`}
                                     </Badge>
@@ -1005,7 +1005,7 @@ export default function CreateOrderPage() {
                                       </Badge>
                                     )}
                                   </div>
-                                  <p className="mt-0.5 text-xs text-gray-500">
+                                  <p className="mt-0.5 text-xs text-text-2">
                                     {item.sku} &middot; {item.category}
                                     {item.supplier && item.supplierProduct && (
                                       <> &middot; {item.supplier.name} &middot; RM {item.supplierProduct.price.toFixed(2)}/{item.supplierProduct.packageLabel}</>
@@ -1016,10 +1016,10 @@ export default function CreateOrderPage() {
                                 <div className="flex items-center gap-3">
                                   {/* Stock bar */}
                                   <div className="w-32">
-                                    <div className="h-2 rounded-full bg-gray-100">
+                                    <div className="h-2 rounded-full bg-sunken">
                                       <div className={`h-2 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
                                     </div>
-                                    <p className="mt-0.5 text-[10px] text-gray-400 text-right">
+                                    <p className="mt-0.5 text-[10px] text-text-3 text-right">
                                       {item.currentQty.toLocaleString()}/{item.parLevel.toLocaleString()} {item.baseUom}
                                     </p>
                                   </div>
@@ -1027,9 +1027,9 @@ export default function CreateOrderPage() {
                                   {/* Cart controls */}
                                   {inCartAlready && cartItem ? (
                                     <div className="flex items-center gap-2">
-                                      <button onClick={() => updateCartQty(item.productId, item.supplier!.id, item.supplierProduct!.packageId, -1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200"><Minus className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => updateCartQty(item.productId, item.supplier!.id, item.supplierProduct!.packageId, -1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-sunken text-text-2 hover:bg-line"><Minus className="h-3.5 w-3.5" /></button>
                                       <span className="min-w-[2rem] text-center text-sm font-bold">{cartItem.quantity}</span>
-                                      <button onClick={() => updateCartQty(item.productId, item.supplier!.id, item.supplierProduct!.packageId, 1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-terracotta/10 text-terracotta-dark hover:bg-terracotta/20"><Plus className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => updateCartQty(item.productId, item.supplier!.id, item.supplierProduct!.packageId, 1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-soft text-brand-text hover:bg-brand-soft"><Plus className="h-3.5 w-3.5" /></button>
                                     </div>
                                   ) : item.supplier && item.supplierProduct ? (
                                     <Button size="sm" className={`h-8 text-xs ${item.status === "critical" ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700"}`}
@@ -1044,7 +1044,7 @@ export default function CreateOrderPage() {
                                       <Plus className="mr-1 h-3.5 w-3.5" />Add {pkgQty} {item.supplierProduct.packageLabel}
                                     </Button>
                                   ) : (
-                                    <span className="text-xs text-gray-400">No supplier linked</span>
+                                    <span className="text-xs text-text-3">No supplier linked</span>
                                   )}
                                 </div>
                               </div>
@@ -1099,13 +1099,13 @@ export default function CreateOrderPage() {
             <div className="space-y-4">
               {supplierProducts.length === 0 ? (
                 <Card className="py-12 text-center">
-                  <Search className="mx-auto h-8 w-8 text-gray-300" />
-                  <p className="mt-2 text-sm text-gray-400">
+                  <Search className="mx-auto h-8 w-8 text-text-3" />
+                  <p className="mt-2 text-sm text-text-3">
                     {(productSearch && productSearch.trim().length >= 2) || supplierFilter
                       ? "No products match your filter"
                       : "Select a supplier or type at least 2 characters to search"}
                   </p>
-                  <p className="mt-1 text-xs text-gray-300">
+                  <p className="mt-1 text-xs text-text-3">
                     {!supplierFilter && (!productSearch || productSearch.trim().length < 2)
                       ? `${suppliers.reduce((acc, s) => acc + s.products.length, 0)} products from ${suppliers.length} ${suppliers.length === 1 ? 'supplier' : 'suppliers'} available`
                       : "Try a different supplier or keyword"}
@@ -1115,8 +1115,8 @@ export default function CreateOrderPage() {
                 supplierProducts.map((supplier) => (
                   <div key={supplier.id}>
                     <div className="mb-2 flex items-center gap-2">
-                      <h3 className="text-sm font-semibold text-gray-700">{supplier.name}</h3>
-                      <Badge className="bg-terracotta/10 text-xs text-terracotta-dark">{supplier.products.length}</Badge>
+                      <h3 className="text-sm font-semibold text-text-2">{supplier.name}</h3>
+                      <Badge className="bg-brand-soft text-xs text-brand-text">{supplier.products.length}</Badge>
                     </div>
                     <div className="space-y-1.5">
                       {supplier.products.map((product) => {
@@ -1125,14 +1125,14 @@ export default function CreateOrderPage() {
                         return (
                           <Card key={`${supplier.id}-${product.id}-${product.packageId}`} className="flex items-center justify-between px-4 py-3">
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-gray-900">{product.name}</p>
-                              <p className="text-xs text-gray-500">{product.sku} &middot; {product.packageLabel} &middot; RM {product.price.toFixed(2)}</p>
+                              <p className="text-sm font-medium text-text">{product.name}</p>
+                              <p className="text-xs text-text-2">{product.sku} &middot; {product.packageLabel} &middot; RM {product.price.toFixed(2)}</p>
                             </div>
                             {inCart ? (
                               <div className="flex items-center gap-2">
-                                <button onClick={() => updateCartQty(product.id, supplier.id, product.packageId, -1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200"><Minus className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => updateCartQty(product.id, supplier.id, product.packageId, -1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-sunken text-text-2 hover:bg-line"><Minus className="h-3.5 w-3.5" /></button>
                                 <span className="min-w-[2rem] text-center text-sm font-bold">{cartItem?.quantity}</span>
-                                <button onClick={() => updateCartQty(product.id, supplier.id, product.packageId, 1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-terracotta/10 text-terracotta-dark hover:bg-terracotta/20"><Plus className="h-3.5 w-3.5" /></button>
+                                <button onClick={() => updateCartQty(product.id, supplier.id, product.packageId, 1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-soft text-brand-text hover:bg-brand-soft"><Plus className="h-3.5 w-3.5" /></button>
                               </div>
                             ) : (
                               <Button size="sm" variant="outline" className="h-8 text-xs"
@@ -1161,16 +1161,16 @@ export default function CreateOrderPage() {
             <div className="space-y-2">
               {quickReorders.length === 0 ? (
                 <Card className="py-12 text-center">
-                  <RotateCcw className="mx-auto h-8 w-8 text-gray-300" />
-                  <p className="mt-2 text-sm text-gray-400">No previous orders for this outlet</p>
+                  <RotateCcw className="mx-auto h-8 w-8 text-text-3" />
+                  <p className="mt-2 text-sm text-text-3">No previous orders for this outlet</p>
                 </Card>
               ) : (
                 quickReorders.map((order) => (
                   <Card key={order.id} className="px-4 py-3">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">{order.supplier}</p>
-                        <p className="text-xs text-gray-400">
+                        <p className="text-sm font-semibold text-text">{order.supplier}</p>
+                        <p className="text-xs text-text-3">
                           {order.orderNumber} &middot; {new Date(order.createdAt).toLocaleDateString("en-MY")} &middot; RM {order.totalAmount.toFixed(2)}
                         </p>
                       </div>
@@ -1180,7 +1180,7 @@ export default function CreateOrderPage() {
                     </div>
                     <div className="mt-2 space-y-0.5">
                       {order.items.map((item, i) => (
-                        <p key={i} className="text-xs text-gray-500">{item.quantity} {item.uom || item.package} — {item.product}</p>
+                        <p key={i} className="text-xs text-text-2">{item.quantity} {item.uom || item.package} — {item.product}</p>
                       ))}
                     </div>
                   </Card>
@@ -1195,18 +1195,18 @@ export default function CreateOrderPage() {
           <div className="lg:sticky lg:top-6">
             <Card className="p-4">
               <div className="mb-3 flex items-center justify-between">
-                <span className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                <span className="flex items-center gap-2 text-sm font-semibold text-text">
                   <ShoppingCart className="h-4 w-4" />Order Cart
                 </span>
                 {cart.length > 0 && (
-                  <Badge className="bg-terracotta">{cart.length}</Badge>
+                  <Badge className="bg-ink">{cart.length}</Badge>
                 )}
               </div>
 
               {cart.length === 0 ? (
                 <div className="py-8 text-center">
-                  <ShoppingCart className="mx-auto h-8 w-8 text-gray-200" />
-                  <p className="mt-2 text-xs text-gray-400">Add products to get started</p>
+                  <ShoppingCart className="mx-auto h-8 w-8 text-text-3" />
+                  <p className="mt-2 text-xs text-text-3">Add products to get started</p>
                 </div>
               ) : (
                 <>
@@ -1217,10 +1217,10 @@ export default function CreateOrderPage() {
                       const supplierTotal = group.items.reduce((s, c) => s + c.quantity * c.unitPrice, 0);
 
                       return (
-                        <div key={supplier} className="rounded-lg border border-gray-100 p-3">
+                        <div key={supplier} className="rounded-lg border border-line p-3">
                           <div className="mb-2 flex items-center justify-between">
-                            <p className="text-xs font-semibold text-gray-700">{supplier}</p>
-                            <p className="text-xs font-bold text-gray-900">RM {supplierTotal.toFixed(2)}</p>
+                            <p className="text-xs font-semibold text-text-2">{supplier}</p>
+                            <p className="text-xs font-bold text-text">RM {supplierTotal.toFixed(2)}</p>
                           </div>
 
                           {/* Delivery date (optional) */}
@@ -1229,7 +1229,7 @@ export default function CreateOrderPage() {
                             <span className="text-[11px] text-blue-700">Delivery:</span>
                             <input
                               type="date"
-                              className="rounded border border-blue-200 bg-white px-1.5 py-0.5 text-[11px] text-blue-700 focus:border-blue-400 focus:outline-none"
+                              className="rounded border border-blue-200 bg-surface px-1.5 py-0.5 text-[11px] text-blue-700 focus:border-blue-400 focus:outline-none"
                               value={deliveryDates[group.supplierId] || ""}
                               onChange={(e) => setDeliveryDates((prev) => ({ ...prev, [group.supplierId]: e.target.value }))}
                             />
@@ -1239,16 +1239,16 @@ export default function CreateOrderPage() {
                             {group.items.map((item) => (
                               <div key={`${item.productId}-${item.supplierId}-${item.productPackageId}`} className="text-xs">
                                 <div className="flex items-center justify-between">
-                                  <p className="truncate text-gray-700 font-medium flex-1 min-w-0">{item.name}</p>
+                                  <p className="truncate text-text-2 font-medium flex-1 min-w-0">{item.name}</p>
                                   <button onClick={() => removeFromCart(item.productId, item.supplierId, item.productPackageId)} className="text-red-400 hover:text-red-600 ml-1"><Trash2 className="h-3 w-3" /></button>
                                 </div>
                                 <div className="flex items-center justify-between mt-1">
                                   <div className="flex items-center gap-1.5">
-                                    <button onClick={() => updateCartQty(item.productId, item.supplierId, item.productPackageId, -1)} className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-gray-600 hover:bg-gray-200"><Minus className="h-3 w-3" /></button>
+                                    <button onClick={() => updateCartQty(item.productId, item.supplierId, item.productPackageId, -1)} className="flex h-6 w-6 items-center justify-center rounded bg-sunken text-text-2 hover:bg-line"><Minus className="h-3 w-3" /></button>
                                     <input
                                       type="number"
                                       min="1"
-                                      className="w-12 rounded border border-gray-200 px-1.5 py-0.5 text-center text-xs focus:border-terracotta focus:outline-none"
+                                      className="w-12 rounded border border-line px-1.5 py-0.5 text-center text-xs focus:border-ink focus:outline-none"
                                       value={item.quantity}
                                       onChange={(e) => {
                                         const val = parseInt(e.target.value) || 0;
@@ -1256,10 +1256,10 @@ export default function CreateOrderPage() {
                                         if (delta !== 0) updateCartQty(item.productId, item.supplierId, item.productPackageId, delta);
                                       }}
                                     />
-                                    <button onClick={() => updateCartQty(item.productId, item.supplierId, item.productPackageId, 1)} className="flex h-6 w-6 items-center justify-center rounded bg-terracotta/10 text-terracotta-dark hover:bg-terracotta/20"><Plus className="h-3 w-3" /></button>
-                                    <span className="text-[10px] text-gray-400">{item.packageLabel}</span>
+                                    <button onClick={() => updateCartQty(item.productId, item.supplierId, item.productPackageId, 1)} className="flex h-6 w-6 items-center justify-center rounded bg-brand-soft text-brand-text hover:bg-brand-soft"><Plus className="h-3 w-3" /></button>
+                                    <span className="text-[10px] text-text-3">{item.packageLabel}</span>
                                   </div>
-                                  <span className="font-medium text-gray-900">RM {(item.quantity * item.unitPrice).toFixed(2)}</span>
+                                  <span className="font-medium text-text">RM {(item.quantity * item.unitPrice).toFixed(2)}</span>
                                 </div>
                               </div>
                             ))}
@@ -1270,9 +1270,9 @@ export default function CreateOrderPage() {
                   </div>
 
                   {/* Total */}
-                  <div className="mt-4 flex items-center justify-between border-t border-gray-100 pt-3">
-                    <span className="text-sm font-semibold text-gray-700">Total</span>
-                    <span className="text-lg font-bold text-gray-900">RM {cartTotal.toFixed(2)}</span>
+                  <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
+                    <span className="text-sm font-semibold text-text-2">Total</span>
+                    <span className="text-lg font-bold text-text">RM {cartTotal.toFixed(2)}</span>
                   </div>
 
                   {/* Actions */}
@@ -1303,7 +1303,7 @@ export default function CreateOrderPage() {
           </DialogHeader>
           <div className="space-y-3 pt-2">
             <div className="rounded-lg bg-green-50 p-3">
-              <pre className="whitespace-pre-wrap text-xs text-gray-700">{whatsappDialog.message}</pre>
+              <pre className="whitespace-pre-wrap text-xs text-text-2">{whatsappDialog.message}</pre>
             </div>
             <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => openWhatsApp("direct")} disabled={sending || !whatsappDialog.phone}>
               {sending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <MessageCircle className="mr-1.5 h-4 w-4" />}
@@ -1313,11 +1313,11 @@ export default function CreateOrderPage() {
               type="button"
               onClick={() => openWhatsApp("picker")}
               disabled={sending}
-              className="w-full rounded-md border border-green-200 bg-white px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+              className="w-full rounded-md border border-green-200 bg-surface px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
             >
               Send to a group / pick chat →
             </button>
-            <p className="text-[10px] text-gray-400 text-center">
+            <p className="text-[10px] text-text-3 text-center">
               WhatsApp doesn&apos;t allow direct group links. The group option opens WhatsApp&apos;s chat picker with the message pre-filled — tap the supplier&apos;s group, hit send.
             </p>
           </div>

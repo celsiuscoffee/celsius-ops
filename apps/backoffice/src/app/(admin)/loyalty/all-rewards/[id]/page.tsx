@@ -85,7 +85,7 @@ export default function EditRewardPage() {
   }
   if (!initial) {
     return (
-      <div className="px-6 py-6 max-w-3xl mx-auto text-slate-500">Loading…</div>
+      <div className="px-6 py-6 max-w-3xl mx-auto text-text-2">Loading…</div>
     );
   }
   return <RewardForm mode="edit" initial={initial} />;

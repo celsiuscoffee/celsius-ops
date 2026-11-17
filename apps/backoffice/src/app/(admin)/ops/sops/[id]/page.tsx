@@ -40,7 +40,7 @@ type SopDetail = {
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-yellow-100 text-yellow-700 border-yellow-200",
   PUBLISHED: "bg-green-100 text-green-700 border-green-200",
-  ARCHIVED: "bg-gray-100 text-gray-500 border-gray-200",
+  ARCHIVED: "bg-sunken text-text-2 border-line",
 };
 
 // House area(s) that own this SOP's work — drives who the checklist auto-assigns
@@ -189,23 +189,23 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
   const moveStep = (from: number, to: number) => { if (to < 0 || to >= steps.length) return; const u = [...steps]; const [m] = u.splice(from, 1); u.splice(to, 0, m); setSteps(u); };
   const toggleOutlet = (oid: string) => { setAssignedOutletIds((p) => { const n = new Set(p); if (n.has(oid)) n.delete(oid); else n.add(oid); return n; }); };
 
-  if (isLoading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-terracotta" /></div>;
-  if (!sop) return <div className="p-6 text-center"><p className="text-gray-500">SOP not found</p><Link href="/ops/sops" className="mt-2 text-sm text-terracotta hover:underline">Back</Link></div>;
+  if (isLoading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-brand-text" /></div>;
+  if (!sop) return <div className="p-6 text-center"><p className="text-text-2">SOP not found</p><Link href="/ops/sops" className="mt-2 text-sm text-brand-text hover:underline">Back</Link></div>;
 
   return (
     <div className="p-3 sm:p-6">
       {/* Header */}
       <div className="mb-6">
-        <Link href="/ops/sops" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-3">
+        <Link href="/ops/sops" className="inline-flex items-center gap-1 text-sm text-text-2 hover:text-text-2 mb-3">
           <ArrowLeft className="h-4 w-4" />Back to SOPs
         </Link>
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-semibold text-gray-900">{sop.title}</h2>
+              <h2 className="text-xl font-semibold text-text">{sop.title}</h2>
               <Badge className={`text-xs ${STATUS_COLORS[sop.status]}`}>{sop.status}</Badge>
             </div>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-text-2">
               {sop.category.name} · v{sop.version} · by {sop.createdBy.name} · {new Date(sop.createdAt).toLocaleDateString()}
             </p>
             {saveMsg && <p className="mt-1.5 inline-flex items-center gap-1 text-sm text-green-600"><CheckCircle2 className="h-3.5 w-3.5" />{saveMsg}</p>}
@@ -238,39 +238,39 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
           <Card>
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-gray-900">Details</h3>
+                <h3 className="text-sm font-semibold text-text">Details</h3>
                 {!editingDetails && (
-                  <button onClick={() => setEditingDetails(true)} className="flex items-center gap-1 text-xs text-terracotta hover:underline">
+                  <button onClick={() => setEditingDetails(true)} className="flex items-center gap-1 text-xs text-brand-text hover:underline">
                     <Pencil className="h-3 w-3" />Edit
                   </button>
                 )}
               </div>
               {editingDetails ? (
                 <div className="space-y-3">
-                  <div><label className="mb-1 block text-xs font-medium text-gray-500">Title</label>
+                  <div><label className="mb-1 block text-xs font-medium text-text-2">Title</label>
                     <Input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
-                  <div><label className="mb-1 block text-xs font-medium text-gray-500">Description</label>
+                  <div><label className="mb-1 block text-xs font-medium text-text-2">Description</label>
                     <Input value={description} onChange={(e) => setDescription(e.target.value)} /></div>
-                  <div><label className="mb-1 block text-xs font-medium text-gray-500">Category</label>
-                    <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
+                  <div><label className="mb-1 block text-xs font-medium text-text-2">Category</label>
+                    <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full rounded-md border border-line px-3 py-2 text-sm">
                       {categories?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select></div>
-                  <div><label className="mb-1 block text-xs font-medium text-gray-500">Station(s)</label>
+                  <div><label className="mb-1 block text-xs font-medium text-text-2">Station(s)</label>
                     <div className="space-y-1.5">
                       {STATION_OPTIONS.map((o) => (
                         <label key={o.value} className="flex items-center gap-2 text-sm">
                           <input type="checkbox" checked={stations.includes(o.value)}
                             onChange={(e) => setStations((prev) => e.target.checked ? [...prev, o.value] : prev.filter((s) => s !== o.value))}
-                            className="h-3.5 w-3.5 rounded border-gray-300 text-terracotta focus:ring-terracotta" />
+                            className="h-3.5 w-3.5 rounded border-line-2 text-brand-text focus:ring-brand" />
                           <span>{o.label}</span>
                         </label>
                       ))}
                     </div>
-                    <p className="mt-1 text-[11px] text-gray-400">Who the checklist auto-assigns to. Tick more than one if it spans areas; leave all off to use the default.</p></div>
-                  <div><label className="mb-1 block text-xs font-medium text-gray-500">Content / Notes</label>
-                    <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={4} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm resize-y" /></div>
+                    <p className="mt-1 text-[11px] text-text-3">Who the checklist auto-assigns to. Tick more than one if it spans areas; leave all off to use the default.</p></div>
+                  <div><label className="mb-1 block text-xs font-medium text-text-2">Content / Notes</label>
+                    <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={4} className="w-full rounded-md border border-line px-3 py-2 text-sm resize-y" /></div>
                   <div className="flex gap-2">
-                    <Button onClick={saveDetails} disabled={saving} size="sm" className="bg-terracotta hover:bg-terracotta-dark">
+                    <Button onClick={saveDetails} disabled={saving} size="sm" className="bg-ink hover:bg-ink-hover">
                       {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}Save
                     </Button>
                     <Button onClick={() => { setEditingDetails(false); if (sop) { setTitle(sop.title); setDescription(sop.description ?? ""); setCategoryId(sop.categoryId); setStations(sop.stations ?? []); setContent(sop.content ?? ""); } }} size="sm" variant="outline">Cancel</Button>
@@ -278,14 +278,14 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {sop.description && <p className="text-sm text-gray-600">{sop.description}</p>}
+                  {sop.description && <p className="text-sm text-text-2">{sop.description}</p>}
                   {sop.content && (
-                    <div className="mt-3 rounded-lg bg-gray-50 p-3">
-                      <p className="text-xs font-medium text-gray-500 mb-1">Notes</p>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{sop.content}</p>
+                    <div className="mt-3 rounded-lg bg-sunken p-3">
+                      <p className="text-xs font-medium text-text-2 mb-1">Notes</p>
+                      <p className="text-sm text-text-2 whitespace-pre-wrap">{sop.content}</p>
                     </div>
                   )}
-                  {!sop.description && !sop.content && <p className="text-sm text-gray-400 italic">No description or notes</p>}
+                  {!sop.description && !sop.content && <p className="text-sm text-text-3 italic">No description or notes</p>}
                 </div>
               )}
             </CardContent>
@@ -295,8 +295,8 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
           <Card>
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                  <ListChecks className="h-4 w-4 text-gray-400" />
+                <h3 className="text-sm font-semibold text-text flex items-center gap-2">
+                  <ListChecks className="h-4 w-4 text-text-3" />
                   Steps ({steps.length})
                 </h3>
                 <div className="flex gap-2">
@@ -305,13 +305,13 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                       <Button onClick={addStep} size="sm" variant="outline" className="h-7 text-xs">
                         <Plus className="mr-1 h-3 w-3" />Add
                       </Button>
-                      <Button onClick={saveSteps} disabled={saving} size="sm" className="h-7 text-xs bg-terracotta hover:bg-terracotta-dark">
+                      <Button onClick={saveSteps} disabled={saving} size="sm" className="h-7 text-xs bg-ink hover:bg-ink-hover">
                         {saving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}Save
                       </Button>
                       <Button onClick={() => { setEditingSteps(false); if (sop) setSteps(sop.steps.map((s) => ({ title: s.title, description: s.description ?? "", photoRequired: s.photoRequired }))); }} size="sm" variant="outline" className="h-7 text-xs">Cancel</Button>
                     </>
                   ) : (
-                    <button onClick={() => setEditingSteps(true)} className="flex items-center gap-1 text-xs text-terracotta hover:underline">
+                    <button onClick={() => setEditingSteps(true)} className="flex items-center gap-1 text-xs text-brand-text hover:underline">
                       <Pencil className="h-3 w-3" />Edit
                     </button>
                   )}
@@ -319,29 +319,29 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
               </div>
 
               {steps.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-6">No steps yet</p>
+                <p className="text-sm text-text-3 text-center py-6">No steps yet</p>
               ) : editingSteps ? (
                 <div className="space-y-2">
                   {steps.map((step, i) => (
-                    <div key={i} className="flex gap-2 rounded-lg border border-gray-200 p-2.5">
+                    <div key={i} className="flex gap-2 rounded-lg border border-line p-2.5">
                       <div className="flex flex-col items-center gap-0.5 pt-0.5">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-terracotta/10 text-[10px] font-bold text-terracotta">{i + 1}</span>
-                        <button onClick={() => moveStep(i, i - 1)} disabled={i === 0} className="text-gray-300 hover:text-gray-500 disabled:opacity-30"><ChevronUp className="h-3 w-3" /></button>
-                        <button onClick={() => moveStep(i, i + 1)} disabled={i === steps.length - 1} className="text-gray-300 hover:text-gray-500 disabled:opacity-30"><ChevronDown className="h-3 w-3" /></button>
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-soft text-[10px] font-bold text-brand-text">{i + 1}</span>
+                        <button onClick={() => moveStep(i, i - 1)} disabled={i === 0} className="text-text-3 hover:text-text-2 disabled:opacity-30"><ChevronUp className="h-3 w-3" /></button>
+                        <button onClick={() => moveStep(i, i + 1)} disabled={i === steps.length - 1} className="text-text-3 hover:text-text-2 disabled:opacity-30"><ChevronDown className="h-3 w-3" /></button>
                       </div>
                       <div className="flex-1 space-y-1.5">
                         <Input value={step.title} onChange={(e) => updateStep(i, "title", e.target.value)} placeholder="Step title" className="text-sm h-8" />
                         <textarea value={step.description} onChange={(e) => updateStep(i, "description", e.target.value)} placeholder="Details (optional)" rows={1}
-                          className="w-full rounded-md border border-gray-200 px-2.5 py-1 text-xs resize-y" />
+                          className="w-full rounded-md border border-line px-2.5 py-1 text-xs resize-y" />
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={step.photoRequired}
                             onChange={(e) => { const u = [...steps]; u[i] = { ...u[i], photoRequired: e.target.checked }; setSteps(u); }}
-                            className="h-3.5 w-3.5 rounded border-gray-300 text-terracotta focus:ring-terracotta" />
-                          <Camera className="h-3 w-3 text-gray-400" />
-                          <span className="text-[10px] text-gray-500">Photo required</span>
+                            className="h-3.5 w-3.5 rounded border-line-2 text-brand-text focus:ring-brand" />
+                          <Camera className="h-3 w-3 text-text-3" />
+                          <span className="text-[10px] text-text-2">Photo required</span>
                         </label>
                       </div>
-                      <button onClick={() => removeStep(i)} className="self-start rounded p-1 text-gray-300 hover:bg-red-50 hover:text-red-500">
+                      <button onClick={() => removeStep(i)} className="self-start rounded p-1 text-text-3 hover:bg-red-50 hover:text-red-500">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -350,11 +350,11 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
               ) : (
                 <div className="space-y-1">
                   {steps.map((step, i) => (
-                    <div key={i} className="flex gap-3 py-2 border-b border-gray-50 last:border-0">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-terracotta/10 text-xs font-medium text-terracotta">{i + 1}</span>
+                    <div key={i} className="flex gap-3 py-2 border-b border-line last:border-0">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-medium text-brand-text">{i + 1}</span>
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{step.title}</p>
-                        {step.description && <p className="text-xs text-gray-400 mt-0.5">{step.description}</p>}
+                        <p className="text-sm font-medium text-text">{step.title}</p>
+                        {step.description && <p className="text-xs text-text-3 mt-0.5">{step.description}</p>}
                       </div>
                       {step.photoRequired && (
                         <span className="flex items-center gap-1 shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] text-blue-600">
@@ -374,59 +374,59 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
           {/* Status card */}
           <Card>
             <CardContent className="p-4">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Info</h3>
+              <h3 className="text-xs font-semibold text-text-2 uppercase tracking-wider mb-3">Info</h3>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Status</span>
+                  <span className="text-text-2">Status</span>
                   <Badge className={`text-[10px] ${STATUS_COLORS[sop.status]}`}>{sop.status}</Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Version</span>
-                  <span className="font-medium text-gray-900">v{sop.version}</span>
+                  <span className="text-text-2">Version</span>
+                  <span className="font-medium text-text">v{sop.version}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Category</span>
-                  <span className="font-medium text-gray-900">{sop.category.name}</span>
+                  <span className="text-text-2">Category</span>
+                  <span className="font-medium text-text">{sop.category.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Station</span>
-                  <span className={`font-medium text-right ${sop.stations?.length ? "text-gray-900" : "text-gray-400 italic"}`}>
+                  <span className="text-text-2">Station</span>
+                  <span className={`font-medium text-right ${sop.stations?.length ? "text-text" : "text-text-3 italic"}`}>
                     {sop.stations?.length ? sop.stations.map((s) => STATION_SHORT[s] ?? s).join(", ") : "Not mapped"}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Steps</span>
-                  <span className="font-medium text-gray-900">{sop.steps.length}</span>
+                  <span className="text-text-2">Steps</span>
+                  <span className="font-medium text-text">{sop.steps.length}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Created by</span>
-                  <span className="font-medium text-gray-900">{sop.createdBy.name}</span>
+                  <span className="text-text-2">Created by</span>
+                  <span className="font-medium text-text">{sop.createdBy.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Created</span>
-                  <span className="text-gray-600">{new Date(sop.createdAt).toLocaleDateString()}</span>
+                  <span className="text-text-2">Created</span>
+                  <span className="text-text-2">{new Date(sop.createdAt).toLocaleDateString()}</span>
                 </div>
                 {sop.publishedAt && (
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Published</span>
-                    <span className="text-gray-600">{new Date(sop.publishedAt).toLocaleDateString()}</span>
+                    <span className="text-text-2">Published</span>
+                    <span className="text-text-2">{new Date(sop.publishedAt).toLocaleDateString()}</span>
                   </div>
                 )}
-                <div className="border-t border-gray-100 pt-3 mt-3">
+                <div className="border-t border-line pt-3 mt-3">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Expected Frequency</p>
+                    <p className="text-[10px] font-semibold text-text-3 uppercase tracking-wider">Expected Frequency</p>
                     {!editingFrequency && (
-                      <button onClick={() => setEditingFrequency(true)} className="text-[10px] text-terracotta hover:underline">Edit</button>
+                      <button onClick={() => setEditingFrequency(true)} className="text-[10px] text-brand-text hover:underline">Edit</button>
                     )}
                   </div>
                   {editingFrequency ? (
                     <div className="space-y-3">
                       <div>
-                        <p className="text-[10px] text-gray-500 mb-1">Recurrence</p>
+                        <p className="text-[10px] text-text-2 mb-1">Recurrence</p>
                         <div className="flex gap-1">
                           {(["SHIFT", "SPECIFIC_TIMES", "HOURLY"] as const).map((r) => (
                             <button key={r} type="button" onClick={() => setExpectedRecurrence(r)}
-                              className={`flex-1 rounded py-1.5 text-[10px] font-medium ${expectedRecurrence === r ? "bg-terracotta text-white" : "bg-gray-100 text-gray-500"}`}>
+                              className={`flex-1 rounded py-1.5 text-[10px] font-medium ${expectedRecurrence === r ? "bg-ink text-on-ink" : "bg-sunken text-text-2"}`}>
                               {r === "SHIFT" ? "Per shift" : r === "HOURLY" ? "Hourly" : "Specific times"}
                             </button>
                           ))}
@@ -434,16 +434,16 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                       </div>
                       {expectedRecurrence === "SPECIFIC_TIMES" && (
                         <div>
-                          <p className="text-[10px] text-gray-500 mb-1">Times</p>
+                          <p className="text-[10px] text-text-2 mb-1">Times</p>
                           <div className="flex gap-1.5 mb-1.5">
                             <input type="time" value={newExpectedTime} onChange={(e) => setNewExpectedTime(e.target.value)}
-                              className="rounded border border-gray-200 px-2 py-1 text-xs" />
+                              className="rounded border border-line px-2 py-1 text-xs" />
                             <button type="button" onClick={addExpectedTime}
-                              className="rounded bg-terracotta px-2 py-1 text-[10px] text-white">Add</button>
+                              className="rounded bg-ink px-2 py-1 text-[10px] text-on-ink">Add</button>
                           </div>
                           <div className="flex flex-wrap gap-1">
                             {expectedTimes.map((t) => (
-                              <span key={t} className="inline-flex items-center gap-1 rounded-full bg-terracotta/10 px-2 py-0.5 text-[10px] text-terracotta">
+                              <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[10px] text-brand-text">
                                 {t}<button onClick={() => removeExpectedTime(t)} className="hover:text-red-500">×</button>
                               </span>
                             ))}
@@ -452,17 +452,17 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                       )}
                       {expectedRecurrence !== "SPECIFIC_TIMES" && (
                         <div>
-                          <p className="text-[10px] text-gray-500 mb-1">Times per day</p>
+                          <p className="text-[10px] text-text-2 mb-1">Times per day</p>
                           <input type="number" min={1} value={expectedTimesPerDay} onChange={(e) => setExpectedTimesPerDay(parseInt(e.target.value) || 1)}
-                            className="w-full rounded border border-gray-200 px-2 py-1 text-xs" />
+                            className="w-full rounded border border-line px-2 py-1 text-xs" />
                         </div>
                       )}
                       <div>
-                        <p className="text-[10px] text-gray-500 mb-1">Due within (minutes)</p>
+                        <p className="text-[10px] text-text-2 mb-1">Due within (minutes)</p>
                         <div className="flex gap-1">
                           {[0, 15, 30, 60].map((m) => (
                             <button key={m} type="button" onClick={() => setExpectedDueMinutes(m)}
-                              className={`flex-1 rounded py-1.5 text-[10px] font-medium ${expectedDueMinutes === m ? "bg-terracotta text-white" : "bg-gray-100 text-gray-500"}`}>
+                              className={`flex-1 rounded py-1.5 text-[10px] font-medium ${expectedDueMinutes === m ? "bg-ink text-on-ink" : "bg-sunken text-text-2"}`}>
                               {m === 0 ? "None" : `${m}min`}
                             </button>
                           ))}
@@ -471,45 +471,45 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                       <div>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={appliesToAllOutlets} onChange={(e) => setAppliesToAllOutlets(e.target.checked)}
-                            className="h-3.5 w-3.5 rounded border-gray-300 text-terracotta" />
-                          <span className="text-xs text-gray-600">Applies to all outlets</span>
+                            className="h-3.5 w-3.5 rounded border-line-2 text-brand-text" />
+                          <span className="text-xs text-text-2">Applies to all outlets</span>
                         </label>
                       </div>
                       <div className="flex gap-1.5">
                         <button onClick={saveFrequency} disabled={saving}
-                          className="flex-1 rounded bg-terracotta py-1.5 text-[10px] font-medium text-white disabled:opacity-50">Save</button>
+                          className="flex-1 rounded bg-ink py-1.5 text-[10px] font-medium text-on-ink disabled:opacity-50">Save</button>
                         <button onClick={() => setEditingFrequency(false)}
-                          className="flex-1 rounded bg-gray-100 py-1.5 text-[10px] font-medium text-gray-600">Cancel</button>
+                          className="flex-1 rounded bg-sunken py-1.5 text-[10px] font-medium text-text-2">Cancel</button>
                       </div>
                     </div>
                   ) : (
                     <div className="space-y-1">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Recurrence</span>
-                        <span className="font-medium text-gray-900">{
+                        <span className="text-text-2">Recurrence</span>
+                        <span className="font-medium text-text">{
                           sop.expectedRecurrence === "SHIFT" ? "Per shift" :
                           sop.expectedRecurrence === "HOURLY" ? "Hourly" : "Specific times"
                         }</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Times/day</span>
-                        <span className="font-medium text-gray-900">{sop.expectedTimesPerDay}x</span>
+                        <span className="text-text-2">Times/day</span>
+                        <span className="font-medium text-text">{sop.expectedTimesPerDay}x</span>
                       </div>
                       {sop.expectedTimes && sop.expectedTimes.length > 0 && (
                         <div className="flex justify-between">
-                          <span className="text-gray-500">At</span>
-                          <span className="font-medium text-gray-900 text-right">{sop.expectedTimes.join(", ")}</span>
+                          <span className="text-text-2">At</span>
+                          <span className="font-medium text-text text-right">{sop.expectedTimes.join(", ")}</span>
                         </div>
                       )}
                       {sop.expectedDueMinutes > 0 && (
                         <div className="flex justify-between">
-                          <span className="text-gray-500">Due within</span>
-                          <span className="font-medium text-gray-900">{sop.expectedDueMinutes} min</span>
+                          <span className="text-text-2">Due within</span>
+                          <span className="font-medium text-text">{sop.expectedDueMinutes} min</span>
                         </div>
                       )}
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Scope</span>
-                        <span className="font-medium text-gray-900">{sop.appliesToAllOutlets ? "All outlets" : "Assigned only"}</span>
+                        <span className="text-text-2">Scope</span>
+                        <span className="font-medium text-text">{sop.appliesToAllOutlets ? "All outlets" : "Assigned only"}</span>
                       </div>
                     </div>
                   )}
@@ -522,20 +522,20 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-xs font-semibold text-text-2 uppercase tracking-wider flex items-center gap-1.5">
                   <Building2 className="h-3.5 w-3.5" />Outlets ({sop.sopOutlets.length})
                 </h3>
-                <button onClick={() => setOutletsDialog(true)} className="text-xs text-terracotta hover:underline">Manage</button>
+                <button onClick={() => setOutletsDialog(true)} className="text-xs text-brand-text hover:underline">Manage</button>
               </div>
               {sop.sopOutlets.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">Not assigned to any outlet</p>
+                <p className="text-sm text-text-3 italic">Not assigned to any outlet</p>
               ) : (
                 <div className="space-y-1.5">
                   {sop.sopOutlets.map((a) => (
-                    <div key={a.id} className="flex items-center gap-2 rounded-md bg-gray-50 px-2.5 py-1.5">
+                    <div key={a.id} className="flex items-center gap-2 rounded-md bg-sunken px-2.5 py-1.5">
                       <div className="h-2 w-2 rounded-full bg-green-400" />
-                      <span className="text-sm text-gray-700">{a.outlet.name}</span>
-                      <span className="text-[10px] text-gray-400 ml-auto">{a.outlet.code}</span>
+                      <span className="text-sm text-text-2">{a.outlet.name}</span>
+                      <span className="text-[10px] text-text-3 ml-auto">{a.outlet.code}</span>
                     </div>
                   ))}
                 </div>
@@ -551,19 +551,19 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
           <DialogHeader><DialogTitle>Assign to Outlets</DialogTitle></DialogHeader>
           <div className="py-2 space-y-2 max-h-80 overflow-y-auto">
             {allOutlets?.map((outlet) => (
-              <label key={outlet.id} className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:bg-gray-50">
+              <label key={outlet.id} className="flex items-center gap-3 rounded-lg border border-line p-3 cursor-pointer hover:bg-sunken">
                 <input type="checkbox" checked={assignedOutletIds.has(outlet.id)} onChange={() => toggleOutlet(outlet.id)}
-                  className="h-4 w-4 rounded border-gray-300 text-terracotta focus:ring-terracotta" />
+                  className="h-4 w-4 rounded border-line-2 text-brand-text focus:ring-brand" />
                 <div>
                   <p className="text-sm font-medium">{outlet.name}</p>
-                  <p className="text-xs text-gray-400">{outlet.code} · {outlet.type}</p>
+                  <p className="text-xs text-text-3">{outlet.code} · {outlet.type}</p>
                 </div>
               </label>
             ))}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOutletsDialog(false)}>Cancel</Button>
-            <Button onClick={saveOutlets} disabled={saving} className="bg-terracotta hover:bg-terracotta-dark">
+            <Button onClick={saveOutlets} disabled={saving} className="bg-ink hover:bg-ink-hover">
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save
             </Button>
           </DialogFooter>

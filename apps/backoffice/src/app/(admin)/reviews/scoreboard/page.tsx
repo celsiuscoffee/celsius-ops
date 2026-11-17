@@ -69,7 +69,7 @@ export default function ScoreboardPage() {
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
       ) : (
-        <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-white">
+        <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-surface">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">

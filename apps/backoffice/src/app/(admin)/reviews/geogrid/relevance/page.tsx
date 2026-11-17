@@ -52,7 +52,7 @@ const LEVER_LABEL: Record<KeywordCoverage["lever"], string> = {
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-xl border border-border bg-white p-4">
+    <div className="rounded-xl border border-border bg-surface p-4">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${tone ?? "text-foreground"}`}>{value}</p>
     </div>
@@ -113,7 +113,7 @@ export default function RelevanceAuditPage() {
       <div className="mt-5 flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-xs font-medium text-muted-foreground">Outlet</label>
-          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="mt-1 rounded-lg border border-border bg-white px-3 py-2 text-sm">
+          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm">
             {outlets.map((o) => (
               <option key={o.id} value={o.id}>{o.name}</option>
             ))}
@@ -122,7 +122,7 @@ export default function RelevanceAuditPage() {
         <button
           onClick={() => load(outletId)}
           disabled={loading || !outletId}
-          className="flex items-center gap-1.5 rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink/90 disabled:opacity-50"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           {loading ? "Auditing…" : "Re-run audit"}
@@ -136,7 +136,7 @@ export default function RelevanceAuditPage() {
       {report?.profile && (
         <>
           {/* Profile snapshot — what Google currently reads */}
-          <div className="mt-6 rounded-xl border border-border bg-white p-4">
+          <div className="mt-6 rounded-xl border border-border bg-surface p-4">
             <div className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
               <SearchCheck className="h-4 w-4" /> Live profile · {report.profile.title ?? report.outletName}
             </div>
@@ -183,7 +183,7 @@ export default function RelevanceAuditPage() {
               </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {report.suggestedCategories!.map((c) => (
-                  <span key={c} className="rounded-full border border-emerald-300 bg-white px-2.5 py-0.5 text-xs font-medium text-emerald-900">
+                  <span key={c} className="rounded-full border border-emerald-300 bg-surface px-2.5 py-0.5 text-xs font-medium text-emerald-900">
                     {c}
                   </span>
                 ))}
@@ -192,7 +192,7 @@ export default function RelevanceAuditPage() {
           )}
 
           {/* Per-keyword coverage */}
-          <div className="mt-4 rounded-xl border border-border bg-white p-4">
+          <div className="mt-4 rounded-xl border border-border bg-surface p-4">
             <div className="mb-2 text-sm font-medium text-foreground">Keyword coverage ({kws.length})</div>
             <table className="w-full text-sm">
               <thead>
@@ -231,7 +231,7 @@ export default function RelevanceAuditPage() {
       )}
 
       {!report?.profile && !error && !loading && (
-        <div className="mt-6 rounded-xl border border-border bg-white p-10 text-center">
+        <div className="mt-6 rounded-xl border border-border bg-surface p-10 text-center">
           <SearchCheck className="mx-auto h-10 w-10 text-muted-foreground/30" />
           <p className="mt-3 text-sm text-muted-foreground">Pick an outlet to audit its profile against the target keywords.</p>
         </div>

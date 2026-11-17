@@ -222,7 +222,7 @@ export default function OrdersPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
@@ -232,13 +232,13 @@ export default function OrdersPage() {
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">PO Lists</h2>
-          <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
+          <h2 className="text-lg sm:text-xl font-semibold text-text">PO Lists</h2>
+          <p className="mt-0.5 text-xs sm:text-sm text-text-2">
             {summary.total} {summary.total === 1 ? 'order' : 'orders'} &middot; {summary.active} active
           </p>
         </div>
         <Link href="/inventory/orders/create" className="sm:w-auto">
-          <Button className="bg-terracotta hover:bg-terracotta-dark w-full sm:w-auto">
+          <Button className="bg-ink hover:bg-ink-hover w-full sm:w-auto">
             <Plus className="mr-1.5 h-4 w-4" />Create Order
           </Button>
         </Link>
@@ -246,32 +246,32 @@ export default function OrdersPage() {
 
       {/* Summary cards */}
       <div className="mt-4 grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-4">
-        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === null ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(null)}>
-          <p className="text-xs text-gray-500">Total Orders</p>
-          <p className="text-xl font-bold text-gray-900">{summary.total}</p>
+        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === null ? "ring-2 ring-brand" : "hover:bg-sunken"}`} onClick={() => setCardFilter(null)}>
+          <p className="text-xs text-text-2">Total Orders</p>
+          <p className="text-xl font-bold text-text">{summary.total}</p>
         </Card>
-        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "DRAFT" ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(cardFilter === "DRAFT" ? null : "DRAFT")}>
-          <p className="text-xs text-gray-500">Draft</p>
-          <p className="text-xl font-bold text-gray-500">{summary.draft}</p>
+        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "DRAFT" ? "ring-2 ring-brand" : "hover:bg-sunken"}`} onClick={() => setCardFilter(cardFilter === "DRAFT" ? null : "DRAFT")}>
+          <p className="text-xs text-text-2">Draft</p>
+          <p className="text-xl font-bold text-text-2">{summary.draft}</p>
         </Card>
-        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "active" ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(cardFilter === "active" ? null : "active")}>
-          <p className="text-xs text-gray-500">Active / In Progress</p>
-          <p className="text-xl font-bold text-terracotta">{summary.active}</p>
+        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "active" ? "ring-2 ring-brand" : "hover:bg-sunken"}`} onClick={() => setCardFilter(cardFilter === "active" ? null : "active")}>
+          <p className="text-xs text-text-2">Active / In Progress</p>
+          <p className="text-xl font-bold text-brand-text">{summary.active}</p>
         </Card>
-        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "COMPLETED" ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(cardFilter === "COMPLETED" ? null : "COMPLETED")}>
-          <p className="text-xs text-gray-500">Completed</p>
+        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "COMPLETED" ? "ring-2 ring-brand" : "hover:bg-sunken"}`} onClick={() => setCardFilter(cardFilter === "COMPLETED" ? null : "COMPLETED")}>
+          <p className="text-xs text-text-2">Completed</p>
           <p className="text-xl font-bold text-green-600">{summary.completed}</p>
         </Card>
         <Card className="px-4 py-3">
-          <p className="text-xs text-gray-500">Total Value</p>
-          <p className="text-xl font-bold text-gray-900">RM {summary.totalValue.toFixed(2)}</p>
+          <p className="text-xs text-text-2">Total Value</p>
+          <p className="text-xl font-bold text-text">RM {summary.totalValue.toFixed(2)}</p>
         </Card>
       </div>
 
       {/* Filters */}
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
         <div className="relative w-full sm:flex-1 sm:max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <Input placeholder="Search by PO#, supplier, or outlet..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex gap-1.5">
@@ -279,7 +279,7 @@ export default function OrdersPage() {
             <button
               key={value}
               onClick={() => setTab(value)}
-              className={`rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:bg-sunken"}`}
             >
               {label}
             </button>
@@ -287,7 +287,7 @@ export default function OrdersPage() {
         </div>
         <button
           onClick={() => setShowFilters(!showFilters)}
-          className={`relative flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${showFilters || activeOrderFilterCount > 0 ? "border-blue-400 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+          className={`relative flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${showFilters || activeOrderFilterCount > 0 ? "border-blue-400 bg-blue-50 text-blue-700" : "border-line text-text-2 hover:bg-sunken"}`}
         >
           <Filter className="h-3 w-3" />
           Filters
@@ -298,7 +298,7 @@ export default function OrdersPage() {
         {activeOrderFilterCount > 0 && (
           <button
             onClick={() => { setCreatedFrom(""); setCreatedTo(""); }}
-            className="flex items-center gap-1 rounded-full border border-gray-200 px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-50"
+            className="flex items-center gap-1 rounded-full border border-line px-2 py-1 text-[10px] text-text-2 hover:bg-sunken"
           >
             <X className="h-3 w-3" /> Clear filters
           </button>
@@ -310,18 +310,18 @@ export default function OrdersPage() {
         <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/30 p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-text-2">
                 <CalendarDays className="h-3 w-3" /> Created From
               </label>
               <input
                 type="date"
                 value={createdFrom}
                 onChange={(e) => setCreatedFrom(e.target.value)}
-                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm text-text-2 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
               />
             </div>
             <div>
-              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-text-2">
                 <CalendarDays className="h-3 w-3" /> Created To
               </label>
               <input
@@ -329,7 +329,7 @@ export default function OrdersPage() {
                 value={createdTo}
                 onChange={(e) => setCreatedTo(e.target.value)}
                 min={createdFrom || undefined}
-                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm text-text-2 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
               />
             </div>
           </div>
@@ -337,27 +337,27 @@ export default function OrdersPage() {
       )}
 
       {/* Orders table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
+      <div className="mt-4 rounded-xl border border-line bg-surface overflow-x-auto">
         <table className="w-full min-w-[820px] text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
+            <tr className="border-b border-line bg-sunken/50">
               <th className="w-8 px-3 py-3"></th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">PO Number</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Supplier</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Amount</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Items</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Delivery</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Actions</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">PO Number</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Outlet</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Supplier</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Status</th>
+              <th className="px-4 py-3 text-right font-medium text-text-2">Amount</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Items</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Delivery</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Actions</th>
             </tr>
           </thead>
           <tbody>
             {orders.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-4 py-12 text-center">
-                  <ShoppingCart className="mx-auto h-8 w-8 text-gray-300" />
-                  <p className="mt-2 text-sm text-gray-500">
+                  <ShoppingCart className="mx-auto h-8 w-8 text-text-3" />
+                  <p className="mt-2 text-sm text-text-2">
                     {!debouncedSearch && tab === "all" ? "No orders yet. Click 'Create Order' to get started." : "No orders match your filter."}
                   </p>
                 </td>
@@ -374,19 +374,19 @@ export default function OrdersPage() {
               const actions = NEXT_ACTIONS[order.status] ?? [];
               return (
                 <Fragment key={order.id}>
-                  <tr className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer" onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}>
+                  <tr className="border-b border-line hover:bg-sunken/50 cursor-pointer" onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}>
                     <td className="px-3 py-3">
-                      <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${expandedId === order.id ? "rotate-180" : ""}`} />
+                      <ChevronDown className={`h-4 w-4 text-text-3 transition-transform ${expandedId === order.id ? "rotate-180" : ""}`} />
                     </td>
                     <td className="px-4 py-3">
                       <Link href={`/inventory/orders/${order.id}`} onClick={(e) => e.stopPropagation()} className="hover:underline">
-                        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-terracotta">{order.orderNumber}</code>
+                        <code className="rounded bg-sunken px-1.5 py-0.5 text-xs font-medium text-brand-text">{order.orderNumber}</code>
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{order.outlet}</td>
+                    <td className="px-4 py-3 text-text-2 text-xs">{order.outlet}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900">{order.supplier}</span>
+                        <span className="font-medium text-text">{order.supplier}</span>
                         {order.supplierPhone && ["APPROVED", "SENT", "AWAITING_DELIVERY"].includes(order.status) && (
                           <a href={buildWhatsAppUrl(order)} target="_blank" onClick={(e) => e.stopPropagation()} className="text-green-600 hover:text-green-700" title="Send via WhatsApp">
                             <MessageCircle className="h-3.5 w-3.5" />
@@ -395,11 +395,11 @@ export default function OrdersPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3"><Badge className={`text-[10px] ${config.color}`}>{config.label}</Badge></td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-900">RM {order.totalAmount.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-gray-600">
+                    <td className="px-4 py-3 text-right font-medium text-text">RM {order.totalAmount.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-text-2">
                       <span className="flex items-center gap-1 text-xs"><Package className="h-3 w-3" />{order.items.length}</span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{order.deliveryDate ?? "—"}</td>
+                    <td className="px-4 py-3 text-xs text-text-2">{order.deliveryDate ?? "—"}</td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-1">
                         {actions.map((a) => (
@@ -422,12 +422,12 @@ export default function OrdersPage() {
                           </button>
                         )}
                         {order.status === "DRAFT" && (
-                          <Link href={`/inventory/orders/create?draft=${order.id}`} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50" title="Edit Draft">
+                          <Link href={`/inventory/orders/create?draft=${order.id}`} className="rounded-md px-2 py-1 text-[10px] font-medium text-text-2 border border-line hover:bg-sunken" title="Edit Draft">
                             <Pencil className="h-3 w-3" />
                           </Link>
                         )}
                         {["SENT", "APPROVED", "AWAITING_DELIVERY"].includes(order.status) && order.invoice?.status !== "PAID" && (
-                          <button onClick={() => openEditDialog(order)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-50" title="Edit Order">
+                          <button onClick={() => openEditDialog(order)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-text-2 border border-line hover:bg-sunken disabled:opacity-50" title="Edit Order">
                             <Pencil className="h-3 w-3" />
                           </button>
                         )}
@@ -449,10 +449,10 @@ export default function OrdersPage() {
                   </tr>
                   {expandedId === order.id && (
                     <tr>
-                      <td colSpan={9} className="bg-gray-50 px-8 py-3">
+                      <td colSpan={9} className="bg-sunken px-8 py-3">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-semibold text-gray-500 uppercase">Order Items</p>
-                          <div className="flex gap-2 text-xs text-gray-400">
+                          <p className="text-xs font-semibold text-text-2 uppercase">Order Items</p>
+                          <div className="flex gap-2 text-xs text-text-3">
                             <span>Created by: {order.createdBy}</span>
                             {order.approvedBy && <span>&middot; Approved by: {order.approvedBy}</span>}
                             {order.sentAt && <span>&middot; Sent: {new Date(order.sentAt).toLocaleDateString("en-MY")}</span>}
@@ -460,7 +460,7 @@ export default function OrdersPage() {
                         </div>
                         <table className="w-full text-xs">
                           <thead>
-                            <tr className="text-gray-400">
+                            <tr className="text-text-3">
                               <th className="pb-1 text-left font-medium">Product</th>
                               <th className="pb-1 text-left font-medium">SKU</th>
                               <th className="pb-1 text-left font-medium">Package</th>
@@ -471,34 +471,34 @@ export default function OrdersPage() {
                           </thead>
                           <tbody>
                             {order.items.map((item) => (
-                              <tr key={item.id} className="border-t border-gray-200/50">
-                                <td className="py-1.5 text-gray-700">{item.product}</td>
-                                <td className="py-1.5"><code className="text-gray-500">{item.sku}</code></td>
-                                <td className="py-1.5 text-gray-500">{item.uom || item.package}</td>
-                                <td className="py-1.5 text-right text-gray-700">{item.quantity}</td>
-                                <td className="py-1.5 text-right text-gray-600">RM {item.unitPrice.toFixed(2)}</td>
-                                <td className="py-1.5 text-right text-gray-900 font-medium">RM {item.totalPrice.toFixed(2)}</td>
+                              <tr key={item.id} className="border-t border-line/50">
+                                <td className="py-1.5 text-text-2">{item.product}</td>
+                                <td className="py-1.5"><code className="text-text-2">{item.sku}</code></td>
+                                <td className="py-1.5 text-text-2">{item.uom || item.package}</td>
+                                <td className="py-1.5 text-right text-text-2">{item.quantity}</td>
+                                <td className="py-1.5 text-right text-text-2">RM {item.unitPrice.toFixed(2)}</td>
+                                <td className="py-1.5 text-right text-text font-medium">RM {item.totalPrice.toFixed(2)}</td>
                               </tr>
                             ))}
-                            <tr className="border-t border-gray-300">
-                              <td colSpan={5} className="py-1.5 font-semibold text-gray-700">Total</td>
-                              <td className="py-1.5 text-right font-semibold text-gray-900">RM {order.totalAmount.toFixed(2)}</td>
+                            <tr className="border-t border-line-2">
+                              <td colSpan={5} className="py-1.5 font-semibold text-text-2">Total</td>
+                              <td className="py-1.5 text-right font-semibold text-text">RM {order.totalAmount.toFixed(2)}</td>
                             </tr>
                           </tbody>
                         </table>
-                        {order.notes && <p className="mt-2 text-xs text-gray-500">Notes: {order.notes}</p>}
+                        {order.notes && <p className="mt-2 text-xs text-text-2">Notes: {order.notes}</p>}
                         {order.receivingCount > 0 && <p className="mt-2 text-xs text-green-600">{order.receivingCount} receiving record(s) linked</p>}
                         {order.photos && order.photos.length > 0 && (
                           <div className="mt-2">
-                            <p className="text-xs text-gray-500 mb-1">Attached documents ({order.photos.length})</p>
+                            <p className="text-xs text-text-2 mb-1">Attached documents ({order.photos.length})</p>
                             <div className="flex gap-2 flex-wrap">
                               {order.photos.map((url, i) => {
                                 const isRaw = url.includes("/raw/upload/") || url.endsWith(".pdf");
                                 const displayUrl = isRaw ? url : url.replace("/raw/upload/", "/image/upload/");
                                 return (
-                                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="relative h-16 w-16 rounded-md overflow-hidden border border-gray-200 hover:border-blue-400 transition-colors">
+                                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="relative h-16 w-16 rounded-md overflow-hidden border border-line hover:border-blue-400 transition-colors">
                                   {isRaw ? (
-                                    <div className="h-full w-full flex items-center justify-center bg-gray-50">
+                                    <div className="h-full w-full flex items-center justify-center bg-sunken">
                                       <FileText className="h-6 w-6 text-red-400" />
                                     </div>
                                   ) : (
@@ -511,14 +511,14 @@ export default function OrdersPage() {
                           </div>
                         )}
                         {order.invoice && (
-                          <div className="mt-2 flex items-center gap-3 rounded-md bg-white px-3 py-2 border border-gray-200">
-                            <Receipt className="h-4 w-4 text-gray-400" />
+                          <div className="mt-2 flex items-center gap-3 rounded-md bg-surface px-3 py-2 border border-line">
+                            <Receipt className="h-4 w-4 text-text-3" />
                             <div className="flex-1 flex items-center gap-4 text-xs">
-                              <span className="font-medium text-gray-700">{order.invoice.invoiceNumber}</span>
-                              <span className="text-gray-500">RM {order.invoice.amount.toFixed(2)}</span>
-                              <Badge className={`text-[9px] ${order.invoice.status === "PAID" ? "bg-green-500" : order.invoice.status === "OVERDUE" ? "bg-blue-500" : "bg-terracotta"}`}>{{ PENDING: "Payment", OVERDUE: "Initiated", PAID: "Paid" }[order.invoice.status] || order.invoice.status}</Badge>
-                              {order.invoice.dueDate && <span className="text-gray-400">Due: {order.invoice.dueDate}</span>}
-                              {order.invoice.photoCount > 0 && <span className="text-gray-400">{order.invoice.photoCount} photo(s)</span>}
+                              <span className="font-medium text-text-2">{order.invoice.invoiceNumber}</span>
+                              <span className="text-text-2">RM {order.invoice.amount.toFixed(2)}</span>
+                              <Badge className={`text-[9px] ${order.invoice.status === "PAID" ? "bg-green-500" : order.invoice.status === "OVERDUE" ? "bg-blue-500" : "bg-ink"}`}>{{ PENDING: "Payment", OVERDUE: "Initiated", PAID: "Paid" }[order.invoice.status] || order.invoice.status}</Badge>
+                              {order.invoice.dueDate && <span className="text-text-3">Due: {order.invoice.dueDate}</span>}
+                              {order.invoice.photoCount > 0 && <span className="text-text-3">{order.invoice.photoCount} photo(s)</span>}
                             </div>
                           </div>
                         )}

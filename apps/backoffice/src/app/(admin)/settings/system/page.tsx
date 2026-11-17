@@ -16,8 +16,8 @@ export default function SystemSettingsPage() {
   return (
     <div className="p-3 sm:p-6">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">System Settings</h2>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h2 className="text-xl font-semibold text-text">System Settings</h2>
+        <p className="mt-0.5 text-sm text-text-2">
           These settings now live closer to where they apply — follow the links below.
         </p>
       </div>
@@ -55,16 +55,16 @@ function Pointer({ href, icon, bg, title, sub }: {
   return (
     <Link
       href={href}
-      className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3.5 transition-colors hover:bg-gray-50"
+      className="flex items-center justify-between gap-4 rounded-xl border border-line bg-surface px-4 py-3.5 transition-colors hover:bg-sunken"
     >
       <div className="flex items-center gap-3">
         <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${bg}`}>{icon}</div>
         <div>
-          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-          <p className="mt-0.5 text-xs text-gray-500">{sub}</p>
+          <h3 className="text-sm font-semibold text-text">{title}</h3>
+          <p className="mt-0.5 text-xs text-text-2">{sub}</p>
         </div>
       </div>
-      <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
+      <ArrowRight className="h-4 w-4 shrink-0 text-text-3" />
     </Link>
   );
 }

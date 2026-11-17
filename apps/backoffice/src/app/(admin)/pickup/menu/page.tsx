@@ -49,12 +49,12 @@ function SortableCategoryHeader({ id, name, children }: { id: string; name: stri
     position: "relative",
   };
   return (
-    <div ref={setNodeRef} style={style} className="bg-white rounded-2xl overflow-hidden">
+    <div ref={setNodeRef} style={style} className="bg-surface rounded-2xl overflow-hidden">
       <div className="px-5 py-3 border-b bg-muted/20 flex items-center gap-3">
         <button
           {...attributes}
           {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-[#160800] -ml-1 touch-none"
+          className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-text -ml-1 touch-none"
           title="Drag to reorder category"
           aria-label="Drag to reorder category"
         >
@@ -78,11 +78,11 @@ function SortableProductRow({ id, children }: { id: string; children: React.Reac
     position: "relative",
   };
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-4 px-5 py-3.5 bg-white">
+    <div ref={setNodeRef} style={style} className="flex items-center gap-4 px-5 py-3.5 bg-surface">
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-[#160800] -ml-1 touch-none"
+        className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-text -ml-1 touch-none"
         title="Drag to reorder"
         aria-label="Drag to reorder"
       >
@@ -236,14 +236,14 @@ export default function PickupMenu() {
     <div className="p-3 sm:p-6 space-y-5 max-w-4xl">
       <ConfirmDialog />
       {/* Tabs */}
-      <div className="flex gap-1 bg-white rounded-xl p-1 w-fit border border-border/40">
+      <div className="flex gap-1 bg-surface rounded-xl p-1 w-fit border border-border/40">
         <button
           type="button"
           onClick={() => setView("catalog")}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             view === "catalog"
-              ? "bg-[#160800] text-white shadow-sm"
-              : "text-muted-foreground hover:text-[#160800]"
+              ? "bg-ink text-on-ink shadow-sm"
+              : "text-muted-foreground hover:text-text"
           }`}
         >
           Catalog
@@ -253,8 +253,8 @@ export default function PickupMenu() {
           onClick={() => setView("availability")}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             view === "availability"
-              ? "bg-[#160800] text-white shadow-sm"
-              : "text-muted-foreground hover:text-[#160800]"
+              ? "bg-ink text-on-ink shadow-sm"
+              : "text-muted-foreground hover:text-text"
           }`}
         >
           Availability
@@ -266,7 +266,7 @@ export default function PickupMenu() {
         <>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-[#160800]">Products</h1>
+              <h1 className="text-2xl font-bold text-text">Products</h1>
               <p className="text-sm text-muted-foreground mt-0.5">
                 {products.length} {products.length === 1 ? 'item' : 'items'} · {unavailableCount} unavailable
               </p>
@@ -274,13 +274,13 @@ export default function PickupMenu() {
             <div className="flex items-center gap-2">
               <button
                 onClick={load}
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-[#160800] transition-colors"
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-text transition-colors"
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               </button>
               <Link
                 href="/pickup/menu/new"
-                className="flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
+                className="flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
               >
                 <Plus className="h-4 w-4" /> Add Product
               </Link>
@@ -288,7 +288,7 @@ export default function PickupMenu() {
           </div>
 
           {/* Filters */}
-          <div className="bg-white rounded-2xl p-4 flex flex-wrap gap-2">
+          <div className="bg-surface rounded-2xl p-4 flex flex-wrap gap-2">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
@@ -337,7 +337,7 @@ export default function PickupMenu() {
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className={`text-sm font-semibold ${!p.is_available ? "text-muted-foreground line-through" : "text-[#160800]"}`}>
+                        <p className={`text-sm font-semibold ${!p.is_available ? "text-muted-foreground line-through" : "text-text"}`}>
                           {p.name}
                         </p>
                         {p.is_new && <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">NEW</span>}
@@ -369,13 +369,13 @@ export default function PickupMenu() {
                       <button
                         onClick={() => toggleAvailable(p)}
                         disabled={toggling === p.id}
-                        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 ${p.is_available ? "bg-green-500" : "bg-gray-300"}`}
+                        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 ${p.is_available ? "bg-green-500" : "bg-line"}`}
                       >
-                        <span className={`inline-block h-5 w-5 mt-0.5 rounded-full bg-white shadow transition-transform duration-200 ${p.is_available ? "translate-x-5.5" : "translate-x-0.5"}`} />
+                        <span className={`inline-block h-5 w-5 mt-0.5 rounded-full bg-surface shadow transition-transform duration-200 ${p.is_available ? "translate-x-5.5" : "translate-x-0.5"}`} />
                       </button>
                       <Link
                         href={`/pickup/menu/${p.id}`}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 transition-colors"
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-text hover:bg-muted/50 transition-colors"
                         title="Edit product"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -415,7 +415,7 @@ export default function PickupMenu() {
                       {productsList(items)}
                     </SortableCategoryHeader>
                   ) : (
-                    <div key={cat.id} className="bg-white rounded-2xl overflow-hidden">
+                    <div key={cat.id} className="bg-surface rounded-2xl overflow-hidden">
                       <div className="px-5 py-3 border-b bg-muted/20">
                         <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wide">{cat.name}</h2>
                       </div>
@@ -456,7 +456,7 @@ export default function PickupMenu() {
         >
           <button
             onClick={closeZoom}
-            className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2 transition-colors"
+            className="absolute top-4 right-4 bg-surface/10 hover:bg-surface/20 text-white rounded-full p-2 transition-colors"
           >
             <X className="h-5 w-5" />
           </button>

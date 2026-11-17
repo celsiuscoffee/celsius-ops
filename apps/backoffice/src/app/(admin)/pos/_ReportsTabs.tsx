@@ -18,7 +18,7 @@ const TABS = [
 export function ReportsTabs() {
   const pathname = usePathname();
   return (
-    <div className="flex gap-1 bg-white rounded-xl p-1 w-fit border border-border/40">
+    <div className="flex gap-1 bg-surface rounded-xl p-1 w-fit border border-border/40">
       {TABS.map((t) => {
         const active = pathname === t.href;
         return (
@@ -26,7 +26,7 @@ export function ReportsTabs() {
             key={t.href}
             href={t.href}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              active ? "bg-[#160800] text-white shadow-sm" : "text-muted-foreground hover:text-[#160800]"
+              active ? "bg-ink text-on-ink shadow-sm" : "text-muted-foreground hover:text-text"
             }`}
           >
             {t.label}

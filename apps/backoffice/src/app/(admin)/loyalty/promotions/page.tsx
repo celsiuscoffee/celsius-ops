@@ -238,7 +238,7 @@ export default function PromotionsPage() {
                         "flex items-center gap-1 text-xs font-medium px-2 py-1 rounded",
                         p.is_active
                           ? "text-emerald-600 hover:bg-emerald-50"
-                          : "text-gray-500 hover:bg-muted",
+                          : "text-text-2 hover:bg-muted",
                       )}
                     >
                       {p.is_active ? (
@@ -548,8 +548,8 @@ function PromoModal({
                     onClick={() => toggleChannel(c.id)}
                     className={
                       on
-                        ? "rounded-full bg-[#C2452D] px-2.5 py-1 text-xs text-white"
-                        : "rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-200 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600"
+                        ? "rounded-full bg-ink px-2.5 py-1 text-xs text-on-ink"
+                        : "rounded-full bg-sunken px-2.5 py-1 text-xs text-text-2 hover:bg-line dark:bg-neutral-700 dark:hover:bg-neutral-600"
                     }
                   >
                     {c.label}
@@ -567,7 +567,7 @@ function PromoModal({
                     key={t}
                     type="button"
                     onClick={() => toggleTag(t)}
-                    className="flex items-center gap-1 rounded-full bg-[#C2452D] px-2.5 py-1 text-xs text-white"
+                    className="flex items-center gap-1 rounded-full bg-ink px-2.5 py-1 text-xs text-on-ink"
                   >
                     {t}
                     <X className="h-3 w-3" />
@@ -584,7 +584,7 @@ function PromoModal({
                       key={t.tag}
                       type="button"
                       onClick={() => toggleTag(t.tag)}
-                      className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-200 dark:bg-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-600"
+                      className="rounded-full bg-sunken px-2.5 py-1 text-xs text-text-2 hover:bg-line dark:bg-neutral-700 dark:hover:bg-neutral-600"
                       title={`${t.count} member${t.count === 1 ? "" : "s"}`}
                     >
                       {t.tag}{" "}
@@ -610,7 +610,7 @@ function PromoModal({
                 type="button"
                 onClick={addCustomTag}
                 disabled={!tagInput.trim()}
-                className="px-3 py-2 rounded-md border text-sm hover:bg-gray-50 dark:hover:bg-neutral-800 disabled:opacity-40"
+                className="px-3 py-2 rounded-md border text-sm hover:bg-sunken dark:hover:bg-neutral-800 disabled:opacity-40"
               >
                 Add
               </button>

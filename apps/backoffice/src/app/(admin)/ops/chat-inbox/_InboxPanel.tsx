@@ -184,7 +184,7 @@ export default function InboxPanel() {
                       onClick={() => setSelected(t.staffPhone)}
                       className={
                         "w-full px-3 py-2.5 text-left transition " +
-                        (active ? "bg-brand-offwhite" : "hover:bg-gray-50")
+                        (active ? "bg-brand-offwhite" : "hover:bg-sunken")
                       }
                     >
                       <div className="flex items-center gap-2">
@@ -275,7 +275,7 @@ export default function InboxPanel() {
                       <div
                         className={
                           "max-w-[78%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm " +
-                          (out ? "bg-terracotta text-white" : "border bg-white text-foreground")
+                          (out ? "bg-ink text-on-ink" : "border bg-surface text-foreground")
                         }
                       >
                         {m.body}
@@ -320,7 +320,7 @@ export default function InboxPanel() {
                     <Button
                       onClick={send}
                       disabled={sending || !text.trim()}
-                      className="bg-terracotta hover:bg-terracotta-dark"
+                      className="bg-ink hover:bg-ink-hover"
                     >
                       {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     </Button>

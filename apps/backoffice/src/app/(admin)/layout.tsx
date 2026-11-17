@@ -142,7 +142,7 @@ function PasswordChangeDialog({ hasPassword }: { hasPassword?: boolean }) {
           <button
             onClick={handleSave}
             disabled={saving || !newPw || !confirmPw}
-            className="flex w-full items-center justify-center rounded-lg bg-terracotta py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50 transition-colors"
+            className="flex w-full items-center justify-center rounded-lg bg-ink py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50 transition-colors"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Password"}
           </button>
@@ -226,7 +226,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-brand-offwhite">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-terracotta border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-ink border-t-transparent" />
       </div>
     );
   }

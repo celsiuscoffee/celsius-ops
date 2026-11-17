@@ -145,7 +145,7 @@ export default function PtRatesPage() {
           </h2>
           <div className="space-y-2">
             {pending.map((p) => (
-              <div key={p.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-white p-3 text-xs">
+              <div key={p.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-surface p-3 text-xs">
                 <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-semibold uppercase text-amber-800">
                   {typeLabel(p.salary_type)}
                 </span>
@@ -311,7 +311,7 @@ export default function PtRatesPage() {
               <button
                 onClick={submit}
                 disabled={busy || !amount || !effective}
-                className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
                 {overLimit && !canApprove ? "Send for approval" : "Save"}

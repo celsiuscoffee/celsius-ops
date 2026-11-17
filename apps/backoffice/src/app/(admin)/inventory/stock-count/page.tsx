@@ -55,7 +55,7 @@ const VARIANCE_REASONS = [
 const STATUS_STYLES: Record<string, string> = {
   SUBMITTED: "bg-yellow-50 text-yellow-700 border-yellow-200",
   REVIEWED: "bg-green-50 text-green-700 border-green-200",
-  DRAFT: "bg-gray-50 text-gray-500 border-gray-200",
+  DRAFT: "bg-sunken text-text-2 border-line",
 };
 
 const STATUS_ICON: Record<string, typeof Clock> = {
@@ -263,7 +263,7 @@ export default function StockCountPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-text-3" />
       </div>
     );
   }
@@ -272,8 +272,8 @@ export default function StockCountPage() {
     <div className="p-3 sm:p-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Stock Count</h2>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <h2 className="text-xl font-semibold text-text">Stock Count</h2>
+          <p className="mt-0.5 text-sm text-text-2">
             {stats.total} counts — {stats.flagged} with unresolved discrepancies, {stats.reviewed} reviewed
           </p>
         </div>
@@ -282,12 +282,12 @@ export default function StockCountPage() {
       {/* Filters */}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <Input placeholder="Search outlet or staff..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex gap-1.5">
           {(["all", "flagged", "SUBMITTED", "REVIEWED"] as const).map((t) => (
-            <button key={t} onClick={() => setStatusFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${statusFilter === t ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>
+            <button key={t} onClick={() => setStatusFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${statusFilter === t ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2"}`}>
               {t === "all" ? `All (${stats.total})`
                 : t === "flagged" ? `Flagged (${stats.flagged})`
                 : t === "SUBMITTED" ? `Pending (${stats.submitted})`
@@ -302,23 +302,23 @@ export default function StockCountPage() {
       )}
 
       {/* Table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
+      <div className="mt-4 rounded-xl border border-line bg-surface overflow-hidden overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Date</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Type</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Counted By</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Items</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Discrepancies</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
+            <tr className="border-b border-line bg-sunken/50">
+              <th className="px-4 py-3 text-left font-medium text-text-2">Date</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Outlet</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Type</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Counted By</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Items</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Discrepancies</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Status</th>
+              <th className="px-4 py-3 text-right font-medium text-text-2">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400">No stock counts found</td></tr>
+              <tr><td colSpan={8} className="px-4 py-12 text-center text-text-3">No stock counts found</td></tr>
             )}
             {filtered.map((sc) => {
               const comparable = sc.items.filter(
@@ -335,19 +335,19 @@ export default function StockCountPage() {
               const uncheckedItems = countedItems - comparable.length;
               const StatusIcon = STATUS_ICON[sc.status] ?? Clock;
               return (
-                <tr key={sc.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                <tr key={sc.id} className="border-b border-line hover:bg-sunken/50">
                   <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">{formatDate(sc.countDate)}</p>
-                    <p className="text-[10px] text-gray-400">{formatTime(sc.createdAt)}</p>
+                    <p className="font-medium text-text">{formatDate(sc.countDate)}</p>
+                    <p className="text-[10px] text-text-3">{formatTime(sc.createdAt)}</p>
                   </td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{sc.outlet}</td>
+                  <td className="px-4 py-3 font-medium text-text">{sc.outlet}</td>
                   <td className="px-4 py-3">
                     <Badge variant="outline" className="text-[10px] capitalize">{sc.frequency.toLowerCase()}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{sc.countedBy}</td>
+                  <td className="px-4 py-3 text-text-2">{sc.countedBy}</td>
                   <td className="px-4 py-3">
-                    <span className="text-gray-900 font-medium">{sc.items.filter((i) => i.countedQty != null).length}</span>
-                    <span className="text-gray-400 text-xs ml-1">/ {sc.items.length}</span>
+                    <span className="text-text font-medium">{sc.items.filter((i) => i.countedQty != null).length}</span>
+                    <span className="text-text-3 text-xs ml-1">/ {sc.items.length}</span>
                   </td>
                   <td className="px-4 py-3">
                     {discrepancies > 0 ? (
@@ -378,7 +378,7 @@ export default function StockCountPage() {
                         {sc.status === "SUBMITTED" ? "Pending" : sc.status.toLowerCase()}
                       </Badge>
                       {isAutoApproved(sc) && (
-                        <span className="text-[9px] uppercase tracking-wide text-gray-400" title="Auto-approved at finalize">
+                        <span className="text-[9px] uppercase tracking-wide text-text-3" title="Auto-approved at finalize">
                           auto
                         </span>
                       )}
@@ -444,7 +444,7 @@ export default function StockCountPage() {
               <>
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
-                    <ClipboardCheck className="h-5 w-5 text-terracotta" />
+                    <ClipboardCheck className="h-5 w-5 text-brand-text" />
                     Stock Count — {selected.outlet}
                   </DialogTitle>
                 </DialogHeader>
@@ -452,19 +452,19 @@ export default function StockCountPage() {
                 {/* Meta cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-2">
                   <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-gray-500 uppercase">Date</p>
+                    <p className="text-[10px] text-text-2 uppercase">Date</p>
                     <p className="text-sm font-semibold">{formatDate(selected.countDate)}</p>
                   </div>
                   <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-gray-500 uppercase">Type</p>
+                    <p className="text-[10px] text-text-2 uppercase">Type</p>
                     <p className="text-sm font-semibold capitalize">{selected.frequency.toLowerCase()}</p>
                   </div>
                   <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-gray-500 uppercase">Counted By</p>
+                    <p className="text-[10px] text-text-2 uppercase">Counted By</p>
                     <p className="text-sm font-semibold">{selected.countedBy}</p>
                   </div>
                   <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-gray-500 uppercase">Items</p>
+                    <p className="text-[10px] text-text-2 uppercase">Items</p>
                     <p className="text-sm font-semibold">{itemsWithVariance.length}</p>
                   </div>
                   <div className={`rounded-lg border p-2.5 ${
@@ -472,7 +472,7 @@ export default function StockCountPage() {
                       : uncheckedCount > 0 ? "border-amber-200 bg-amber-50"
                       : "border-green-200 bg-green-50"
                   }`}>
-                    <p className="text-[10px] text-gray-500 uppercase">Discrepancies</p>
+                    <p className="text-[10px] text-text-2 uppercase">Discrepancies</p>
                     <p className={`text-sm font-semibold ${
                       discrepancyCount > 0 ? "text-red-600"
                         : uncheckedCount > 0 ? "text-amber-700"
@@ -491,7 +491,7 @@ export default function StockCountPage() {
 
                 {/* Exception-only review: discrepancies first, expandable to all */}
                 <div className="mt-3 flex items-center justify-between gap-2">
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-text-2">
                     {discrepancyCount > 0
                       ? showAllItems
                         ? `Showing all ${itemsWithVariance.length} items`
@@ -505,7 +505,7 @@ export default function StockCountPage() {
                   {itemsWithVariance.length > discrepancyItems.length && (
                     <button
                       onClick={() => setShowAllItems((v) => !v)}
-                      className="text-xs text-terracotta hover:underline whitespace-nowrap"
+                      className="text-xs text-brand-text hover:underline whitespace-nowrap"
                     >
                       {showAllItems
                         ? "Show discrepancies only"
@@ -544,12 +544,12 @@ export default function StockCountPage() {
                 <div className="mt-2 rounded-lg border overflow-hidden overflow-x-auto">
                   <table className="w-full text-xs min-w-[720px]">
                     <thead>
-                      <tr className="bg-gray-50 border-b">
-                        <th className="px-3 py-2 text-left font-medium text-gray-500">Product</th>
-                        <th className="px-3 py-2 text-right font-medium text-gray-500">Expected</th>
-                        <th className="px-3 py-2 text-right font-medium text-gray-500">Counted</th>
-                        <th className="px-3 py-2 text-right font-medium text-gray-500">Variance</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-500 min-w-[180px]">Reason</th>
+                      <tr className="bg-sunken border-b">
+                        <th className="px-3 py-2 text-left font-medium text-text-2">Product</th>
+                        <th className="px-3 py-2 text-right font-medium text-text-2">Expected</th>
+                        <th className="px-3 py-2 text-right font-medium text-text-2">Counted</th>
+                        <th className="px-3 py-2 text-right font-medium text-text-2">Variance</th>
+                        <th className="px-3 py-2 text-left font-medium text-text-2 min-w-[180px]">Reason</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -560,15 +560,15 @@ export default function StockCountPage() {
                         const uom = item.package || item.baseUom;
 
                         return (
-                          <tr key={item.id} className={`border-b border-gray-50 ${hasVariance ? "bg-red-50/30" : ""}`}>
+                          <tr key={item.id} className={`border-b border-line ${hasVariance ? "bg-red-50/30" : ""}`}>
                             <td className="px-3 py-2">
-                              <p className="font-medium text-gray-900">{item.product}</p>
-                              <p className="text-[10px] text-gray-400">{item.sku}</p>
+                              <p className="font-medium text-text">{item.product}</p>
+                              <p className="text-[10px] text-text-3">{item.sku}</p>
                             </td>
-                            <td className="px-3 py-2 text-right font-mono text-gray-500">
+                            <td className="px-3 py-2 text-right font-mono text-text-2">
                               {formatBaseQty(item.expectedQty, cf, item.baseUom, uom)}
                             </td>
-                            <td className="px-3 py-2 text-right font-mono font-medium text-gray-900">
+                            <td className="px-3 py-2 text-right font-mono font-medium text-text">
                               {formatPackageQty(item.countedQty, item.baseUom, uom, cf)}
                             </td>
                             <td className={`px-3 py-2 text-right font-mono font-bold ${
@@ -587,7 +587,7 @@ export default function StockCountPage() {
                                 // coding is the manager's follow-up work.
                                 selected.status === "SUBMITTED" || selected.status === "REVIEWED" ? (
                                   <select
-                                    className="h-7 w-full rounded border border-gray-200 px-2 text-xs"
+                                    className="h-7 w-full rounded border border-line px-2 text-xs"
                                     value={editReasons[item.id] || item.varianceReason || ""}
                                     onChange={(e) => setEditReasons((prev) => ({ ...prev, [item.id]: e.target.value }))}
                                   >
@@ -597,10 +597,10 @@ export default function StockCountPage() {
                                     ))}
                                   </select>
                                 ) : (
-                                  <span className="text-gray-600">{item.varianceReason || "—"}</span>
+                                  <span className="text-text-2">{item.varianceReason || "—"}</span>
                                 )
                               ) : (
-                                <span className="text-gray-300">—</span>
+                                <span className="text-text-3">—</span>
                               )}
                             </td>
                           </tr>
@@ -614,7 +614,7 @@ export default function StockCountPage() {
                 {/* Actions */}
                 {selected.status === "SUBMITTED" && (
                   <div className="mt-4 flex items-center justify-between">
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-text-2">
                       {unresolvedCount > 0
                         ? <span className="text-red-500 font-medium">{unresolvedCount} discrepancies need a reason before review</span>
                         : <span className="text-green-600">All discrepancies resolved ✓</span>
@@ -645,7 +645,7 @@ export default function StockCountPage() {
 
                 {selected.status === "REVIEWED" && discrepancyCount > 0 && (
                   <div className="mt-4 flex items-center justify-between">
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-text-2">
                       {unresolvedCount > 0
                         ? <span className="text-red-500 font-medium">{unresolvedCount} discrepanc{unresolvedCount === 1 ? "y" : "ies"} still need{unresolvedCount === 1 ? "s" : ""} a reason</span>
                         : <span className="text-green-600">All discrepancies resolved ✓</span>
@@ -664,7 +664,7 @@ export default function StockCountPage() {
                 )}
 
                 {selected.status === "REVIEWED" && selected.reviewedAt && (
-                  <p className="mt-3 text-xs text-gray-400 text-right">
+                  <p className="mt-3 text-xs text-text-3 text-right">
                     {isAutoApproved(selected) ? "Auto-approved" : "Reviewed"} on {formatDate(selected.reviewedAt)} at {formatTime(selected.reviewedAt)}
                   </p>
                 )}

@@ -132,22 +132,22 @@ export default function SmsTestPage() {
       <div className="flex items-center gap-3">
         <Link
           href="/loyalty/engage"
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          className="p-2 rounded-lg hover:bg-sunken transition-colors"
         >
-          <ArrowLeft className="h-5 w-5 text-gray-500" />
+          <ArrowLeft className="h-5 w-5 text-text-2" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">SMS Test Console</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-text">SMS Test Console</h1>
+          <p className="text-sm text-text-2 mt-0.5">
             Diagnose the active SMS gateway and send test messages
           </p>
         </div>
       </div>
 
       {/* Diagnostics Card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-surface rounded-xl border border-line p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-text">
             {diagnostics ? `${providerLabel(provider)} Configuration` : "SMS Configuration"}
           </h2>
           <div className="flex items-center gap-3">
@@ -157,7 +157,7 @@ export default function SmsTestPage() {
             <button
               onClick={loadDiagnostics}
               disabled={diagLoading}
-              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+              className="flex items-center gap-1.5 text-sm text-text-2 hover:text-text transition-colors"
             >
               <RefreshCw className={cn("h-4 w-4", diagLoading && "animate-spin")} />
               Refresh
@@ -166,7 +166,7 @@ export default function SmsTestPage() {
         </div>
 
         {diagLoading && !diagnostics ? (
-          <div className="flex items-center gap-2 text-sm text-gray-500 py-4">
+          <div className="flex items-center gap-2 text-sm text-text-2 py-4">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading diagnostics...
           </div>
@@ -175,7 +175,7 @@ export default function SmsTestPage() {
             {/* Provider (active, from the toggle) */}
             <div className="flex items-center gap-2">
               <StatusIcon ok={diagnostics.configured} />
-              <span className="text-sm text-gray-600">Active provider:</span>
+              <span className="text-sm text-text-2">Active provider:</span>
               <span
                 className={cn(
                   "text-sm font-medium px-2 py-0.5 rounded",
@@ -189,7 +189,7 @@ export default function SmsTestPage() {
             {/* API Key */}
             <div className="flex items-center gap-2">
               <StatusIcon ok={diagnostics.api_key_set} />
-              <span className="text-sm text-gray-600">API Key:</span>
+              <span className="text-sm text-text-2">API Key:</span>
               <span className="text-sm font-mono">
                 {diagnostics.api_key_set ? diagnostics.api_key_prefix : "NOT SET"}
               </span>
@@ -199,7 +199,7 @@ export default function SmsTestPage() {
             {diagnostics.provider === "sms123" && (
               <div className="flex items-center gap-2">
                 <StatusIcon ok={diagnostics.email_set} />
-                <span className="text-sm text-gray-600">Email:</span>
+                <span className="text-sm text-text-2">Email:</span>
                 <span className="text-sm font-mono">
                   {diagnostics.email_set ? diagnostics.email_value || "Set" : "NOT SET"}
                 </span>
@@ -209,7 +209,7 @@ export default function SmsTestPage() {
             {/* Balance */}
             <div className="flex items-center gap-2">
               <StatusIcon ok={!!diagnostics.balance && !diagnostics.balance_error} />
-              <span className="text-sm text-gray-600">Balance:</span>
+              <span className="text-sm text-text-2">Balance:</span>
               <span className="text-sm font-semibold">
                 {diagnostics.balance ?? diagnostics.balance_error ?? "Unknown"}
               </span>
@@ -218,7 +218,7 @@ export default function SmsTestPage() {
             {/* Sender ID */}
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-blue-500" />
-              <span className="text-sm text-gray-600">Sender ID:</span>
+              <span className="text-sm text-text-2">Sender ID:</span>
               <span className="text-sm font-mono">{diagnostics.sender_id}</span>
             </div>
 
@@ -226,7 +226,7 @@ export default function SmsTestPage() {
             {diagnostics.endpoint && (
               <div className="flex items-center gap-2 col-span-1 sm:col-span-2">
                 <CheckCircle2 className="h-4 w-4 text-blue-500" />
-                <span className="text-sm text-gray-600">Endpoint:</span>
+                <span className="text-sm text-text-2">Endpoint:</span>
                 <span className="text-sm font-mono truncate">{diagnostics.endpoint}</span>
               </div>
             )}
@@ -256,30 +256,30 @@ export default function SmsTestPage() {
       </div>
 
       {/* Send Test SMS Card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Send Test SMS</h2>
+      <div className="bg-surface rounded-xl border border-line p-6">
+        <h2 className="text-lg font-semibold text-text mb-4">Send Test SMS</h2>
 
         <div className="space-y-4">
           {/* Phone */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-text-2 mb-1">
               Phone Number
             </label>
             <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-gray-400" />
+              <Phone className="h-4 w-4 text-text-3" />
               <input
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="e.g. 0123456789 or 60123456789"
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="flex-1 rounded-lg border border-line-2 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
 
           {/* Sender ID */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-text-2 mb-1">
               Sender ID
             </label>
             <input
@@ -288,10 +288,10 @@ export default function SmsTestPage() {
               onChange={(e) => setSenderId(e.target.value)}
               placeholder="CelsiusCoffee"
               disabled={isSmsNiaga}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+              className="w-full rounded-lg border border-line-2 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-sunken disabled:text-text-3"
             />
             {isSmsNiaga && (
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-text-3 mt-1">
                 Ignored on SMS Niaga — the gateway uses your registered Sender ID ({diagnostics?.sender_id}).
               </p>
             )}
@@ -299,31 +299,31 @@ export default function SmsTestPage() {
 
           {/* Message */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-text-2 mb-1">
               Message
             </label>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={3}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full rounded-lg border border-line-2 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Type your test message..."
             />
             <div className="flex items-center justify-between mt-1">
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-text-3">
                 {message.length} / 160 characters
               </p>
             </div>
           </div>
 
           {/* Preview */}
-          <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-            <p className="text-xs font-medium text-gray-500 mb-1">Message Preview (as sent)</p>
-            <p className="text-sm font-mono text-gray-800 whitespace-pre-wrap break-all">
+          <div className="p-3 bg-sunken rounded-lg border border-line">
+            <p className="text-xs font-medium text-text-2 mb-1">Message Preview (as sent)</p>
+            <p className="text-sm font-mono text-text whitespace-pre-wrap break-all">
               {previewMessage}
             </p>
             {isSmsNiaga && (
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-text-3 mt-1">
                 SMS Niaga automatically prepends &quot;RM0 {(diagnostics?.sender_id || "").replace(/ \(.*\)$/, "")}: &quot;.
               </p>
             )}
@@ -336,7 +336,7 @@ export default function SmsTestPage() {
             className={cn(
               "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors",
               sending || !phone.trim() || !message.trim()
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                ? "bg-sunken text-text-3 cursor-not-allowed"
                 : "bg-blue-600 text-white hover:bg-blue-700"
             )}
           >
@@ -379,7 +379,7 @@ export default function SmsTestPage() {
                 </span>
               </div>
               {sendResult.messageId && (
-                <p className="text-xs text-gray-600">
+                <p className="text-xs text-text-2">
                   Message ID: <code className="font-mono">{sendResult.messageId}</code>
                 </p>
               )}
@@ -389,10 +389,10 @@ export default function SmsTestPage() {
                 </p>
               )}
               <details className="mt-2">
-                <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                <summary className="text-xs text-text-2 cursor-pointer hover:text-text-2">
                   Raw response
                 </summary>
-                <pre className="mt-1 text-xs font-mono bg-white/50 p-2 rounded overflow-auto max-h-40">
+                <pre className="mt-1 text-xs font-mono bg-surface/50 p-2 rounded overflow-auto max-h-40">
                   {JSON.stringify(sendResult, null, 2)}
                 </pre>
               </details>
@@ -402,16 +402,16 @@ export default function SmsTestPage() {
       </div>
 
       {/* Recent Test Logs */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Test Logs</h2>
+      <div className="bg-surface rounded-xl border border-line p-6">
+        <h2 className="text-lg font-semibold text-text mb-4">Recent Test Logs</h2>
 
         {testLogs.length === 0 ? (
-          <p className="text-sm text-gray-500">No test SMS logs yet. Send a test above.</p>
+          <p className="text-sm text-text-2">No test SMS logs yet. Send a test above.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-xs text-gray-500 border-b">
+                <tr className="text-left text-xs text-text-2 border-b">
                   <th className="pb-2 pr-4">Time</th>
                   <th className="pb-2 pr-4">Phone</th>
                   <th className="pb-2 pr-4">Provider</th>
@@ -419,10 +419,10 @@ export default function SmsTestPage() {
                   <th className="pb-2">Error</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-line">
                 {testLogs.map((log) => (
                   <tr key={log.id}>
-                    <td className="py-2 pr-4 text-xs text-gray-500 whitespace-nowrap">
+                    <td className="py-2 pr-4 text-xs text-text-2 whitespace-nowrap">
                       {new Date(log.created_at).toLocaleString()}
                     </td>
                     <td className="py-2 pr-4 font-mono text-xs">{log.phone}</td>

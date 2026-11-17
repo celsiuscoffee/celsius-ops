@@ -145,7 +145,7 @@ export default function CashierPerformancePage() {
     <div className="p-3 sm:p-6 space-y-5 max-w-5xl">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#160800]">Cashier Performance</h1>
+          <h1 className="text-2xl font-bold text-text">Cashier Performance</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Phone-number collection per cashier — the loyalty top-of-funnel. Counter-rung
             orders only (Grab / pickup / QR self-orders excluded). Target {target}%.
@@ -155,7 +155,7 @@ export default function CashierPerformancePage() {
           <select
             value={outletId}
             onChange={(e) => setOutletId(e.target.value)}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-[#160800]"
+            className="rounded-lg border border-line-2 bg-surface px-3 py-1.5 text-sm font-medium text-text"
           >
             <option value="all">All outlets</option>
             {outlets.map((o) => (
@@ -165,7 +165,7 @@ export default function CashierPerformancePage() {
           <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-[#160800]"
+            className="rounded-lg border border-line-2 bg-surface px-3 py-1.5 text-sm font-medium text-text"
           >
             {DAYS_OPTIONS.map((d) => (
               <option key={d} value={d}>Last {d} days</option>
@@ -179,15 +179,15 @@ export default function CashierPerformancePage() {
           Dimmed while a filter change is loading so stale numbers don't read as
           "unchanged" — this query can take a few seconds on All outlets. */}
       <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 transition-opacity ${loading ? "opacity-40" : ""}`}>
-        <div className="rounded-2xl bg-white p-4 border border-gray-100">
+        <div className="rounded-2xl bg-surface p-4 border border-line">
           <div className="flex items-center gap-2 mb-1.5">
             <Target className="h-4 w-4 text-[#A2492C]" />
-            <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">Collection Rate</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-text-2">Collection Rate</p>
           </div>
           <p className={`text-2xl font-bold ${rateColor(overall?.rate ?? 0, target)}`}>
             {overall ? `${overall.rate}%` : "—"}
           </p>
-          <p className="mt-0.5 text-[11px] text-gray-500">
+          <p className="mt-0.5 text-[11px] text-text-2">
             {overall ? `${overall.collected.toLocaleString()} / ${overall.orders.toLocaleString()} orders · target ${target}%` : " "}
           </p>
         </div>
@@ -199,15 +199,15 @@ export default function CashierPerformancePage() {
       {/* Table toolbar: search + quick filters */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-3" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search cashier…"
-            className="w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-1.5 text-sm text-[#160800] placeholder:text-gray-400"
+            className="w-full rounded-lg border border-line-2 bg-surface pl-9 pr-3 py-1.5 text-sm text-text placeholder:text-text-3"
           />
         </div>
-        <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+        <div className="flex items-center gap-1 rounded-lg bg-sunken p-1">
           {([
             { key: "all", label: "All" },
             { key: "below", label: "Below target" },
@@ -217,7 +217,7 @@ export default function CashierPerformancePage() {
               key={t.key}
               onClick={() => setQuick(t.key)}
               className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                quick === t.key ? "bg-white text-[#160800] shadow-sm" : "text-gray-500 hover:text-[#160800]"
+                quick === t.key ? "bg-surface text-text shadow-sm" : "text-text-2 hover:text-text"
               }`}
             >
               {t.label}
@@ -227,10 +227,10 @@ export default function CashierPerformancePage() {
       </div>
 
       {/* Per-cashier leaderboard */}
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+      <div className="overflow-hidden rounded-2xl border border-line bg-surface">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-700">
+            <tr className="border-b border-line bg-sunken text-left text-xs font-medium text-text-2">
               <th className="px-4 py-3 w-10">#</th>
               <SortableTh label="Cashier" col="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
               <SortableTh label="Orders" col="orders" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
@@ -241,18 +241,18 @@ export default function CashierPerformancePage() {
               <SortableTh label="Upsell %" col="upsellRate" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" title="Share of this cashier's orders that included an upsold pair — several pairs in one order count once (coaching-only)" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line">
             {loading ? (
-              <tr><td colSpan={8} className="px-4 py-12 text-center"><Loader2 className="inline h-5 w-5 animate-spin text-gray-400" /></td></tr>
+              <tr><td colSpan={8} className="px-4 py-12 text-center"><Loader2 className="inline h-5 w-5 animate-spin text-text-3" /></td></tr>
             ) : cashiers.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-500">
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-text-2">
                 {allCashiers.length === 0 ? "No counter-rung orders in this period yet." : "No cashiers match these filters."}
               </td></tr>
             ) : (
               cashiers.map((c, i) => (
-                <tr key={c.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-400">{i + 1}</td>
-                  <td className="px-4 py-3 text-sm text-[#160800]">
+                <tr key={c.id} className="hover:bg-sunken">
+                  <td className="px-4 py-3 text-sm text-text-3">{i + 1}</td>
+                  <td className="px-4 py-3 text-sm text-text">
                     <div className="flex items-center gap-2">
                       <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FBEBE8] text-xs font-bold text-[#A2492C]">
                         {c.name.charAt(0)}
@@ -265,26 +265,26 @@ export default function CashierPerformancePage() {
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-right text-gray-600">{c.orders.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-right font-medium text-[#160800]">{c.collected.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm text-right text-text-2">{c.orders.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm text-right font-medium text-text">{c.collected.toLocaleString()}</td>
                   <td className="px-4 py-3 text-sm text-right font-medium text-emerald-700" title="New members enrolled (fresh acquisitions)">{c.collectedNew.toLocaleString()}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <div className="h-1.5 w-24 rounded-full bg-gray-200 overflow-hidden">
+                      <div className="h-1.5 w-24 rounded-full bg-line overflow-hidden">
                         <div className={`h-1.5 rounded-full ${rateBar(c.rate, target)}`} style={{ width: `${Math.min(c.rate, 100)}%` }} />
                       </div>
                       <span className={`text-sm font-semibold w-10 text-right ${rateColor(c.rate, target)}`}>{c.rate}%</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-right text-gray-600">{c.pairAdds.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-right font-medium text-[#160800]" title={`${c.upsellOrders.toLocaleString()} of ${c.orders.toLocaleString()} orders had an upsold pair`}>{c.upsellRate == null ? "—" : `${c.upsellRate}%`}</td>
+                  <td className="px-4 py-3 text-sm text-right text-text-2">{c.pairAdds.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm text-right font-medium text-text" title={`${c.upsellOrders.toLocaleString()} of ${c.orders.toLocaleString()} orders had an upsold pair`}>{c.upsellRate == null ? "—" : `${c.upsellRate}%`}</td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
         {!loading && filtersActive && allCashiers.length > 0 && (
-          <div className="border-t border-gray-100 px-4 py-2 text-[11px] text-gray-500">
+          <div className="border-t border-line px-4 py-2 text-[11px] text-text-2">
             Showing {cashiers.length} of {allCashiers.length} cashiers
           </div>
         )}
@@ -314,13 +314,13 @@ function SortableTh({
     <th className={`px-4 py-3 ${align === "right" ? "text-right" : "text-left"} ${className}`} title={title}>
       <button
         onClick={() => onSort(col)}
-        className={`inline-flex items-center gap-1 hover:text-[#160800] ${align === "right" ? "flex-row-reverse" : ""} ${active ? "text-[#160800]" : ""}`}
+        className={`inline-flex items-center gap-1 hover:text-text ${align === "right" ? "flex-row-reverse" : ""} ${active ? "text-text" : ""}`}
       >
         <span>{label}</span>
         {active ? (
           sortDir === "desc" ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />
         ) : (
-          <ChevronsUpDown className="h-3.5 w-3.5 text-gray-300" />
+          <ChevronsUpDown className="h-3.5 w-3.5 text-text-3" />
         )}
       </button>
     </th>
@@ -340,13 +340,13 @@ function rateBar(rate: number, target: number): string {
 
 function KpiCard({ Icon, label, value, sub }: { Icon: React.ComponentType<{ className?: string }>; label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-2xl bg-white p-4 border border-gray-100">
+    <div className="rounded-2xl bg-surface p-4 border border-line">
       <div className="flex items-center gap-2 mb-1.5">
         <Icon className="h-4 w-4 text-[#A2492C]" />
-        <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">{label}</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-text-2">{label}</p>
       </div>
-      <p className="text-2xl font-bold text-[#160800]">{value}</p>
-      {sub && <p className="mt-0.5 text-[11px] text-gray-500">{sub}</p>}
+      <p className="text-2xl font-bold text-text">{value}</p>
+      {sub && <p className="mt-0.5 text-[11px] text-text-2">{sub}</p>}
     </div>
   );
 }

@@ -216,21 +216,21 @@ export function AccumulativeChart({
   const toggle = (active: boolean) =>
     cn(
       "px-2.5 py-1 rounded-md text-xs font-medium capitalize transition-colors",
-      active ? "bg-[#C2452D] text-white" : "text-gray-500 hover:text-gray-700",
+      active ? "bg-ink text-on-ink" : "text-text-2 hover:text-text-2",
     );
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4 sm:p-5">
+    <div className="rounded-xl border border-line bg-surface shadow-sm p-4 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-gray-900">
+          <h2 className="text-sm font-semibold text-text">
             Total Accumulative {metric === "revenue" ? "Sales" : "Orders"}
-            {metric === "revenue" && <span className="font-normal text-gray-400"> (RM)</span>}
+            {metric === "revenue" && <span className="font-normal text-text-3"> (RM)</span>}
           </h2>
-          <p className="mt-0.5 text-xs text-gray-500">{meta.cur} vs {meta.prev} · running total</p>
+          <p className="mt-0.5 text-xs text-text-2">{meta.cur} vs {meta.prev} · running total</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+          <div className="flex gap-1 rounded-lg border border-line bg-sunken p-1">
             {(["revenue", "orders"] as Metric[]).map((mt) => (
               <button key={mt} onClick={() => setMetric(mt)} className={toggle(metric === mt)}>{mt}</button>
             ))}
@@ -240,7 +240,7 @@ export function AccumulativeChart({
 
       {loading ? (
         <div className="flex items-center justify-center" style={{ height: 300 }}>
-          <Loader2 className="h-6 w-6 animate-spin text-[#C2452D]" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       ) : error ? (
         <div className="flex items-center justify-center text-sm text-red-500" style={{ height: 300 }}>{error}</div>

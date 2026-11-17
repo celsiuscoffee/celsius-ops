@@ -538,24 +538,24 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white">
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-surface">
+        <div className="flex items-center justify-between border-b border-line px-5 py-3">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">
+            <h3 className="text-sm font-semibold text-text">
               Compose poster · {placement === "home" ? "Home banner" : placement === "pos-display" ? "POS screen" : "Splash"}
             </h3>
-            <p className="text-[11px] text-gray-500 mt-0.5">
+            <p className="text-[11px] text-text-2 mt-0.5">
               Type an objective, hit Generate, then drag to adjust.
             </p>
           </div>
-          <button onClick={onCancel} className="rounded-md p-1 hover:bg-gray-100">
-            <X className="h-4 w-4 text-gray-600" />
+          <button onClick={onCancel} className="rounded-md p-1 hover:bg-sunken">
+            <X className="h-4 w-4 text-text-2" />
           </button>
         </div>
 
         <div className="grid flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[1fr_320px]">
           {/* PREVIEW pane ------------------------------------------ */}
-          <div className="flex flex-col items-center justify-start gap-3 overflow-y-auto bg-gray-50 p-5">
+          <div className="flex flex-col items-center justify-start gap-3 overflow-y-auto bg-sunken p-5">
             <div
               ref={frameRef}
               className="relative overflow-hidden rounded-lg bg-black shadow-lg select-none"
@@ -599,7 +599,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                 <>
                   {/* C logo — dark rounded square top-left */}
                   <div
-                    className="pointer-events-none absolute flex items-center justify-center rounded-lg bg-[#160800] shadow-md"
+                    className="pointer-events-none absolute flex items-center justify-center rounded-lg bg-ink shadow-md"
                     style={{
                       left:   `${0.03 * previewW}px`,
                       top:    `${0.03 * previewH}px`,
@@ -616,7 +616,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
 
                   {/* Cart — white circle top-right */}
                   <div
-                    className="pointer-events-none absolute flex items-center justify-center rounded-full bg-white shadow-md"
+                    className="pointer-events-none absolute flex items-center justify-center rounded-full bg-surface shadow-md"
                     style={{
                       right:  `${0.03 * previewW}px`,
                       top:    `${0.03 * previewH}px`,
@@ -625,7 +625,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                     }}
                   >
                     <ShoppingCart
-                      className="text-[#160800]"
+                      className="text-text"
                       style={{ width: `${Math.max(14, previewH * 0.045)}px`, height: `${Math.max(14, previewH * 0.045)}px` }}
                     />
                   </div>
@@ -806,8 +806,8 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
 
             {/* AI objective input — directly below the preview so it
                 reads top-down: image, what you want, generate. */}
-            <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-3">
-              <label className="text-[11px] font-semibold text-gray-700">
+            <div className="w-full max-w-md rounded-lg border border-line bg-surface p-3">
+              <label className="text-[11px] font-semibold text-text-2">
                 Objective
               </label>
               <textarea
@@ -815,13 +815,13 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                 onChange={(e) => setObjective(e.target.value)}
                 rows={2}
                 placeholder="e.g. Promote Ramadan iftar special, 20% off espresso this week, warm casual tone"
-                className="mt-1 w-full resize-none rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                className="mt-1 w-full resize-none rounded-md border border-line px-2 py-1.5 text-xs"
               />
               <button
                 type="button"
                 onClick={generate}
                 disabled={generating || !objective.trim()}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-terracotta px-3 py-2 text-xs font-semibold text-white hover:bg-terracotta-dark disabled:opacity-50"
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-ink px-3 py-2 text-xs font-semibold text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {generating ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -830,18 +830,18 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                 )}
                 {generating ? "Generating…" : "Generate with AI"}
               </button>
-              <p className="mt-1.5 text-[10px] text-gray-400">
+              <p className="mt-1.5 text-[10px] text-text-3">
                 AI promotes the strongest part of your objective (an offer like &quot;10% off&quot;) to the headline, picks supporting subhead lines, and chooses tint + text colours that contrast with the image — while dodging the C-logo, cart and info-card zones.
               </p>
             </div>
           </div>
 
           {/* CONTROLS pane ----------------------------------------- */}
-          <div className="flex flex-col gap-4 overflow-y-auto border-l border-gray-100 p-5">
+          <div className="flex flex-col gap-4 overflow-y-auto border-l border-line p-5">
             {/* Layer tabs — dynamic. Background + Headline are fixed;
                 subheads wrap depending on how many the operator has
                 added. The "+ Add" tile spawns a new subhead. */}
-            <div className="flex flex-wrap gap-1 rounded-lg bg-gray-100 p-1">
+            <div className="flex flex-wrap gap-1 rounded-lg bg-sunken p-1">
               {[
                 { sel: { kind: "bg" } as Selected,       label: "Background", active: selected.kind === "bg" },
                 { sel: { kind: "headline" } as Selected, label: "Headline",   active: selected.kind === "headline" },
@@ -855,7 +855,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                   key={t.label}
                   onClick={() => setSelected(t.sel)}
                   className={`flex-1 min-w-[60px] rounded-md px-2 py-1.5 text-[11px] font-semibold ${
-                    t.active ? "bg-white text-gray-900 shadow-sm" : "text-gray-600"
+                    t.active ? "bg-surface text-text shadow-sm" : "text-text-2"
                   }`}
                 >
                   {t.label}
@@ -865,7 +865,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                 <button
                   onClick={addSubhead}
                   title="Add another subhead"
-                  className="flex items-center justify-center rounded-md px-2 py-1.5 text-[11px] font-semibold text-terracotta hover:bg-white"
+                  className="flex items-center justify-center rounded-md px-2 py-1.5 text-[11px] font-semibold text-brand-text hover:bg-surface"
                 >
                   <Plus className="h-3 w-3" />
                 </button>
@@ -876,7 +876,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
             {selected.kind === "bg" && (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[11px] font-medium text-gray-700">
+                  <label className="text-[11px] font-medium text-text-2">
                     Zoom · {state.bgZoom.toFixed(2)}×
                   </label>
                   <input
@@ -891,7 +891,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-medium text-gray-700">
+                  <label className="text-[11px] font-medium text-text-2">
                     Tint colour
                   </label>
                   <div className="mt-1 flex items-center gap-2">
@@ -899,19 +899,19 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                       type="color"
                       value={state.tintColor}
                       onChange={(e) => setState((s) => ({ ...s, tintColor: e.target.value }))}
-                      className="h-8 w-12 cursor-pointer rounded border border-gray-200"
+                      className="h-8 w-12 cursor-pointer rounded border border-line"
                     />
                     <input
                       type="text"
                       value={state.tintColor}
                       onChange={(e) => setState((s) => ({ ...s, tintColor: e.target.value }))}
-                      className="flex-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-mono"
+                      className="flex-1 rounded-md border border-line px-2 py-1 text-xs font-mono"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-medium text-gray-700">
+                  <label className="text-[11px] font-medium text-text-2">
                     Tint opacity · {(state.tintOpacity * 100).toFixed(0)}%
                   </label>
                   <input
@@ -929,7 +929,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                   onClick={() =>
                     setState((s) => ({ ...s, bgPanX: 0, bgPanY: 0, bgZoom: 1 }))
                   }
-                  className="flex w-full items-center justify-center gap-1 rounded-md border border-gray-200 px-2 py-1.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+                  className="flex w-full items-center justify-center gap-1 rounded-md border border-line px-2 py-1.5 text-[11px] font-semibold text-text-2 hover:bg-sunken"
                 >
                   <RotateCcw className="h-3 w-3" />
                   Reset position
@@ -948,7 +948,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
               return (
                 <div className="space-y-3">
                   <div>
-                    <label className="text-[11px] font-medium text-gray-700">
+                    <label className="text-[11px] font-medium text-text-2">
                       {isHeadline
                         ? "Headline text"
                         : state.subheads.length > 1
@@ -959,12 +959,12 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                       value={selectedLayer.text}
                       onChange={(e) => patch({ text: e.target.value })}
                       rows={isHeadline ? 1 : 2}
-                      className="mt-1 w-full resize-none rounded-md border border-gray-200 px-2 py-1.5 text-xs"
+                      className="mt-1 w-full resize-none rounded-md border border-line px-2 py-1.5 text-xs"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-medium text-gray-700">
+                    <label className="text-[11px] font-medium text-text-2">
                       Size · {(selectedLayer.size * 100).toFixed(1)}%
                     </label>
                     <input
@@ -979,7 +979,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-medium text-gray-700">
+                    <label className="text-[11px] font-medium text-text-2">
                       Colour
                     </label>
                     <div className="mt-1 flex items-center gap-2">
@@ -987,13 +987,13 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                         type="color"
                         value={selectedLayer.color}
                         onChange={(e) => patch({ color: e.target.value })}
-                        className="h-8 w-12 cursor-pointer rounded border border-gray-200"
+                        className="h-8 w-12 cursor-pointer rounded border border-line"
                       />
                       <input
                         type="text"
                         value={selectedLayer.color}
                         onChange={(e) => patch({ color: e.target.value })}
-                        className="flex-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-mono"
+                        className="flex-1 rounded-md border border-line px-2 py-1 text-xs font-mono"
                       />
                     </div>
                   </div>
@@ -1003,7 +1003,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                       reads better against the bg + matches the campaign
                       mood. Per-layer so headline and subheads can mix. */}
                   <div>
-                    <label className="text-[11px] font-medium text-gray-700">Font</label>
+                    <label className="text-[11px] font-medium text-text-2">Font</label>
                     <div className="mt-1 grid grid-cols-2 gap-1">
                       {([
                         { id: "peachi" as const,        label: "Peachi",        stack: FONT_STACK["peachi"] },
@@ -1016,8 +1016,8 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                             onClick={() => patch({ font: f.id })}
                             className={`rounded-md border px-2 py-1.5 text-[11px] font-semibold ${
                               active
-                                ? "border-terracotta bg-terracotta/10 text-terracotta"
-                                : "border-gray-200 text-gray-600"
+                                ? "border-ink bg-brand-soft text-brand-text"
+                                : "border-line text-text-2"
                             }`}
                             style={{ fontFamily: f.stack }}
                           >
@@ -1029,7 +1029,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-medium text-gray-700">Align</label>
+                    <label className="text-[11px] font-medium text-text-2">Align</label>
                     <div className="mt-1 grid grid-cols-3 gap-1">
                       {(["left", "center", "right"] as const).map((a) => (
                         <button
@@ -1037,8 +1037,8 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                           onClick={() => patch({ align: a })}
                           className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${
                             selectedLayer.align === a
-                              ? "border-terracotta bg-terracotta/10 text-terracotta"
-                              : "border-gray-200 text-gray-600"
+                              ? "border-ink bg-brand-soft text-brand-text"
+                              : "border-line text-text-2"
                           }`}
                         >
                           {a[0].toUpperCase() + a.slice(1)}
@@ -1054,14 +1054,14 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                       preview and the rasterised JPEG. */}
                   <div>
                     <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-medium text-gray-700">
+                      <label className="text-[11px] font-medium text-text-2">
                         Shadow · {Math.round(((selectedLayer.shadow ?? 0) * 100))}%
                       </label>
                       {(selectedLayer.shadow ?? 0) > 0 && (
                         <button
                           type="button"
                           onClick={() => patch({ shadow: 0 })}
-                          className="text-[10px] text-gray-500 hover:text-gray-900"
+                          className="text-[10px] text-text-2 hover:text-text"
                         >
                           Clear
                         </button>
@@ -1076,7 +1076,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                       onChange={(e) => patch({ shadow: Number(e.target.value) })}
                       className="mt-1 w-full"
                     />
-                    <p className="mt-1 text-[10px] text-gray-400">
+                    <p className="mt-1 text-[10px] text-text-3">
                       Lifts text off pale or busy backgrounds. Leave at 0 when the text already has enough contrast.
                     </p>
                   </div>
@@ -1094,7 +1094,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                     </button>
                   )}
 
-                  <p className="text-[10px] text-gray-400">
+                  <p className="text-[10px] text-text-3">
                     Drag the text in the preview to move it. Position is
                     saved as a fraction of the poster size, so it stays
                     put across resolutions.
@@ -1105,17 +1105,17 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-5 py-3">
+        <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
           <button
             onClick={onCancel}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-text-2 hover:bg-sunken"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving || !bgReady}
-            className="flex items-center gap-2 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-60"
             title={!bgReady ? "Waiting for the background to load…" : undefined}
           >
             {(saving || !bgReady) && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

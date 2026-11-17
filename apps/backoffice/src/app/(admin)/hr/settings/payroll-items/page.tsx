@@ -107,12 +107,12 @@ export default function PayrollItemsPage() {
       <div className="rounded-xl border bg-card p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 font-semibold">
-            <Calculator className="h-5 w-5 text-terracotta" />
+            <Calculator className="h-5 w-5 text-brand-text" />
             Payroll Items Catalog ({items.length})
           </h2>
           <button
             onClick={() => setEditing({ ...BLANK })}
-            className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark"
+            className="flex items-center gap-1 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover"
           >
             <Plus className="h-4 w-4" /> New Item
           </button>
@@ -120,7 +120,7 @@ export default function PayrollItemsPage() {
 
         <div className="mb-4 flex flex-wrap gap-2">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-text-3" />
             <input placeholder="Search code or name…" value={filter} onChange={(e) => setFilter(e.target.value)} className="w-full rounded-lg border bg-background pl-8 pr-3 py-2 text-sm" />
           </div>
           <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} className="rounded-lg border bg-background px-3 py-2 text-sm">
@@ -135,8 +135,8 @@ export default function PayrollItemsPage() {
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{cat}</h3>
               <div className="overflow-hidden rounded-lg border overflow-x-auto">
                 <table className="w-full text-sm min-w-[720px]">
-                  <thead className="bg-gray-50">
-                    <tr className="text-xs text-gray-500">
+                  <thead className="bg-sunken">
+                    <tr className="text-xs text-text-2">
                       <th className="px-3 py-2 text-left">Code</th>
                       <th className="px-3 py-2 text-left">Name</th>
                       <th className="px-3 py-2 text-left">Type</th>
@@ -151,23 +151,23 @@ export default function PayrollItemsPage() {
                   </thead>
                   <tbody>
                     {(grouped.get(cat) || []).map((i) => (
-                      <tr key={i.id} className="border-t hover:bg-gray-50/50">
+                      <tr key={i.id} className="border-t hover:bg-sunken/50">
                         <td className="px-3 py-2 font-mono text-xs">{i.code}</td>
                         <td className="px-3 py-2 font-medium">{i.name}</td>
-                        <td className="px-3 py-2 text-xs text-gray-600">{i.item_type.replace(/_/g, " ")}</td>
+                        <td className="px-3 py-2 text-xs text-text-2">{i.item_type.replace(/_/g, " ")}</td>
                         <td className="px-3 py-2 font-mono text-xs">{i.ea_form_field || "—"}</td>
                         <td className="px-3 py-2 text-center">{i.pcb_taxable ? "✓" : "—"}</td>
                         <td className="px-3 py-2 text-center">{i.epf_contributing ? "✓" : "—"}</td>
                         <td className="px-3 py-2 text-center">{i.socso_contributing ? "✓" : "—"}</td>
                         <td className="px-3 py-2 text-center">{i.eis_contributing ? "✓" : "—"}</td>
                         <td className="px-3 py-2 text-center">
-                          <button onClick={() => toggleActive(i)} className={"rounded px-1.5 py-0.5 text-[10px] " + (i.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500")}>
+                          <button onClick={() => toggleActive(i)} className={"rounded px-1.5 py-0.5 text-[10px] " + (i.is_active ? "bg-green-100 text-green-700" : "bg-sunken text-text-2")}>
                             {i.is_active ? "ON" : "OFF"}
                           </button>
                         </td>
                         <td className="px-3 py-2 text-right">
-                          <button onClick={() => setEditing(i)} className="mr-1 rounded px-2 py-1 text-xs hover:bg-gray-100">Edit</button>
-                          <button onClick={() => remove(i.id)} disabled={deleting === i.id} className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50">
+                          <button onClick={() => setEditing(i)} className="mr-1 rounded px-2 py-1 text-xs hover:bg-sunken">Edit</button>
+                          <button onClick={() => remove(i.id)} disabled={deleting === i.id} className="rounded p-1 text-text-3 hover:bg-red-50 hover:text-red-600 disabled:opacity-50">
                             {deleting === i.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                           </button>
                         </td>
@@ -184,10 +184,10 @@ export default function PayrollItemsPage() {
 
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditing(null)}>
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold">{editing.id ? "Edit Item" : "New Payroll Item"}</h3>
-              <button onClick={() => setEditing(null)} className="rounded p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+              <button onClick={() => setEditing(null)} className="rounded p-1 hover:bg-sunken"><X className="h-4 w-4" /></button>
             </div>
 
             <div className="space-y-4">
@@ -243,7 +243,7 @@ export default function PayrollItemsPage() {
 
               <div className="flex justify-end gap-2 border-t pt-4">
                 <button onClick={() => setEditing(null)} className="rounded-lg border px-4 py-2 text-sm">Cancel</button>
-                <button onClick={save} disabled={saving || !editing.code || !editing.name} className="flex items-center gap-1 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50">
+                <button onClick={save} disabled={saving || !editing.code || !editing.name} className="flex items-center gap-1 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save
                 </button>
               </div>

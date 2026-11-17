@@ -601,14 +601,14 @@ export default function SplashPostersPage() {
 
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Posters</h2>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <h2 className="text-xl font-semibold text-text">Posters</h2>
+          <p className="mt-0.5 text-sm text-text-2">
             Splash = launch screen (one active wins). Home = carousel banners (all active rotate).
           </p>
         </div>
         <button
           onClick={openNew}
-          className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark"
+          className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover"
         >
           <Plus className="h-4 w-4" />
           New poster
@@ -628,19 +628,19 @@ export default function SplashPostersPage() {
           { id: "pos-display", label: "POS screen",  count: posCount    },
         ];
         return (
-          <div className="mb-4 flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+          <div className="mb-4 flex gap-1 rounded-lg bg-sunken p-1 w-fit">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 onClick={() => { setTab(t.id); setRoundFilter("all"); }}
                 className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
                   tab === t.id
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
+                    ? "bg-surface text-text shadow-sm"
+                    : "text-text-2 hover:text-text"
                 }`}
               >
                 {t.label}
-                <span className={`ml-1.5 text-[10px] ${tab === t.id ? "text-gray-500" : "text-gray-400"}`}>
+                <span className={`ml-1.5 text-[10px] ${tab === t.id ? "text-text-2" : "text-text-3"}`}>
                   {t.count}
                 </span>
               </button>
@@ -678,11 +678,11 @@ export default function SplashPostersPage() {
                   key={r.id}
                   onClick={() => setRoundFilter(r.id)}
                   className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
-                    active ? "bg-terracotta text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    active ? "bg-ink text-on-ink" : "bg-sunken text-text-2 hover:bg-line"
                   }`}
                 >
                   {r.label}
-                  <span className={`ml-1 text-[10px] ${active ? "text-white/70" : "text-gray-400"}`}>
+                  <span className={`ml-1 text-[10px] ${active ? "text-white/70" : "text-text-3"}`}>
                     {countFor(r.id)}
                   </span>
                 </button>
@@ -709,18 +709,18 @@ export default function SplashPostersPage() {
 
         if (loading) {
           return (
-            <div className="flex h-40 items-center justify-center text-gray-400">
+            <div className="flex h-40 items-center justify-center text-text-3">
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
           );
         }
         if (posters.length === 0) {
           return (
-            <div className="rounded-xl border border-dashed border-gray-200 bg-white p-12 text-center">
-              <p className="text-sm text-gray-500">No posters yet.</p>
+            <div className="rounded-xl border border-dashed border-line bg-surface p-12 text-center">
+              <p className="text-sm text-text-2">No posters yet.</p>
               <button
                 onClick={openNew}
-                className="mt-3 text-sm font-medium text-terracotta hover:underline"
+                className="mt-3 text-sm font-medium text-brand-text hover:underline"
               >
                 Create your first poster
               </button>
@@ -729,13 +729,13 @@ export default function SplashPostersPage() {
         }
         if (filtered.length === 0) {
           return (
-            <div className="rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center">
-              <p className="text-sm text-gray-500">
+            <div className="rounded-xl border border-dashed border-line bg-surface p-10 text-center">
+              <p className="text-sm text-text-2">
                 No posters scheduled on {tab === "splash" ? "Splash" : tab === "pos-display" ? "POS screen" : "Home"}.
               </p>
               <button
                 onClick={() => { setForm({ ...empty, placement: tab as Placement }); setShowForm(true); }}
-                className="mt-3 text-sm font-medium text-terracotta hover:underline"
+                className="mt-3 text-sm font-medium text-brand-text hover:underline"
               >
                 Add one
               </button>
@@ -765,9 +765,9 @@ export default function SplashPostersPage() {
             return (
             <div
               key={p.id}
-              className="overflow-hidden rounded-xl border border-gray-200 bg-white"
+              className="overflow-hidden rounded-xl border border-line bg-surface"
             >
-              <div className={`relative ${aspectClass} bg-gray-100`}>
+              <div className={`relative ${aspectClass} bg-sunken`}>
                 {p.image_url && (
                   <img
                     src={bust(p.image_url, p.updated_at)}
@@ -862,14 +862,14 @@ export default function SplashPostersPage() {
                 })()}
               </div>
               <div className="p-3">
-                <p className="truncate text-sm font-semibold text-gray-900">
+                <p className="truncate text-sm font-semibold text-text">
                   {p.title || "(untitled)"}
                 </p>
-                <p className="mt-0.5 truncate text-xs text-gray-500">
+                <p className="mt-0.5 truncate text-xs text-text-2">
                   {p.deeplink ? `Tap → ${p.deeplink}` : "No deeplink"} · {p.duration_ms}ms
                 </p>
                 {(p.starts_at || p.ends_at) && (
-                  <p className="mt-1 flex items-center gap-1 text-[10px] text-gray-400">
+                  <p className="mt-1 flex items-center gap-1 text-[10px] text-text-3">
                     <Clock className="h-3 w-3" />
                     {p.starts_at ? new Date(p.starts_at).toLocaleDateString() : "—"} →{" "}
                     {p.ends_at ? new Date(p.ends_at).toLocaleDateString() : "—"}
@@ -881,7 +881,7 @@ export default function SplashPostersPage() {
                     className={`flex flex-1 items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium ${
                       p.active
                         ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-gray-200 bg-white text-gray-700"
+                        : "border-line bg-surface text-text-2"
                     }`}
                   >
                     <Power className="h-3 w-3" />
@@ -890,7 +890,7 @@ export default function SplashPostersPage() {
                   <button
                     onClick={() => openEdit(p)}
                     title="Edit poster"
-                    className="flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1.5 text-gray-700"
+                    className="flex items-center justify-center rounded-lg border border-line bg-surface p-1.5 text-text-2"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
@@ -902,7 +902,7 @@ export default function SplashPostersPage() {
                   <button
                     onClick={() => duplicate(p)}
                     title="Duplicate as draft"
-                    className="flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1.5 text-gray-700"
+                    className="flex items-center justify-center rounded-lg border border-line bg-surface p-1.5 text-text-2"
                   >
                     <Copy className="h-3.5 w-3.5" />
                   </button>
@@ -910,7 +910,7 @@ export default function SplashPostersPage() {
                     onClick={() => del(p)}
                     disabled={deleting === p.id}
                     title="Delete poster"
-                    className="flex items-center justify-center rounded-lg border border-red-200 bg-white p-1.5 text-red-600 disabled:opacity-50"
+                    className="flex items-center justify-center rounded-lg border border-red-200 bg-surface p-1.5 text-red-600 disabled:opacity-50"
                   >
                     {deleting === p.id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -929,13 +929,13 @@ export default function SplashPostersPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-6">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="text-lg font-semibold text-text">
                 {form.id ? "Edit poster" : "New poster"}
               </h3>
               <button onClick={() => setShowForm(false)}>
-                <X className="h-5 w-5 text-gray-500" />
+                <X className="h-5 w-5 text-text-2" />
               </button>
             </div>
 
@@ -945,7 +945,7 @@ export default function SplashPostersPage() {
                   operator from realising mid-upload that splash and
                   home need different crops. */}
               <div>
-                <label className="text-xs font-medium text-gray-700">
+                <label className="text-xs font-medium text-text-2">
                   Where it shows
                 </label>
                 <div className="mt-1 grid grid-cols-3 gap-2">
@@ -973,28 +973,28 @@ export default function SplashPostersPage() {
                         }
                         className={`rounded-lg border p-3 text-left transition-colors ${
                           selected
-                            ? "border-terracotta bg-terracotta/5"
-                            : "border-gray-200 hover:bg-gray-50"
+                            ? "border-ink bg-brand-soft"
+                            : "border-line hover:bg-sunken"
                         }`}
                       >
-                        <p className={`text-sm font-semibold ${selected ? "text-terracotta" : "text-gray-900"}`}>
+                        <p className={`text-sm font-semibold ${selected ? "text-brand-text" : "text-text"}`}>
                           {p === "splash" ? "Splash" : p === "pos-display" ? "POS screen" : "Home"}
                         </p>
-                        <p className="mt-0.5 text-[10px] text-gray-500 leading-tight">
+                        <p className="mt-0.5 text-[10px] text-text-2 leading-tight">
                           {meta.aspectLabel}
                         </p>
                       </button>
                     );
                   })}
                 </div>
-                <p className="mt-2 text-[11px] text-gray-500">
+                <p className="mt-2 text-[11px] text-text-2">
                   {PLACEMENT_META[form.placement].help}
                 </p>
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-700">Rounds (time of day)</label>
-                <p className="mt-0.5 text-[11px] text-gray-500">
+                <label className="text-xs font-medium text-text-2">Rounds (time of day)</label>
+                <p className="mt-0.5 text-[11px] text-text-2">
                   Pick the day-parts this poster appears in (a span is fine, e.g.
                   Lunch→Supper). Leave all off for <span className="font-semibold">Always</span>.
                 </p>
@@ -1015,8 +1015,8 @@ export default function SplashPostersPage() {
                         }
                         className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
                           on
-                            ? "bg-terracotta text-white"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            ? "bg-ink text-on-ink"
+                            : "bg-sunken text-text-2 hover:bg-line"
                         }`}
                       >
                         {r.label}
@@ -1024,7 +1024,7 @@ export default function SplashPostersPage() {
                     );
                   })}
                 </div>
-                <p className="mt-1.5 text-[11px] text-gray-500">
+                <p className="mt-1.5 text-[11px] text-text-2">
                   {form.rounds.length === 0
                     ? "Showing in every round (Always)."
                     : `Showing only during: ${form.rounds
@@ -1034,7 +1034,7 @@ export default function SplashPostersPage() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-700">
+                <label className="text-xs font-medium text-text-2">
                   Image · {PLACEMENT_META[form.placement].aspectLabel} · auto-resized to 1440px max
                 </label>
                 <div className="mt-1 flex items-start gap-3">
@@ -1047,7 +1047,7 @@ export default function SplashPostersPage() {
                        no overlay. */
                     <div className="relative">
                       <div
-                        className={`relative overflow-hidden rounded-lg bg-gray-100 ${
+                        className={`relative overflow-hidden rounded-lg bg-sunken ${
                           form.placement === "home"
                             ? "h-52 w-[235px]"
                             : "h-72 w-40"
@@ -1104,7 +1104,7 @@ export default function SplashPostersPage() {
                       <button
                         type="button"
                         onClick={() => setCropSource(form.imageUrl)}
-                        className="absolute -bottom-3 left-2 flex items-center gap-1 rounded-md bg-white px-2 py-1 text-[10px] font-semibold text-gray-700 shadow"
+                        className="absolute -bottom-3 left-2 flex items-center gap-1 rounded-md bg-surface px-2 py-1 text-[10px] font-semibold text-text-2 shadow"
                         title="Reposition / re-zoom"
                       >
                         <Crop className="h-3 w-3" />
@@ -1154,7 +1154,7 @@ export default function SplashPostersPage() {
                           if (!ok) return;
                           setComposeSource(form.imageUrl);
                         }}
-                        className="absolute -bottom-3 left-[88px] flex items-center gap-1 rounded-md bg-terracotta px-2 py-1 text-[10px] font-semibold text-white shadow"
+                        className="absolute -bottom-3 left-[88px] flex items-center gap-1 rounded-md bg-ink px-2 py-1 text-[10px] font-semibold text-on-ink shadow"
                         title={form.composerState ? "Edit composition (text, colours, positions)" : "Compose with AI"}
                       >
                         <Sparkles className="h-3 w-3" />
@@ -1162,9 +1162,9 @@ export default function SplashPostersPage() {
                       </button>
                       <button
                         onClick={() => setForm((f) => ({ ...f, imageUrl: "" }))}
-                        className="absolute -right-2 -top-2 rounded-full bg-white p-1 shadow"
+                        className="absolute -right-2 -top-2 rounded-full bg-surface p-1 shadow"
                       >
-                        <X className="h-3 w-3 text-gray-600" />
+                        <X className="h-3 w-3 text-text-2" />
                       </button>
                     </div>
                   ) : (
@@ -1180,8 +1180,8 @@ export default function SplashPostersPage() {
                         form.placement === "home" ? "h-52" : "h-72"
                       } ${
                         dragOver
-                          ? "border-terracotta bg-terracotta/5 text-terracotta"
-                          : "border-gray-300 text-gray-500 hover:border-terracotta hover:bg-gray-50"
+                          ? "border-ink bg-brand-soft text-brand-text"
+                          : "border-line-2 text-text-2 hover:border-ink hover:bg-sunken"
                       }`}
                     >
                       {uploading ? (
@@ -1195,7 +1195,7 @@ export default function SplashPostersPage() {
                           <span className="font-medium">
                             {dragOver ? "Drop to upload" : "Drop an image or click to browse"}
                           </span>
-                          <span className="text-[10px] text-gray-400">
+                          <span className="text-[10px] text-text-3">
                             JPG / PNG / WEBP · auto-resized
                           </span>
                         </>
@@ -1219,7 +1219,7 @@ export default function SplashPostersPage() {
                   />
                 </div>
                 {form.imageUrl && form.placement === "home" && (
-                  <p className="mt-3 text-[10px] text-gray-400">
+                  <p className="mt-3 text-[10px] text-text-3">
                     Preview shows the espresso info card overlay —
                     keep important details (logo, headline) clear of
                     the bottom 25% of the image.
@@ -1228,20 +1228,20 @@ export default function SplashPostersPage() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-700">
+                <label className="text-xs font-medium text-text-2">
                   Title (internal)
                 </label>
                 <input
                   type="text"
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm"
                   placeholder="e.g. Ramadan 2026 promo"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-700">
+                <label className="text-xs font-medium text-text-2">
                   Where tap navigates (optional)
                 </label>
                 {(() => {
@@ -1303,7 +1303,7 @@ export default function SplashPostersPage() {
                           setDeeplinkMode(null);
                           setForm((f) => ({ ...f, deeplink: v }));
                         }}
-                        className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                        className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
                       >
                         <option value={DEEPLINK_SENTINEL.NONE}>
                           — No deeplink (tap does nothing) —
@@ -1331,7 +1331,7 @@ export default function SplashPostersPage() {
                       {selectedSentinel === DEEPLINK_SENTINEL.PRODUCT && (
                         <div className="mt-2">
                           {productsLoading ? (
-                            <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-500">
+                            <div className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-xs text-text-2">
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
                               Loading product catalog…
                             </div>
@@ -1346,7 +1346,7 @@ export default function SplashPostersPage() {
                                 }));
                               }}
                               onFocus={() => void ensureProducts()}
-                              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
                             >
                               <option value="">— Pick a product —</option>
                               {(() => {
@@ -1376,12 +1376,12 @@ export default function SplashPostersPage() {
                               })()}
                             </select>
                           ) : (
-                            <p className="rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-500">
+                            <p className="rounded-lg border border-line px-3 py-2 text-xs text-text-2">
                               No products available.
                             </p>
                           )}
                           {form.deeplink && (
-                            <p className="mt-1 text-[10px] text-gray-400">
+                            <p className="mt-1 text-[10px] text-text-3">
                               Resolved path: <code className="font-mono">{form.deeplink}</code>
                             </p>
                           )}
@@ -1398,7 +1398,7 @@ export default function SplashPostersPage() {
                           onChange={(e) =>
                             setForm((f) => ({ ...f, deeplink: e.target.value }))
                           }
-                          className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono"
+                          className="mt-2 w-full rounded-lg border border-line px-3 py-2 text-sm font-mono"
                           placeholder="/challenge/abc/swap"
                           autoFocus
                         />
@@ -1409,7 +1409,7 @@ export default function SplashPostersPage() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-700">
+                <label className="text-xs font-medium text-text-2">
                   Show duration ({(form.durationMs / 1000).toFixed(1)}s)
                 </label>
                 <input
@@ -1432,7 +1432,7 @@ export default function SplashPostersPage() {
                     local timezone. "Clear" wipes both to leave the
                     poster on indefinitely while active. */}
                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-text-2">
                     Schedule:
                   </span>
                   {([
@@ -1476,7 +1476,7 @@ export default function SplashPostersPage() {
                         const { startsAt, endsAt } = preset.apply();
                         setForm((f) => ({ ...f, startsAt, endsAt }));
                       }}
-                      className="rounded-full border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:border-terracotta hover:text-terracotta"
+                      className="rounded-full border border-line bg-surface px-2.5 py-1 text-[11px] font-medium text-text-2 hover:border-ink hover:text-brand-text"
                     >
                       {preset.label}
                     </button>
@@ -1485,7 +1485,7 @@ export default function SplashPostersPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-medium text-gray-700">
+                    <label className="text-xs font-medium text-text-2">
                       Starts at (optional)
                     </label>
                     <input
@@ -1494,11 +1494,11 @@ export default function SplashPostersPage() {
                       onChange={(e) =>
                         setForm((f) => ({ ...f, startsAt: e.target.value }))
                       }
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                      className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-gray-700">
+                    <label className="text-xs font-medium text-text-2">
                       Ends at (optional)
                     </label>
                     <input
@@ -1507,7 +1507,7 @@ export default function SplashPostersPage() {
                       onChange={(e) =>
                         setForm((f) => ({ ...f, endsAt: e.target.value }))
                       }
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                      className="mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm"
                     />
                   </div>
                 </div>
@@ -1526,14 +1526,14 @@ export default function SplashPostersPage() {
                 className={`mt-1 flex items-center justify-between rounded-xl border p-3 ${
                   form.active
                     ? "border-emerald-300 bg-emerald-50"
-                    : "border-gray-200 bg-gray-50"
+                    : "border-line bg-sunken"
                 }`}
               >
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">
+                  <p className="text-sm font-semibold text-text">
                     {form.active ? "Active in app" : "Inactive (draft)"}
                   </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-xs text-text-2 mt-0.5">
                     {form.placement === "home"
                       ? "All active home posters rotate in the carousel"
                       : "Most-recent active splash poster wins"}
@@ -1543,11 +1543,11 @@ export default function SplashPostersPage() {
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, active: !f.active }))}
                   className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                    form.active ? "bg-emerald-500" : "bg-gray-300"
+                    form.active ? "bg-emerald-500" : "bg-line"
                   }`}
                 >
                   <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                    className={`inline-block h-5 w-5 transform rounded-full bg-surface shadow transition-transform ${
                       form.active ? "translate-x-6" : "translate-x-1"
                     }`}
                   />
@@ -1557,14 +1557,14 @@ export default function SplashPostersPage() {
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => setShowForm(false)}
-                  className="flex-1 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700"
+                  className="flex-1 rounded-lg border border-line px-4 py-2 text-sm font-medium text-text-2"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={save}
                   disabled={saving || !form.imageUrl}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink disabled:opacity-50"
                 >
                   {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                   {form.id ? "Save" : "Create"}

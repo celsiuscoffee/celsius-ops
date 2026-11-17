@@ -270,7 +270,7 @@ export default function GrabIntegrationPage() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-text-3" />
       </div>
     );
   }
@@ -291,8 +291,8 @@ export default function GrabIntegrationPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-neutral-900">GrabFood Integration</h1>
-          <p className="mt-1 text-sm text-neutral-600">
+          <h1 className="text-2xl font-semibold text-text">GrabFood Integration</h1>
+          <p className="mt-1 text-sm text-text-2">
             Outlet linkage, sync activity, and operational status for the GrabFood Partner API integration.
           </p>
         </div>
@@ -309,7 +309,7 @@ export default function GrabIntegrationPage() {
           ) : null}
           <button
             onClick={load}
-            className="inline-flex items-center gap-2 rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            className="inline-flex items-center gap-2 rounded border border-line-2 bg-surface px-3 py-1.5 text-sm font-medium text-text-2 hover:bg-sunken"
           >
             <RefreshCw className="h-4 w-4" /> Refresh
           </button>
@@ -356,15 +356,15 @@ export default function GrabIntegrationPage() {
       </div>
 
       {/* Outlet linkage */}
-      <section className="rounded-lg border border-neutral-200 bg-white">
-        <header className="border-b border-neutral-200 px-5 py-3">
-          <h2 className="text-base font-medium text-neutral-900">Outlet ↔ Grab merchant linkage</h2>
-          <p className="mt-0.5 text-sm text-neutral-600">
+      <section className="rounded-lg border border-line bg-surface">
+        <header className="border-b border-line px-5 py-3">
+          <h2 className="text-base font-medium text-text">Outlet ↔ Grab merchant linkage</h2>
+          <p className="mt-0.5 text-sm text-text-2">
             Each Grab merchant ID maps to one outlet. Incoming Grab orders use this to route to the right POS / KDS.
             Find your IDs in the GrabFood Developer Portal → Store Information.
           </p>
         </header>
-        <div className="divide-y divide-neutral-100">
+        <div className="divide-y divide-line">
           {data.outlets.map((o) => {
             const current = o.grabMerchantId ?? "";
             const edit = edits[o.id] ?? current;
@@ -372,18 +372,18 @@ export default function GrabIntegrationPage() {
             return (
               <div key={o.id} className="flex items-center gap-3 px-5 py-3">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-sm font-medium text-neutral-900">
+                  <div className="flex items-center gap-2 text-sm font-medium text-text">
                     {o.name}
                     {!o.isActive ? (
-                      <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">Inactive</span>
+                      <span className="rounded bg-sunken px-1.5 py-0.5 text-xs text-text-2">Inactive</span>
                     ) : null}
                   </div>
-                  <div className="text-xs text-neutral-500">
+                  <div className="text-xs text-text-2">
                     {o.city || "—"} · storehubId: <code>{o.storehubId || "—"}</code>
                   </div>
                 </div>
                 <input
-                  className="w-64 rounded border border-neutral-300 px-2 py-1 font-mono text-sm focus:border-neutral-500 focus:outline-none"
+                  className="w-64 rounded border border-line-2 px-2 py-1 font-mono text-sm focus:border-neutral-500 focus:outline-none"
                   placeholder="e.g. GFSBPOS-083-564"
                   value={edit}
                   onChange={(e) => setEdits((s) => ({ ...s, [o.id]: e.target.value }))}
@@ -391,7 +391,7 @@ export default function GrabIntegrationPage() {
                 <button
                   onClick={() => saveOutlet(o.id)}
                   disabled={!dirty || saving[o.id]}
-                  className="inline-flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-2.5 py-1 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded border border-line-2 bg-surface px-2.5 py-1 text-sm font-medium text-text-2 hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {saving[o.id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                   Save
@@ -409,16 +409,16 @@ export default function GrabIntegrationPage() {
       <GrabModifierLinker />
 
       {/* Self-serve store activation */}
-      <section className="rounded-lg border border-neutral-200 bg-white">
-        <header className="border-b border-neutral-200 px-5 py-3">
-          <h2 className="text-base font-medium text-neutral-900">Self-serve store activation</h2>
-          <p className="mt-0.5 text-sm text-neutral-600">
+      <section className="rounded-lg border border-line bg-surface">
+        <header className="border-b border-line px-5 py-3">
+          <h2 className="text-base font-medium text-text">Self-serve store activation</h2>
+          <p className="mt-0.5 text-sm text-text-2">
             Generate a Grab activation link per outlet. The store owner opens it to link their existing
             GrabFood store to this POS integration — Grab then pushes the store menu and integration status
             to us automatically (no manual merchant-ID entry). The outlet id is sent as the Partner store ID.
           </p>
         </header>
-        <div className="divide-y divide-neutral-100">
+        <div className="divide-y divide-line">
           {data.outlets.map((o) => {
             const url = ssUrl[o.id];
             const err = ssErr[o.id];
@@ -427,11 +427,11 @@ export default function GrabIntegrationPage() {
               <div key={o.id} className="px-5 py-3">
                 <div className="flex items-center gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-sm font-medium text-neutral-900">
+                    <div className="flex items-center gap-2 text-sm font-medium text-text">
                       {o.name}
                       <ConnectionBadge status={o.integrationStatus} at={o.integrationStatusAt} />
                     </div>
-                    <div className="text-xs text-neutral-500">
+                    <div className="text-xs text-text-2">
                       Partner store ID: <code>{o.id}</code>
                     </div>
                   </div>
@@ -460,7 +460,7 @@ export default function GrabIntegrationPage() {
                   <button
                     onClick={() => generateSelfServe(o.id)}
                     disabled={ssBusy[o.id]}
-                    className="inline-flex items-center gap-1.5 rounded border border-neutral-300 bg-white px-2.5 py-1 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 rounded border border-line-2 bg-surface px-2.5 py-1 text-sm font-medium text-text-2 hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {ssBusy[o.id] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Rocket className="h-3.5 w-3.5" />}
                     {url ? "Regenerate link" : "Generate activation link"}
@@ -471,7 +471,7 @@ export default function GrabIntegrationPage() {
                     <code className="min-w-0 flex-1 truncate text-xs text-emerald-900">{url}</code>
                     <button
                       onClick={() => copyUrl(o.id, url)}
-                      className="shrink-0 rounded border border-emerald-300 bg-white px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                      className="shrink-0 rounded border border-emerald-300 bg-surface px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
                     >
                       {copied === o.id ? "Copied!" : "Copy"}
                     </button>
@@ -479,7 +479,7 @@ export default function GrabIntegrationPage() {
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex shrink-0 items-center gap-1 rounded border border-emerald-300 bg-white px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                      className="inline-flex shrink-0 items-center gap-1 rounded border border-emerald-300 bg-surface px-2 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
                     >
                       Open <ExternalLink className="h-3 w-3" />
                     </a>
@@ -499,17 +499,17 @@ export default function GrabIntegrationPage() {
       </section>
 
       {/* Recent orders */}
-      <section className="rounded-lg border border-neutral-200 bg-white">
-        <header className="border-b border-neutral-200 px-5 py-3">
-          <h2 className="text-base font-medium text-neutral-900">Recent GrabFood orders (last 14 days)</h2>
+      <section className="rounded-lg border border-line bg-surface">
+        <header className="border-b border-line px-5 py-3">
+          <h2 className="text-base font-medium text-text">Recent GrabFood orders (last 14 days)</h2>
         </header>
         {data.recentOrders.length === 0 ? (
-          <div className="px-5 py-8 text-center text-sm text-neutral-500">
+          <div className="px-5 py-8 text-center text-sm text-text-2">
             No GrabFood orders yet. Place a test order via the App Simulator to see one here.
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="border-b border-neutral-100 text-left text-xs uppercase tracking-wide text-neutral-500">
+            <thead className="border-b border-line text-left text-xs uppercase tracking-wide text-text-2">
               <tr>
                 <th className="px-5 py-2">Order #</th>
                 <th className="px-5 py-2">Outlet</th>
@@ -518,9 +518,9 @@ export default function GrabIntegrationPage() {
                 <th className="px-5 py-2 text-right">When</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody className="divide-y divide-line">
               {data.recentOrders.map((o) => (
-                <tr key={o.id} className="text-neutral-800">
+                <tr key={o.id} className="text-text">
                   <td className="px-5 py-2 font-mono text-xs">{o.orderNumber || o.externalId || o.id.slice(0, 8)}</td>
                   <td className="px-5 py-2">{o.outletName || "—"}</td>
                   <td className="px-5 py-2">
@@ -529,7 +529,7 @@ export default function GrabIntegrationPage() {
                   <td className="px-5 py-2 text-right font-mono">
                     {o.totalRM != null ? `RM ${o.totalRM.toFixed(2)}` : "—"}
                   </td>
-                  <td className="px-5 py-2 text-right text-xs text-neutral-500">
+                  <td className="px-5 py-2 text-right text-xs text-text-2">
                     {new Date(o.createdAt).toLocaleString("en-MY", { dateStyle: "short", timeStyle: "short" })}
                   </td>
                 </tr>
@@ -540,8 +540,8 @@ export default function GrabIntegrationPage() {
       </section>
 
       {/* Quick links */}
-      <section className="rounded-lg border border-neutral-200 bg-white p-5">
-        <h2 className="mb-2 text-base font-medium text-neutral-900">Quick links</h2>
+      <section className="rounded-lg border border-line bg-surface p-5">
+        <h2 className="mb-2 text-base font-medium text-text">Quick links</h2>
         <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
           <ExternalLinkRow
             href="https://developer.grab.com/dashboard/grab-platform/"
@@ -567,8 +567,8 @@ export default function GrabIntegrationPage() {
       </section>
 
       {/* Operational notes */}
-      <section className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 text-sm text-neutral-700">
-        <h2 className="mb-2 text-base font-medium text-neutral-900">How this fits together</h2>
+      <section className="rounded-lg border border-line bg-sunken p-5 text-sm text-text-2">
+        <h2 className="mb-2 text-base font-medium text-text">How this fits together</h2>
         <ul className="list-inside list-disc space-y-1">
           <li>OAuth, HMAC, and Partner client credentials live as Vercel env vars on the <code>celsius-backoffice</code> project (not editable here). The legacy <code>celsius-pos</code> project is no longer the source of truth.</li>
           <li>To rotate or swap to production, run <code>scripts/grab-go-live.sh</code> from the repo root.</li>
@@ -590,19 +590,19 @@ function StatusCard(props: {
   tone?: "prod" | "stage";
 }) {
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4">
+    <div className="rounded-lg border border-line bg-surface p-4">
       <div className="flex items-center gap-2">
         {props.icon}
-        <span className="text-xs uppercase tracking-wide text-neutral-500">{props.label}</span>
+        <span className="text-xs uppercase tracking-wide text-text-2">{props.label}</span>
       </div>
       <div
         className={`mt-1 text-xl font-semibold ${
-          props.tone === "prod" ? "text-emerald-700" : props.tone === "stage" ? "text-amber-700" : "text-neutral-900"
+          props.tone === "prod" ? "text-emerald-700" : props.tone === "stage" ? "text-amber-700" : "text-text"
         }`}
       >
         {props.value}
       </div>
-      <div className="mt-0.5 text-xs text-neutral-500">{props.sub}</div>
+      <div className="mt-0.5 text-xs text-text-2">{props.sub}</div>
     </div>
   );
 }
@@ -616,7 +616,7 @@ function StatusPill({ status }: { status: string | null }) {
       ? "bg-red-100 text-red-700"
       : s === "open" || s === "pending"
       ? "bg-amber-100 text-amber-700"
-      : "bg-neutral-100 text-neutral-700";
+      : "bg-sunken text-text-2";
   return (
     <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>
       {status || "—"}
@@ -632,9 +632,9 @@ function ConnectionBadge({ status, at }: { status: string | null; at: string | n
     ACTIVE: { label: "● Connected", cls: "bg-emerald-100 text-emerald-700" },
     SYNCING: { label: "● Syncing", cls: "bg-blue-100 text-blue-700" },
     FAILED: { label: "● Failed", cls: "bg-red-100 text-red-700" },
-    INACTIVE: { label: "● Inactive", cls: "bg-neutral-100 text-neutral-600" },
+    INACTIVE: { label: "● Inactive", cls: "bg-sunken text-text-2" },
   };
-  const m = map[s] ?? { label: "○ Not linked", cls: "bg-neutral-100 text-neutral-500" };
+  const m = map[s] ?? { label: "○ Not linked", cls: "bg-sunken text-text-2" };
   const title = at
     ? `Grab reported "${s}" at ${new Date(at).toLocaleString("en-MY", { dateStyle: "short", timeStyle: "short" })}`
     : "No integration status received from Grab yet";
@@ -651,15 +651,15 @@ function ExternalLinkRow({ href, label, sub }: { href: string; label: string; su
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-start gap-2 rounded border border-neutral-200 p-3 hover:border-neutral-400 hover:bg-neutral-50"
+      className="group flex items-start gap-2 rounded border border-line p-3 hover:border-line-2 hover:bg-sunken"
     >
-      <Link2 className="mt-0.5 h-4 w-4 text-neutral-400 group-hover:text-neutral-600" />
+      <Link2 className="mt-0.5 h-4 w-4 text-text-3 group-hover:text-text-2" />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1 text-sm font-medium text-neutral-900">
+        <div className="flex items-center gap-1 text-sm font-medium text-text">
           {label}
-          <ExternalLink className="h-3 w-3 text-neutral-400" />
+          <ExternalLink className="h-3 w-3 text-text-3" />
         </div>
-        <div className="text-xs text-neutral-500">{sub}</div>
+        <div className="text-xs text-text-2">{sub}</div>
       </div>
     </a>
   );

@@ -221,7 +221,7 @@ export default function LoopsPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/loyalty/engage" className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
+      <Link href="/loyalty/engage" className="mb-4 inline-flex items-center gap-1 text-sm text-text-2 hover:text-text">
         <ArrowLeft className="h-4 w-4" /> Engage
       </Link>
 
@@ -229,7 +229,7 @@ export default function LoopsPage() {
         <Repeat className="h-6 w-6 text-[#A2492C]" />
         <h1 className="text-2xl font-semibold">Win-back loops</h1>
       </div>
-      <p className="mb-4 text-sm text-gray-500">
+      <p className="mb-4 text-sm text-text-2">
         Every campaign is a loop: the engine proposes each round&apos;s offers against a holdout and learns which logic wins — the setup sharpens over time. Pick an objective:
       </p>
 
@@ -237,7 +237,7 @@ export default function LoopsPage() {
 
       {/* Fire all auto-triggered loops on demand (first run / catch-up). They
           also run themselves daily at 9am; this is for an immediate send. */}
-      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3">
+      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3">
         <button
           disabled={busy === "run"}
           onClick={async () => {
@@ -258,7 +258,7 @@ export default function LoopsPage() {
         >
           {busy === "run" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Force run now
         </button>
-        <span className="text-xs text-gray-500">{runResult ?? "Fires Reactivation + Welcome + Birthday immediately (also auto at 9am daily). “Force” ignores the once-a-day skip — use after changing a segment."}</span>
+        <span className="text-xs text-text-2">{runResult ?? "Fires Reactivation + Welcome + Birthday immediately (also auto at 9am daily). “Force” ignores the once-a-day skip — use after changing a segment."}</span>
       </div>
 
       {opt && (
@@ -268,7 +268,7 @@ export default function LoopsPage() {
               key={l.key}
               onClick={() => setLoopKey(l.key)}
               title={l.objective}
-              className={cn("rounded-full border px-3 py-1.5 text-sm", loopKey === l.key ? "border-[#A2492C] bg-[#A2492C] text-white" : "border-gray-200 bg-white text-gray-600 hover:border-gray-300")}
+              className={cn("rounded-full border px-3 py-1.5 text-sm", loopKey === l.key ? "border-[#A2492C] bg-[#A2492C] text-white" : "border-line bg-surface text-text-2 hover:border-line-2")}
             >
               {l.label}
             </button>
@@ -288,11 +288,11 @@ export default function LoopsPage() {
         </div>
       )}
 
-      <div className="mb-6 flex flex-wrap gap-x-6 gap-y-1 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-        {!activeTriggered && <span><span className="text-gray-500">SMS budget</span> <strong>set per round</strong> (start {rm(DEFAULT_BUDGET_RM)}, scale up)</span>}
-        <span><span className="text-gray-500">Scale an arm at</span> <strong>≥{SUCCESS_BAR_PP}pp lift</strong> vs holdout</span>
-        <span><span className="text-gray-500">Margin read at</span> <strong>{Math.round(GP * 100)}% GP</strong></span>
-        <span><span className="text-gray-500">SMS</span> <strong>{rm(SMS_COST_RM)}</strong>/msg · rewards self-funding (need a paid order)</span>
+      <div className="mb-6 flex flex-wrap gap-x-6 gap-y-1 rounded-lg border border-line bg-sunken px-4 py-3 text-sm">
+        {!activeTriggered && <span><span className="text-text-2">SMS budget</span> <strong>set per round</strong> (start {rm(DEFAULT_BUDGET_RM)}, scale up)</span>}
+        <span><span className="text-text-2">Scale an arm at</span> <strong>≥{SUCCESS_BAR_PP}pp lift</strong> vs holdout</span>
+        <span><span className="text-text-2">Margin read at</span> <strong>{Math.round(GP * 100)}% GP</strong></span>
+        <span><span className="text-text-2">SMS</span> <strong>{rm(SMS_COST_RM)}</strong>/msg · rewards self-funding (need a paid order)</span>
       </div>
 
       {err && (
@@ -349,7 +349,7 @@ export default function LoopsPage() {
           }}
         />
       ) : (
-        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-400 shadow-sm">
+        <div className="mb-6 rounded-xl border border-line bg-surface p-8 text-center text-sm text-text-3 shadow-sm">
           <Loader2 className="mx-auto h-5 w-5 animate-spin" /> Loading optimizer…
         </div>
       ))}
@@ -368,13 +368,13 @@ export default function LoopsPage() {
       )}
 
       {activeTriggered ? (
-        <p className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500">This loop runs automatically — every send and its results roll up into the <strong>live scoreboard</strong> at the top of the page. Nothing to manage here.</p>
+        <p className="mt-2 rounded-lg border border-line bg-sunken px-3 py-2.5 text-sm text-text-2">This loop runs automatically — every send and its results roll up into the <strong>live scoreboard</strong> at the top of the page. Nothing to manage here.</p>
       ) : (<>
       <h2 className="mb-3 mt-2 text-lg font-semibold">Rounds</h2>
       {rounds === null ? (
-        <div className="py-10 text-center text-gray-400"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
+        <div className="py-10 text-center text-text-3"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
       ) : rounds.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 py-10 text-center text-sm text-gray-400">{activeTriggered ? "No rounds yet — this loop runs automatically; rounds appear here after the next daily run (~9am)." : "No rounds yet — configure one above."}</div>
+        <div className="rounded-lg border border-dashed border-line-2 py-10 text-center text-sm text-text-3">{activeTriggered ? "No rounds yet — this loop runs automatically; rounds appear here after the next daily run (~9am)." : "No rounds yet — configure one above."}</div>
       ) : (
         <div className="space-y-4">
           {rounds.map((r) => (
@@ -429,7 +429,7 @@ export default function LoopsPage() {
       )}
       </>)}
 
-      <button onClick={() => void load()} className="mt-6 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
+      <button onClick={() => void load()} className="mt-6 inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
         <RefreshCw className="h-3.5 w-3.5" /> Refresh
       </button>
     </div>
@@ -439,10 +439,10 @@ export default function LoopsPage() {
 // ---- Evaluation overview: cross-loop scorecard ------------------------------
 function Kpi({ label, value, sub, highlight }: { label: string; value: string; sub?: string; highlight?: boolean }) {
   return (
-    <div className={cn("rounded-lg border p-3", highlight ? "border-[#A2492C]/30 bg-[#A2492C]/5" : "border-gray-200 bg-gray-50")}>
-      <p className="text-xs text-gray-500">{label}</p>
+    <div className={cn("rounded-lg border p-3", highlight ? "border-[#A2492C]/30 bg-[#A2492C]/5" : "border-line bg-sunken")}>
+      <p className="text-xs text-text-2">{label}</p>
       <p className="mt-0.5 text-xl font-semibold tabular-nums">{value}</p>
-      {sub && <p className="text-xs text-gray-400">{sub}</p>}
+      {sub && <p className="text-xs text-text-3">{sub}</p>}
     </div>
   );
 }
@@ -470,24 +470,24 @@ function EvaluationPanel({ data, days, onDays, loops }: { data: Evaluation; days
           </span>
           Live
         </span>
-        {days ? <span className="text-xs text-gray-400">last {days}d</span> : null}
+        {days ? <span className="text-xs text-text-3">last {days}d</span> : null}
         <div className="ml-auto flex items-center gap-1">
           {EVAL_PRESETS.map((p) => (
-            <button key={p.label} onClick={() => onDays(p.val)} className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", days === p.val ? "bg-[#A2492C] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200")}>{p.label}</button>
+            <button key={p.label} onClick={() => onDays(p.val)} className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", days === p.val ? "bg-[#A2492C] text-white" : "bg-sunken text-text-2 hover:bg-line")}>{p.label}</button>
           ))}
         </div>
       </div>
 
       {/* All-campaigns total */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">All campaigns</p>
+      <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-3">All campaigns</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Kpi label="SMS sent" value={lv.sent.toLocaleString()} sub={`${rm(lv.sms_cost_rm)} spent`} />
           <Kpi label="Redeemed" value={lv.redeemed.toLocaleString()} sub={`${lv.redeemed_rate}%`} />
           <Kpi label="Orders (raw)" value={lv.orders.toLocaleString()} sub="not incremental" />
           <Kpi label="RM Orders (raw)" value={rm(lv.revenue_rm)} sub="gross · in window" />
         </div>
-        <p className="mt-2 text-[11px] text-gray-400">Orders &amp; RM are <strong>gross attributed</strong> — every order a recipient made in the window, including ones they&apos;d have made anyway. <strong>Not ROI.</strong> True ROI vs the holdout shows per campaign once each window closes.</p>
+        <p className="mt-2 text-[11px] text-text-3">Orders &amp; RM are <strong>gross attributed</strong> — every order a recipient made in the window, including ones they&apos;d have made anyway. <strong>Not ROI.</strong> True ROI vs the holdout shows per campaign once each window closes.</p>
       </div>
 
       {/* One board per campaign */}
@@ -513,14 +513,14 @@ function CampaignBoard({ meta, live, meas }: {
     : pausedArmKeys.length ? { t: "Partly paused", c: "bg-amber-100 text-amber-800" }
     : measuring ? { t: "Measuring", c: "bg-blue-100 text-blue-800" }
     : hasResults ? { t: "Measured", c: "bg-green-100 text-green-800" }
-    : sent > 0 ? { t: "Sent", c: "bg-gray-100 text-gray-600" }
-    : { t: "Idle", c: "bg-gray-100 text-gray-400" };
+    : sent > 0 ? { t: "Sent", c: "bg-sunken text-text-2" }
+    : { t: "Idle", c: "bg-sunken text-text-3" };
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h3 className="font-semibold text-gray-900">{meta.label}</h3>
-          {meta.objective && <p className="truncate text-xs text-gray-400">{meta.objective}</p>}
+          <h3 className="font-semibold text-text">{meta.label}</h3>
+          {meta.objective && <p className="truncate text-xs text-text-3">{meta.objective}</p>}
         </div>
         <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", status.c)}>{status.t}</span>
       </div>
@@ -530,7 +530,7 @@ function CampaignBoard({ meta, live, meas }: {
         <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">{pausedArmKeys.map((k) => `${k} arm paused — ${meta.pausedArms![k]}`).join(" · ")}</p>
       ) : null}
       {sent === 0 ? (
-        <p className="mt-3 text-sm text-gray-400">{meta.triggered ? "Runs automatically — fires when customers qualify." : "No sends yet."}</p>
+        <p className="mt-3 text-sm text-text-3">{meta.triggered ? "Runs automatically — fires when customers qualify." : "No sends yet."}</p>
       ) : (
         <>
           {/* Raw activity only — NO gross "Return" multiple. That tile divided
@@ -562,8 +562,8 @@ function CampaignBoard({ meta, live, meas }: {
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wide text-gray-400">{label}</p>
-      <p className="text-sm font-semibold tabular-nums text-gray-900">{value}</p>
+      <p className="text-[11px] uppercase tracking-wide text-text-3">{label}</p>
+      <p className="text-sm font-semibold tabular-nums text-text">{value}</p>
     </div>
   );
 }
@@ -575,20 +575,20 @@ function RoundGapPrepareCard({ busy, onPrepare, note }: { busy: boolean; onPrepa
     { id: "shah-alam-evening", title: "Shah Alam · Evening (5–7pm)", offer: "Free coffee with any bite — de-concentrate the midday peak", audience: "Shah Alam regulars who skip evenings" },
   ];
   return (
-    <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="mb-6 rounded-xl border border-line bg-surface p-5 shadow-sm">
       <div className="mb-1 flex items-center gap-2">
         <Coins className="h-5 w-5 text-[#A2492C]" />
         <h2 className="text-lg font-semibold">Prepare a round-gap campaign</h2>
       </div>
-      <p className="mb-3 text-xs text-gray-500">
+      <p className="mb-3 text-xs text-text-2">
         Auto-tags the audience and creates a time-boxed, tag-restricted promo — no manual promotions to set. Prepares a round you review + send below (10% held back as control; no SMS until you approve).
       </p>
       <div className="grid gap-3 md:grid-cols-2">
         {campaigns.map((c) => (
-          <div key={c.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-            <div className="text-sm font-semibold text-gray-900">{c.title}</div>
-            <p className="mt-0.5 text-xs text-gray-600">{c.offer}</p>
-            <p className="mt-1 text-[11px] text-gray-400">{c.audience}</p>
+          <div key={c.id} className="rounded-lg border border-line bg-sunken p-3">
+            <div className="text-sm font-semibold text-text">{c.title}</div>
+            <p className="mt-0.5 text-xs text-text-2">{c.offer}</p>
+            <p className="mt-1 text-[11px] text-text-3">{c.audience}</p>
             <button
               disabled={busy}
               onClick={() => { if (confirm(`Prepare "${c.title}"? This tags the audience + creates the promo. No SMS until you send the round.`)) onPrepare(c.id); }}
@@ -608,23 +608,23 @@ function RoundGapPrepareCard({ busy, onPrepare, note }: { busy: boolean; onPrepa
 function MessagesPanel({ arms }: { arms: ProposalArm[] }) {
   if (!arms.length) return null;
   return (
-    <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="mb-6 rounded-xl border border-line bg-surface p-5 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Send className="h-5 w-5 text-[#A2492C]" />
         <h2 className="text-lg font-semibold">Messages going out</h2>
-        <span className="text-xs text-gray-400">exactly what each customer receives · {arms.length} in rotation</span>
+        <span className="text-xs text-text-3">exactly what each customer receives · {arms.length} in rotation</span>
       </div>
       <div className="space-y-3">
         {arms.map((a) => {
           const seg = smsSegments(a.message);
           return (
-            <div key={a.key} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <div key={a.key} className="rounded-lg border border-line bg-sunken p-3">
               <div className="mb-1.5 flex flex-wrap items-center gap-2">
                 <RoleBadge role={a.role} />
                 <span className="text-sm font-medium">{a.label}</span>
               </div>
-              <p className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800">{SMS_PREFIX}{a.message}</p>
-              <p className="mt-1 text-[11px] text-gray-400">{seg.chars}/{seg.gsm7 ? 160 : 70} chars · {seg.segments} SMS{a.reason ? ` · ${a.reason}` : ""}</p>
+              <p className="rounded-md border border-line bg-surface px-3 py-2 text-sm text-text">{SMS_PREFIX}{a.message}</p>
+              <p className="mt-1 text-[11px] text-text-3">{seg.chars}/{seg.gsm7 ? 160 : 70} chars · {seg.segments} SMS{a.reason ? ` · ${a.reason}` : ""}</p>
             </div>
           );
         })}
@@ -639,14 +639,14 @@ function OptimizerPanel({ opt }: { opt: Optimizer }) {
   const champion = lb.find((e) => e.recipients >= CHAMPION_MIN_RECIPIENTS) ?? null;
 
   return (
-    <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="mb-6 rounded-xl border border-line bg-surface p-5 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
         <Trophy className="h-5 w-5 text-[#A2492C]" />
         <h2 className="text-lg font-semibold">Optimizer</h2>
       </div>
 
       {lb.length === 0 ? (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-text-2">
           No measured rounds yet — the leaderboard fills in after your first round. The engine has proposed a diverse starter set below (one of each logic) to begin exploring.
         </p>
       ) : (
@@ -663,7 +663,7 @@ function OptimizerPanel({ opt }: { opt: Optimizer }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
+                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-text-3">
                   <th className="py-2 pr-3">Offer</th>
                   <th className="py-2 pr-3">Logic</th>
                   <th className="py-2 pr-3 text-right">Rounds</th>
@@ -674,17 +674,17 @@ function OptimizerPanel({ opt }: { opt: Optimizer }) {
               </thead>
               <tbody>
                 {lb.map((e) => (
-                  <tr key={e.template_id} className={cn("border-b border-gray-100", champion?.template_id === e.template_id && "bg-green-50")}>
+                  <tr key={e.template_id} className={cn("border-b border-line", champion?.template_id === e.template_id && "bg-green-50")}>
                     <td className="py-2 pr-3 font-medium">
                       <span className="inline-flex items-center gap-1.5">
                         {champion?.template_id === e.template_id && <Crown className="h-3.5 w-3.5 text-green-600" />}
                         {e.label}
                       </span>
                     </td>
-                    <td className="py-2 pr-3 text-gray-500">{e.logic ?? "—"}</td>
+                    <td className="py-2 pr-3 text-text-2">{e.logic ?? "—"}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{e.rounds}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{e.recipients.toLocaleString()}</td>
-                    <td className={cn("py-2 pr-3 text-right tabular-nums", e.avg_lift_pp >= SUCCESS_BAR_PP ? "text-green-700" : e.avg_lift_pp > 0 ? "text-gray-700" : "text-red-600")}>
+                    <td className={cn("py-2 pr-3 text-right tabular-nums", e.avg_lift_pp >= SUCCESS_BAR_PP ? "text-green-700" : e.avg_lift_pp > 0 ? "text-text-2" : "text-red-600")}>
                       {e.avg_lift_pp > 0 ? "+" : ""}{e.avg_lift_pp}pp
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">{e.incr_margin_per_recipient_rm >= 0 ? "+" : ""}{rm(e.incr_margin_per_recipient_rm)}</td>
@@ -697,16 +697,16 @@ function OptimizerPanel({ opt }: { opt: Optimizer }) {
       )}
 
       {/* Send-time learning — best window + per-window lift (unknown #3). */}
-      <div className="mt-4 border-t border-gray-100 pt-3">
+      <div className="mt-4 border-t border-line pt-3">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
           <Clock className="h-4 w-4 text-[#A2492C]" />
           <span className="font-medium">Best send time</span>
-          <span className="text-gray-500">— {windowLabel(opt.send_window_proposal?.window)}. {opt.send_window_proposal?.reason}</span>
+          <span className="text-text-2">— {windowLabel(opt.send_window_proposal?.window)}. {opt.send_window_proposal?.reason}</span>
         </div>
         {opt.send_time_leaderboard.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {opt.send_time_leaderboard.map((s) => (
-              <span key={s.send_window} className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
+              <span key={s.send_window} className="rounded bg-sunken px-2 py-1 text-xs text-text-2">
                 {windowLabel(s.send_window)}: {s.avg_lift_pp >= 0 ? "+" : ""}{s.avg_lift_pp}pp ({s.recipients.toLocaleString()})
               </span>
             ))}
@@ -761,7 +761,7 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
   };
 
   return (
-    <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="mb-6 rounded-xl border border-line bg-surface p-5 shadow-sm">
       <div className="mb-4 flex items-center gap-2">
         <FlaskConical className="h-5 w-5 text-[#A2492C]" />
         <h2 className="text-lg font-semibold">New round</h2>
@@ -775,7 +775,7 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
         {loopKey === "welcome" && <Field label="Joined within (days)"><NumInput v={joinedD} set={setJoinedD} /></Field>}
         {loopKey === "birthday" && <Field label="Birthday within (days)"><NumInput v={bdayD} set={setBdayD} /></Field>}
         {loopKey === "round_gap" && (<>
-          <Field label="Outlet ID"><input value={outletId} onChange={(e) => setOutletId(e.target.value)} placeholder="outlet uuid" className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm" /></Field>
+          <Field label="Outlet ID"><input value={outletId} onChange={(e) => setOutletId(e.target.value)} placeholder="outlet uuid" className="w-full rounded-md border border-line px-3 py-2 text-sm" /></Field>
           <Field label="Active within (days)"><NumInput v={activeD} set={setActiveD} /></Field>
         </>)}
         <Field label="Holdout %"><NumInput v={holdout} set={setHoldout} /></Field>
@@ -783,47 +783,47 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
         {!triggered && <Field label="SMS budget (RM)"><NumInput v={budget} set={setBudget} /></Field>}
       </div>
       {triggered ? (
-        <p className="mb-4 text-xs text-gray-500">
+        <p className="mb-4 text-xs text-text-2">
           Auto-triggered loop — sends to everyone who qualifies, no budget cap. A manual round here does the same.
         </p>
       ) : (
-        <p className="mb-4 text-xs text-gray-500">
+        <p className="mb-4 text-xs text-text-2">
           Budget {rm(budget)} → up to <strong>{maxSms.toLocaleString()}</strong> SMS (~{maxRecipients.toLocaleString()} reached incl. holdout). Caps the round if the segment is larger. Scale later by raising the budget.
         </p>
       )}
 
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-700">Proposed arms ({arms.length})</span>
+        <span className="text-sm font-medium text-text-2">Proposed arms ({arms.length})</span>
         <button onClick={addArm} className="inline-flex items-center gap-1 text-xs text-[#A2492C] hover:underline"><Plus className="h-3.5 w-3.5" /> add arm</button>
       </div>
       <div className="space-y-2">
         {arms.map((a, i) => (
-          <div key={`${a.voucher_template_id}-${i}`} className="rounded-lg border border-gray-200 p-3">
+          <div key={`${a.voucher_template_id}-${i}`} className="rounded-lg border border-line p-3">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <RoleBadge role={a.role} />
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">{logicOf(a.voucher_template_id)}</span>
+              <span className="rounded bg-sunken px-1.5 py-0.5 text-xs text-text-2">{logicOf(a.voucher_template_id)}</span>
               <select
                 value={a.voucher_template_id}
                 onChange={(e) => swapArm(i, e.target.value)}
-                className="rounded-md border border-gray-200 px-2 py-1 text-sm"
+                className="rounded-md border border-line px-2 py-1 text-sm"
               >
                 {candidates.map((c) => (
                   <option key={c.voucher_template_id} value={c.voucher_template_id}>{c.label} · {c.logic}</option>
                 ))}
               </select>
-              <button onClick={() => setArms((prev) => prev.filter((_, j) => j !== i))} className="ml-auto text-gray-400 hover:text-red-600" aria-label="remove arm"><X className="h-4 w-4" /></button>
+              <button onClick={() => setArms((prev) => prev.filter((_, j) => j !== i))} className="ml-auto text-text-3 hover:text-red-600" aria-label="remove arm"><X className="h-4 w-4" /></button>
             </div>
-            <p className="mb-2 text-xs text-gray-500">{a.reason}</p>
+            <p className="mb-2 text-xs text-text-2">{a.reason}</p>
             <textarea
               value={a.message}
               onChange={(e) => setArms((prev) => prev.map((x, j) => j === i ? { ...x, message: e.target.value } : x))}
               rows={2}
-              className="w-full rounded-md border border-gray-200 p-2 text-sm"
+              className="w-full rounded-md border border-line p-2 text-sm"
             />
             {(() => {
               const s = smsSegments(a.message);
               return (
-                <p className={cn("mt-1 text-xs", s.segments > 1 ? "font-medium text-red-600" : "text-gray-400")}>
+                <p className={cn("mt-1 text-xs", s.segments > 1 ? "font-medium text-red-600" : "text-text-3")}>
                   {s.chars}/{s.gsm7 ? 160 : 70} incl. sender · {s.segments === 1 ? "1 SMS" : `${s.segments} SMS — shorten to fit 1`}{!s.gsm7 && " · non-GSM char (halves the limit)"}
                 </p>
               );
@@ -855,14 +855,14 @@ function NewRoundCard({ loopKey, loopMeta, proposal, candidates, busy, onPrepare
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-gray-500">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-text-2">{label}</span>
       {children}
     </label>
   );
 }
 function NumInput({ v, set }: { v: number; set: (n: number) => void }) {
   return (
-    <input type="number" value={v} onChange={(e) => set(Number(e.target.value))} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm" />
+    <input type="number" value={v} onChange={(e) => set(Number(e.target.value))} className="w-full rounded-md border border-line px-3 py-2 text-sm" />
   );
 }
 
@@ -875,19 +875,19 @@ function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, propo
   const [when, setWhen] = useState(() => defaultLocalDatetime());
   const [win, setWin] = useState(proposedWindow ?? "weekday_evening");
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-base font-semibold">Round {round.round_no}</span>
           <StatusBadge status={round.status} />
         </div>
-        <div className="flex items-center gap-2 text-xs text-gray-400">
+        <div className="flex items-center gap-2 text-xs text-text-3">
           <span className="inline-flex items-center gap-1"><ShieldOff className="h-3.5 w-3.5" /> {round.holdout_pct}% holdout</span>
           <span>· {round.attribution_window_days}d window</span>
         </div>
       </div>
 
-      <div className="mb-3 text-sm text-gray-600">{round.segment_label}</div>
+      <div className="mb-3 text-sm text-text-2">{round.segment_label}</div>
 
       <div className="mb-3 flex flex-wrap gap-1.5">
         {round.arms?.map((a) => (
@@ -910,11 +910,11 @@ function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, propo
 
           {/* Schedule: approve now, engine fires at the chosen window. */}
           <div className="mb-2 flex flex-wrap items-end gap-2">
-            <label className="text-xs text-gray-600">Send at
-              <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="mt-1 block rounded-md border border-gray-200 px-2 py-1 text-sm" />
+            <label className="text-xs text-text-2">Send at
+              <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="mt-1 block rounded-md border border-line px-2 py-1 text-sm" />
             </label>
-            <label className="text-xs text-gray-600">Window
-              <select value={win} onChange={(e) => setWin(e.target.value)} className="mt-1 block rounded-md border border-gray-200 px-2 py-1 text-sm">
+            <label className="text-xs text-text-2">Window
+              <select value={win} onChange={(e) => setWin(e.target.value)} className="mt-1 block rounded-md border border-line px-2 py-1 text-sm">
                 {windows.map((w) => <option key={w} value={w}>{windowLabel(w)}</option>)}
               </select>
             </label>
@@ -926,7 +926,7 @@ function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, propo
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clock className="h-4 w-4" />} {round.scheduled_send_at ? "Reschedule" : "Schedule send"}
             </button>
           </div>
-          {proposedWindow && <p className="mb-2 text-xs text-gray-500">Engine suggests <strong>{windowLabel(proposedWindow)}</strong> as the best-known window.</p>}
+          {proposedWindow && <p className="mb-2 text-xs text-text-2">Engine suggests <strong>{windowLabel(proposedWindow)}</strong> as the best-known window.</p>}
 
           <button
             disabled={busy}
@@ -938,7 +938,7 @@ function RoundCard({ round, busy, onSend, onMeasure, onSchedule, onCancel, propo
           <button
             disabled={busy}
             onClick={() => { if (confirm(`Cancel round ${round.round_no}? This deletes the un-sent vouchers + the round. No SMS has gone out.`)) onCancel(); }}
-            className="ml-2 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-500 hover:text-red-600 disabled:opacity-50"
+            className="ml-2 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-text-2 hover:text-red-600 disabled:opacity-50"
           >
             <X className="h-4 w-4" /> Cancel round
           </button>
@@ -984,13 +984,13 @@ function Results({ round }: { round: Round }) {
 
   return (
     <div>
-      <div className="mb-2 flex items-center gap-2 text-sm text-gray-500">
-        <Coins className="h-4 w-4" /> Holdout order rate <strong className="text-gray-800">{holdout?.conversion_rate ?? 0}%</strong> — the baseline every arm is judged against.
+      <div className="mb-2 flex items-center gap-2 text-sm text-text-2">
+        <Coins className="h-4 w-4" /> Holdout order rate <strong className="text-text">{holdout?.conversion_rate ?? 0}%</strong> — the baseline every arm is judged against.
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
+            <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-text-3">
               <th className="py-2 pr-3">Arm</th>
               <th className="py-2 pr-3 text-right">Sent</th>
               <th className="py-2 pr-3 text-right">Order rate</th>
@@ -1002,7 +1002,7 @@ function Results({ round }: { round: Round }) {
           </thead>
           <tbody>
             {treatment.map((t) => (
-              <tr key={t.arm} className={cn("border-b border-gray-100", t.arm === winnerArm && "bg-green-50")}>
+              <tr key={t.arm} className={cn("border-b border-line", t.arm === winnerArm && "bg-green-50")}>
                 <td className="py-2 pr-3 font-medium">
                   <span className="inline-flex items-center gap-1.5">
                     {t.arm === winnerArm && <Trophy className="h-3.5 w-3.5 text-green-600" />}
@@ -1011,7 +1011,7 @@ function Results({ round }: { round: Round }) {
                 </td>
                 <td className="py-2 pr-3 text-right tabular-nums">{t.n.toLocaleString()}</td>
                 <td className="py-2 pr-3 text-right tabular-nums">{t.conversion_rate}%</td>
-                <td className={cn("py-2 pr-3 text-right font-medium tabular-nums", t.lift_pp >= SUCCESS_BAR_PP ? "text-green-700" : t.lift_pp > 0 ? "text-gray-700" : "text-red-600")}>
+                <td className={cn("py-2 pr-3 text-right font-medium tabular-nums", t.lift_pp >= SUCCESS_BAR_PP ? "text-green-700" : t.lift_pp > 0 ? "text-text-2" : "text-red-600")}>
                   {t.lift_pp > 0 ? "+" : ""}{t.lift_pp}pp {t.meetsBar && "✓"}
                 </td>
                 <td className="py-2 pr-3 text-right tabular-nums">{t.redemption_rate}%</td>
@@ -1022,7 +1022,7 @@ function Results({ round }: { round: Round }) {
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-xs text-gray-400">
+      <p className="mt-2 text-xs text-text-3">
         Incremental margin = (arm revenue/recipient − holdout revenue/recipient) × recipients × {Math.round(GP * 100)}% GP. ROI = incremental margin ÷ SMS spend.
         {winnerArm
           ? ` Round winner: ${labelFor(winnerArm)}. It feeds the leaderboard — if it leads with enough evidence it becomes the champion next round.`

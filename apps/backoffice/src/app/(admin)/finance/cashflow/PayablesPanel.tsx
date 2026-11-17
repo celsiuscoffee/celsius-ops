@@ -131,24 +131,24 @@ export default function PayablesPanel() {
     : `next ${days}d`;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-text">
             <ArrowUpFromLine className="h-4 w-4 text-red-600" />
             Outgoing payables
           </h3>
-          <p className="mt-0.5 text-xs text-gray-500">
+          <p className="mt-0.5 text-xs text-text-2">
             Committed cash leaving per day — unpaid invoices on their due dates plus recurring expenses (rent, utilities, payroll support) on theirs.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <div className="flex rounded-md border border-gray-200 p-0.5">
+          <div className="flex rounded-md border border-line p-0.5">
             {PRESETS.map((d) => (
               <button
                 key={d}
                 onClick={() => { setDays(d); setCustom(null); }}
-                className={`rounded px-2 py-1 text-xs ${!custom && days === d ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                className={`rounded px-2 py-1 text-xs ${!custom && days === d ? "bg-gray-900 text-white" : "text-text-2 hover:bg-sunken"}`}
               >
                 {d}d
               </button>
@@ -164,25 +164,25 @@ export default function PayablesPanel() {
       </div>
 
       {isLoading || !f || !filtered ? (
-        <div className="py-10 text-center"><Loader2 className="mx-auto h-4 w-4 animate-spin text-gray-400" /></div>
+        <div className="py-10 text-center"><Loader2 className="mx-auto h-4 w-4 animate-spin text-text-3" /></div>
       ) : (
         <>
           <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
-            <div className="rounded-lg bg-gray-50 px-3 py-2">
-              <p className="text-[11px] text-gray-500">Due {windowLabel}</p>
-              <p className="mt-0.5 text-lg font-bold text-gray-900">{RM0(filtered.total)}</p>
+            <div className="rounded-lg bg-sunken px-3 py-2">
+              <p className="text-[11px] text-text-2">Due {windowLabel}</p>
+              <p className="mt-0.5 text-lg font-bold text-text">{RM0(filtered.total)}</p>
             </div>
             <div className="rounded-lg bg-red-50 px-3 py-2">
               <p className="text-[11px] text-red-700">Overdue</p>
               <p className="mt-0.5 text-lg font-bold text-red-700">{RM0(filtered.overdueTotal)}</p>
               <p className="text-[10px] text-red-600/70">{filtered.overdueItems.length} invoice{filtered.overdueItems.length === 1 ? "" : "s"} past due or undated</p>
             </div>
-            <div className="rounded-lg bg-gray-50 px-3 py-2">
-              <p className="text-[11px] text-gray-500">Invoices / recurring</p>
-              <p className="mt-0.5 text-lg font-bold text-gray-700">
-                {RM0(filtered.invoiceTotal)} <span className="text-xs font-normal text-gray-400">/</span> {RM0(filtered.recurringTotal)}
+            <div className="rounded-lg bg-sunken px-3 py-2">
+              <p className="text-[11px] text-text-2">Invoices / recurring</p>
+              <p className="mt-0.5 text-lg font-bold text-text-2">
+                {RM0(filtered.invoiceTotal)} <span className="text-xs font-normal text-text-3">/</span> {RM0(filtered.recurringTotal)}
               </p>
-              <p className="text-[10px] text-gray-400">committed vs scheduled</p>
+              <p className="text-[10px] text-text-3">committed vs scheduled</p>
             </div>
           </div>
 
@@ -197,7 +197,7 @@ export default function PayablesPanel() {
                 <button
                   key={c}
                   onClick={() => toggleCategory(c)}
-                  className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${active ? "border-gray-900 bg-gray-900 text-white" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                  className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${active ? "border-gray-900 bg-gray-900 text-white" : "border-line text-text-2 hover:bg-sunken"}`}
                 >
                   <span className={`h-1.5 w-1.5 rounded-full ${CATEGORY_DOT[c]}`} />
                   {CATEGORY_LABEL[c]}
@@ -230,12 +230,12 @@ export default function PayablesPanel() {
                   {filtered.overdueItems.map((it) => (
                     <div key={it.id} className="flex items-center gap-2 py-1 text-xs">
                       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${CATEGORY_DOT[it.category]}`} />
-                      <span className="flex-1 truncate text-gray-700">
+                      <span className="flex-1 truncate text-text-2">
                         {it.payee}
-                        {it.ref && <span className="ml-1 text-gray-400">{it.ref}</span>}
+                        {it.ref && <span className="ml-1 text-text-3">{it.ref}</span>}
                       </span>
                       <span className="shrink-0 text-[10px] text-red-600">{it.dueDate ? `due ${fmtDueShort(it.dueDate)}` : "no due date"}</span>
-                      <span className="w-20 shrink-0 text-right font-semibold tabular-nums text-gray-900">{RM2(it.amount)}</span>
+                      <span className="w-20 shrink-0 text-right font-semibold tabular-nums text-text">{RM2(it.amount)}</span>
                     </div>
                   ))}
                 </div>
@@ -244,7 +244,7 @@ export default function PayablesPanel() {
           )}
 
           {filtered.days.length === 0 ? (
-            <p className="mt-4 py-6 text-center text-xs text-gray-400">
+            <p className="mt-4 py-6 text-center text-xs text-text-3">
               Nothing due in this window{categories.length > 0 ? " for the selected categories" : ""}.
             </p>
           ) : (
@@ -253,47 +253,47 @@ export default function PayablesPanel() {
                 const l = dayLabel(d.date, todayStr);
                 const open = openDay === d.date;
                 return (
-                  <div key={d.date} className="rounded-md px-1.5 py-1 hover:bg-gray-50">
+                  <div key={d.date} className="rounded-md px-1.5 py-1 hover:bg-sunken">
                     <button
                       onClick={() => setOpenDay(open ? null : d.date)}
                       className="flex w-full items-center gap-2 text-left"
                       title="Click for the payee breakdown"
                     >
                       <div className="w-20 shrink-0 text-xs">
-                        <span className={`font-medium ${l.isToday ? "text-red-700" : "text-gray-700"}`}>{l.dow}</span>{" "}
-                        <span className="text-gray-400">{l.date}</span>
+                        <span className={`font-medium ${l.isToday ? "text-red-700" : "text-text-2"}`}>{l.dow}</span>{" "}
+                        <span className="text-text-3">{l.date}</span>
                       </div>
-                      <div className="relative h-4 flex-1 overflow-hidden rounded bg-gray-100">
+                      <div className="relative h-4 flex-1 overflow-hidden rounded bg-sunken">
                         <div className="absolute inset-y-0 left-0 bg-red-400/80" style={{ width: `${(d.total / maxDay) * 100}%` }} />
                       </div>
-                      <div className="w-20 shrink-0 text-right text-xs font-semibold tabular-nums text-gray-900">{RM0(d.total)}</div>
+                      <div className="w-20 shrink-0 text-right text-xs font-semibold tabular-nums text-text">{RM0(d.total)}</div>
                     </button>
                     <div className="ml-20 flex flex-wrap gap-x-3 gap-y-0.5 pl-2 pt-0.5">
                       {(Object.keys(CATEGORY_LABEL) as Category[])
                         .filter((c) => (d.byCategory[c] ?? 0) > 0)
                         .map((c) => (
-                          <span key={c} className="flex items-center gap-1 text-[10px] text-gray-500">
+                          <span key={c} className="flex items-center gap-1 text-[10px] text-text-2">
                             <span className={`h-1.5 w-1.5 rounded-full ${CATEGORY_DOT[c]}`} />
-                            {CATEGORY_LABEL[c]} <span className="tabular-nums text-gray-700">{RM0(d.byCategory[c]!)}</span>
+                            {CATEGORY_LABEL[c]} <span className="tabular-nums text-text-2">{RM0(d.byCategory[c]!)}</span>
                           </span>
                         ))}
                     </div>
                     {open && (
-                      <div className="ml-20 mt-1 border-l-2 border-gray-100 pl-2">
+                      <div className="ml-20 mt-1 border-l-2 border-line pl-2">
                         {d.items
                           .slice()
                           .sort((a, b) => b.amount - a.amount)
                           .map((it) => (
                             <div key={it.id} className="flex items-center gap-2 py-0.5 text-xs">
                               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${CATEGORY_DOT[it.category]}`} />
-                              <span className="flex-1 truncate text-gray-700">
+                              <span className="flex-1 truncate text-text-2">
                                 {it.payee}
-                                {it.ref && <span className="ml-1 text-gray-400">{it.ref}</span>}
+                                {it.ref && <span className="ml-1 text-text-3">{it.ref}</span>}
                               </span>
-                              <span className="shrink-0 rounded bg-gray-100 px-1 py-px text-[9px] uppercase tracking-wide text-gray-500">
+                              <span className="shrink-0 rounded bg-sunken px-1 py-px text-[9px] uppercase tracking-wide text-text-2">
                                 {it.source === "recurring" ? "recurring" : it.status.toLowerCase().replace(/_/g, " ")}
                               </span>
-                              <span className="w-20 shrink-0 text-right tabular-nums text-gray-700">{RM2(it.amount)}</span>
+                              <span className="w-20 shrink-0 text-right tabular-nums text-text-2">{RM2(it.amount)}</span>
                             </div>
                           ))}
                       </div>
@@ -304,8 +304,8 @@ export default function PayablesPanel() {
             </div>
           )}
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2">
-            <p className="text-[11px] text-gray-400">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2">
+            <p className="text-[11px] text-text-3">
               Click a day for its payee list. Recurring rows are the same entries the weekly projection fires.
             </p>
             <Link href="/inventory/invoices" className="inline-flex shrink-0 items-center gap-1 text-[11px] text-blue-600 hover:underline">

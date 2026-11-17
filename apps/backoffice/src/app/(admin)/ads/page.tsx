@@ -48,14 +48,14 @@ function KpiCard({ label, value, prev, icon: Icon }: { label: string; value: str
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between">
-        <div className="flex items-center gap-2 text-xs text-neutral-500">
+        <div className="flex items-center gap-2 text-xs text-text-2">
           <Icon className="h-3.5 w-3.5" />
           {label}
         </div>
       </div>
       <div className="mt-2 text-2xl font-semibold">{value}</div>
       <div className={`mt-1 flex items-center gap-1 text-xs ${
-        prev.dir === "up" ? "text-emerald-600" : prev.dir === "down" ? "text-rose-600" : "text-neutral-400"
+        prev.dir === "up" ? "text-emerald-600" : prev.dir === "down" ? "text-rose-600" : "text-text-3"
       }`}>
         {prev.dir === "up" && <TrendingUp className="h-3 w-3" />}
         {prev.dir === "down" && <TrendingDown className="h-3 w-3" />}
@@ -115,14 +115,14 @@ export default function AdsOverviewPage() {
   });
 
   if (isLoading) {
-    return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-neutral-400" /></div>;
+    return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-text-3" /></div>;
   }
   if (error || !data) {
     return (
       <div className="p-6">
-        <Card className="p-6 text-center text-sm text-neutral-500">
-          <Megaphone className="mx-auto mb-3 h-8 w-8 text-neutral-300" />
-          No ads data yet. Go to <Link href="/ads/settings" className="text-terracotta underline">Settings</Link> and run a manual sync.
+        <Card className="p-6 text-center text-sm text-text-2">
+          <Megaphone className="mx-auto mb-3 h-8 w-8 text-text-3" />
+          No ads data yet. Go to <Link href="/ads/settings" className="text-brand-text underline">Settings</Link> and run a manual sync.
         </Card>
       </div>
     );
@@ -141,7 +141,7 @@ export default function AdsOverviewPage() {
           <select
             value={outletId}
             onChange={(e) => { setOutletId(e.target.value); setCampaignId("all"); }}
-            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm"
+            className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm"
           >
             <option value="all">All outlets</option>
             <option value="unlinked">Unlinked</option>
@@ -152,7 +152,7 @@ export default function AdsOverviewPage() {
           <select
             value={campaignId}
             onChange={(e) => setCampaignId(e.target.value)}
-            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm"
+            className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm"
           >
             <option value="all">All campaigns</option>
             {campaignOptions.map((c) => (
@@ -162,7 +162,7 @@ export default function AdsOverviewPage() {
           <select
             value={preset}
             onChange={(e) => setPreset(e.target.value as Preset)}
-            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm"
+            className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm"
           >
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
@@ -178,13 +178,13 @@ export default function AdsOverviewPage() {
                 type="date"
                 value={customFrom}
                 onChange={(e) => setCustomFrom(e.target.value)}
-                className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm"
+                className="rounded-md border border-line bg-surface px-2 py-1.5 text-sm"
               />
               <input
                 type="date"
                 value={customTo}
                 onChange={(e) => setCustomTo(e.target.value)}
-                className="rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm"
+                className="rounded-md border border-line bg-surface px-2 py-1.5 text-sm"
               />
             </>
           )}
@@ -221,10 +221,10 @@ export default function AdsOverviewPage() {
           <h2 className="mb-3 text-sm font-medium">Conversion Breakdown</h2>
           <div className="grid grid-cols-2 gap-x-8 gap-y-2 lg:grid-cols-3">
             {convData.byCategory.map((c) => (
-              <div key={c.category} className="flex items-center justify-between border-b border-neutral-100 py-2">
+              <div key={c.category} className="flex items-center justify-between border-b border-line py-2">
                 <div>
-                  <div className="text-sm text-neutral-700">{CATEGORY_LABELS[c.category] ?? c.category}</div>
-                  <div className="text-[10px] uppercase tracking-wider text-neutral-400">{c.category}</div>
+                  <div className="text-sm text-text-2">{CATEGORY_LABELS[c.category] ?? c.category}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-text-3">{c.category}</div>
                 </div>
                 <div className="text-lg font-semibold tabular-nums">{fmtInt(c.conversions)}</div>
               </div>
@@ -232,10 +232,10 @@ export default function AdsOverviewPage() {
           </div>
           {convData.byAction.length > 0 && (
             <details className="mt-3">
-              <summary className="cursor-pointer text-xs text-neutral-500">View by individual action ({convData.byAction.length})</summary>
+              <summary className="cursor-pointer text-xs text-text-2">View by individual action ({convData.byAction.length})</summary>
               <table className="mt-2 w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs text-neutral-500">
+                  <tr className="text-left text-xs text-text-2">
                     <th className="pb-1 font-normal">Action</th>
                     <th className="pb-1 font-normal">Category</th>
                     <th className="pb-1 text-right font-normal">Conversions</th>
@@ -243,9 +243,9 @@ export default function AdsOverviewPage() {
                 </thead>
                 <tbody>
                   {convData.byAction.map((a) => (
-                    <tr key={`${a.name}-${a.category}`} className="border-t border-neutral-100">
+                    <tr key={`${a.name}-${a.category}`} className="border-t border-line">
                       <td className="py-1.5">{a.name}</td>
-                      <td className="py-1.5 text-xs text-neutral-500">{a.category}</td>
+                      <td className="py-1.5 text-xs text-text-2">{a.category}</td>
                       <td className="py-1.5 text-right tabular-nums">{fmtInt(a.conversions)}</td>
                     </tr>
                   ))}
@@ -260,11 +260,11 @@ export default function AdsOverviewPage() {
       <Card className="p-4">
         <h2 className="mb-3 text-sm font-medium">Top Campaigns (MTD by spend)</h2>
         {data.topCampaigns.length === 0 ? (
-          <p className="py-4 text-center text-xs text-neutral-400">No campaign data yet</p>
+          <p className="py-4 text-center text-xs text-text-3">No campaign data yet</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-xs text-neutral-500">
+              <tr className="text-left text-xs text-text-2">
                 <th className="pb-2 font-normal">Campaign</th>
                 <th className="pb-2 text-right font-normal">Spend</th>
                 <th className="pb-2 text-right font-normal">Clicks</th>
@@ -273,8 +273,8 @@ export default function AdsOverviewPage() {
             </thead>
             <tbody>
               {data.topCampaigns.map((c) => (
-                <tr key={c.id} className="border-t border-neutral-100">
-                  <td className="py-2 text-neutral-700">{c.name}</td>
+                <tr key={c.id} className="border-t border-line">
+                  <td className="py-2 text-text-2">{c.name}</td>
                   <td className="py-2 text-right">{fmtMYR(c.costMYR)}</td>
                   <td className="py-2 text-right">{fmtInt(c.clicks)}</td>
                   <td className="py-2 text-right">{fmtInt(c.conversions)}</td>

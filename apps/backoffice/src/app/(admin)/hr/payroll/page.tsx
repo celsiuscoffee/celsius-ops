@@ -235,7 +235,7 @@ export default function PayrollPage() {
       {/* Compute Controls */}
       <div className="rounded-xl border bg-card p-5">
         <h2 className="mb-4 flex items-center gap-2 font-semibold">
-          <Bot className="h-5 w-5 text-terracotta" />
+          <Bot className="h-5 w-5 text-brand-text" />
           AI Payroll Calculator
         </h2>
         <div className="flex flex-wrap items-end gap-3">
@@ -265,14 +265,14 @@ export default function PayrollPage() {
           <button
             onClick={handleCompute}
             disabled={computing}
-            className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-sunken disabled:opacity-50"
           >
             {computing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
             Quick Compute
           </button>
           <Link
             href="/hr/payroll/run"
-            className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark"
+            className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover"
           >
             <Bot className="h-4 w-4" /> Run Payroll
           </Link>
@@ -300,7 +300,7 @@ export default function PayrollPage() {
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                       isConfirmed ? "bg-green-100 text-green-700" :
                       isComputed ? "bg-blue-100 text-blue-700" :
-                      "bg-gray-100 text-gray-600"
+                      "bg-sunken text-text-2"
                     }`}>
                       {run.status.replace("_", " ")}
                     </span>
@@ -451,7 +451,7 @@ export default function PayrollPage() {
                             <td className="py-2 pl-2">
                               <button
                                 onClick={() => downloadFile(`/api/hr/payroll/payslip?run_id=${run.id}&user_id=${item.user_id}`)}
-                                className="text-terracotta hover:underline text-xs"
+                                className="text-brand-text hover:underline text-xs"
                                 title="Download payslip PDF"
                               >
                                 PDF
@@ -474,7 +474,7 @@ export default function PayrollPage() {
 
         {runs.length === 0 && (
           <div className="rounded-xl border bg-card py-16 text-center">
-            <Banknote className="mx-auto mb-3 h-12 w-12 text-gray-300" />
+            <Banknote className="mx-auto mb-3 h-12 w-12 text-text-3" />
             <p className="text-lg font-semibold">No payroll runs yet</p>
             <p className="text-sm text-muted-foreground">Use the AI calculator above to compute</p>
           </div>

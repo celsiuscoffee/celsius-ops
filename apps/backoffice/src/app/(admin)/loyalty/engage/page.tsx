@@ -573,18 +573,18 @@ export default function NotificationsPage() {
 
       {/* ── Page header + tab switcher ───────────────────────── */}
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
+        <h1 className="text-xl font-bold tracking-tight text-text flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-amber-600" />
           Engage
         </h1>
-        <p className="text-xs text-gray-500 mt-0.5">
+        <p className="text-xs text-text-2 mt-0.5">
           How we reach customers — automatic push reminders + manual SMS broadcasts.
         </p>
-        <div className="mt-3 inline-flex rounded-lg border border-gray-200 p-0.5 bg-white text-sm">
+        <div className="mt-3 inline-flex rounded-lg border border-line p-0.5 bg-surface text-sm">
           <button
             onClick={() => setTopTab("push")}
             className={`px-4 py-1.5 rounded-md transition flex items-center gap-1.5 ${
-              topTab === "push" ? "bg-amber-100 text-amber-900 font-semibold" : "text-gray-600 hover:text-gray-900"
+              topTab === "push" ? "bg-amber-100 text-amber-900 font-semibold" : "text-text-2 hover:text-text"
             }`}
           >
             <Bell className="h-3.5 w-3.5" />
@@ -593,7 +593,7 @@ export default function NotificationsPage() {
           <button
             onClick={() => setTopTab("sms")}
             className={`px-4 py-1.5 rounded-md transition flex items-center gap-1.5 ${
-              topTab === "sms" ? "bg-amber-100 text-amber-900 font-semibold" : "text-gray-600 hover:text-gray-900"
+              topTab === "sms" ? "bg-amber-100 text-amber-900 font-semibold" : "text-text-2 hover:text-text"
             }`}
           >
             <Phone className="h-3.5 w-3.5" />
@@ -611,41 +611,41 @@ export default function NotificationsPage() {
       {/* ── KPI Cards ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         {/* SMS123 Balance */}
-        <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
+        <div className="rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 p-5 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-50">
               <CreditCard className="h-5 w-5 text-green-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">SMS credits · <span className="uppercase">{smsProvider === "smsniaga" ? "SMS Niaga" : smsProvider}</span></p>
+              <p className="text-xs font-medium text-text-2">SMS credits · <span className="uppercase">{smsProvider === "smsniaga" ? "SMS Niaga" : smsProvider}</span></p>
               <div className="flex items-center gap-2">
-                <p className={`font-sans text-xl font-bold ${smsBalance !== null && smsBalance < 100 ? "text-red-500" : "text-gray-900 dark:text-white"}`}>
+                <p className={`font-sans text-xl font-bold ${smsBalance !== null && smsBalance < 100 ? "text-red-500" : "text-text dark:text-white"}`}>
                   {smsBalance !== null ? Math.floor(smsBalance).toLocaleString() : "—"}
                 </p>
-                <button onClick={refreshSmsBalance} disabled={smsBalanceLoading} className="text-gray-400 hover:text-gray-600 dark:hover:text-neutral-300" title="Refresh balance">
+                <button onClick={refreshSmsBalance} disabled={smsBalanceLoading} className="text-text-3 hover:text-text-2" title="Refresh balance">
                   <RefreshCw className={`h-3.5 w-3.5 ${smsBalanceLoading ? "animate-spin" : ""}`} />
                 </button>
               </div>
               {smsProvider === "sms123" ? (
-                <a href="https://www.sms123.net" target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium text-[#C2452D] hover:underline inline-flex items-center gap-0.5">
+                <a href="https://www.sms123.net" target="_blank" rel="noopener noreferrer" className="text-[10px] font-medium text-brand-text hover:underline inline-flex items-center gap-0.5">
                   Top up on SMS123 <ExternalLink className="h-2.5 w-2.5" />
                 </a>
               ) : (
-                <span className="text-[10px] text-gray-400">Live gateway · balance managed in SMS Niaga</span>
+                <span className="text-[10px] text-text-3">Live gateway · balance managed in SMS Niaga</span>
               )}
             </div>
           </div>
         </div>
 
         {/* Sent this month */}
-        <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
+        <div className="rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 p-5 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
               <Send className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Sent this month</p>
-              <p className="font-sans text-xl font-bold text-gray-900 dark:text-white">
+              <p className="text-xs font-medium text-text-2">Sent this month</p>
+              <p className="font-sans text-xl font-bold text-text dark:text-white">
                 {smsSentThisMonth.toLocaleString()}
               </p>
             </div>
@@ -653,14 +653,14 @@ export default function NotificationsPage() {
         </div>
 
         {/* Delivery rate */}
-        <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
+        <div className="rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 p-5 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50">
               <MessageSquare className="h-5 w-5 text-purple-600" />
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Delivery rate</p>
-              <p className="font-sans text-xl font-bold text-gray-900 dark:text-white">
+              <p className="text-xs font-medium text-text-2">Delivery rate</p>
+              <p className="font-sans text-xl font-bold text-text dark:text-white">
                 {deliveryRate}%
               </p>
             </div>
@@ -668,14 +668,14 @@ export default function NotificationsPage() {
         </div>
 
         {/* Members reachable */}
-        <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-5 shadow-sm">
+        <div className="rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 p-5 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50">
-              <Users className="h-5 w-5 text-[#C2452D]" />
+              <Users className="h-5 w-5 text-brand-text" />
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-500 dark:text-neutral-400">Members reachable</p>
-              <p className="font-sans text-xl font-bold text-gray-900 dark:text-white">
+              <p className="text-xs font-medium text-text-2">Members reachable</p>
+              <p className="font-sans text-xl font-bold text-text dark:text-white">
                 {allMembers.length.toLocaleString()}
               </p>
             </div>
@@ -686,40 +686,40 @@ export default function NotificationsPage() {
 
       {/* ── SMS Log Panel ── */}
       {showSmsLog && (
-        <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-neutral-700">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <History className="h-4 w-4 text-gray-400" />
+        <div className="rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-line dark:border-neutral-700">
+            <h3 className="text-sm font-semibold text-text dark:text-white flex items-center gap-2">
+              <History className="h-4 w-4 text-text-3" />
               SMS Send Log
             </h3>
-            <button onClick={() => setShowSmsLog(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-neutral-300">
+            <button onClick={() => setShowSmsLog(false)} className="text-text-3 hover:text-text-2">
               <X className="h-4 w-4" />
             </button>
           </div>
           <div className="overflow-x-auto max-h-80 overflow-y-auto">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-gray-50 dark:bg-neutral-800">
-                <tr className="text-xs text-gray-500 dark:text-neutral-400 uppercase">
+              <thead className="sticky top-0 bg-sunken dark:bg-neutral-800">
+                <tr className="text-xs text-text-2 uppercase">
                   <th className="px-4 py-2 text-left">Time</th>
                   <th className="px-4 py-2 text-left">Phone</th>
                   <th className="px-4 py-2 text-left">Message</th>
                   <th className="px-4 py-2 text-left">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-neutral-700/50">
+              <tbody className="divide-y divide-line dark:divide-neutral-700/50">
                 {smsLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-gray-400 dark:text-neutral-500">
+                    <td colSpan={4} className="px-4 py-8 text-center text-text-3">
                       No SMS sent yet
                     </td>
                   </tr>
                 ) : smsLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50/50 dark:hover:bg-neutral-700/30">
-                    <td className="px-4 py-2 whitespace-nowrap font-sans text-gray-500 dark:text-neutral-400">
+                  <tr key={log.id} className="hover:bg-sunken/50 dark:hover:bg-neutral-700/30">
+                    <td className="px-4 py-2 whitespace-nowrap font-sans text-text-2">
                       {new Date(log.created_at).toLocaleString("en-MY", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                     </td>
-                    <td className="px-4 py-2 font-sans text-gray-700 dark:text-neutral-300">{formatPhone(log.phone)}</td>
-                    <td className="px-4 py-2 text-gray-600 dark:text-neutral-400 max-w-xs truncate">{log.message}</td>
+                    <td className="px-4 py-2 font-sans text-text-2">{formatPhone(log.phone)}</td>
+                    <td className="px-4 py-2 text-text-2 max-w-xs truncate">{log.message}</td>
                     <td className="px-4 py-2">
                       <span className={cn(
                         "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
@@ -752,7 +752,7 @@ export default function NotificationsPage() {
                   "whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
                   activeTab === tab.key
                     ? "bg-gray-900 text-white"
-                    : "text-gray-500 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-700 hover:text-gray-700 dark:hover:text-neutral-200"
+                    : "text-text-2 hover:bg-sunken dark:hover:bg-neutral-700 hover:text-text-2"
                 )}
               >
                 {tab.label}
@@ -761,8 +761,8 @@ export default function NotificationsPage() {
                     className={cn(
                       "ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-xs",
                       activeTab === tab.key
-                        ? "bg-white/20 text-white"
-                        : "bg-gray-100 dark:bg-neutral-700 text-gray-500 dark:text-neutral-400"
+                        ? "bg-surface/20 text-white"
+                        : "bg-sunken dark:bg-neutral-700 text-text-2"
                     )}
                   >
                     {count}
@@ -777,20 +777,20 @@ export default function NotificationsPage() {
           {/* Search toggle */}
           {showSearch ? (
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
               <input
                 autoFocus
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search messages..."
-                className="h-9 w-48 rounded-lg border border-gray-300 pl-8 pr-8 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                className="h-9 w-48 rounded-lg border border-line-2 pl-8 pr-8 text-sm focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
               />
               <button
                 onClick={() => {
                   setShowSearch(false);
                   setSearchQuery("");
                 }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-3 hover:text-text-2"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -798,7 +798,7 @@ export default function NotificationsPage() {
           ) : (
             <button
               onClick={() => setShowSearch(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-line dark:border-neutral-700 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
             >
               <Search className="h-4 w-4" />
             </button>
@@ -825,7 +825,7 @@ export default function NotificationsPage() {
                 { key: "status", label: "Status" },
               ], `celsius-notifications-${today}`);
             }}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-line dark:border-neutral-700 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
             title="Export CSV"
           >
             <Download className="h-4 w-4" />
@@ -834,7 +834,7 @@ export default function NotificationsPage() {
           {/* Test SMS */}
           <Link
             href="/loyalty/engage/test"
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700 px-3 text-sm font-medium transition-colors"
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-line dark:border-neutral-700 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700 px-3 text-sm font-medium transition-colors"
           >
             <AlertTriangle className="h-4 w-4" />
             <span className="hidden sm:inline">Test</span>
@@ -846,8 +846,8 @@ export default function NotificationsPage() {
             className={cn(
               "flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors",
               showSmsLog
-                ? "border-[#C2452D] bg-[#C2452D]/5 text-[#C2452D]"
-                : "border-gray-200 dark:border-neutral-700 text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                ? "border-ink bg-brand-soft text-brand-text"
+                : "border-line dark:border-neutral-700 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
             )}
           >
             <History className="h-4 w-4" />
@@ -857,7 +857,7 @@ export default function NotificationsPage() {
           {/* Create new */}
           <button
             onClick={() => setShowComposeModal(true)}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#C2452D] px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#A33822]"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink px-4 text-sm font-medium text-on-ink shadow-sm transition-colors hover:bg-ink-hover"
           >
             <Plus className="h-4 w-4" />
             Compose
@@ -866,33 +866,33 @@ export default function NotificationsPage() {
       </div>
 
       {/* ── Message Table ──────────────────────────────────────── */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-gray-100 dark:border-neutral-700 bg-gray-50/60 dark:bg-neutral-800">
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+              <tr className="border-b border-line dark:border-neutral-700 bg-sunken/60 dark:bg-neutral-800">
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-2">
                   Message
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-2">
                   Channel
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-2">
                   Audience
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-2">
                   Sent
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-2">
                   Delivered
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-2">
                   Status
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400" />
+                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-2" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-neutral-700/50">
+            <tbody className="divide-y divide-line dark:divide-neutral-700/50">
               {filtered.map((msg) => {
                 const sBadge = statusBadge[msg.status];
                 const cBadge = channelBadge[msg.channel];
@@ -900,15 +900,15 @@ export default function NotificationsPage() {
                 return (
                   <tr
                     key={msg.id}
-                    className="transition-colors hover:bg-gray-50/50 dark:hover:bg-neutral-700/50"
+                    className="transition-colors hover:bg-sunken/50 dark:hover:bg-neutral-700/50"
                   >
                     {/* Message */}
                     <td className="max-w-[260px] px-4 py-3">
-                      <p className="truncate font-medium text-gray-900 dark:text-white">
+                      <p className="truncate font-medium text-text dark:text-white">
                         {msg.message}
                       </p>
                       {msg.scheduledAt && (
-                        <p className="mt-0.5 flex items-center gap-1 text-xs text-gray-400">
+                        <p className="mt-0.5 flex items-center gap-1 text-xs text-text-3">
                           <Clock className="h-3 w-3" />
                           {new Date(msg.scheduledAt).toLocaleDateString(
                             "en-MY",
@@ -937,15 +937,15 @@ export default function NotificationsPage() {
                       </span>
                     </td>
                     {/* Audience */}
-                    <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-neutral-400">
+                    <td className="whitespace-nowrap px-4 py-3 text-text-2">
                       {msg.audience}
                     </td>
                     {/* Sent */}
-                    <td className="px-4 py-3 font-sans text-gray-700 dark:text-neutral-300">
+                    <td className="px-4 py-3 font-sans text-text-2">
                       {msg.sent !== null ? msg.sent.toLocaleString() : "\u2014"}
                     </td>
                     {/* Delivered */}
-                    <td className="px-4 py-3 font-sans text-gray-700 dark:text-neutral-300">
+                    <td className="px-4 py-3 font-sans text-text-2">
                       {msg.delivered !== null
                         ? msg.delivered.toLocaleString()
                         : "\u2014"}
@@ -981,7 +981,7 @@ export default function NotificationsPage() {
                               setOpenMenu(msg.id);
                             }
                           }}
-                          className="rounded-lg p-1.5 text-gray-400 dark:text-neutral-500 hover:bg-gray-100 dark:hover:bg-neutral-700 hover:text-gray-600 dark:hover:text-neutral-300"
+                          className="rounded-lg p-1.5 text-text-3 hover:bg-sunken dark:hover:bg-neutral-700 hover:text-text-2"
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
@@ -995,7 +995,7 @@ export default function NotificationsPage() {
                 <tr>
                   <td
                     colSpan={7}
-                    className="px-4 py-12 text-center text-gray-400 dark:text-neutral-500"
+                    className="px-4 py-12 text-center text-text-3"
                   >
                     {messagesLoading ? "Loading SMS history..." : "No messages found"}
                   </td>
@@ -1012,7 +1012,7 @@ export default function NotificationsPage() {
         <div
           data-engage-menu
           style={{ position: "fixed", top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, zIndex: 50 }}
-          className="w-40 overflow-hidden rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-lg"
+          className="w-40 overflow-hidden rounded-xl border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 shadow-lg"
         >
           <button
             onClick={(e) => {
@@ -1022,7 +1022,7 @@ export default function NotificationsPage() {
               setOpenMenu(null);
               setMenuPos(null);
             }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
           >
             <Eye className="h-3.5 w-3.5" />
             View Details
@@ -1051,7 +1051,7 @@ export default function NotificationsPage() {
               setOpenMenu(null);
               setMenuPos(null);
             }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
           >
             <Pencil className="h-3.5 w-3.5" />
             Edit
@@ -1073,13 +1073,13 @@ export default function NotificationsPage() {
         <div
           data-engage-menu
           style={{ position: "fixed", top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, zIndex: 50 }}
-          className="w-56 rounded-xl border border-red-200 dark:border-red-900 bg-white dark:bg-neutral-800 shadow-lg p-3"
+          className="w-56 rounded-xl border border-red-200 dark:border-red-900 bg-surface dark:bg-neutral-800 shadow-lg p-3"
         >
-          <p className="text-sm text-gray-700 dark:text-neutral-300 mb-2">Delete this message?</p>
+          <p className="text-sm text-text-2 mb-2">Delete this message?</p>
           <div className="flex gap-2">
             <button
               onClick={(e) => { e.stopPropagation(); setDeleteConfirm(null); setOpenMenu(null); setMenuPos(null); }}
-              className="flex-1 rounded-lg bg-gray-100 dark:bg-neutral-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-neutral-300"
+              className="flex-1 rounded-lg bg-sunken dark:bg-neutral-700 px-3 py-1.5 text-xs font-medium text-text-2"
             >
               Cancel
             </button>
@@ -1108,48 +1108,48 @@ export default function NotificationsPage() {
           onClick={() => setViewingMsg(null)}
         >
           <div
-            className="relative w-full max-w-lg md:max-w-3xl rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl"
+            className="relative w-full max-w-lg md:max-w-3xl rounded-2xl bg-surface dark:bg-neutral-800 p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setViewingMsg(null)}
-              className="absolute right-4 top-4 rounded-lg p-1 text-gray-400 dark:text-neutral-500 hover:bg-gray-100 dark:hover:bg-neutral-700"
+              className="absolute right-4 top-4 rounded-lg p-1 text-text-3 hover:bg-sunken dark:hover:bg-neutral-700"
             >
               <X className="h-5 w-5" />
             </button>
-            <h2 className="mb-4 text-lg font-bold text-gray-900 dark:text-white">
+            <h2 className="mb-4 text-lg font-bold text-text dark:text-white">
               Message Details
             </h2>
             <div className="space-y-3 text-sm">
-              <div className="flex justify-between border-b border-gray-100 dark:border-neutral-700 pb-2">
-                <span className="text-gray-500 dark:text-neutral-400">Channel</span>
-                <span className="font-medium text-gray-900 dark:text-white capitalize">{viewingMsg.channel}</span>
+              <div className="flex justify-between border-b border-line dark:border-neutral-700 pb-2">
+                <span className="text-text-2">Channel</span>
+                <span className="font-medium text-text dark:text-white capitalize">{viewingMsg.channel}</span>
               </div>
-              <div className="flex justify-between border-b border-gray-100 dark:border-neutral-700 pb-2">
-                <span className="text-gray-500 dark:text-neutral-400">Audience</span>
-                <span className="font-medium text-gray-900 dark:text-white">{viewingMsg.audience}</span>
+              <div className="flex justify-between border-b border-line dark:border-neutral-700 pb-2">
+                <span className="text-text-2">Audience</span>
+                <span className="font-medium text-text dark:text-white">{viewingMsg.audience}</span>
               </div>
-              <div className="flex justify-between border-b border-gray-100 dark:border-neutral-700 pb-2">
-                <span className="text-gray-500 dark:text-neutral-400">Status</span>
-                <span className="font-medium text-gray-900 dark:text-white capitalize">{viewingMsg.status}</span>
+              <div className="flex justify-between border-b border-line dark:border-neutral-700 pb-2">
+                <span className="text-text-2">Status</span>
+                <span className="font-medium text-text dark:text-white capitalize">{viewingMsg.status}</span>
               </div>
               {viewingMsg.sent !== null && (
-                <div className="flex justify-between border-b border-gray-100 dark:border-neutral-700 pb-2">
-                  <span className="text-gray-500 dark:text-neutral-400">Sent / Delivered</span>
-                  <span className="font-medium text-gray-900 dark:text-white">{viewingMsg.sent?.toLocaleString()} / {(viewingMsg.delivered ?? 0).toLocaleString()}</span>
+                <div className="flex justify-between border-b border-line dark:border-neutral-700 pb-2">
+                  <span className="text-text-2">Sent / Delivered</span>
+                  <span className="font-medium text-text dark:text-white">{viewingMsg.sent?.toLocaleString()} / {(viewingMsg.delivered ?? 0).toLocaleString()}</span>
                 </div>
               )}
               {viewingMsg.scheduledAt && (
-                <div className="flex justify-between border-b border-gray-100 dark:border-neutral-700 pb-2">
-                  <span className="text-gray-500 dark:text-neutral-400">Scheduled</span>
-                  <span className="font-medium text-gray-900 dark:text-white">
+                <div className="flex justify-between border-b border-line dark:border-neutral-700 pb-2">
+                  <span className="text-text-2">Scheduled</span>
+                  <span className="font-medium text-text dark:text-white">
                     {new Date(viewingMsg.scheduledAt).toLocaleString("en-MY")}
                   </span>
                 </div>
               )}
-              <div className="border-b border-gray-100 dark:border-neutral-700 pb-2">
-                <span className="text-gray-500 dark:text-neutral-400 block mb-1">Message</span>
-                <p className="rounded-lg bg-gray-50 dark:bg-neutral-700 p-3 text-gray-900 dark:text-white whitespace-pre-wrap">{viewingMsg.message}</p>
+              <div className="border-b border-line dark:border-neutral-700 pb-2">
+                <span className="text-text-2 block mb-1">Message</span>
+                <p className="rounded-lg bg-sunken dark:bg-neutral-700 p-3 text-text dark:text-white whitespace-pre-wrap">{viewingMsg.message}</p>
               </div>
             </div>
             <div className="mt-5 flex gap-2">
@@ -1172,13 +1172,13 @@ export default function NotificationsPage() {
                   }
                   setShowComposeModal(true);
                 }}
-                className="flex-1 rounded-lg bg-[#C2452D] px-4 py-2 text-sm font-medium text-white hover:bg-[#A93B26]"
+                className="flex-1 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-[#A93B26]"
               >
                 Edit Message
               </button>
               <button
                 onClick={() => setViewingMsg(null)}
-                className="flex-1 rounded-lg bg-gray-100 dark:bg-neutral-700 px-4 py-2 text-sm font-medium text-gray-600 dark:text-neutral-300"
+                className="flex-1 rounded-lg bg-sunken dark:bg-neutral-700 px-4 py-2 text-sm font-medium text-text-2"
               >
                 Close
               </button>
@@ -1189,19 +1189,19 @@ export default function NotificationsPage() {
 
       {showComposeModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 pt-6 pb-10">
-          <div className="relative w-full max-w-4xl rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl">
+          <div className="relative w-full max-w-4xl rounded-2xl bg-surface dark:bg-neutral-800 p-6 shadow-xl">
             {/* Close */}
             <button
               onClick={() => {
                 setShowComposeModal(false);
                 resetForm();
               }}
-              className="absolute right-4 top-4 rounded-lg p-1 text-gray-400 dark:text-neutral-500 hover:bg-gray-100 dark:hover:bg-neutral-700 hover:text-gray-600 dark:hover:text-neutral-300"
+              className="absolute right-4 top-4 rounded-lg p-1 text-text-3 hover:bg-sunken dark:hover:bg-neutral-700 hover:text-text-2"
             >
               <X className="h-5 w-5" />
             </button>
 
-            <h2 className="mb-5 text-lg font-bold text-gray-900 dark:text-white">
+            <h2 className="mb-5 text-lg font-bold text-text dark:text-white">
               {editingMsg ? "Edit message" : "Compose message"}
             </h2>
 
@@ -1210,11 +1210,11 @@ export default function NotificationsPage() {
               <div className="flex-1 space-y-4">
                 {/* Channel */}
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-neutral-300">
+                  <label className="mb-2 block text-sm font-medium text-text-2">
                     Channel
                   </label>
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 rounded-lg border border-[#C2452D] bg-[#C2452D]/5 px-4 py-2.5 text-sm font-medium text-[#C2452D]">
+                    <div className="flex items-center gap-2 rounded-lg border border-ink bg-brand-soft px-4 py-2.5 text-sm font-medium text-brand-text">
                       <Phone className="h-4 w-4" />
                       SMS
                     </div>
@@ -1223,7 +1223,7 @@ export default function NotificationsPage() {
 
                 {/* Sender ID */}
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-neutral-300">
+                  <label className="mb-1 block text-sm font-medium text-text-2">
                     Sender ID (Header)
                   </label>
                   <input
@@ -1231,16 +1231,16 @@ export default function NotificationsPage() {
                     value={formSenderId}
                     onChange={(e) => setFormSenderId(e.target.value.slice(0, 15))}
                     placeholder="e.g. CelsiusCoffee"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                    className="w-full rounded-lg border border-line-2 px-3 py-2 text-sm focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                   />
-                  <p className="mt-1 text-xs text-gray-400">
+                  <p className="mt-1 text-xs text-text-3">
                     Name shown as SMS sender. Must be registered with SMS123.
                   </p>
                 </div>
 
                 {/* Audience */}
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-neutral-300">
+                  <label className="mb-1 block text-sm font-medium text-text-2">
                     Audience
                   </label>
                   <div className="relative">
@@ -1251,7 +1251,7 @@ export default function NotificationsPage() {
                         const tpl = smsTemplates[e.target.value];
                         if (tpl && !formMessage.trim()) setFormMessage(tpl);
                       }}
-                      className="w-full appearance-none rounded-lg border border-gray-300 px-3 py-2 pr-8 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                      className="w-full appearance-none rounded-lg border border-line-2 px-3 py-2 pr-8 text-sm focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                     >
                       {pickedPhones.length > 0 && (
                         <option value="picked">Members you picked ({pickedPhones.length})</option>
@@ -1262,18 +1262,18 @@ export default function NotificationsPage() {
                         </option>
                       ))}
                     </select>
-                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
                   </div>
                 </div>
 
                 {/* Custom filter builder */}
                 {formAudience === "custom" && (
-                  <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
-                    <div className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <div className="rounded-lg border border-dashed border-line-2 bg-sunken p-4">
+                    <div className="mb-3 flex items-center gap-2 text-sm font-medium text-text-2">
                       <Filter className="h-4 w-4" />
                       Custom filter builder
                     </div>
-                    <p className="mb-3 text-xs text-gray-500">
+                    <p className="mb-3 text-xs text-text-2">
                       All conditions must match (AND logic)
                     </p>
 
@@ -1286,7 +1286,7 @@ export default function NotificationsPage() {
                             onChange={(e) =>
                               updateFilter(idx, "field", e.target.value)
                             }
-                            className="w-36 appearance-none rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                            className="w-36 appearance-none rounded-md border border-line-2 px-2 py-1.5 text-xs focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                           >
                             {(
                               Object.entries(filterFieldLabels) as [
@@ -1306,7 +1306,7 @@ export default function NotificationsPage() {
                             onChange={(e) =>
                               updateFilter(idx, "op", e.target.value)
                             }
-                            className="w-20 appearance-none rounded-md border border-gray-300 px-2 py-1.5 text-center text-xs focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                            className="w-20 appearance-none rounded-md border border-line-2 px-2 py-1.5 text-center text-xs focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                           >
                             {filter.field === "sms_received" ? (
                               <>
@@ -1331,7 +1331,7 @@ export default function NotificationsPage() {
                             onChange={(e) =>
                               updateFilter(idx, "value", e.target.value)
                             }
-                            className="flex-1 appearance-none rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                            className="flex-1 appearance-none rounded-md border border-line-2 px-2 py-1.5 text-xs focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                           >
                             <option value="">Select SMS message</option>
                             {smsMessages.map((s) => (
@@ -1353,10 +1353,10 @@ export default function NotificationsPage() {
                                   : "Value"
                               }
                               type="number"
-                              className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-xs focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                              className="w-full rounded-md border border-line-2 px-2 py-1.5 text-xs focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                             />
                             {isDateField(filter.field as FilterField) && (
-                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">
+                              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-text-3">
                                 days
                               </span>
                             )}
@@ -1367,7 +1367,7 @@ export default function NotificationsPage() {
                           {customFilters.length > 1 && (
                             <button
                               onClick={() => removeFilter(idx)}
-                              className="rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                              className="rounded p-1 text-text-3 hover:bg-line hover:text-text-2"
                             >
                               <X className="h-3.5 w-3.5" />
                             </button>
@@ -1378,7 +1378,7 @@ export default function NotificationsPage() {
 
                     <button
                       onClick={addFilter}
-                      className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-[#C2452D] hover:underline"
+                      className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-text hover:underline"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       Add filter
@@ -1389,13 +1389,13 @@ export default function NotificationsPage() {
                 {/* Message */}
                 <div>
                   <div className="mb-1 flex items-center justify-between">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-neutral-300">
+                    <label className="block text-sm font-medium text-text-2">
                       Message
                     </label>
                     {smsTemplates[formAudience] && (
                       <button
                         onClick={() => setFormMessage(smsTemplates[formAudience])}
-                        className="text-xs font-medium text-[#C2452D] hover:underline"
+                        className="text-xs font-medium text-brand-text hover:underline"
                       >
                         Use template
                       </button>
@@ -1411,7 +1411,7 @@ export default function NotificationsPage() {
                       }}
                       placeholder="Type your SMS message..."
                       rows={4}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                      className="w-full rounded-lg border border-line-2 px-3 py-2 text-sm focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                     />
                     <div className="mt-1 flex items-center justify-between">
                       <span
@@ -1419,14 +1419,14 @@ export default function NotificationsPage() {
                           "text-xs",
                           fullMessage.length > charLimit * 0.9
                             ? "text-red-500"
-                            : "text-gray-400"
+                            : "text-text-3"
                         )}
                       >
                         {fullMessage.length}/{charLimit} characters
-                        <span className="text-gray-300"> (auto-prefix: {smsProvider === "smsniaga" ? `RM0 ${(formSenderId || "CelsiusCoffee").toUpperCase()}:` : `RM0 [${formSenderId || "CelsiusCoffee"}]`})</span>
+                        <span className="text-text-3"> (auto-prefix: {smsProvider === "smsniaga" ? `RM0 ${(formSenderId || "CelsiusCoffee").toUpperCase()}:` : `RM0 [${formSenderId || "CelsiusCoffee"}]`})</span>
                       </span>
                       {(formChannel === "sms" || formChannel === "both") && formScheduleType === "now" && smsBalance !== null && (
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-text-3">
                           Credits: <span className={smsBalance < getTargetPhones().length ? "text-red-500 font-medium" : "text-green-600 font-medium"}>{Math.floor(smsBalance).toLocaleString()}</span> / {getTargetPhones().length.toLocaleString()} needed
                         </span>
                       )}
@@ -1451,12 +1451,12 @@ export default function NotificationsPage() {
 
                   {/* Variable chips */}
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs text-gray-400">Variables:</span>
+                    <span className="text-xs text-text-3">Variables:</span>
                     {variables.map((v) => (
                       <button
                         key={v.key}
                         onClick={() => insertVariable(v.key)}
-                        className="inline-flex items-center rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-mono text-gray-600 transition-colors hover:border-[#C2452D] hover:bg-[#C2452D]/5 hover:text-[#C2452D]"
+                        className="inline-flex items-center rounded-md border border-line bg-sunken px-2 py-1 text-xs font-mono text-text-2 transition-colors hover:border-ink hover:bg-brand-soft hover:text-brand-text"
                       >
                         {v.key}
                       </button>
@@ -1466,7 +1466,7 @@ export default function NotificationsPage() {
 
                 {/* Schedule */}
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-neutral-300">
+                  <label className="mb-2 block text-sm font-medium text-text-2">
                     Schedule
                   </label>
                   <div className="flex items-center gap-3">
@@ -1474,8 +1474,8 @@ export default function NotificationsPage() {
                       className={cn(
                         "flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors",
                         formScheduleType === "now"
-                          ? "border-[#C2452D] bg-[#C2452D]/5 text-[#C2452D]"
-                          : "border-gray-200 dark:border-neutral-600 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                          ? "border-ink bg-brand-soft text-brand-text"
+                          : "border-line dark:border-neutral-600 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
                       )}
                     >
                       <input
@@ -1493,8 +1493,8 @@ export default function NotificationsPage() {
                       className={cn(
                         "flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors",
                         formScheduleType === "later"
-                          ? "border-[#C2452D] bg-[#C2452D]/5 text-[#C2452D]"
-                          : "border-gray-200 dark:border-neutral-600 text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                          ? "border-ink bg-brand-soft text-brand-text"
+                          : "border-line dark:border-neutral-600 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
                       )}
                     >
                       <input
@@ -1513,21 +1513,21 @@ export default function NotificationsPage() {
                   {formScheduleType === "later" && (
                     <div className="mt-3 flex items-center gap-2">
                       <div className="relative flex-1">
-                        <Calendar className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <Calendar className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
                         <input
                           type="date"
                           value={formScheduleDate}
                           onChange={(e) => setFormScheduleDate(e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 py-2 pl-8 pr-3 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                          className="w-full rounded-lg border border-line-2 py-2 pl-8 pr-3 text-sm focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                         />
                       </div>
                       <div className="relative flex-1">
-                        <Clock className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                        <Clock className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
                         <input
                           type="time"
                           value={formScheduleTime}
                           onChange={(e) => setFormScheduleTime(e.target.value)}
-                          className="w-full rounded-lg border border-gray-300 py-2 pl-8 pr-3 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                          className="w-full rounded-lg border border-line-2 py-2 pl-8 pr-3 text-sm focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                         />
                       </div>
                     </div>
@@ -1538,21 +1538,21 @@ export default function NotificationsPage() {
 
               {/* ─── Right: Phone Preview ─── */}
               <div className="hidden w-72 flex-shrink-0 md:block">
-                <p className="mb-2 text-sm font-medium text-gray-700 dark:text-neutral-300">
+                <p className="mb-2 text-sm font-medium text-text-2">
                   Preview
                 </p>
-                <div className="rounded-2xl border border-gray-200 bg-gray-100 p-3">
+                <div className="rounded-2xl border border-line bg-sunken p-3">
                   {/* Phone frame */}
                   <div className="mx-auto w-full">
                     {/* Status bar */}
                     <div className="mb-2 flex items-center justify-between px-1">
-                      <span className="text-[10px] font-medium text-gray-500">
+                      <span className="text-[10px] font-medium text-text-2">
                         9:41
                       </span>
                       <div className="flex items-center gap-1">
                         <div className="h-1.5 w-3 rounded-sm bg-gray-400" />
                         <div className="h-1.5 w-3 rounded-sm bg-gray-400" />
-                        <div className="h-2 w-4 rounded-sm border border-gray-400">
+                        <div className="h-2 w-4 rounded-sm border border-line-2">
                           <div className="h-full w-3/4 rounded-sm bg-gray-400" />
                         </div>
                       </div>
@@ -1569,7 +1569,7 @@ export default function NotificationsPage() {
                     </div>
 
                     {/* Chat area */}
-                    <div className="min-h-[200px] rounded-lg bg-white p-3">
+                    <div className="min-h-[200px] rounded-lg bg-surface p-3">
                       {/* Message bubble */}
                       <div className="max-w-[90%] rounded-xl bg-blue-500 px-3 py-2 text-xs leading-relaxed text-white">
                         <p className="whitespace-pre-wrap">{previewText}</p>
@@ -1585,8 +1585,8 @@ export default function NotificationsPage() {
                 </div>
 
                 {/* Variable legend */}
-                <div className="mt-3 rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-3">
-                  <p className="mb-2 text-xs font-medium text-gray-500 dark:text-neutral-400">
+                <div className="mt-3 rounded-lg border border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 p-3">
+                  <p className="mb-2 text-xs font-medium text-text-2">
                     Preview values
                   </p>
                   <div className="space-y-1">
@@ -1595,10 +1595,10 @@ export default function NotificationsPage() {
                         key={v.key}
                         className="flex items-center justify-between text-xs"
                       >
-                        <span className="font-mono text-gray-400">
+                        <span className="font-mono text-text-3">
                           {v.key}
                         </span>
-                        <span className="text-gray-700 dark:text-neutral-300">{v.preview}</span>
+                        <span className="text-text-2">{v.preview}</span>
                       </div>
                     ))}
                   </div>
@@ -1607,13 +1607,13 @@ export default function NotificationsPage() {
             </div>
 
             {/* Actions */}
-            <div className="mt-6 flex items-center justify-end gap-3 border-t border-gray-100 dark:border-neutral-700 pt-4">
+            <div className="mt-6 flex items-center justify-end gap-3 border-t border-line dark:border-neutral-700 pt-4">
               <button
                 onClick={() => {
                   setShowComposeModal(false);
                   resetForm();
                 }}
-                className="rounded-lg border border-gray-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                className="rounded-lg border border-line-2 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
               >
                 Cancel
               </button>
@@ -1635,7 +1635,7 @@ export default function NotificationsPage() {
                     resetForm();
                   }}
                   disabled={!formMessage.trim()}
-                  className="rounded-lg border border-gray-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="rounded-lg border border-line-2 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-text-2 hover:bg-sunken dark:hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Save as draft
                 </button>
@@ -1679,14 +1679,14 @@ export default function NotificationsPage() {
                   resetForm();
                 }}
                 disabled={!formMessage.trim() || smsSending}
-                className="rounded-lg bg-[#C2452D] px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#A33822] disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+                className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink shadow-sm transition-colors hover:bg-ink-hover disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
               >
                 {smsSending ? "Sending..." : editingMsg ? "Save changes" : formScheduleType === "now" ? (
                   <><Send className="h-3.5 w-3.5" /> Send now ({getTargetPhones().length} members)</>
                 ) : "Schedule"}
               </button>
               {smsOptOutCount > 0 && (
-                <p className="text-[10px] text-gray-400 mt-1">{smsOptOutCount} opted-out member{smsOptOutCount > 1 ? "s" : ""} excluded (PDPA)</p>
+                <p className="text-[10px] text-text-3 mt-1">{smsOptOutCount} opted-out member{smsOptOutCount > 1 ? "s" : ""} excluded (PDPA)</p>
               )}
             </div>
           </div>

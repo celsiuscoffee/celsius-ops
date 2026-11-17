@@ -48,7 +48,7 @@ const myr = (n: number) => `RM${n.toLocaleString(undefined, { maximumFractionDig
 
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {
   return (
-    <div className="rounded-xl border border-border bg-white p-4">
+    <div className="rounded-xl border border-border bg-surface p-4">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${tone ?? "text-foreground"}`}>{value}</p>
       {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
@@ -150,7 +150,7 @@ export default function AdsOptimizerPage() {
       ) : error ? (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{error}</div>
       ) : !report || campaigns.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-border bg-white p-10 text-center">
+        <div className="mt-6 rounded-xl border border-border bg-surface p-10 text-center">
           <Coins className="mx-auto h-10 w-10 text-muted-foreground/30" />
           <p className="mt-3 text-sm text-muted-foreground">
             No enabled campaigns with spend yet. Metrics flow in with the nightly ads sync.
@@ -196,7 +196,7 @@ export default function AdsOptimizerPage() {
             {report.benchmarkOutlet ? ` · your best: ${report.benchmarkOutlet}` : ""}
           </p>
 
-          <div className="mt-2 rounded-xl border border-border bg-white p-4">
+          <div className="mt-2 rounded-xl border border-border bg-surface p-4">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">
@@ -285,7 +285,7 @@ export default function AdsOptimizerPage() {
                             <button
                               onClick={() => decide(c, "reject")}
                               disabled={busy === key}
-                              className="rounded-lg border border-border bg-white px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-muted/50 disabled:opacity-50"
+                              className="rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-muted/50 disabled:opacity-50"
                             >
                               Dismiss
                             </button>

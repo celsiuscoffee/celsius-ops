@@ -146,7 +146,7 @@ export default function POSPrintersPage() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+        <Loader2 className="h-5 w-5 animate-spin text-text-3" />
       </div>
     );
   }
@@ -155,21 +155,21 @@ export default function POSPrintersPage() {
     <div className="p-3 sm:p-6 space-y-5 max-w-5xl">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#160800]">POS Printers</h1>
+          <h1 className="text-2xl font-bold text-text">POS Printers</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Physical printers per outlet. Each docket printer serves one station; receipt printers handle the customer slip.
           </p>
         </div>
         <button
           onClick={() => setEditing(blankRow(outletId))}
-          className="flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
+          className="flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
         >
           <Plus className="h-4 w-4" /> Add Printer
         </button>
       </div>
 
       {/* Outlet tabs */}
-      <div className="bg-white rounded-2xl p-2 inline-flex gap-1">
+      <div className="bg-surface rounded-2xl p-2 inline-flex gap-1">
         {OUTLETS.map((o) => {
           const count = printers.filter((p) => p.outlet_id === o.id).length;
           const isActive = o.id === outletId;
@@ -178,10 +178,10 @@ export default function POSPrintersPage() {
               key={o.id}
               onClick={() => setOutletId(o.id)}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                isActive ? "bg-[#160800] text-white" : "text-gray-600 hover:bg-gray-100"
+                isActive ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"
               }`}
             >
-              {o.label} {count > 0 && <span className={`ml-1 text-xs ${isActive ? "text-white/70" : "text-gray-400"}`}>({count})</span>}
+              {o.label} {count > 0 && <span className={`ml-1 text-xs ${isActive ? "text-white/70" : "text-text-3"}`}>({count})</span>}
             </button>
           );
         })}
@@ -189,21 +189,21 @@ export default function POSPrintersPage() {
 
       {/* Printer table */}
       {outletPrinters.length === 0 ? (
-        <div className="bg-white rounded-2xl p-12 text-center">
-          <Printer className="h-12 w-12 mx-auto text-gray-300" />
-          <p className="mt-4 text-sm text-gray-500">No printers configured for this outlet yet.</p>
-          <p className="mt-1 text-xs text-gray-400">The POS will fall back to the built-in printer for every station.</p>
+        <div className="bg-surface rounded-2xl p-12 text-center">
+          <Printer className="h-12 w-12 mx-auto text-text-3" />
+          <p className="mt-4 text-sm text-text-2">No printers configured for this outlet yet.</p>
+          <p className="mt-1 text-xs text-text-3">The POS will fall back to the built-in printer for every station.</p>
           <button
             onClick={() => setEditing(blankRow(outletId))}
-            className="mt-4 inline-flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
+            className="mt-4 inline-flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
           >
             <Plus className="h-4 w-4" /> Add the first printer
           </button>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl overflow-hidden">
+        <div className="bg-surface rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <thead className="bg-sunken text-left text-xs font-semibold uppercase tracking-wider text-text-2">
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Type</th>
@@ -214,10 +214,10 @@ export default function POSPrintersPage() {
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-line">
               {outletPrinters.map((p) => (
                 <tr key={p.id} className={p.is_enabled ? "" : "opacity-50"}>
-                  <td className="px-4 py-3 font-medium text-[#160800]">{p.name}</td>
+                  <td className="px-4 py-3 font-medium text-text">{p.name}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                       p.printer_type === "docket"
@@ -227,20 +227,20 @@ export default function POSPrintersPage() {
                       {p.printer_type === "docket" ? "Kitchen docket" : "Customer receipt"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{p.station ?? "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{p.connection_type}</td>
-                  <td className="px-4 py-3 text-gray-600 font-mono text-xs">
+                  <td className="px-4 py-3 text-text-2">{p.station ?? "—"}</td>
+                  <td className="px-4 py-3 text-text-2">{p.connection_type}</td>
+                  <td className="px-4 py-3 text-text-2 font-mono text-xs">
                     {p.ip_address ? `${p.ip_address}:${p.port ?? 9100}` : "—"}
                   </td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => handleToggle(p)}
                       className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                        p.is_enabled ? "bg-green-500" : "bg-gray-300"
+                        p.is_enabled ? "bg-green-500" : "bg-line"
                       }`}
                     >
                       <span
-                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-surface transition-transform ${
                           p.is_enabled ? "translate-x-5" : "translate-x-0.5"
                         }`}
                       />
@@ -249,14 +249,14 @@ export default function POSPrintersPage() {
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => setEditing(p)}
-                      className="p-1.5 text-gray-400 hover:text-[#160800] hover:bg-gray-100 rounded-lg transition-colors"
+                      className="p-1.5 text-text-3 hover:text-text hover:bg-sunken rounded-lg transition-colors"
                       aria-label="Edit"
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(p.id, p.name)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1"
+                      className="p-1.5 text-text-3 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1"
                       aria-label="Delete"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -314,12 +314,12 @@ function PrinterModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md p-6 space-y-4">
+      <div className="bg-surface rounded-2xl w-full max-w-md p-6 space-y-4">
         <div className="flex items-start justify-between">
-          <h2 className="text-lg font-bold text-[#160800]">
+          <h2 className="text-lg font-bold text-text">
             {isNew ? "Add Printer" : "Edit Printer"}
           </h2>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700">
+          <button onClick={onClose} className="p-1 text-text-3 hover:text-text-2">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -331,7 +331,7 @@ function PrinterModal({
               value={row.name}
               onChange={(e) => onChange({ ...row, name: e.target.value })}
               placeholder='e.g. "Bar Printer", "Kitchen 80mm"'
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-ink focus:outline-none"
             />
           </Field>
 
@@ -339,7 +339,7 @@ function PrinterModal({
             <select
               value={row.printer_type}
               onChange={(e) => onChange({ ...row, printer_type: e.target.value as "docket" | "receipt", station: e.target.value === "receipt" ? null : (row.station ?? "Bar") })}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-ink focus:outline-none"
             >
               <option value="docket">Kitchen docket (Bar / Counter / Kitchen)</option>
               <option value="receipt">Customer receipt</option>
@@ -351,7 +351,7 @@ function PrinterModal({
               <select
                 value={row.station ?? "Bar"}
                 onChange={(e) => onChange({ ...row, station: e.target.value })}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none"
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-ink focus:outline-none"
               >
                 {STATION_OPTIONS.map((s) => (
                   <option key={s} value={s}>{s}</option>
@@ -364,7 +364,7 @@ function PrinterModal({
             <select
               value={row.connection_type}
               onChange={(e) => onChange({ ...row, connection_type: e.target.value as Printer["connection_type"] })}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-ink focus:outline-none"
             >
               {CONNECTION_OPTIONS.map((c) => (
                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -381,7 +381,7 @@ function PrinterModal({
                     value={row.ip_address ?? ""}
                     onChange={(e) => onChange({ ...row, ip_address: e.target.value })}
                     placeholder="192.168.1.100"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none font-mono"
+                    className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-ink focus:outline-none font-mono"
                   />
                 </Field>
               </div>
@@ -391,7 +391,7 @@ function PrinterModal({
                   value={row.port ?? 9100}
                   onChange={(e) => onChange({ ...row, port: parseInt(e.target.value, 10) || 9100 })}
                   placeholder="9100"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#160800] focus:outline-none font-mono"
+                  className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-ink focus:outline-none font-mono"
                 />
               </Field>
             </div>
@@ -411,14 +411,14 @@ function PrinterModal({
         <div className="flex justify-end gap-2 pt-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
+            className="px-4 py-2 text-sm font-medium text-text-2 hover:bg-sunken rounded-lg"
           >
             Cancel
           </button>
           <button
             onClick={onSave}
             disabled={saving || !row.name}
-            className="flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors disabled:opacity-60"
+            className="flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors disabled:opacity-60"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             {isNew ? "Add" : "Save"}
@@ -432,7 +432,7 @@ function PrinterModal({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</p>
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-text-2">{label}</p>
       {children}
     </div>
   );

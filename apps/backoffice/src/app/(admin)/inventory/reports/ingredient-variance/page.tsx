@@ -76,28 +76,28 @@ export default function IngredientVariancePage() {
     <div className="p-3 sm:p-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/inventory/reports" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+        <Link href="/inventory/reports" className="rounded-lg p-1.5 text-text-3 hover:bg-sunken hover:text-text-2">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Usage Variance</h2>
-          <p className="text-sm text-gray-500">Actual usage (stock movements) vs expected (recipe BOM × sales)</p>
+          <h2 className="text-xl font-semibold text-text">Usage Variance</h2>
+          <p className="text-sm text-text-2">Actual usage (stock movements) vs expected (recipe BOM × sales)</p>
         </div>
       </div>
 
       {/* Filters */}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <select className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={outletId} onChange={(e) => setOutletId(e.target.value)}>
+        <select className="rounded-lg border border-line px-3 py-2 text-sm" value={outletId} onChange={(e) => setOutletId(e.target.value)}>
           <option value="">Select outlet…</option>
           {(data?.outlets ?? []).map((o) => (
             <option key={o.id} value={o.id}>{o.name}</option>
           ))}
         </select>
-        <label className="flex items-center gap-1.5 text-sm text-gray-500">From
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+        <label className="flex items-center gap-1.5 text-sm text-text-2">From
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-lg border border-line px-2 py-1.5 text-sm" />
         </label>
-        <label className="flex items-center gap-1.5 text-sm text-gray-500">To
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+        <label className="flex items-center gap-1.5 text-sm text-text-2">To
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-lg border border-line px-2 py-1.5 text-sm" />
         </label>
       </div>
 
@@ -123,8 +123,8 @@ export default function IngredientVariancePage() {
       {/* Summary cards */}
       {s && !insufficient && (
         <>
-          <p className="mt-5 text-xs text-gray-500">
-            Measured between counts <span className="font-medium text-gray-700">{day(s.openingCountDate)}</span> and <span className="font-medium text-gray-700">{day(s.closingCountDate)}</span> · {s.outletName}
+          <p className="mt-5 text-xs text-text-2">
+            Measured between counts <span className="font-medium text-text-2">{day(s.openingCountDate)}</span> and <span className="font-medium text-text-2">{day(s.closingCountDate)}</span> · {s.outletName}
           </p>
           <div className="mt-2 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Card label="Expected cost" value={`RM ${fmt(s.totalExpectedCost ?? 0)}`} sub="recipe × sales" />
@@ -142,8 +142,8 @@ export default function IngredientVariancePage() {
 
       {/* Data-quality warnings */}
       {data && !insufficient && data.warnings && (data.warnings.menuItemsWithoutBom.length > 0 || data.warnings.productsWithoutCost.length > 0 || data.warnings.uomMismatches.length > 0 || data.warnings.noSales || data.warnings.unreceivedTransfersIn > 0) && (
-        <div className="mt-4 space-y-1.5 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600">
-          <p className="font-medium text-gray-700">Data quality — variance may be incomplete:</p>
+        <div className="mt-4 space-y-1.5 rounded-xl border border-line bg-sunken px-4 py-3 text-xs text-text-2">
+          <p className="font-medium text-text-2">Data quality — variance may be incomplete:</p>
           {data.warnings.noSales && <p>• No sales in this window — actual usage shown without an expected baseline.</p>}
           {data.warnings.menuItemsWithoutBom.length > 0 && <p>• {data.warnings.menuItemsWithoutBom.length} sold menu item(s) have no recipe (BOM): {data.warnings.menuItemsWithoutBom.slice(0, 5).join(", ")}{data.warnings.menuItemsWithoutBom.length > 5 ? "…" : ""}</p>}
           {data.warnings.productsWithoutCost.length > 0 && <p>• {data.warnings.productsWithoutCost.length} product(s) have no supplier cost — variance qty only, no RM.</p>}
@@ -153,7 +153,7 @@ export default function IngredientVariancePage() {
       )}
 
       {isLoading && (
-        <div className="flex items-center justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-terracotta" /></div>
+        <div className="flex items-center justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-brand-text" /></div>
       )}
 
       {/* Table */}
@@ -187,60 +187,60 @@ const varianceColumns: ReportColumn<VarianceItem>[] = [
     render: (it) => (
       <>
         <div className="flex items-center gap-1.5">
-          <span className="font-medium text-gray-900">{it.productName}</span>
+          <span className="font-medium text-text">{it.productName}</span>
           {it.flags.includes("HIGH_VARIANCE") && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-          {it.flags.includes("NO_COST") && <Badge variant="outline" className="text-[10px] text-gray-400">no cost</Badge>}
+          {it.flags.includes("NO_COST") && <Badge variant="outline" className="text-[10px] text-text-3">no cost</Badge>}
         </div>
-        {it.category && <span className="text-xs text-gray-400">{it.category}</span>}
+        {it.category && <span className="text-xs text-text-3">{it.category}</span>}
       </>
     ),
   },
   {
     key: "expectedQty", header: "Expected", align: "right", sortValue: (it) => it.expectedQty,
-    render: (it) => <span className="font-mono text-gray-700">{fmt(it.expectedQty)} <span className="text-xs text-gray-400">{it.baseUom}</span></span>,
+    render: (it) => <span className="font-mono text-text-2">{fmt(it.expectedQty)} <span className="text-xs text-text-3">{it.baseUom}</span></span>,
   },
   {
     key: "actualQty", header: "Actual", align: "right", sortValue: (it) => it.actualQty,
-    render: (it) => <span className="font-mono text-gray-700">{fmt(it.actualQty)} <span className="text-xs text-gray-400">{it.baseUom}</span></span>,
+    render: (it) => <span className="font-mono text-text-2">{fmt(it.actualQty)} <span className="text-xs text-text-3">{it.baseUom}</span></span>,
   },
   {
     key: "varianceQty", header: "Variance", align: "right", sortValue: (it) => it.varianceQty,
     render: (it) => (
-      <span className={`font-mono ${it.varianceQty > 0 ? "text-red-600" : it.varianceQty < 0 ? "text-blue-600" : "text-gray-400"}`}>
+      <span className={`font-mono ${it.varianceQty > 0 ? "text-red-600" : it.varianceQty < 0 ? "text-blue-600" : "text-text-3"}`}>
         {it.varianceQty > 0 ? "+" : ""}{fmt(it.varianceQty)}
       </span>
     ),
   },
   {
     key: "costPerBase", header: "Cost/Unit", align: "right", sortValue: (it) => (it.costPerBase > 0 ? it.costPerBase : null),
-    render: (it) => <span className="font-mono text-gray-500">{it.costPerBase > 0 ? `RM ${fmt(it.costPerBase)}` : "—"}</span>,
+    render: (it) => <span className="font-mono text-text-2">{it.costPerBase > 0 ? `RM ${fmt(it.costPerBase)}` : "—"}</span>,
   },
   {
     key: "varianceCost", header: "Variance RM", align: "right",
     sortValue: (it) => (it.costPerBase > 0 ? it.varianceCost : null),
     render: (it) => it.costPerBase > 0 ? (
-      <span className={`font-mono font-medium ${it.varianceCost > 0 ? "text-red-600" : it.varianceCost < 0 ? "text-green-600" : "text-gray-400"}`}>
+      <span className={`font-mono font-medium ${it.varianceCost > 0 ? "text-red-600" : it.varianceCost < 0 ? "text-green-600" : "text-text-3"}`}>
         {it.varianceCost > 0 ? <TrendingUp className="mr-0.5 inline h-3 w-3" /> : it.varianceCost < 0 ? <TrendingDown className="mr-0.5 inline h-3 w-3" /> : null}
         {it.varianceCost > 0 ? "+" : ""}RM {fmt(Math.abs(it.varianceCost))}
       </span>
-    ) : <span className="text-gray-300">—</span>,
+    ) : <span className="text-text-3">—</span>,
   },
   {
     key: "variancePercent", header: "%", align: "right", sortValue: (it) => it.variancePercent,
-    render: (it) => <span className="font-mono text-gray-500">{it.variancePercent !== null ? `${it.variancePercent}%` : "—"}</span>,
+    render: (it) => <span className="font-mono text-text-2">{it.variancePercent !== null ? `${it.variancePercent}%` : "—"}</span>,
   },
 ];
 
 function Card({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "good" | "bad" | "warn" }) {
-  const valueColor = tone === "bad" ? "text-red-600" : tone === "good" ? "text-green-600" : tone === "warn" ? "text-amber-600" : "text-gray-900";
+  const valueColor = tone === "bad" ? "text-red-600" : tone === "good" ? "text-green-600" : tone === "warn" ? "text-amber-600" : "text-text";
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       <div className="flex items-center gap-2">
         <div className="rounded-lg bg-amber-50 p-2"><Scale className="h-4 w-4 text-amber-600" /></div>
-        <span className="text-sm text-gray-500">{label}</span>
+        <span className="text-sm text-text-2">{label}</span>
       </div>
       <p className={`mt-2 text-2xl font-bold ${valueColor}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-gray-500">{sub}</p>}
+      {sub && <p className="mt-0.5 text-xs text-text-2">{sub}</p>}
     </div>
   );
 }

@@ -65,7 +65,7 @@ function fmtTime(iso: string | null): string {
 const SEV_CLASS: Record<string, string> = {
   urgent: "bg-red-100 text-red-700",
   important: "bg-amber-100 text-amber-700",
-  normal: "bg-slate-100 text-slate-600",
+  normal: "bg-sunken text-text-2",
 };
 
 export default function InstructionsPanel({ onChange }: { onChange: () => void }) {
@@ -161,7 +161,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
   return (
     <Card className="h-[calc(100vh-15rem)] overflow-y-auto p-4">
       <div className="mb-3 flex items-center gap-2">
-        <Megaphone className="h-4 w-4 text-terracotta" />
+        <Megaphone className="h-4 w-4 text-brand-text" />
         <span className="text-sm font-medium">Send an instruction</span>
         <span className="hidden text-xs text-muted-foreground sm:inline">
           Directive over WhatsApp — tracked per person until they confirm
@@ -196,7 +196,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
                 onClick={() => setAudienceType(key)}
                 className={
                   "flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition " +
-                  (active ? "border-terracotta bg-terracotta/10 text-terracotta" : "text-muted-foreground hover:text-foreground")
+                  (active ? "border-ink bg-brand-soft text-brand-text" : "text-muted-foreground hover:text-foreground")
                 }
                 disabled={sending}
               >
@@ -256,14 +256,14 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
                     onClick={() => togglePick(s.id)}
                     className={
                       "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition " +
-                      (on ? "bg-terracotta/10 text-terracotta" : "hover:bg-muted")
+                      (on ? "bg-brand-soft text-brand-text" : "hover:bg-muted")
                     }
                     disabled={sending}
                   >
                     <span
                       className={
                         "flex h-4 w-4 items-center justify-center rounded border " +
-                        (on ? "border-terracotta bg-terracotta text-white" : "border-muted-foreground/40")
+                        (on ? "border-ink bg-ink text-on-ink" : "border-muted-foreground/40")
                       }
                     >
                       {on && <Check className="h-3 w-3" />}
@@ -292,7 +292,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
             <option value="important">Important</option>
             <option value="urgent">Urgent</option>
           </select>
-          <Button onClick={send} disabled={!canSend} className="ml-auto gap-1 bg-terracotta hover:bg-terracotta-dark">
+          <Button onClick={send} disabled={!canSend} className="ml-auto gap-1 bg-ink hover:bg-ink-hover">
             {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send
           </Button>
         </div>

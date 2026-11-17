@@ -201,9 +201,9 @@ export default function OvertimeLedgerPage() {
       approved: "bg-green-100 text-green-800",
       rejected: "bg-red-100 text-red-800",
       partial: "bg-blue-100 text-blue-800",
-      cancelled: "bg-gray-100 text-gray-600",
+      cancelled: "bg-sunken text-text-2",
     };
-    return <span className={`rounded px-2 py-0.5 text-xs font-medium ${map[s] || "bg-gray-100"}`}>{s}</span>;
+    return <span className={`rounded px-2 py-0.5 text-xs font-medium ${map[s] || "bg-sunken"}`}>{s}</span>;
   };
 
   return (
@@ -215,7 +215,7 @@ export default function OvertimeLedgerPage() {
             {monthLabel(month)}: <strong>{approvedHours}h</strong> approved across {byPerson.length} staff
             {counts.pending > 0 ? <> · <strong className="text-yellow-800">{counts.pending} pending</strong></> : null}
             . Clocked OT is approved on{" "}
-            <Link href="/hr/attendance" className="text-terracotta underline">Attendance Review</Link>; this is the ledger.
+            <Link href="/hr/attendance" className="text-brand-text underline">Attendance Review</Link>; this is the ledger.
           </>
         }
         action={
@@ -229,7 +229,7 @@ export default function OvertimeLedgerPage() {
             </select>
             <button
               onClick={() => setNewOT({ user_id: "", date: new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10), hours: "", reason: "", ot_type: "1.5x" })}
-              className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark"
+              className="flex items-center gap-1 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover"
               title="OT that was never clocked (e.g. worked from home, event) — enter it by hand"
             >
               <Plus className="h-4 w-4" /> Unclocked OT
@@ -245,7 +245,7 @@ export default function OvertimeLedgerPage() {
             <button
               key={id}
               onClick={() => setUserId(id)}
-              className="rounded-full border bg-card px-3 py-1 text-xs hover:border-terracotta"
+              className="rounded-full border bg-card px-3 py-1 text-xs hover:border-ink"
               title={`${p.days} day${p.days === 1 ? "" : "s"} — click to filter`}
             >
               <span className="font-medium">{p.name}</span> <span className="text-muted-foreground">{p.hours}h</span>
@@ -268,7 +268,7 @@ export default function OvertimeLedgerPage() {
               key={t.k}
               onClick={() => setTab(t.k)}
               className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium ${
-                tab === t.k ? "border-terracotta text-terracotta" : "border-transparent text-gray-500 hover:text-gray-700"
+                tab === t.k ? "border-ink text-brand-text" : "border-transparent text-text-2 hover:text-text-2"
               }`}
             >
               <Ic className="h-4 w-4" /> {t.l}
@@ -306,28 +306,28 @@ export default function OvertimeLedgerPage() {
                   const src = sourceOf(r);
                   const Ic = src.icon;
                   return (
-                    <tr key={r.id} className="border-b last:border-b-0 hover:bg-gray-50/50">
+                    <tr key={r.id} className="border-b last:border-b-0 hover:bg-sunken/50">
                       <td className="py-2.5 pr-3 font-medium">{r.staff?.name || "—"}</td>
                       <td className="py-2.5 pr-3">{r.date}</td>
                       <td className="py-2.5 pr-3">
                         {r.status === "pending" ? fmtH(r.hours_requested) : fmtH(r.hours_approved)}
-                        {r.status === "partial" && <span className="ml-1 text-xs text-gray-500">of {fmtH(r.hours_requested)}</span>}
+                        {r.status === "partial" && <span className="ml-1 text-xs text-text-2">of {fmtH(r.hours_requested)}</span>}
                       </td>
                       <td className="py-2.5 pr-3 font-mono text-xs">{r.ot_type}</td>
                       <td className="py-2.5 pr-3 text-xs">
                         <span className={`inline-flex items-center gap-1 ${src.cls}`}><Ic className="h-3.5 w-3.5" /> {src.label}</span>
                       </td>
-                      <td className="max-w-[260px] truncate py-2.5 pr-3 text-xs text-gray-600" title={r.reason}>
+                      <td className="max-w-[260px] truncate py-2.5 pr-3 text-xs text-text-2" title={r.reason}>
                         {r.reason?.startsWith(AUTO_PREFIX) ? r.reason.replace(/^.*?—\s*/, "") : r.reason}
                       </td>
                       <td className="py-2.5 pr-3">{statusPill(r.status)}</td>
                       <td className="py-2.5 pr-3 text-right">
                         {r.status === "pending" ? (
-                          <button onClick={() => setReviewing(r)} className="rounded bg-terracotta px-3 py-1 text-xs font-medium text-white hover:bg-terracotta-dark">
+                          <button onClick={() => setReviewing(r)} className="rounded bg-ink px-3 py-1 text-xs font-medium text-on-ink hover:bg-ink-hover">
                             Review
                           </button>
                         ) : (
-                          <button onClick={() => setReviewing(r)} className="rounded border px-3 py-1 text-xs font-medium text-gray-700 hover:bg-muted">
+                          <button onClick={() => setReviewing(r)} className="rounded border px-3 py-1 text-xs font-medium text-text-2 hover:bg-muted">
                             Details
                           </button>
                         )}
@@ -348,10 +348,10 @@ export default function OvertimeLedgerPage() {
       {/* Unclocked OT entry */}
       {newOT && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setNewOT(null)}>
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-xl bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-1 flex items-center justify-between">
               <h3 className="text-lg font-semibold">Unclocked OT</h3>
-              <button onClick={() => setNewOT(null)} className="rounded p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+              <button onClick={() => setNewOT(null)} className="rounded p-1 hover:bg-sunken"><X className="h-4 w-4" /></button>
             </div>
             <p className="mb-4 text-xs text-muted-foreground">
               For overtime with no clock-in behind it. If the person clocked in, approve the day on Attendance Review instead — that pays the clocked tail.
@@ -393,7 +393,7 @@ export default function OvertimeLedgerPage() {
               <button
                 onClick={createOT}
                 disabled={saving || !newOT.user_id || !newOT.date || toHalf(Number(newOT.hours)) < 0.5 || !newOT.reason}
-                className="flex items-center gap-1 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                className="flex items-center gap-1 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Create
               </button>
@@ -423,21 +423,21 @@ function ReviewModal({ req, onClose, onDecide, saving }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold">{decided ? "OT details" : "Review OT request"}</h3>
-          <button onClick={onClose} className="rounded p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className="rounded p-1 hover:bg-sunken"><X className="h-4 w-4" /></button>
         </div>
 
-        <div className="mb-4 rounded-lg bg-gray-50 p-3 text-sm">
+        <div className="mb-4 rounded-lg bg-sunken p-3 text-sm">
           <div className="font-semibold">{req.staff?.name}</div>
-          <div className="mt-1 text-xs text-gray-600">
+          <div className="mt-1 text-xs text-text-2">
             {req.date} · <strong>{fmtH(decided ? req.hours_approved : req.hours_requested)}</strong> at <strong>{req.ot_type}</strong>
             {decided && req.status === "partial" ? ` (of ${fmtH(req.hours_requested)} requested)` : ""} · <span className={src.cls}>{src.label}</span>
           </div>
           <p className="mt-2 text-sm">{req.reason}</p>
           {decided && (
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="mt-2 text-xs text-text-2">
               {req.status} {req.reviewed_at ? `on ${req.reviewed_at.slice(0, 10)}` : ""}
               {req.rejection_reason ? ` — ${req.rejection_reason}` : ""}{req.manager_notes ? ` · ${req.manager_notes}` : ""}
             </p>
@@ -445,17 +445,17 @@ function ReviewModal({ req, onClose, onDecide, saving }: {
         </div>
 
         {logs.length > 0 ? (
-          <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3 text-sm">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Clock-ins that day</div>
+          <div className="mb-4 rounded-lg border border-line bg-surface p-3 text-sm">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-2">Clock-ins that day</div>
             <div className="divide-y">
               {logs.map((l) => {
                 const mins = l.clock_out ? Math.round((new Date(l.clock_out).getTime() - new Date(l.clock_in).getTime()) / 60000) : null;
                 const duration = mins != null ? `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m` : "ongoing";
                 return (
                   <div key={l.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-xs">
-                    <span className="flex items-center gap-1 text-gray-700"><LogIn className="h-3.5 w-3.5 text-green-600" /><span className="font-mono">{fmtMyt(l.clock_in)}</span></span>
-                    <span className="flex items-center gap-1 text-gray-700"><LogOut className="h-3.5 w-3.5 text-red-600" /><span className="font-mono">{l.clock_out ? fmtMyt(l.clock_out) : "—"}</span></span>
-                    <span className="text-gray-500">{duration}</span>
+                    <span className="flex items-center gap-1 text-text-2"><LogIn className="h-3.5 w-3.5 text-green-600" /><span className="font-mono">{fmtMyt(l.clock_in)}</span></span>
+                    <span className="flex items-center gap-1 text-text-2"><LogOut className="h-3.5 w-3.5 text-red-600" /><span className="font-mono">{l.clock_out ? fmtMyt(l.clock_out) : "—"}</span></span>
+                    <span className="text-text-2">{duration}</span>
                     {l.overtime_hours != null && Number(l.overtime_hours) > 0 && (
                       <span className="ml-auto rounded bg-amber-50 px-1.5 py-0.5 font-mono text-[11px] text-amber-800">
                         OT {toHalf(l.overtime_hours)}h{l.overtime_type ? ` · ${l.overtime_type}` : ""}

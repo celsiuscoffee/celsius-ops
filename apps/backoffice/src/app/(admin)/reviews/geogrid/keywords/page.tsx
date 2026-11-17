@@ -66,7 +66,7 @@ const TREND_ICON: Record<Trend, React.ReactNode> = {
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-xl border border-border bg-white p-4">
+    <div className="rounded-xl border border-border bg-surface p-4">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${tone ?? "text-foreground"}`}>{value}</p>
     </div>
@@ -143,7 +143,7 @@ export default function KeywordStrategyPage() {
       ) : error ? (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{error}</div>
       ) : !report || outlets.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-border bg-white p-10 text-center">
+        <div className="mt-6 rounded-xl border border-border bg-surface p-10 text-center">
           <Search className="mx-auto h-10 w-10 text-muted-foreground/30" />
           <p className="mt-3 text-sm text-muted-foreground">
             No scan data yet. The strategy needs at least one geogrid scan per keyword — it fills in as the weekly scan runs.
@@ -170,7 +170,7 @@ export default function KeywordStrategyPage() {
 
           <div className="mt-5 space-y-6">
             {outlets.map((o) => (
-              <div key={o.outletId} className="rounded-xl border border-border bg-white p-4">
+              <div key={o.outletId} className="rounded-xl border border-border bg-surface p-4">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <h2 className="font-heading text-lg font-semibold text-foreground">{o.outletName}</h2>
                   <span className="text-xs text-muted-foreground">
@@ -224,7 +224,7 @@ export default function KeywordStrategyPage() {
                               <button
                                 onClick={() => toggle(o.outletId, v, "retire")}
                                 disabled={busy === key}
-                                className="inline-flex items-center gap-1 rounded-lg border border-border bg-white px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-muted/50 disabled:opacity-50"
+                                className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-muted/50 disabled:opacity-50"
                               >
                                 {busy === key ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3" />}
                                 Stop tracking

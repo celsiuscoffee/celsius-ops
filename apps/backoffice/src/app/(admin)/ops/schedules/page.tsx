@@ -161,7 +161,7 @@ export default function SchedulesPage() {
             Assign SOPs to staff with recurring schedules
           </p>
         </div>
-        <Button onClick={openCreate} className="bg-terracotta hover:bg-terracotta-dark">
+        <Button onClick={openCreate} className="bg-ink hover:bg-ink-hover">
           <Plus className="mr-2 h-4 w-4" />New Schedule
         </Button>
       </div>
@@ -232,7 +232,7 @@ export default function SchedulesPage() {
                       className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
                         s.isActive
                           ? "bg-green-100 text-green-700 hover:bg-green-200"
-                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                          : "bg-sunken text-text-2 hover:bg-line"
                       }`}
                     >
                       {s.isActive ? "Active" : "Paused"}
@@ -306,7 +306,7 @@ export default function SchedulesPage() {
                 {(["SHIFT", "SPECIFIC_TIMES", "HOURLY"] as const).map((r) => (
                   <button key={r} type="button" onClick={() => { setRecurrence(r); if (r === "SHIFT") setTimes([]); }}
                     className={`flex-1 rounded-md py-2 text-xs font-medium transition-colors ${
-                      recurrence === r ? "bg-terracotta text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      recurrence === r ? "bg-ink text-on-ink" : "bg-muted text-muted-foreground hover:bg-muted/80"
                     }`}
                   >
                     {RECURRENCE_LABELS[r]}
@@ -327,7 +327,7 @@ export default function SchedulesPage() {
                 {times.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {times.map((t) => (
-                      <span key={t} className="inline-flex items-center gap-1 rounded-full bg-terracotta/10 px-2.5 py-1 text-xs text-terracotta">
+                      <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-xs text-brand-text">
                         {t}
                         <button onClick={() => removeTime(t)} className="hover:text-red-500">×</button>
                       </span>
@@ -346,7 +346,7 @@ export default function SchedulesPage() {
                   {[0, 15, 30, 60].map((m) => (
                     <button key={m} type="button" onClick={() => setDueMinutes(m)}
                       className={`flex-1 rounded-md py-2 text-xs font-medium transition-colors ${
-                        dueMinutes === m ? "bg-terracotta text-white" : "bg-muted text-muted-foreground"
+                        dueMinutes === m ? "bg-ink text-on-ink" : "bg-muted text-muted-foreground"
                       }`}
                     >
                       {m === 0 ? "No limit" : `${m} min`}
@@ -368,11 +368,11 @@ export default function SchedulesPage() {
                       type="button"
                       onClick={() => toggleStaff(s.id)}
                       className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
-                        isSelected ? "bg-terracotta/10 text-foreground" : "hover:bg-muted text-muted-foreground"
+                        isSelected ? "bg-brand-soft text-foreground" : "hover:bg-muted text-muted-foreground"
                       }`}
                     >
                       <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                        isSelected ? "bg-terracotta border-terracotta text-white" : "border-input"
+                        isSelected ? "bg-ink border-ink text-on-ink" : "border-input"
                       }`}>
                         {isSelected && <span className="text-[10px]">✓</span>}
                       </div>
@@ -392,7 +392,7 @@ export default function SchedulesPage() {
                   <button
                     type="button"
                     onClick={() => setSelectedStaff(new Set(filteredStaff.map((s) => s.id)))}
-                    className="text-[10px] text-terracotta hover:underline"
+                    className="text-[10px] text-brand-text hover:underline"
                   >
                     Select all
                   </button>
@@ -418,7 +418,7 @@ export default function SchedulesPage() {
                       onClick={() => toggleDay(day)}
                       className={`flex-1 rounded-md py-2 text-xs font-medium transition-colors ${
                         selected
-                          ? "bg-terracotta text-white"
+                          ? "bg-ink text-on-ink"
                           : "bg-muted text-muted-foreground hover:bg-muted/80"
                       }`}
                     >
@@ -432,7 +432,7 @@ export default function SchedulesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving} className="bg-terracotta hover:bg-terracotta-dark">
+            <Button onClick={handleSave} disabled={saving} className="bg-ink hover:bg-ink-hover">
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create Schedule
             </Button>

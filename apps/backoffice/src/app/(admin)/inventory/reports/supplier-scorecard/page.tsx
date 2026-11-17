@@ -54,7 +54,7 @@ function fmt(n: number) {
 function scoreBadge(score: number | null) {
   if (score === null)
     return (
-      <Badge variant="outline" className="text-xs text-gray-400">
+      <Badge variant="outline" className="text-xs text-text-3">
         N/A
       </Badge>
     );
@@ -77,16 +77,16 @@ function scoreBadge(score: number | null) {
 
 function rateBar(rate: number | null, color: string) {
   if (rate === null)
-    return <span className="text-xs text-gray-300">No data</span>;
+    return <span className="text-xs text-text-3">No data</span>;
   return (
     <div className="flex items-center gap-2">
-      <div className="h-2 flex-1 rounded-full bg-gray-100">
+      <div className="h-2 flex-1 rounded-full bg-sunken">
         <div
           className={`h-2 rounded-full ${color}`}
           style={{ width: `${Math.min(rate, 100)}%` }}
         />
       </div>
-      <span className="text-xs font-medium text-gray-700">{fmt(rate)}%</span>
+      <span className="text-xs font-medium text-text-2">{fmt(rate)}%</span>
     </div>
   );
 }
@@ -110,15 +110,15 @@ export default function SupplierScorecardPage() {
       <div className="flex items-center gap-3">
         <Link
           href="/inventory/reports"
-          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          className="rounded-lg p-1.5 text-text-3 hover:bg-sunken hover:text-text-2"
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 className="text-xl font-semibold text-text">
             Supplier Scorecard
           </h2>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-text-2">
             Delivery performance, fulfillment accuracy, and pricing stability
           </p>
         </div>
@@ -127,47 +127,47 @@ export default function SupplierScorecardPage() {
       {/* Summary cards */}
       {data && (
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="rounded-xl border border-line bg-surface p-4">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-blue-50 p-2">
                 <Truck className="h-4 w-4 text-blue-600" />
               </div>
-              <span className="text-sm text-gray-500">Suppliers Rated</span>
+              <span className="text-sm text-text-2">Suppliers Rated</span>
             </div>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
+            <p className="mt-2 text-2xl font-bold text-text">
               {data.summary.totalSuppliers}
             </p>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="rounded-xl border border-line bg-surface p-4">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-yellow-50 p-2">
                 <Star className="h-4 w-4 text-yellow-600" />
               </div>
-              <span className="text-sm text-gray-500">Avg Score</span>
+              <span className="text-sm text-text-2">Avg Score</span>
             </div>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
+            <p className="mt-2 text-2xl font-bold text-text">
               {data.summary.avgScore !== null ? data.summary.avgScore : "--"}
             </p>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="rounded-xl border border-line bg-surface p-4">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-green-50 p-2">
                 <TrendingUp className="h-4 w-4 text-green-600" />
               </div>
-              <span className="text-sm text-gray-500">Top Performer</span>
+              <span className="text-sm text-text-2">Top Performer</span>
             </div>
-            <p className="mt-2 text-lg font-bold text-gray-900 truncate">
+            <p className="mt-2 text-lg font-bold text-text truncate">
               {data.summary.topPerformer ?? "--"}
             </p>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="rounded-xl border border-line bg-surface p-4">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-purple-50 p-2">
                 <DollarSign className="h-4 w-4 text-purple-600" />
               </div>
-              <span className="text-sm text-gray-500">Total Spend</span>
+              <span className="text-sm text-text-2">Total Spend</span>
             </div>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
+            <p className="mt-2 text-2xl font-bold text-text">
               RM {fmt(data.summary.totalSpend)}
             </p>
           </div>
@@ -177,25 +177,25 @@ export default function SupplierScorecardPage() {
       {/* Filters */}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-500">From</label>
+          <label className="text-sm text-text-2">From</label>
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+            className="rounded-lg border border-line px-3 py-2 text-sm"
           />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-500">To</label>
+          <label className="text-sm text-text-2">To</label>
           <input
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+            className="rounded-lg border border-line px-3 py-2 text-sm"
           />
         </div>
         <select
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          className="rounded-lg border border-line px-3 py-2 text-sm"
           value={outletId}
           onChange={(e) => setOutletId(e.target.value)}
         >
@@ -204,13 +204,13 @@ export default function SupplierScorecardPage() {
             <option key={o.id} value={o.id}>{o.name}</option>
           ))}
         </select>
-        <div className="ml-auto flex gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+        <div className="ml-auto flex gap-1 rounded-lg border border-line bg-sunken p-1">
           {(["table", "cards"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
               className={`rounded-md px-3 py-1 text-sm font-medium capitalize transition ${
-                view === v ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                view === v ? "bg-surface text-text shadow-sm" : "text-text-2 hover:text-text-2"
               }`}
             >
               {v}
@@ -222,7 +222,7 @@ export default function SupplierScorecardPage() {
       {/* Loading */}
       {isLoading && (
         <div className="flex items-center justify-center p-12">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       )}
 
@@ -251,22 +251,22 @@ export default function SupplierScorecardPage() {
       {data && view === "cards" && (
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {data.suppliers.length === 0 && (
-            <div className="col-span-full rounded-xl border border-gray-200 bg-white px-4 py-12 text-center text-sm text-gray-400">
+            <div className="col-span-full rounded-xl border border-line bg-surface px-4 py-12 text-center text-sm text-text-3">
               No suppliers found
             </div>
           )}
           {data.suppliers.map((s) => (
             <div
               key={s.id}
-              className="rounded-xl border border-gray-200 bg-white p-5"
+              className="rounded-xl border border-line bg-surface p-5"
             >
               {/* Header row */}
               <div className="flex items-start justify-between">
                 <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-base font-semibold text-gray-900">
+                  <h3 className="truncate text-base font-semibold text-text">
                     {s.name}
                   </h3>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-0.5 text-xs text-text-2">
                     {s.totalOrders} {s.totalOrders === 1 ? 'order' : 'orders'} &middot; {s.completedOrders}{" "}
                     completed
                   </p>
@@ -275,7 +275,7 @@ export default function SupplierScorecardPage() {
                   {scoreBadge(s.score)}
                   <Badge
                     variant="outline"
-                    className="text-xs text-gray-500"
+                    className="text-xs text-text-2"
                   >
                     <Clock className="mr-1 h-3 w-3" />
                     {s.leadTimeDays}d lead
@@ -289,7 +289,7 @@ export default function SupplierScorecardPage() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5">
                     <Package className="h-3.5 w-3.5 text-blue-500" />
-                    <span className="text-xs font-medium text-gray-500">
+                    <span className="text-xs font-medium text-text-2">
                       On-Time Rate
                     </span>
                   </div>
@@ -307,7 +307,7 @@ export default function SupplierScorecardPage() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5">
                     <Truck className="h-3.5 w-3.5 text-indigo-500" />
-                    <span className="text-xs font-medium text-gray-500">
+                    <span className="text-xs font-medium text-text-2">
                       Fulfillment
                     </span>
                   </div>
@@ -329,17 +329,17 @@ export default function SupplierScorecardPage() {
                     ) : s.avgPriceChange < 0 ? (
                       <TrendingDown className="h-3.5 w-3.5 text-green-500" />
                     ) : (
-                      <AlertTriangle className="h-3.5 w-3.5 text-gray-400" />
+                      <AlertTriangle className="h-3.5 w-3.5 text-text-3" />
                     )}
-                    <span className="text-xs font-medium text-gray-500">
+                    <span className="text-xs font-medium text-text-2">
                       Price Changes
                     </span>
                   </div>
-                  <p className="text-sm font-semibold text-gray-900">
+                  <p className="text-sm font-semibold text-text">
                     {s.priceChanges}
                     {s.priceChanges > 0 && (
                       <span
-                        className={`ml-1.5 text-xs font-normal ${s.avgPriceChange > 0 ? "text-red-500" : s.avgPriceChange < 0 ? "text-green-500" : "text-gray-400"}`}
+                        className={`ml-1.5 text-xs font-normal ${s.avgPriceChange > 0 ? "text-red-500" : s.avgPriceChange < 0 ? "text-green-500" : "text-text-3"}`}
                       >
                         {s.avgPriceChange > 0 ? "+" : ""}
                         {fmt(s.avgPriceChange)}%
@@ -352,11 +352,11 @@ export default function SupplierScorecardPage() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5">
                     <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
-                    <span className="text-xs font-medium text-gray-500">
+                    <span className="text-xs font-medium text-text-2">
                       Total Spend
                     </span>
                   </div>
-                  <p className="text-sm font-semibold text-gray-900">
+                  <p className="text-sm font-semibold text-text">
                     RM {fmt(s.totalSpend)}
                   </p>
                 </div>
@@ -383,17 +383,17 @@ export default function SupplierScorecardPage() {
 const pct = (v: number | null) => (v === null ? "—" : `${v}%`);
 
 const scorecardColumns: ReportColumn<SupplierScore>[] = [
-  { key: "name", header: "Supplier", sortValue: (sp) => sp.name, render: (sp) => <span className="font-medium text-gray-900">{sp.name}</span> },
+  { key: "name", header: "Supplier", sortValue: (sp) => sp.name, render: (sp) => <span className="font-medium text-text">{sp.name}</span> },
   { key: "score", header: "Score", align: "right", sortValue: (sp) => sp.score, render: (sp) => scoreBadge(sp.score) },
   {
     key: "totalOrders", header: "Orders", align: "right", sortValue: (sp) => sp.totalOrders,
     csv: (sp) => sp.totalOrders,
-    render: (sp) => <span className="font-mono text-gray-900">{sp.totalOrders}<span className="text-xs text-gray-400"> / {sp.completedOrders} done</span></span>,
+    render: (sp) => <span className="font-mono text-text">{sp.totalOrders}<span className="text-xs text-text-3"> / {sp.completedOrders} done</span></span>,
   },
   {
     key: "onTimeRate", header: "On-time", align: "right", sortValue: (sp) => sp.onTimeRate,
     render: (sp) => (
-      <span className={`font-mono ${sp.onTimeRate === null ? "text-gray-300" : sp.onTimeRate >= 80 ? "text-green-600" : sp.onTimeRate >= 60 ? "text-amber-600" : "text-red-600"}`}>
+      <span className={`font-mono ${sp.onTimeRate === null ? "text-text-3" : sp.onTimeRate >= 80 ? "text-green-600" : sp.onTimeRate >= 60 ? "text-amber-600" : "text-red-600"}`}>
         {pct(sp.onTimeRate)}
       </span>
     ),
@@ -401,7 +401,7 @@ const scorecardColumns: ReportColumn<SupplierScore>[] = [
   {
     key: "fulfillmentRate", header: "Fulfilment", align: "right", sortValue: (sp) => sp.fulfillmentRate,
     render: (sp) => (
-      <span className={`font-mono ${sp.fulfillmentRate === null ? "text-gray-300" : sp.fulfillmentRate >= 80 ? "text-green-600" : sp.fulfillmentRate >= 60 ? "text-amber-600" : "text-red-600"}`}>
+      <span className={`font-mono ${sp.fulfillmentRate === null ? "text-text-3" : sp.fulfillmentRate >= 80 ? "text-green-600" : sp.fulfillmentRate >= 60 ? "text-amber-600" : "text-red-600"}`}>
         {pct(sp.fulfillmentRate)}
       </span>
     ),
@@ -410,17 +410,17 @@ const scorecardColumns: ReportColumn<SupplierScore>[] = [
     key: "shortDeliveries", header: "Short", align: "right", sortValue: (sp) => sp.shortDeliveries,
     render: (sp) => sp.shortDeliveries > 0
       ? <span className="font-mono font-medium text-amber-600"><AlertTriangle className="mr-0.5 inline h-3 w-3" />{sp.shortDeliveries}</span>
-      : <span className="text-gray-300">—</span>,
+      : <span className="text-text-3">—</span>,
   },
   {
     key: "avgPriceChange", header: "Price change", align: "right", sortValue: (sp) => (sp.priceChanges > 0 ? sp.avgPriceChange : null),
     render: (sp) => sp.priceChanges > 0 ? (
-      <span className={`font-mono ${sp.avgPriceChange > 0 ? "text-red-600" : sp.avgPriceChange < 0 ? "text-green-600" : "text-gray-400"}`}>
+      <span className={`font-mono ${sp.avgPriceChange > 0 ? "text-red-600" : sp.avgPriceChange < 0 ? "text-green-600" : "text-text-3"}`}>
         {sp.avgPriceChange > 0 ? "+" : ""}{fmt(sp.avgPriceChange)}%
-        <span className="text-xs text-gray-400"> ({sp.priceChanges})</span>
+        <span className="text-xs text-text-3"> ({sp.priceChanges})</span>
       </span>
-    ) : <span className="text-gray-300">—</span>,
+    ) : <span className="text-text-3">—</span>,
   },
-  { key: "leadTimeDays", header: "Lead", align: "right", sortValue: (sp) => sp.leadTimeDays, render: (sp) => <span className="font-mono text-gray-600">{sp.leadTimeDays}d</span> },
-  { key: "totalSpend", header: "Total Spend", align: "right", sortValue: (sp) => sp.totalSpend, render: (sp) => <span className="font-mono font-medium text-gray-900">RM {fmt(sp.totalSpend)}</span> },
+  { key: "leadTimeDays", header: "Lead", align: "right", sortValue: (sp) => sp.leadTimeDays, render: (sp) => <span className="font-mono text-text-2">{sp.leadTimeDays}d</span> },
+  { key: "totalSpend", header: "Total Spend", align: "right", sortValue: (sp) => sp.totalSpend, render: (sp) => <span className="font-mono font-medium text-text">RM {fmt(sp.totalSpend)}</span> },
 ];

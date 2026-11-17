@@ -32,7 +32,7 @@ const KIND_LABEL: Record<Kind, string> = {
 const KIND_CLASS: Record<Kind, string> = {
   pulse: "bg-red-100 text-red-700", nudge: "bg-amber-100 text-amber-700", scoreboard: "bg-violet-100 text-violet-700",
   reminder: "bg-blue-100 text-blue-700", instruction: "bg-teal-100 text-teal-700", audit: "bg-indigo-100 text-indigo-700",
-  reply: "bg-green-100 text-green-700", manual: "bg-slate-100 text-slate-600", supplier: "bg-orange-100 text-orange-700", other: "bg-slate-100 text-slate-600",
+  reply: "bg-green-100 text-green-700", manual: "bg-sunken text-text-2", supplier: "bg-orange-100 text-orange-700", other: "bg-sunken text-text-2",
 };
 
 const FILTER_KINDS: { key: string; label: string }[] = [
@@ -80,7 +80,7 @@ export default function MessagesPanel() {
     <Card className="flex h-[calc(100vh-15rem)] flex-col p-4">
       {/* Header + summary */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Activity className="h-4 w-4 text-terracotta" />
+        <Activity className="h-4 w-4 text-brand-text" />
         <span className="text-sm font-medium">Message monitor</span>
         {s && (
           <span className="text-xs text-muted-foreground">
@@ -105,7 +105,7 @@ export default function MessagesPanel() {
               onClick={() => setKind(k.key)}
               className={
                 "rounded-md border px-2 py-1 text-xs transition " +
-                (active ? "border-terracotta bg-terracotta/10 text-terracotta" : "text-muted-foreground hover:text-foreground")
+                (active ? "border-ink bg-brand-soft text-brand-text" : "text-muted-foreground hover:text-foreground")
               }
             >
               {k.label}{n ? ` ${n}` : ""}

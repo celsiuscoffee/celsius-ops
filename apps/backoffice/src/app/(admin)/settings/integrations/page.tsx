@@ -96,15 +96,15 @@ const METHOD_DEFS: MethodDef[] = [
   // platform wallet sheets). Keep this list in sync with apps/order's
   // /api/payments/gateway-config DEFAULT_METHODS + the pickup-native
   // checkout METHOD_LABELS.
-  { id: "card",       name: "Credit / Debit Card", Icon: CreditCard,  tint: "text-slate-600",   bg: "bg-slate-100",  providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
+  { id: "card",       name: "Credit / Debit Card", Icon: CreditCard,  tint: "text-text-2",   bg: "bg-sunken",  providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
   { id: "fpx",        name: "FPX Online Banking",  Icon: Landmark,    tint: "text-blue-700",    bg: "bg-blue-50",    providers: ["revenue_monster", "stripe"], defaultProvider: "revenue_monster" },
   { id: "tng",        name: "TNG eWallet",         Icon: Smartphone,  tint: "text-sky-600",     bg: "bg-sky-50",     providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
   { id: "boost",      name: "Boost",               Icon: Zap,         tint: "text-rose-500",    bg: "bg-rose-50",    providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
   { id: "shopeepay",  name: "ShopeePay",           Icon: ShoppingBag, tint: "text-orange-600",  bg: "bg-orange-50",  providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
   { id: "grabpay",    name: "GrabPay",             Icon: Wallet,      tint: "text-emerald-600", bg: "bg-emerald-50", providers: ["stripe", "revenue_monster"], defaultProvider: "stripe" },
   { id: "duitnow",    name: "DuitNow QR",          Icon: QrCode,      tint: "text-red-600",     bg: "bg-red-50",     providers: ["revenue_monster"],            defaultProvider: "revenue_monster" },
-  { id: "apple_pay",  name: "Apple Pay",           Icon: AppleMark,   tint: "text-gray-900",    bg: "bg-gray-100",   providers: ["stripe"],                     defaultProvider: "stripe" },
-  { id: "google_pay", name: "Google Pay",          Icon: GoogleMark,  tint: "",                 bg: "bg-gray-100",   providers: ["stripe"],                     defaultProvider: "stripe" },
+  { id: "apple_pay",  name: "Apple Pay",           Icon: AppleMark,   tint: "text-text",    bg: "bg-sunken",   providers: ["stripe"],                     defaultProvider: "stripe" },
+  { id: "google_pay", name: "Google Pay",          Icon: GoogleMark,  tint: "",                 bg: "bg-sunken",   providers: ["stripe"],                     defaultProvider: "stripe" },
 ];
 
 /* ─── Helpers ───────────────────────────────────────────────────────────── */
@@ -138,7 +138,7 @@ function CredField({
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-xs font-medium text-gray-600">{label}</label>
+        <label className="text-xs font-medium text-text-2">{label}</label>
         {isSet && (
           <span className="text-[10px] text-green-600 font-semibold flex items-center gap-0.5">
             <ShieldCheck className="h-3 w-3" />Saved
@@ -152,7 +152,7 @@ function CredField({
             placeholder={isSet ? mask(existing) : placeholder}
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 font-mono bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-terracotta/20 focus:border-terracotta/40 resize-none transition"
+            className="w-full text-xs border border-line rounded-lg px-3 py-2 font-mono bg-sunken/50 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-ink/40 resize-none transition"
           />
         ) : (
           <input
@@ -160,11 +160,11 @@ function CredField({
             placeholder={isSet ? mask(existing) : placeholder}
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 pr-9 font-mono bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-terracotta/20 focus:border-terracotta/40 transition"
+            className="w-full text-xs border border-line rounded-lg px-3 py-2 pr-9 font-mono bg-sunken/50 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-ink/40 transition"
           />
         )}
         {!textarea && (
-          <button type="button" onClick={() => setShow((s) => !s)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
+          <button type="button" onClick={() => setShow((s) => !s)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-3 hover:text-text-2 transition">
             {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>
         )}
@@ -180,9 +180,9 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
     <button
       onClick={() => onChange(!checked)}
       disabled={disabled}
-      className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${checked ? "bg-green-500" : "bg-gray-300"} ${disabled ? "opacity-50" : "cursor-pointer"}`}
+      className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${checked ? "bg-green-500" : "bg-line"} ${disabled ? "opacity-50" : "cursor-pointer"}`}
     >
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 mt-0.5 ${checked ? "translate-x-4 ml-0.5" : "translate-x-0.5"}`} />
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-surface shadow transition-transform duration-200 mt-0.5 ${checked ? "translate-x-4 ml-0.5" : "translate-x-0.5"}`} />
     </button>
   );
 }
@@ -207,7 +207,7 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
       {label}
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 text-[10px] bg-gray-50 text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full font-medium">
+    <span className="inline-flex items-center gap-1 text-[10px] bg-sunken text-text-2 border border-line px-2 py-0.5 rounded-full font-medium">
       <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
       {label}
     </span>
@@ -223,23 +223,23 @@ function SectionCard({
   badge?: React.ReactNode; open: boolean; onToggle: () => void; children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-      <button onClick={onToggle} className="flex items-center justify-between w-full px-5 py-4 hover:bg-gray-50/50 transition-colors">
+    <section className="rounded-xl border border-line bg-surface shadow-sm overflow-hidden">
+      <button onClick={onToggle} className="flex items-center justify-between w-full px-5 py-4 hover:bg-sunken/50 transition-colors">
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
             {icon}
           </div>
           <div className="text-left">
             <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-gray-900 text-sm">{title}</h2>
+              <h2 className="font-semibold text-text text-sm">{title}</h2>
               {badge}
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>
+            <p className="text-xs text-text-2 mt-0.5">{subtitle}</p>
           </div>
         </div>
-        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${open ? "" : "-rotate-90"}`} />
+        <ChevronDown className={`h-4 w-4 text-text-3 transition-transform duration-200 ${open ? "" : "-rotate-90"}`} />
       </button>
-      {open && <div className="px-5 pb-5 border-t border-gray-100">{children}</div>}
+      {open && <div className="px-5 pb-5 border-t border-line">{children}</div>}
     </section>
   );
 }
@@ -257,17 +257,17 @@ function OutletCard({
   const name = STORE_NAMES[storeId] ?? storeId;
 
   return (
-    <div className={`rounded-lg border transition-colors ${enabled ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50/50"}`}>
+    <div className={`rounded-lg border transition-colors ${enabled ? "border-line bg-surface" : "border-line bg-sunken/50"}`}>
       <div className="flex items-center justify-between px-4 py-3">
         <button onClick={() => setOpen(!open)} className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
-          <Store className="h-4 w-4 text-gray-400 shrink-0" />
-          <span className="text-sm font-medium text-gray-900 truncate">{name}</span>
+          <Store className="h-4 w-4 text-text-3 shrink-0" />
+          <span className="text-sm font-medium text-text truncate">{name}</span>
           <StatusPill ok={configured} label={configured ? "Configured" : "Not set"} />
-          <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 ${open ? "" : "-rotate-90"}`} />
+          <ChevronDown className={`h-3.5 w-3.5 text-text-3 transition-transform duration-200 ${open ? "" : "-rotate-90"}`} />
         </button>
         <Toggle checked={enabled} onChange={onToggle} disabled={toggling} />
       </div>
-      {open && <div className="px-4 pb-4 border-t border-gray-100 pt-3">{children}</div>}
+      {open && <div className="px-4 pb-4 border-t border-line pt-3">{children}</div>}
     </div>
   );
 }
@@ -582,7 +582,7 @@ export default function IntegrationsPage() {
   if (outletsLoading && pgLoading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-text-3" />
       </div>
     );
   }
@@ -592,12 +592,12 @@ export default function IntegrationsPage() {
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Integrations</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Payment gateways, accounting, and connected services</p>
+          <h1 className="text-xl font-bold text-text">Integrations</h1>
+          <p className="text-sm text-text-2 mt-0.5">Payment gateways, accounting, and connected services</p>
         </div>
         <button
           onClick={() => { loadOutlets(); loadPgConfig(); }}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors rounded-lg px-3 py-1.5 hover:bg-gray-100"
+          className="flex items-center gap-1.5 text-sm text-text-2 hover:text-text transition-colors rounded-lg px-3 py-1.5 hover:bg-sunken"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${outletsLoading || pgLoading ? "animate-spin" : ""}`} />
           Refresh
@@ -607,16 +607,16 @@ export default function IntegrationsPage() {
       {/* ── Status Overview ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Payment Methods", value: `${enabledMethods}/${METHOD_DEFS.length}`, sub: "active", color: "bg-terracotta/10 text-terracotta" },
+          { label: "Payment Methods", value: `${enabledMethods}/${METHOD_DEFS.length}`, sub: "active", color: "bg-brand-soft text-brand-text" },
           { label: "Revenue Monster", value: `${rmConfiguredCount}/${outlets.length}`, sub: "outlets", color: "bg-blue-50 text-blue-600" },
           { label: "Bukku", value: `${bukkuConfiguredCount}/${outlets.length}`, sub: "outlets", color: "bg-purple-50 text-purple-600" },
-          { label: "StoreHub", value: "Legacy", sub: "archive only", color: "bg-gray-100 text-gray-500" },
+          { label: "StoreHub", value: "Legacy", sub: "archive only", color: "bg-sunken text-text-2" },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-3.5">
-            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">{s.label}</p>
+          <div key={s.label} className="rounded-xl border border-line bg-surface p-3.5">
+            <p className="text-[11px] font-medium text-text-2 uppercase tracking-wider">{s.label}</p>
             <div className="flex items-baseline gap-1.5 mt-1">
-              <span className="text-lg font-bold text-gray-900">{s.value}</span>
-              <span className="text-xs text-gray-400">{s.sub}</span>
+              <span className="text-lg font-bold text-text">{s.value}</span>
+              <span className="text-xs text-text-3">{s.sub}</span>
             </div>
           </div>
         ))}
@@ -640,9 +640,9 @@ export default function IntegrationsPage() {
         onToggle={() => setSmsOpen(!smsOpen)}
       >
         <div className="mt-4 space-y-3">
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-text-2">
             Switches the active gateway for OTP and loyalty blasts instantly — no redeploy. Applies
-            everywhere via <code className="text-[11px] bg-gray-100 px-1 py-0.5 rounded">app_settings.sms_provider</code>.
+            everywhere via <code className="text-[11px] bg-sunken px-1 py-0.5 rounded">app_settings.sms_provider</code>.
           </p>
           <div className="grid gap-2">
             {[
@@ -656,11 +656,11 @@ export default function IntegrationsPage() {
                   key={opt.id}
                   onClick={() => saveSmsProvider(opt.id)}
                   disabled={smsSaving}
-                  className={`flex items-center justify-between rounded-lg border px-4 py-3 text-left transition-colors disabled:opacity-60 ${active ? "border-emerald-500 bg-emerald-50/50" : "border-gray-200 bg-white hover:bg-gray-50"}`}
+                  className={`flex items-center justify-between rounded-lg border px-4 py-3 text-left transition-colors disabled:opacity-60 ${active ? "border-emerald-500 bg-emerald-50/50" : "border-line bg-surface hover:bg-sunken"}`}
                 >
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-gray-900">{opt.label}</div>
-                    <div className="text-xs text-gray-500 truncate">{opt.note}</div>
+                    <div className="text-sm font-medium text-text">{opt.label}</div>
+                    <div className="text-xs text-text-2 truncate">{opt.note}</div>
                   </div>
                   {active && <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />}
                 </button>
@@ -669,20 +669,20 @@ export default function IntegrationsPage() {
           </div>
           {!smsProvider && (
             <p className="text-[11px] text-amber-600">
-              No override set — using the <code className="text-[11px] bg-gray-100 px-1 py-0.5 rounded">SMS_PROVIDER</code> env var as default.
+              No override set — using the <code className="text-[11px] bg-sunken px-1 py-0.5 rounded">SMS_PROVIDER</code> env var as default.
             </p>
           )}
-          {smsMsg && <p className="text-xs text-gray-500">{smsMsg}</p>}
+          {smsMsg && <p className="text-xs text-text-2">{smsMsg}</p>}
         </div>
       </SectionCard>
 
       {/* ── Payment Methods ─────────────────────────────────────────────── */}
       <SectionCard
-        icon={<Wallet className="h-5 w-5 text-terracotta" />}
-        iconBg="bg-terracotta/10"
+        icon={<Wallet className="h-5 w-5 text-brand-text" />}
+        iconBg="bg-brand-soft"
         title="Payment Methods"
         subtitle="Enable methods and choose which gateway processes each one"
-        badge={<span className="text-[10px] bg-terracotta/10 text-terracotta px-2 py-0.5 rounded-full font-medium">{enabledMethods} active</span>}
+        badge={<span className="text-[10px] bg-brand-soft text-brand-text px-2 py-0.5 rounded-full font-medium">{enabledMethods} active</span>}
         open={paymentOpen}
         onToggle={() => setPaymentOpen(!paymentOpen)}
       >
@@ -690,7 +690,7 @@ export default function IntegrationsPage() {
           {/* Provider legend */}
           <div className="flex gap-4">
             {PROVIDERS.map((p) => (
-              <div key={p.id} className="flex items-center gap-1.5 text-xs text-gray-600">
+              <div key={p.id} className="flex items-center gap-1.5 text-xs text-text-2">
                 <span className={`w-2.5 h-2.5 rounded-full ${p.dot}`} />
                 {p.label}
               </div>
@@ -698,12 +698,12 @@ export default function IntegrationsPage() {
           </div>
 
           {/* Method rows */}
-          <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+          <div className="rounded-lg border border-line divide-y divide-line overflow-hidden">
             {METHOD_DEFS.map((method) => {
               const cfg = getConfig(method.id);
               const saving = pgSaving === method.id || pgSaving === method.id + "_provider";
               return (
-                <div key={method.id} className={`flex items-center justify-between px-4 py-3 transition-colors ${cfg.enabled ? "bg-white" : "bg-gray-50/50"}`}>
+                <div key={method.id} className={`flex items-center justify-between px-4 py-3 transition-colors ${cfg.enabled ? "bg-surface" : "bg-sunken/50"}`}>
                   <div className="flex items-center gap-3 min-w-0">
                     <Toggle
                       checked={cfg.enabled}
@@ -713,11 +713,11 @@ export default function IntegrationsPage() {
                     <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${method.bg}`}>
                       <method.Icon className={`h-4 w-4 ${method.tint}`} />
                     </span>
-                    <span className={`text-sm font-medium transition-colors ${cfg.enabled ? "text-gray-900" : "text-gray-400"}`}>{method.name}</span>
+                    <span className={`text-sm font-medium transition-colors ${cfg.enabled ? "text-text" : "text-text-3"}`}>{method.name}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     {method.providers.length > 1 ? (
-                      <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                      <div className="flex rounded-lg border border-line overflow-hidden">
                         {method.providers.map((p) => {
                           const active = cfg.provider === p;
                           const prov = PROVIDERS.find((pr) => pr.id === p)!;
@@ -729,17 +729,17 @@ export default function IntegrationsPage() {
                               className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium transition-colors ${
                                 active
                                   ? "bg-gray-900 text-white"
-                                  : "bg-white text-gray-500 hover:bg-gray-50"
+                                  : "bg-surface text-text-2 hover:bg-sunken"
                               }`}
                             >
-                              <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-white" : prov.dot}`} />
+                              <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-surface" : prov.dot}`} />
                               {prov.label}
                             </button>
                           );
                         })}
                       </div>
                     ) : (
-                      <span className="flex items-center gap-1.5 text-[11px] text-gray-400 font-medium px-2">
+                      <span className="flex items-center gap-1.5 text-[11px] text-text-3 font-medium px-2">
                         <span className={`w-1.5 h-1.5 rounded-full ${PROVIDERS.find((p) => p.id === method.providers[0])?.dot}`} />
                         {PROVIDERS.find((p) => p.id === method.providers[0])?.label}
                       </span>
@@ -764,10 +764,10 @@ export default function IntegrationsPage() {
       >
         <div className="mt-4 space-y-4">
           {/* Master enable */}
-          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3">
+          <div className="flex items-center justify-between rounded-lg border border-line px-4 py-3">
             <div className="pr-4">
-              <div className="text-sm font-medium text-gray-900">Show Maybank QR at checkout</div>
-              <div className="text-xs text-gray-500 mt-0.5">
+              <div className="text-sm font-medium text-text">Show Maybank QR at checkout</div>
+              <div className="text-xs text-text-2 mt-0.5">
                 When on, customers can pay by scanning the outlet&apos;s Maybank QR. The order waits as
                 <span className="font-medium"> pending</span> until staff confirm payment and release it to the kitchen.
               </div>
@@ -780,7 +780,7 @@ export default function IntegrationsPage() {
               the customer-display renders the exact pink poster the
               customer would see at the counter. The merchant-id payload
               is a legacy fallback for outlets without an uploaded image. */}
-          <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+          <div className="rounded-lg border border-line divide-y divide-line overflow-hidden">
             {outlets.map((o) => {
               const sid = o.store_id;
               const oc = qr.outlets[sid] ?? { payload: "", enabled: false, image_url: null };
@@ -790,8 +790,8 @@ export default function IntegrationsPage() {
                 <div key={sid} className="px-4 py-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
-                      <Store className="h-4 w-4 text-gray-400 shrink-0" />
-                      <span className="text-sm font-medium text-gray-900 truncate">{STORE_NAMES[sid] ?? sid}</span>
+                      <Store className="h-4 w-4 text-text-3 shrink-0" />
+                      <span className="text-sm font-medium text-text truncate">{STORE_NAMES[sid] ?? sid}</span>
                       <StatusPill
                         ok={hasAny}
                         label={hasImage ? "Image set" : oc.payload ? "Payload set" : "No QR"}
@@ -806,7 +806,7 @@ export default function IntegrationsPage() {
 
                   <div className="flex items-start gap-3">
                     {/* Preview tile — shows the live image (or placeholder). */}
-                    <div className="shrink-0 w-20 h-28 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
+                    <div className="shrink-0 w-20 h-28 rounded-lg border border-line bg-sunken overflow-hidden flex items-center justify-center">
                       {hasImage ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -815,13 +815,13 @@ export default function IntegrationsPage() {
                           className="w-full h-full object-contain"
                         />
                       ) : (
-                        <QrCode className="h-6 w-6 text-gray-300" />
+                        <QrCode className="h-6 w-6 text-text-3" />
                       )}
                     </div>
 
                     <div className="flex-1 min-w-0 space-y-2">
                       <label className="block">
-                        <span className="block text-[11px] font-medium text-gray-600 mb-1">
+                        <span className="block text-[11px] font-medium text-text-2 mb-1">
                           Poster image (preferred)
                         </span>
                         <div className="flex items-center gap-2">
@@ -857,16 +857,16 @@ export default function IntegrationsPage() {
                             <button
                               type="button"
                               onClick={() => clearQrImage(sid)}
-                              className="text-[11px] text-gray-500 hover:text-rose-600"
+                              className="text-[11px] text-text-2 hover:text-rose-600"
                             >
                               Remove
                             </button>
                           )}
-                          <span className="text-[10px] text-gray-400">PNG / JPG, ≤1.5 MB</span>
+                          <span className="text-[10px] text-text-3">PNG / JPG, ≤1.5 MB</span>
                         </div>
                       </label>
                       <label className="block">
-                        <span className="block text-[11px] font-medium text-gray-600 mb-1">
+                        <span className="block text-[11px] font-medium text-text-2 mb-1">
                           Merchant ID fallback (optional)
                         </span>
                         <input
@@ -875,7 +875,7 @@ export default function IntegrationsPage() {
                           onChange={(e) => setQr({ ...qr, outlets: { ...qr.outlets, [sid]: { ...oc, payload: e.target.value } } })}
                           onBlur={() => saveQr(qr)}
                           placeholder="e.g. MBBQR1671618"
-                          className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-mono text-gray-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                          className="w-full rounded-lg border border-line px-3 py-1.5 text-xs font-mono text-text outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                         />
                       </label>
                     </div>
@@ -886,8 +886,8 @@ export default function IntegrationsPage() {
           </div>
 
           {/* Sync */}
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-            <div className="text-xs text-gray-600">
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-line bg-sunken px-4 py-3">
+            <div className="text-xs text-text-2">
               {qrMsg && <span className="mr-2 font-medium text-emerald-600">{qrMsg}</span>}
               Push the latest QR + payment config to the POS displays and the order app.
             </div>
@@ -900,7 +900,7 @@ export default function IntegrationsPage() {
               {syncing ? "Syncing…" : "Sync now"}
             </button>
           </div>
-          {syncMsg && <p className="text-xs text-gray-500">{syncMsg}</p>}
+          {syncMsg && <p className="text-xs text-text-2">{syncMsg}</p>}
         </div>
       </SectionCard>
 
@@ -943,9 +943,9 @@ export default function IntegrationsPage() {
                           type="checkbox"
                           checked={rmForms[outlet.store_id].is_production}
                           onChange={(e) => setRmForms((f) => ({ ...f, [outlet.store_id]: { ...f[outlet.store_id], is_production: e.target.checked } }))}
-                          className="rounded border-gray-300"
+                          className="rounded border-line-2"
                         />
-                        <span className="text-gray-600">Production mode</span>
+                        <span className="text-text-2">Production mode</span>
                       </label>
                       <div className="flex items-center gap-2">
                         {rmMsg[outlet.store_id] && (
@@ -1003,16 +1003,16 @@ export default function IntegrationsPage() {
                   <div className="space-y-3">
                     <CredField label="API Token" placeholder="Enter Bukku API token" existing={outlet.bukku_token} value={bukkuForms[outlet.store_id].token} onChange={(v) => setBukkuForms((f) => ({ ...f, [outlet.store_id]: { ...f[outlet.store_id], token: v } }))} />
                     <div>
-                      <label className="text-xs font-medium text-gray-600 mb-1.5 block">Subdomain</label>
+                      <label className="text-xs font-medium text-text-2 mb-1.5 block">Subdomain</label>
                       <div className="flex items-center gap-0">
                         <input
                           type="text"
                           placeholder={outlet.bukku_subdomain || "e.g. celsius-shah-alam"}
                           value={bukkuForms[outlet.store_id].subdomain}
                           onChange={(e) => setBukkuForms((f) => ({ ...f, [outlet.store_id]: { ...f[outlet.store_id], subdomain: e.target.value } }))}
-                          className="flex-1 text-xs border border-gray-200 rounded-l-lg px-3 py-2 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-terracotta/20 focus:border-terracotta/40 transition"
+                          className="flex-1 text-xs border border-line rounded-l-lg px-3 py-2 bg-sunken/50 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-ink/40 transition"
                         />
-                        <span className="text-xs text-gray-400 border border-l-0 border-gray-200 rounded-r-lg px-3 py-2 bg-gray-100 whitespace-nowrap">.bukku.my</span>
+                        <span className="text-xs text-text-3 border border-l-0 border-line rounded-r-lg px-3 py-2 bg-sunken whitespace-nowrap">.bukku.my</span>
                       </div>
                     </div>
 
@@ -1041,17 +1041,17 @@ export default function IntegrationsPage() {
       </SectionCard>
 
       {/* ── StoreHub POS ─────────────────────────────────────────────────── */}
-      <section className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden px-5 py-4">
+      <section className="rounded-xl border border-line bg-surface shadow-sm overflow-hidden px-5 py-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
             <Receipt className="h-5 w-5 text-emerald-600" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-gray-900 text-sm">StoreHub POS</h2>
+              <h2 className="font-semibold text-text text-sm">StoreHub POS</h2>
               <StatusPill ok={false} label="Retired" />
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">Legacy POS — fully replaced by the native POS for catalogue, sales, and loyalty. Kept read-only for historical sales reporting (the <code>storehub_sales</code> archive); no longer syncing.</p>
+            <p className="text-xs text-text-2 mt-0.5">Legacy POS — fully replaced by the native POS for catalogue, sales, and loyalty. Kept read-only for historical sales reporting (the <code>storehub_sales</code> archive); no longer syncing.</p>
           </div>
         </div>
       </section>
@@ -1084,7 +1084,7 @@ function GrabFoodCard() {
   return (
     <Link
       href="/settings/integrations/grab"
-      className="block rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden px-5 py-4 hover:bg-gray-50/50 transition-colors"
+      className="block rounded-xl border border-line bg-surface shadow-sm overflow-hidden px-5 py-4 hover:bg-sunken/50 transition-colors"
     >
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center shrink-0">
@@ -1092,18 +1092,18 @@ function GrabFoodCard() {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="font-semibold text-gray-900 text-sm">GrabFood</h2>
+            <h2 className="font-semibold text-text text-sm">GrabFood</h2>
             {state.loaded && (
               state.configured
                 ? <StatusPill ok={true} label={state.linkedOutlets > 0 ? `${state.linkedOutlets} outlet${state.linkedOutlets === 1 ? "" : "s"} linked` : "Configured · no outlet linked"} />
                 : <StatusPill ok={false} label="Not configured" />
             )}
           </div>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-text-2 mt-0.5">
             Inbound orders + outbound menu sync via Grab Partner API. Manage outlet linkage, view recent Grab orders, and run integration health checks.
           </p>
         </div>
-        <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
+        <ChevronRight className="h-4 w-4 text-text-3 shrink-0" />
       </div>
     </Link>
   );

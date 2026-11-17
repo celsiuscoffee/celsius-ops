@@ -46,7 +46,7 @@ type Product = { id: string; name: string; sku: string; baseUom: string; categor
 type CartItem = { productId: string; name: string; sku: string; uom: string; quantity: number; productPackageId: string | null; conversionFactor: number; availableStock: number };
 
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-gray-50 text-gray-600 border-gray-200",
+  DRAFT: "bg-sunken text-text-2 border-line",
   PENDING_APPROVAL: "bg-amber-50 text-amber-700 border-amber-200",
   APPROVED: "bg-blue-50 text-blue-700 border-blue-200",
   IN_TRANSIT: "bg-purple-50 text-purple-700 border-purple-200",
@@ -444,7 +444,7 @@ export default function TransfersPage() {
       case "COMPLETED":
         return <CheckCircle2 className={`${iconSize} text-green-500`} />;
       case "CANCELLED":
-        return <Ban className={`${iconSize} text-gray-400`} />;
+        return <Ban className={`${iconSize} text-text-3`} />;
       default:
         return null;
     }
@@ -453,7 +453,7 @@ export default function TransfersPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-text-3" />
       </div>
     );
   }
@@ -462,8 +462,8 @@ export default function TransfersPage() {
     <div className="p-3 sm:p-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Transfers</h2>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <h2 className="text-xl font-semibold text-text">Transfers</h2>
+          <p className="mt-0.5 text-sm text-text-2">
             {stats.total} transfers — {stats.draft} draft, {stats.pendingApproval} pending approval, {stats.inTransit} in transit, {stats.received} received
           </p>
         </div>
@@ -471,7 +471,7 @@ export default function TransfersPage() {
           <Button onClick={loadSmartTransfers} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
             <Sparkles className="mr-1.5 h-4 w-4" />Smart Transfer
           </Button>
-          <Button onClick={openCreate} className="bg-terracotta hover:bg-terracotta-dark">
+          <Button onClick={openCreate} className="bg-ink hover:bg-ink-hover">
             <Plus className="mr-1.5 h-4 w-4" />New Transfer
           </Button>
         </div>
@@ -480,7 +480,7 @@ export default function TransfersPage() {
       {/* Filters */}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <Input placeholder="Search outlet or staff..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex gap-1.5 flex-wrap">
@@ -493,7 +493,7 @@ export default function TransfersPage() {
             { key: "RECEIVED", label: `Received (${stats.received})` },
             { key: "CANCELLED", label: `Cancelled (${stats.cancelled})` },
           ].map((t) => (
-            <button key={t.key} onClick={() => setStatusFilter(t.key)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === t.key ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>
+            <button key={t.key} onClick={() => setStatusFilter(t.key)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === t.key ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2"}`}>
               {t.label}
             </button>
           ))}
@@ -501,45 +501,45 @@ export default function TransfersPage() {
       </div>
 
       {/* Table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
+      <div className="mt-4 rounded-xl border border-line bg-surface overflow-hidden overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Date</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Route</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Items</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Created By</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
+            <tr className="border-b border-line bg-sunken/50">
+              <th className="px-4 py-3 text-left font-medium text-text-2">Date</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Route</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Items</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Created By</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Status</th>
+              <th className="px-4 py-3 text-right font-medium text-text-2">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-400">
+              <tr><td colSpan={6} className="px-4 py-12 text-center text-text-3">
                 {data.length === 0 ? "No transfers yet. Click 'New Transfer' to move stock between outlets." : "No transfers match your filter."}
               </td></tr>
             )}
             {filtered.map((t) => (
-              <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+              <tr key={t.id} className="border-b border-line hover:bg-sunken/50">
                 <td className="px-4 py-3">
-                  <p className="font-medium text-gray-900">{formatDate(t.createdAt)}</p>
-                  <p className="text-[10px] text-gray-400">{formatTime(t.createdAt)}</p>
+                  <p className="font-medium text-text">{formatDate(t.createdAt)}</p>
+                  <p className="text-[10px] text-text-3">{formatTime(t.createdAt)}</p>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-gray-900">{t.fromOutlet}</span>
-                    <ArrowRight className="h-3.5 w-3.5 text-gray-400" />
-                    <span className="font-medium text-gray-900">{t.toOutlet}</span>
+                    <span className="font-medium text-text">{t.fromOutlet}</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-text-3" />
+                    <span className="font-medium text-text">{t.toOutlet}</span>
                   </div>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1">
-                    <Package className="h-3.5 w-3.5 text-gray-400" />
+                    <Package className="h-3.5 w-3.5 text-text-3" />
                     <span className="font-medium">{t.items.length}</span>
-                    <span className="text-gray-400 text-xs">{t.items.length === 1 ? "item" : "items"}</span>
+                    <span className="text-text-3 text-xs">{t.items.length === 1 ? "item" : "items"}</span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-gray-600">{t.transferredBy}</td>
+                <td className="px-4 py-3 text-text-2">{t.transferredBy}</td>
                 <td className="px-4 py-3">
                   <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[t.status] ?? ""}`}>
                     {STATUS_LABELS[t.status] ?? t.status}
@@ -566,26 +566,26 @@ export default function TransfersPage() {
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <ArrowLeftRight className="h-5 w-5 text-terracotta" />
+                  <ArrowLeftRight className="h-5 w-5 text-brand-text" />
                   Transfer Details
                 </DialogTitle>
               </DialogHeader>
 
               <div className="grid grid-cols-2 gap-3 mt-2">
                 <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-gray-500 uppercase">From</p>
+                  <p className="text-[10px] text-text-2 uppercase">From</p>
                   <p className="text-sm font-semibold">{selected.fromOutlet}</p>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-gray-500 uppercase">To</p>
+                  <p className="text-[10px] text-text-2 uppercase">To</p>
                   <p className="text-sm font-semibold">{selected.toOutlet}</p>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-gray-500 uppercase">Created By</p>
+                  <p className="text-[10px] text-text-2 uppercase">Created By</p>
                   <p className="text-sm font-semibold">{selected.transferredBy}</p>
                 </div>
                 <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-gray-500 uppercase">Status</p>
+                  <p className="text-[10px] text-text-2 uppercase">Status</p>
                   <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[selected.status] ?? ""}`}>
                     {STATUS_LABELS[selected.status] ?? selected.status}
                   </Badge>
@@ -593,7 +593,7 @@ export default function TransfersPage() {
               </div>
 
               {selected.notes && (
-                <p className="text-xs text-gray-500 mt-2 bg-gray-50 rounded-lg px-3 py-2">Note: {selected.notes}</p>
+                <p className="text-xs text-text-2 mt-2 bg-sunken rounded-lg px-3 py-2">Note: {selected.notes}</p>
               )}
 
               {/* Approval info */}
@@ -620,19 +620,19 @@ export default function TransfersPage() {
               <div className="mt-3 rounded-lg border overflow-hidden overflow-x-auto">
                 <table className="w-full text-xs min-w-[720px]">
                   <thead>
-                    <tr className="bg-gray-50 border-b">
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">Product</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">SKU</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">Package</th>
-                      <th className="px-3 py-2 text-right font-medium text-gray-500">Quantity</th>
+                    <tr className="bg-sunken border-b">
+                      <th className="px-3 py-2 text-left font-medium text-text-2">Product</th>
+                      <th className="px-3 py-2 text-left font-medium text-text-2">SKU</th>
+                      <th className="px-3 py-2 text-left font-medium text-text-2">Package</th>
+                      <th className="px-3 py-2 text-right font-medium text-text-2">Quantity</th>
                     </tr>
                   </thead>
                   <tbody>
                     {selected.items.map((item) => (
-                      <tr key={item.id} className="border-b border-gray-50">
-                        <td className="px-3 py-2 font-medium text-gray-900">{item.product}</td>
-                        <td className="px-3 py-2 text-gray-500">{item.sku}</td>
-                        <td className="px-3 py-2 text-gray-500">{item.package || "—"}</td>
+                      <tr key={item.id} className="border-b border-line">
+                        <td className="px-3 py-2 font-medium text-text">{item.product}</td>
+                        <td className="px-3 py-2 text-text-2">{item.sku}</td>
+                        <td className="px-3 py-2 text-text-2">{item.package || "—"}</td>
                         <td className="px-3 py-2 text-right font-mono font-medium">{item.quantity}</td>
                       </tr>
                     ))}
@@ -739,20 +739,20 @@ export default function TransfersPage() {
           {aiLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-              <span className="ml-2 text-sm text-gray-500">Analyzing stock levels across outlets...</span>
+              <span className="ml-2 text-sm text-text-2">Analyzing stock levels across outlets...</span>
             </div>
           ) : aiTransfers.length === 0 ? (
             <div className="py-12 text-center">
               <CheckCircle2 className="mx-auto h-8 w-8 text-green-400" />
-              <p className="mt-2 text-sm text-gray-500">All outlets are balanced. No transfers needed.</p>
+              <p className="mt-2 text-sm text-text-2">All outlets are balanced. No transfers needed.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-xs text-gray-500">{aiTransfers.length} transfer{aiTransfers.length !== 1 ? "s" : ""} recommended based on stock imbalances</p>
+              <p className="text-xs text-text-2">{aiTransfers.length} transfer{aiTransfers.length !== 1 ? "s" : ""} recommended based on stock imbalances</p>
               {aiTransfers.map((t, idx) => (
                 <div key={idx} className="rounded-lg border border-blue-100 bg-blue-50/30 p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                    <div className="flex items-center gap-2 text-sm font-medium text-text">
                       <span>{t.fromOutletName}</span>
                       <ArrowRight className="h-3.5 w-3.5 text-blue-500" />
                       <span>{t.toOutletName}</span>
@@ -769,8 +769,8 @@ export default function TransfersPage() {
                   <div className="space-y-1">
                     {t.items.map((item, i) => (
                       <div key={i} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-700">{item.productName} <span className="text-gray-400">({item.productSku})</span></span>
-                        <span className="font-medium text-gray-900">{item.quantity} {item.packageName}</span>
+                        <span className="text-text-2">{item.productName} <span className="text-text-3">({item.productSku})</span></span>
+                        <span className="font-medium text-text">{item.quantity} {item.packageName}</span>
                       </div>
                     ))}
                   </div>
@@ -795,9 +795,9 @@ export default function TransfersPage() {
           <DialogHeader>
             <DialogTitle>Reject Transfer</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-gray-500">Please provide a reason for rejecting this transfer.</p>
+          <p className="text-sm text-text-2">Please provide a reason for rejecting this transfer.</p>
           <textarea
-            className="mt-2 w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-terracotta focus:outline-none"
+            className="mt-2 w-full rounded-md border border-line px-3 py-2 text-sm focus:border-ink focus:outline-none"
             rows={3}
             placeholder="Reason for rejection..."
             value={rejectionReason}
@@ -821,7 +821,7 @@ export default function TransfersPage() {
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ArrowLeftRight className="h-5 w-5 text-terracotta" />
+              <ArrowLeftRight className="h-5 w-5 text-brand-text" />
               New Transfer
             </DialogTitle>
           </DialogHeader>
@@ -830,9 +830,9 @@ export default function TransfersPage() {
             {/* Outlet selectors */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-gray-600">From Outlet</label>
+                <label className="text-xs font-medium text-text-2">From Outlet</label>
                 <select
-                  className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm"
                   value={fromOutletId}
                   onChange={(e) => { setFromOutletId(e.target.value); setCart([]); fetchStockForOutlet(e.target.value, setStockBalances); }}
                 >
@@ -843,9 +843,9 @@ export default function TransfersPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600">To Outlet</label>
+                <label className="text-xs font-medium text-text-2">To Outlet</label>
                 <select
-                  className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm"
                   value={toOutletId}
                   onChange={(e) => { setToOutletId(e.target.value); fetchStockForOutlet(e.target.value, setToStockBalances); }}
                 >
@@ -859,10 +859,10 @@ export default function TransfersPage() {
 
             {/* Product search + add */}
             <div>
-              <label className="text-xs font-medium text-gray-600">Add Products</label>
+              <label className="text-xs font-medium text-text-2">Add Products</label>
               {!fromOutletId && <p className="mt-1 text-xs text-amber-600">Select source outlet first</p>}
               <div className="relative mt-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
                 <Input
                   placeholder={fromOutletId ? "Search product..." : "Select source outlet first..."}
                   className="pl-9"
@@ -872,9 +872,9 @@ export default function TransfersPage() {
                 />
               </div>
               {productSearch && (
-                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border bg-white shadow-sm">
+                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border bg-surface shadow-sm">
                   {filteredProducts.length === 0 && (
-                    <p className="px-3 py-2 text-xs text-gray-400">No products found</p>
+                    <p className="px-3 py-2 text-xs text-text-3">No products found</p>
                   )}
                   {filteredProducts.slice(0, 8).map((p) => {
                     const pkg = p.packages.find((pk) => pk.isDefault) || p.packages[0];
@@ -884,11 +884,11 @@ export default function TransfersPage() {
                     return (
                       <button
                         key={p.id}
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50"
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-sunken"
                         onClick={() => addToCart(p)}
                       >
-                        <span className="text-gray-900">{p.name}</span>
-                        <span className="text-xs text-gray-400">{pkgStock} {pkg?.label || p.baseUom} · {p.sku}</span>
+                        <span className="text-text">{p.name}</span>
+                        <span className="text-xs text-text-3">{pkgStock} {pkg?.label || p.baseUom} · {p.sku}</span>
                       </button>
                     );
                   })}
@@ -901,12 +901,12 @@ export default function TransfersPage() {
               <div className="rounded-lg border overflow-hidden overflow-x-auto">
                 <table className="w-full text-xs min-w-[720px]">
                   <thead>
-                    <tr className="bg-gray-50 border-b">
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">Product</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">Pkg</th>
-                      <th className="px-3 py-2 text-right font-medium text-gray-500">From</th>
-                      <th className="px-3 py-2 text-right font-medium text-gray-500 w-20">Qty</th>
-                      <th className="px-3 py-2 text-right font-medium text-gray-500">To</th>
+                    <tr className="bg-sunken border-b">
+                      <th className="px-3 py-2 text-left font-medium text-text-2">Product</th>
+                      <th className="px-3 py-2 text-left font-medium text-text-2">Pkg</th>
+                      <th className="px-3 py-2 text-right font-medium text-text-2">From</th>
+                      <th className="px-3 py-2 text-right font-medium text-text-2 w-20">Qty</th>
+                      <th className="px-3 py-2 text-right font-medium text-text-2">To</th>
                       <th className="px-3 py-2 w-8"></th>
                     </tr>
                   </thead>
@@ -918,30 +918,30 @@ export default function TransfersPage() {
                       const toCurrent = Math.floor(toBase / conv);
                       const toAfter = toCurrent + item.quantity;
                       return (
-                      <tr key={item.productId} className={`border-b border-gray-50 ${item.quantity > item.availableStock ? "bg-red-50" : ""}`}>
+                      <tr key={item.productId} className={`border-b border-line ${item.quantity > item.availableStock ? "bg-red-50" : ""}`}>
                         <td className="px-3 py-2">
-                          <p className="font-medium text-gray-900">{item.name}</p>
-                          <p className="text-[10px] text-gray-400">{item.sku}</p>
+                          <p className="font-medium text-text">{item.name}</p>
+                          <p className="text-[10px] text-text-3">{item.sku}</p>
                         </td>
-                        <td className="px-3 py-2 text-gray-500">{item.uom}</td>
+                        <td className="px-3 py-2 text-text-2">{item.uom}</td>
                         <td className="px-3 py-2 text-right">
-                          <span className={item.availableStock <= 0 ? "text-red-600 font-medium" : "text-gray-500"}>{item.availableStock}</span>
-                          <span className="text-gray-300 mx-0.5">&rarr;</span>
-                          <span className={fromAfter <= 0 ? "text-red-600 font-medium" : "text-gray-700 font-medium"}>{fromAfter}</span>
+                          <span className={item.availableStock <= 0 ? "text-red-600 font-medium" : "text-text-2"}>{item.availableStock}</span>
+                          <span className="text-text-3 mx-0.5">&rarr;</span>
+                          <span className={fromAfter <= 0 ? "text-red-600 font-medium" : "text-text-2 font-medium"}>{fromAfter}</span>
                         </td>
                         <td className="px-3 py-2">
                           <input
                             type="number"
                             min="1"
                             max={item.availableStock}
-                            className="w-full rounded border border-gray-200 px-2 py-1 text-right text-xs focus:border-terracotta focus:outline-none"
+                            className="w-full rounded border border-line px-2 py-1 text-right text-xs focus:border-ink focus:outline-none"
                             value={item.quantity}
                             onChange={(e) => updateCartQty(idx, parseInt(e.target.value) || 0)}
                           />
                         </td>
                         <td className="px-3 py-2 text-right">
-                          <span className="text-gray-500">{toCurrent}</span>
-                          <span className="text-gray-300 mx-0.5">&rarr;</span>
+                          <span className="text-text-2">{toCurrent}</span>
+                          <span className="text-text-3 mx-0.5">&rarr;</span>
                           <span className="text-green-600 font-medium">{toAfter}</span>
                         </td>
                         <td className="px-3 py-2 text-center">
@@ -959,7 +959,7 @@ export default function TransfersPage() {
 
             {/* Notes */}
             <div>
-              <label className="text-xs font-medium text-gray-600">Notes (optional)</label>
+              <label className="text-xs font-medium text-text-2">Notes (optional)</label>
               <Input
                 className="mt-1"
                 placeholder="Reason for transfer..."
@@ -974,7 +974,7 @@ export default function TransfersPage() {
             <Button
               onClick={handleCreate}
               disabled={!fromOutletId || !toOutletId || cart.length === 0 || submitting}
-              className="bg-terracotta hover:bg-terracotta-dark"
+              className="bg-ink hover:bg-ink-hover"
             >
               {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ArrowLeftRight className="mr-1.5 h-4 w-4" />}
               Create Transfer

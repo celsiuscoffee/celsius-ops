@@ -72,7 +72,7 @@ function StatusBadge({ s }: { s: StoreCard }) {
     return <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800"><PauseCircle className="h-3.5 w-3.5" />Paused</span>;
   if (s.isOpen)
     return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800"><Power className="h-3.5 w-3.5" />Open</span>;
-  return <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-600"><Power className="h-3.5 w-3.5" />{s.openToday ? "Closed" : "Closed today"}</span>;
+  return <span className="inline-flex items-center gap-1 rounded-full bg-line px-2.5 py-0.5 text-xs font-semibold text-text-2"><Power className="h-3.5 w-3.5" />{s.openToday ? "Closed" : "Closed today"}</span>;
 }
 
 function AlertBanner({ alert }: { alert: StoreCard["alert"] }) {
@@ -135,19 +135,19 @@ export default function StoreMenuStatusPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#160800]">Store / Menu Status</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-text">Store / Menu Status</h1>
+          <p className="text-sm text-text-2">
             Live: who&rsquo;s open, who&rsquo;s selling, and what&rsquo;s 86&rsquo;d — across all outlets.
           </p>
         </div>
         <div className="flex items-center gap-3">
           {data && (
-            <span className="text-xs text-gray-400">as of {clockTime(data.generatedAt)}</span>
+            <span className="text-xs text-text-3">as of {clockTime(data.generatedAt)}</span>
           )}
           <button
             onClick={load}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-[#160800] hover:bg-gray-50 disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line-2 bg-surface px-3 py-1.5 text-sm font-medium text-text hover:bg-sunken disabled:opacity-60"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -160,31 +160,31 @@ export default function StoreMenuStatusPage() {
       )}
 
       {loading && !data ? (
-        <div className="flex items-center justify-center py-20 text-gray-400">
+        <div className="flex items-center justify-center py-20 text-text-3">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
       ) : data ? (
         <>
           {/* ── Store status ──────────────────────────────────────────── */}
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Store status</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-text-2">Store status</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {data.stores.map((s) => {
                 const delta = s.todayOrders - s.avgWeekday;
                 return (
-                  <div key={s.outletId} className="rounded-2xl bg-white p-4 border border-gray-100 shadow-sm">
+                  <div key={s.outletId} className="rounded-2xl bg-surface p-4 border border-line shadow-sm">
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-semibold text-[#160800] leading-tight">{s.name}</h3>
+                      <h3 className="font-semibold text-text leading-tight">{s.name}</h3>
                       <StatusBadge s={s} />
                     </div>
 
                     <div className="mt-4 flex items-end justify-between">
                       <div>
-                        <p className="text-3xl font-bold text-[#160800] leading-none">{s.todayOrders}</p>
-                        <p className="mt-1 text-xs text-gray-500">orders today</p>
+                        <p className="text-3xl font-bold text-text leading-none">{s.todayOrders}</p>
+                        <p className="mt-1 text-xs text-text-2">orders today</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-medium text-gray-600">
+                        <p className="text-sm font-medium text-text-2">
                           {s.avgWeekday > 0 ? (
                             <span className={delta >= 0 ? "text-emerald-600" : "text-amber-600"}>
                               {delta >= 0 ? "+" : ""}
@@ -194,11 +194,11 @@ export default function StoreMenuStatusPage() {
                             "—"
                           )}
                         </p>
-                        <p className="text-xs text-gray-400">vs {s.avgWeekday} avg (this weekday)</p>
+                        <p className="text-xs text-text-3">vs {s.avgWeekday} avg (this weekday)</p>
                       </div>
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-2 text-xs text-gray-500">
+                    <div className="mt-3 flex items-center justify-between border-t border-line pt-2 text-xs text-text-2">
                       <span className="inline-flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5" />
                         {s.openTime ?? "—"}&ndash;{s.closeTime ?? "—"}
@@ -206,7 +206,7 @@ export default function StoreMenuStatusPage() {
                       <span>Last order {relTime(s.lastOrderAt)}</span>
                     </div>
 
-                    <div className="mt-1.5 text-xs text-gray-500">
+                    <div className="mt-1.5 text-xs text-text-2">
                       {s.snoozed > 0 ? (
                         <span className="font-medium text-amber-700">{s.snoozed} item{s.snoozed === 1 ? "" : "s"} snoozed</span>
                       ) : (
@@ -224,16 +224,16 @@ export default function StoreMenuStatusPage() {
           {/* ── Menu status ───────────────────────────────────────────── */}
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-text-2">
                 Menu status &mdash; snoozed items ({totalSnoozed})
               </h2>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search item, category, outlet"
-                  className="w-64 rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-1.5 text-sm text-[#160800] placeholder:text-gray-400"
+                  className="w-64 rounded-lg border border-line-2 bg-surface pl-9 pr-3 py-1.5 text-sm text-text placeholder:text-text-3"
                 />
               </div>
             </div>
@@ -244,27 +244,27 @@ export default function StoreMenuStatusPage() {
                 const live = Math.max(0, s.menuTotal - s.snoozed);
                 const pct = s.menuTotal > 0 ? (s.snoozed / s.menuTotal) * 100 : 0;
                 return (
-                  <div key={s.outletId} className="rounded-2xl bg-white p-4 border border-gray-100">
+                  <div key={s.outletId} className="rounded-2xl bg-surface p-4 border border-line">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium text-[#160800]">{s.name}</span>
-                      <span className="text-gray-500">
+                      <span className="font-medium text-text">{s.name}</span>
+                      <span className="text-text-2">
                         <span className="font-semibold text-amber-700">{s.snoozed}</span> / {s.menuTotal}
                       </span>
                     </div>
                     <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
                       <div className="h-full bg-amber-400" style={{ width: `${pct}%` }} />
                     </div>
-                    <p className="mt-1.5 text-xs text-gray-400">{live} live · {s.snoozed} snoozed</p>
+                    <p className="mt-1.5 text-xs text-text-3">{live} live · {s.snoozed} snoozed</p>
                   </div>
                 );
               })}
             </div>
 
             {/* Snoozed detail table */}
-            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+            <div className="overflow-hidden rounded-2xl border border-line bg-surface">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-700">
+                  <tr className="border-b border-line bg-sunken text-left text-xs font-medium text-text-2">
                     <th className="px-4 py-3">Outlet</th>
                     <th className="px-4 py-3">Category</th>
                     <th className="px-4 py-3">Item</th>
@@ -275,18 +275,18 @@ export default function StoreMenuStatusPage() {
                 <tbody>
                   {filteredSnoozed.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-500">
+                      <td colSpan={5} className="px-4 py-10 text-center text-sm text-text-2">
                         {totalSnoozed === 0 ? "Nothing snoozed — full menu live everywhere. 🎉" : "No matches."}
                       </td>
                     </tr>
                   ) : (
                     filteredSnoozed.map((i, idx) => (
-                      <tr key={`${i.storeId}-${i.item}-${idx}`} className="border-b border-gray-50 hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-[#160800]">{i.outletName}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{i.category}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-[#160800]">{i.item}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{i.reason || "—"}</td>
-                        <td className="px-4 py-3 text-sm text-right text-gray-500" title={new Date(i.since).toLocaleString("en-MY")}>
+                      <tr key={`${i.storeId}-${i.item}-${idx}`} className="border-b border-line hover:bg-sunken">
+                        <td className="px-4 py-3 text-sm text-text">{i.outletName}</td>
+                        <td className="px-4 py-3 text-sm text-text-2">{i.category}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-text">{i.item}</td>
+                        <td className="px-4 py-3 text-sm text-text-2">{i.reason || "—"}</td>
+                        <td className="px-4 py-3 text-sm text-right text-text-2" title={new Date(i.since).toLocaleString("en-MY")}>
                           {relTime(i.since)}
                         </td>
                       </tr>
@@ -295,7 +295,7 @@ export default function StoreMenuStatusPage() {
                 </tbody>
               </table>
             </div>
-            <p className="text-[11px] text-gray-400">
+            <p className="text-[11px] text-text-3">
               Snoozed = an item turned off (&ldquo;86&rdquo;) at an outlet that is otherwise on the live menu. Snoozing on the
               register also hides the item on GrabFood within seconds.
             </p>

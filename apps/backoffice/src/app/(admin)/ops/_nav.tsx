@@ -31,8 +31,8 @@ function TabBar({ tabs }: { tabs: typeof AUDIT_TABS }) {
             className={
               "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition " +
               (active
-                ? "bg-terracotta text-white"
-                : "text-gray-600 hover:bg-gray-100")
+                ? "bg-ink text-on-ink"
+                : "text-text-2 hover:bg-sunken")
             }
           >
             <Icon className="h-4 w-4" />

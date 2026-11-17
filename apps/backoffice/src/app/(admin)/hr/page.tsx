@@ -14,7 +14,7 @@ const MODULES = [
     description: "Profiles, documents, certifications",
     href: "/hr/employees",
     icon: Users,
-    color: "text-terracotta bg-orange-50",
+    color: "text-brand-text bg-orange-50",
     links: [
       { label: "Employees", href: "/hr/employees" },
       { label: "Certifications", href: "/hr/certifications" },
@@ -95,7 +95,7 @@ const MODULES = [
     description: "Policies, holidays, company",
     href: "/hr/settings",
     icon: Settings,
-    color: "text-gray-600 bg-gray-100",
+    color: "text-text-2 bg-sunken",
     links: [
       { label: "Time Off", href: "/hr/settings" },
       { label: "Shift Templates", href: "/hr/settings/shift-templates" },
@@ -167,7 +167,7 @@ export default function HRDashboardPage() {
       value: data?.payrollStatus === "confirmed" ? "Confirmed" : data?.payrollStatus === "ai_computed" ? "Ready" : "—",
       icon: Banknote,
       href: "/hr/payroll",
-      color: data?.payrollStatus === "confirmed" ? "text-green-600 bg-green-50" : "text-gray-600 bg-gray-50",
+      color: data?.payrollStatus === "confirmed" ? "text-green-600 bg-green-50" : "text-text-2 bg-sunken",
       subtitle: data?.payrollStatus === "not_started" ? "Not started" : data?.payrollStatus || "",
     },
     // Probation ends only on confirmation, and until then payroll withholds the
@@ -193,7 +193,7 @@ export default function HRDashboardPage() {
         <button
           onClick={runProcessor}
           disabled={processing}
-          className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
         >
           {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
           Run Attendance AI
@@ -244,7 +244,7 @@ export default function HRDashboardPage() {
                   <Link
                     key={l.href}
                     href={l.href}
-                    className="rounded-full border px-2.5 py-0.5 text-[11px] text-muted-foreground transition hover:border-terracotta hover:text-terracotta"
+                    className="rounded-full border px-2.5 py-0.5 text-[11px] text-muted-foreground transition hover:border-ink hover:text-brand-text"
                   >
                     {l.label}
                   </Link>
@@ -262,7 +262,7 @@ export default function HRDashboardPage() {
       {data?.lastAgentRun && (
         <div className="rounded-xl border bg-card p-5">
           <h3 className="mb-2 flex items-center gap-2 font-semibold">
-            <Bot className="h-5 w-5 text-terracotta" />
+            <Bot className="h-5 w-5 text-brand-text" />
             Last Attendance AI Run
           </h3>
           <div className="grid grid-cols-4 gap-4 text-sm">
@@ -330,7 +330,7 @@ function CelebrationsWidget() {
                 {c.type === "anniversary" && c.years && (
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">{c.years}y</span>
                 )}
-                {c.outlet && <span className="text-[10px] text-gray-500">· {c.outlet}</span>}
+                {c.outlet && <span className="text-[10px] text-text-2">· {c.outlet}</span>}
               </Link>
             ))}
           </div>
@@ -338,17 +338,17 @@ function CelebrationsWidget() {
       )}
       {upcoming.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Next 14 days</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-2">Next 14 days</p>
           <ul className="space-y-1 text-xs">
             {upcoming.map((c) => (
               <li key={`${c.user_id}-${c.type}-${c.on}`} className="flex items-center gap-2">
                 {c.type === "birthday" ? <Cake className="h-3 w-3 text-pink-500" /> : <PartyPopper className="h-3 w-3 text-amber-600" />}
-                <span className="font-mono text-gray-500 w-16">{c.on}</span>
+                <span className="font-mono text-text-2 w-16">{c.on}</span>
                 <Link href={`/hr/employees/${c.user_id}`} className="font-medium text-blue-600 hover:underline">{c.name}</Link>
                 {c.type === "anniversary" && c.years && (
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">{c.years}y anniversary</span>
                 )}
-                <span className="text-gray-400">· in {c.days_until} day{c.days_until === 1 ? "" : "s"}</span>
+                <span className="text-text-3">· in {c.days_until} day{c.days_until === 1 ? "" : "s"}</span>
               </li>
             ))}
           </ul>

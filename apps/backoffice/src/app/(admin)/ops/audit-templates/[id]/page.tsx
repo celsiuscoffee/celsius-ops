@@ -148,11 +148,11 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
   };
 
   if (isLoading) {
-    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-terracotta" /></div>;
+    return <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-brand-text" /></div>;
   }
 
   if (!template) {
-    return <div className="p-6 text-center text-gray-500">Template not found</div>;
+    return <div className="p-6 text-center text-text-2">Template not found</div>;
   }
 
   const totalItems = sections.reduce((s, sec) => s + sec.items.length, 0);
@@ -161,12 +161,12 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
     <div className="p-3 sm:p-6 max-w-3xl">
       {/* Header */}
       <div className="mb-6">
-        <Link href="/ops/audit-templates" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-3">
+        <Link href="/ops/audit-templates" className="inline-flex items-center gap-1 text-sm text-text-2 hover:text-text-2 mb-3">
           <ArrowLeft className="h-4 w-4" />Back to Templates
         </Link>
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-900">Edit Template</h2>
-          <Button onClick={handleSave} disabled={saving || !name.trim()} className="bg-terracotta hover:bg-terracotta-dark">
+          <h2 className="text-xl font-semibold text-text">Edit Template</h2>
+          <Button onClick={handleSave} disabled={saving || !name.trim()} className="bg-ink hover:bg-ink-hover">
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Save className="h-4 w-4 mr-1.5" />}
             Save
           </Button>
@@ -177,35 +177,35 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
       <Card className="mb-6">
         <CardContent className="p-4 space-y-3">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Name</label>
+            <label className="text-xs font-medium text-text-2 mb-1 block">Name</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Description</label>
+            <label className="text-xs font-medium text-text-2 mb-1 block">Description</label>
             <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional description" />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Audit target</label>
+            <label className="text-xs font-medium text-text-2 mb-1 block">Audit target</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setAuditTarget("OUTLET")}
-                className={`rounded-md border px-3 py-2 text-sm ${auditTarget === "OUTLET" ? "border-terracotta bg-terracotta/5 text-terracotta" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
+                className={`rounded-md border px-3 py-2 text-sm ${auditTarget === "OUTLET" ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}
               >
                 Outlet (SOP / Quality)
               </button>
               <button
                 type="button"
                 onClick={() => setAuditTarget("STAFF")}
-                className={`rounded-md border px-3 py-2 text-sm ${auditTarget === "STAFF" ? "border-terracotta bg-terracotta/5 text-terracotta" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}
+                className={`rounded-md border px-3 py-2 text-sm ${auditTarget === "STAFF" ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}
               >
                 Staff Skills
               </button>
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Auditor role</label>
-            <select value={roleType} onChange={(e) => setRoleType(e.target.value)} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm">
+            <label className="text-xs font-medium text-text-2 mb-1 block">Auditor role</label>
+            <select value={roleType} onChange={(e) => setRoleType(e.target.value)} className="w-full rounded-md border border-line px-3 py-2 text-sm">
               <option value="area_manager">Area Manager</option>
               <option value="chef_head">Head of Chef</option>
               <option value="barista_head">Head of Barista</option>
@@ -213,23 +213,23 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
           </div>
           {auditTarget === "STAFF" && (
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">
+              <label className="text-xs font-medium text-text-2 mb-1 block">
                 Staff job role to audit
-                {jobRoleFilter.length > 0 && <span className="ml-1 text-gray-400">({jobRoleFilter.length} selected)</span>}
+                {jobRoleFilter.length > 0 && <span className="ml-1 text-text-3">({jobRoleFilter.length} selected)</span>}
               </label>
-              <p className="text-[11px] text-gray-400 mb-2">
+              <p className="text-[11px] text-text-3 mb-2">
                 Pick every HR position this template should cover.
               </p>
-              <div className="max-h-44 overflow-y-auto rounded-md border border-gray-200 bg-white">
+              <div className="max-h-44 overflow-y-auto rounded-md border border-line bg-surface">
                 {(jobRoles ?? []).length === 0 ? (
-                  <div className="p-3 text-xs text-gray-400">Loading roles…</div>
+                  <div className="p-3 text-xs text-text-3">Loading roles…</div>
                 ) : (
                   (jobRoles ?? []).map((r) => {
                     const checked = jobRoleFilter.includes(r);
                     return (
                       <label
                         key={r}
-                        className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 cursor-pointer"
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-sunken cursor-pointer"
                       >
                         <input
                           type="checkbox"
@@ -241,7 +241,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
                                 : prev.filter((x) => x !== r),
                             )
                           }
-                          className="rounded border-gray-300"
+                          className="rounded border-line-2"
                         />
                         <span>{r}</span>
                       </label>
@@ -276,13 +276,13 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
               )}
             </div>
           )}
-          <p className="text-xs text-gray-400">{sections.length} sections, {totalItems} items</p>
+          <p className="text-xs text-text-3">{sections.length} sections, {totalItems} items</p>
         </CardContent>
       </Card>
 
       {/* Sections */}
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-700">Sections & Items</h3>
+        <h3 className="text-sm font-semibold text-text-2">Sections & Items</h3>
         <Button variant="outline" size="sm" onClick={addSection}>
           <Plus className="h-3.5 w-3.5 mr-1" />Add Section
         </Button>
@@ -293,9 +293,9 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
           <Card key={si}>
             <CardContent className="p-0">
               {/* Section header */}
-              <div className="flex items-center gap-3 p-3 border-b border-gray-100">
+              <div className="flex items-center gap-3 p-3 border-b border-line">
                 <button onClick={() => setExpandedSec(expandedSec === si ? null : si)} className="shrink-0">
-                  {expandedSec === si ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                  {expandedSec === si ? <ChevronDown className="h-4 w-4 text-text-3" /> : <ChevronRight className="h-4 w-4 text-text-3" />}
                 </button>
                 <Input
                   value={sec.name}
@@ -303,18 +303,18 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
                   placeholder="Section name"
                   className="font-medium"
                 />
-                <Badge className="text-[10px] bg-gray-100 text-gray-500 shrink-0">{sec.items.length} items</Badge>
-                <button onClick={() => removeSection(si)} className="shrink-0 rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50">
+                <Badge className="text-[10px] bg-sunken text-text-2 shrink-0">{sec.items.length} items</Badge>
+                <button onClick={() => removeSection(si)} className="shrink-0 rounded-md p-1 text-text-3 hover:text-red-500 hover:bg-red-50">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
 
               {/* Items */}
               {expandedSec === si && (
-                <div className="p-3 space-y-2 bg-gray-50/50">
+                <div className="p-3 space-y-2 bg-sunken/50">
                   {sec.items.map((item, ii) => (
-                    <div key={ii} className="flex items-start gap-2 bg-white rounded-lg p-2.5 border border-gray-100">
-                      <GripVertical className="h-4 w-4 text-gray-300 mt-2 shrink-0" />
+                    <div key={ii} className="flex items-start gap-2 bg-surface rounded-lg p-2.5 border border-line">
+                      <GripVertical className="h-4 w-4 text-text-3 mt-2 shrink-0" />
                       <div className="flex-1 space-y-2">
                         <Input
                           value={item.title}
@@ -332,24 +332,24 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
                           <select
                             value={item.ratingType}
                             onChange={(e) => updateItem(si, ii, "ratingType", e.target.value)}
-                            className="rounded-md border border-gray-200 px-2 py-1 text-xs"
+                            className="rounded-md border border-line px-2 py-1 text-xs"
                           >
                             <option value="pass_fail">Pass / Fail</option>
                             <option value="rating_5">5-Star Rating</option>
                             <option value="rating_3">Good / Fair / Poor</option>
                           </select>
-                          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                          <label className="flex items-center gap-1.5 text-xs text-text-2 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={item.photoRequired}
                               onChange={(e) => updateItem(si, ii, "photoRequired", e.target.checked)}
-                              className="rounded border-gray-300"
+                              className="rounded border-line-2"
                             />
                             <Camera className="h-3 w-3" />Photo required
                           </label>
                         </div>
                       </div>
-                      <button onClick={() => removeItem(si, ii)} className="shrink-0 rounded-md p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 mt-1">
+                      <button onClick={() => removeItem(si, ii)} className="shrink-0 rounded-md p-1 text-text-3 hover:text-red-500 hover:bg-red-50 mt-1">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -367,7 +367,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
       {sections.length === 0 && (
         <Card>
           <CardContent className="py-8 text-center">
-            <p className="text-sm text-gray-500">No sections yet. Click &quot;Add Section&quot; to start building the checklist.</p>
+            <p className="text-sm text-text-2">No sections yet. Click &quot;Add Section&quot; to start building the checklist.</p>
           </CardContent>
         </Card>
       )}

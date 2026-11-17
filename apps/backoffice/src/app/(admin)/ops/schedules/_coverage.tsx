@@ -69,34 +69,34 @@ export function SopCoverage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-terracotta" /></div>
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-brand-text" /></div>
       ) : !data ? (
-        <p className="text-sm text-gray-500">No data</p>
+        <p className="text-sm text-text-2">No data</p>
       ) : (
         <>
           {/* Summary */}
           <div className="grid gap-4 sm:grid-cols-4 mb-6">
             <Card><CardContent className="flex items-center gap-3 p-4">
-              <div className="rounded-lg bg-terracotta/10 p-2"><Shield className="h-5 w-5 text-terracotta" /></div>
-              <div><p className="text-2xl font-bold text-gray-900">{data.summary.coverageRate}%</p>
-                <p className="text-xs text-gray-500">Coverage</p></div>
+              <div className="rounded-lg bg-brand-soft p-2"><Shield className="h-5 w-5 text-brand-text" /></div>
+              <div><p className="text-2xl font-bold text-text">{data.summary.coverageRate}%</p>
+                <p className="text-xs text-text-2">Coverage</p></div>
             </CardContent></Card>
             <Card><CardContent className="flex items-center gap-3 p-4">
               <div className="rounded-lg bg-green-100 p-2"><CheckCircle2 className="h-5 w-5 text-green-500" /></div>
-              <div><p className="text-2xl font-bold text-gray-900">{data.summary.coveredSops}/{data.summary.totalSops}</p>
-                <p className="text-xs text-gray-500">SOPs Covered</p></div>
+              <div><p className="text-2xl font-bold text-text">{data.summary.coveredSops}/{data.summary.totalSops}</p>
+                <p className="text-xs text-text-2">SOPs Covered</p></div>
             </CardContent></Card>
             <Card><CardContent className="flex items-center gap-3 p-4">
-              <div className={`rounded-lg p-2 ${data.summary.criticalGaps > 0 ? "bg-red-100" : "bg-gray-100"}`}>
-                <XCircle className={`h-5 w-5 ${data.summary.criticalGaps > 0 ? "text-red-500" : "text-gray-400"}`} /></div>
-              <div><p className="text-2xl font-bold text-gray-900">{data.summary.criticalGaps}</p>
-                <p className="text-xs text-gray-500">Critical Gaps</p></div>
+              <div className={`rounded-lg p-2 ${data.summary.criticalGaps > 0 ? "bg-red-100" : "bg-sunken"}`}>
+                <XCircle className={`h-5 w-5 ${data.summary.criticalGaps > 0 ? "text-red-500" : "text-text-3"}`} /></div>
+              <div><p className="text-2xl font-bold text-text">{data.summary.criticalGaps}</p>
+                <p className="text-xs text-text-2">Critical Gaps</p></div>
             </CardContent></Card>
             <Card><CardContent className="flex items-center gap-3 p-4">
-              <div className={`rounded-lg p-2 ${data.summary.warningGaps > 0 ? "bg-amber-100" : "bg-gray-100"}`}>
-                <AlertTriangle className={`h-5 w-5 ${data.summary.warningGaps > 0 ? "text-amber-500" : "text-gray-400"}`} /></div>
-              <div><p className="text-2xl font-bold text-gray-900">{data.summary.warningGaps}</p>
-                <p className="text-xs text-gray-500">Warnings</p></div>
+              <div className={`rounded-lg p-2 ${data.summary.warningGaps > 0 ? "bg-amber-100" : "bg-sunken"}`}>
+                <AlertTriangle className={`h-5 w-5 ${data.summary.warningGaps > 0 ? "text-amber-500" : "text-text-3"}`} /></div>
+              <div><p className="text-2xl font-bold text-text">{data.summary.warningGaps}</p>
+                <p className="text-xs text-text-2">Warnings</p></div>
             </CardContent></Card>
           </div>
 
@@ -115,12 +115,12 @@ export function SopCoverage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <Icon className={`h-4 w-4 ${config.color}`} />
-                          <Link href={`/ops/sops/${sop.sopId}`} className="font-medium text-gray-900 hover:text-terracotta">
+                          <Link href={`/ops/sops/${sop.sopId}`} className="font-medium text-text hover:text-brand-text">
                             {sop.title}
                           </Link>
                           <Badge variant="secondary" className="text-[10px]">{sop.category}</Badge>
                         </div>
-                        <p className="mt-1 text-xs text-gray-400 flex items-center gap-3">
+                        <p className="mt-1 text-xs text-text-3 flex items-center gap-3">
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
                             {RECURRENCE_LABELS[sop.expectedRecurrence]} · {sop.expectedTimesPerDay}x/day

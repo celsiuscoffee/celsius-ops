@@ -73,24 +73,24 @@ export default function IncomingPanel() {
   const todayStr = todayMytStr();
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-text">
             <ArrowDownToLine className="h-4 w-4 text-emerald-600" />
             Incoming settlements
           </h3>
-          <p className="mt-0.5 text-xs text-gray-500">
+          <p className="mt-0.5 text-xs text-text-2">
             Cash landing per day on each channel&apos;s real settlement calendar. Weekends are QR-only; Mon/Tue carry the card and Revenue Monster batches.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <div className="flex rounded-md border border-gray-200 p-0.5">
+          <div className="flex rounded-md border border-line p-0.5">
             {[7, 14, 28].map((d) => (
               <button
                 key={d}
                 onClick={() => { setDays(d); setCustom(null); }}
-                className={`rounded px-2 py-1 text-xs ${!custom && days === d ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                className={`rounded px-2 py-1 text-xs ${!custom && days === d ? "bg-gray-900 text-white" : "text-text-2 hover:bg-sunken"}`}
               >
                 {d}d
               </button>
@@ -106,25 +106,25 @@ export default function IncomingPanel() {
       </div>
 
       {isLoading || !f ? (
-        <div className="py-10 text-center"><Loader2 className="mx-auto h-4 w-4 animate-spin text-gray-400" /></div>
+        <div className="py-10 text-center"><Loader2 className="mx-auto h-4 w-4 animate-spin text-text-3" /></div>
       ) : (
         <>
           <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
-            <div className="rounded-lg bg-gray-50 px-3 py-2">
-              <p className="text-[11px] text-gray-500">
+            <div className="rounded-lg bg-sunken px-3 py-2">
+              <p className="text-[11px] text-text-2">
                 Expected {custom ? `${dayLabel(custom.from, todayStr).date} – ${dayLabel(custom.to, todayStr).date}` : `in ${days}d`}
               </p>
-              <p className="mt-0.5 text-lg font-bold text-gray-900">{RM0(f.total)}</p>
+              <p className="mt-0.5 text-lg font-bold text-text">{RM0(f.total)}</p>
             </div>
             <div className="rounded-lg bg-emerald-50 px-3 py-2">
               <p className="text-[11px] text-emerald-700">Booked</p>
               <p className="mt-0.5 text-lg font-bold text-emerald-700">{RM0(f.bookedTotal)}</p>
               <p className="text-[10px] text-emerald-600/70">already rung, awaiting settlement</p>
             </div>
-            <div className="rounded-lg bg-gray-50 px-3 py-2">
-              <p className="text-[11px] text-gray-500">Projected</p>
-              <p className="mt-0.5 text-lg font-bold text-gray-500">{RM0(f.projectedTotal)}</p>
-              <p className="text-[10px] text-gray-400">future sales at run-rate</p>
+            <div className="rounded-lg bg-sunken px-3 py-2">
+              <p className="text-[11px] text-text-2">Projected</p>
+              <p className="mt-0.5 text-lg font-bold text-text-2">{RM0(f.projectedTotal)}</p>
+              <p className="text-[10px] text-text-3">future sales at run-rate</p>
             </div>
           </div>
 
@@ -145,27 +145,27 @@ export default function IncomingPanel() {
               const l = dayLabel(d.date, todayStr);
               const bookedPct = d.net > 0 ? (d.booked / d.net) * 100 : 0;
               return (
-                <div key={d.date} className="rounded-md px-1.5 py-1 hover:bg-gray-50">
+                <div key={d.date} className="rounded-md px-1.5 py-1 hover:bg-sunken">
                   <div className="flex items-center gap-2">
                     <div className="w-20 shrink-0 text-xs">
-                      <span className={`font-medium ${l.isToday ? "text-emerald-700" : "text-gray-700"}`}>{l.dow}</span>{" "}
-                      <span className="text-gray-400">{l.date}</span>
+                      <span className={`font-medium ${l.isToday ? "text-emerald-700" : "text-text-2"}`}>{l.dow}</span>{" "}
+                      <span className="text-text-3">{l.date}</span>
                     </div>
-                    <div className="relative h-4 flex-1 overflow-hidden rounded bg-gray-100">
+                    <div className="relative h-4 flex-1 overflow-hidden rounded bg-sunken">
                       <div className="absolute inset-y-0 left-0 bg-emerald-500/80" style={{ width: `${(d.net / maxNet) * bookedPct}%` }} />
                       <div
-                        className="absolute inset-y-0 bg-gray-300"
+                        className="absolute inset-y-0 bg-line"
                         style={{ left: `${(d.net / maxNet) * bookedPct}%`, width: `${(d.net / maxNet) * (100 - bookedPct)}%` }}
                       />
                     </div>
-                    <div className="w-20 shrink-0 text-right text-xs font-semibold tabular-nums text-gray-900">{RM0(d.net)}</div>
+                    <div className="w-20 shrink-0 text-right text-xs font-semibold tabular-nums text-text">{RM0(d.net)}</div>
                   </div>
                   {/* Channel split on its own line so short bars never clip it. */}
                   <div className="ml-20 flex flex-wrap gap-x-3 gap-y-0.5 pl-2 pt-0.5">
                     {CHANNEL_ORDER.filter((c) => (d.byChannel[c] ?? 0) > 0).map((c) => (
-                      <span key={c} className="flex items-center gap-1 text-[10px] text-gray-500">
+                      <span key={c} className="flex items-center gap-1 text-[10px] text-text-2">
                         <span className={`h-1.5 w-1.5 rounded-full ${CHANNEL_DOT[c]}`} />
-                        {CHANNEL_LABEL[c]} <span className="tabular-nums text-gray-700">{RM0(d.byChannel[c]!)}</span>
+                        {CHANNEL_LABEL[c]} <span className="tabular-nums text-text-2">{RM0(d.byChannel[c]!)}</span>
                       </span>
                     ))}
                   </div>
@@ -174,13 +174,13 @@ export default function IncomingPanel() {
             })}
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-100 pt-2 text-[11px] text-gray-500">
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line pt-2 text-[11px] text-text-2">
             <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-emerald-500/80" /> booked</span>
-            <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-gray-300" /> projected</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-3 rounded-sm bg-line" /> projected</span>
             {f.byEntity.map((e) => (
               <span key={e.entity} className="ml-auto sm:ml-0">
-                {ENTITY_LABEL[e.entity] ?? e.entity} <span className="text-gray-400">({e.account})</span>{" "}
-                <span className="font-medium text-gray-700">{RM0(e.net)}</span>
+                {ENTITY_LABEL[e.entity] ?? e.entity} <span className="text-text-3">({e.account})</span>{" "}
+                <span className="font-medium text-text-2">{RM0(e.net)}</span>
               </span>
             ))}
           </div>
@@ -189,7 +189,7 @@ export default function IncomingPanel() {
               non-inter-company bank credit. Grab is now folded into the forecast
               above (bank run-rate, ~RM{grabPerDay}/day, lands in HQ 4384). Only
               this residual — meetings/events, refunds, misc — is left out. */}
-          <p className="mt-1.5 text-[10px] leading-relaxed text-gray-400">
+          <p className="mt-1.5 text-[10px] leading-relaxed text-text-3">
             Grab is included above at its trailing bank run-rate ({RM0(f.reconcile.grabPerDay)}/day, pools into HQ 4384).
             {f.reconcile.otherPerDay > 0 && (
               <> A further ~{RM0(f.reconcile.otherPerDay)}/day of non-sales credits (meetings, refunds, misc) hits the bank but isn&apos;t forecast here — that&apos;s the gap between this panel and total &ldquo;Avg cash in&rdquo;.</>

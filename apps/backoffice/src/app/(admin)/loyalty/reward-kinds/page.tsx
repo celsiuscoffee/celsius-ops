@@ -118,7 +118,7 @@ export default function RewardKindsPage() {
                     <span
                       className={cn(
                         "text-xs font-medium px-2 py-0.5 rounded",
-                        k.is_active ? "bg-emerald-100 text-emerald-900" : "bg-gray-100 text-gray-600",
+                        k.is_active ? "bg-emerald-100 text-emerald-900" : "bg-sunken text-text-2",
                       )}
                     >
                       {k.is_active ? "Active" : "Hidden"}

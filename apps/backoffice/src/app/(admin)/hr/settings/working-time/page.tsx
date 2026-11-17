@@ -75,13 +75,13 @@ export default function WorkingTimeRulesPage() {
       <div className="rounded-xl border bg-card p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold">
-            <Timer className="h-5 w-5 text-terracotta" />
+            <Timer className="h-5 w-5 text-brand-text" />
             Working Time Rules
           </h2>
           <button
             onClick={save}
             disabled={saving}
-            className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+            className="flex items-center gap-1 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             {saved ? "Saved" : "Save"}
@@ -114,7 +114,7 @@ export default function WorkingTimeRulesPage() {
               />
               <span className="text-sm text-muted-foreground">hours</span>
             </div>
-            <p className="mt-1 text-xs text-gray-500">Hours beyond this are paid as overtime. Default: 45 (EA compliance).</p>
+            <p className="mt-1 text-xs text-text-2">Hours beyond this are paid as overtime. Default: 45 (EA compliance).</p>
           </div>
 
           <div>
@@ -129,7 +129,7 @@ export default function WorkingTimeRulesPage() {
               />
               <span className="text-sm text-muted-foreground">hours</span>
             </div>
-            <p className="mt-1 text-xs text-gray-500">Show a yellow warning when scheduled hours approach this. Default: 40.</p>
+            <p className="mt-1 text-xs text-text-2">Show a yellow warning when scheduled hours approach this. Default: 40.</p>
           </div>
 
           <div>
@@ -144,7 +144,7 @@ export default function WorkingTimeRulesPage() {
               />
               <span className="text-sm text-muted-foreground">hours</span>
             </div>
-            <p className="mt-1 text-xs text-gray-500">Above this, the schedule creator blocks the shift. Protects against staff burnout. Default: 60.</p>
+            <p className="mt-1 text-xs text-text-2">Above this, the schedule creator blocks the shift. Protects against staff burnout. Default: 60.</p>
           </div>
 
           <div>
@@ -158,7 +158,7 @@ export default function WorkingTimeRulesPage() {
               />
               <span className="text-sm text-muted-foreground">days</span>
             </div>
-            <p className="mt-1 text-xs text-gray-500">Staff must get a rest day after this many working days. Default: 6 (1 rest day/week).</p>
+            <p className="mt-1 text-xs text-text-2">Staff must get a rest day after this many working days. Default: 6 (1 rest day/week).</p>
           </div>
 
           <div>
@@ -173,7 +173,7 @@ export default function WorkingTimeRulesPage() {
               />
               <span className="text-sm text-muted-foreground">hours</span>
             </div>
-            <p className="mt-1 text-xs text-gray-500">Between clock-out and next clock-in. Default: 11.</p>
+            <p className="mt-1 text-xs text-text-2">Between clock-out and next clock-in. Default: 11.</p>
           </div>
 
           <div className="flex items-end">
@@ -193,7 +193,7 @@ export default function WorkingTimeRulesPage() {
             levers and lateness/absence deductions. This page is working-time
             only (hours, overtime, rest). */}
 
-        <div className="mt-6 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+        <div className="mt-6 rounded-lg bg-sunken p-3 text-xs text-text-2">
           <strong>Who this affects:</strong> AI scheduler, attendance reviewer, payroll OT calculation. When creating a weekly schedule, the system:
           <ul className="mt-1 ml-4 list-disc space-y-0.5">
             <li>Sums hours across <strong>all outlets</strong> per staff (important for rotating staff like Adam Kelvin, Syafiq Aiman)</li>

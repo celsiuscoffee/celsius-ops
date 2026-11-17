@@ -127,7 +127,7 @@ export default function HRSettingsPage() {
       {/* Leave Balances Init */}
       <div className="rounded-xl border bg-card p-5">
         <h2 className="mb-3 flex items-center gap-2 font-semibold">
-          <Bot className="h-5 w-5 text-terracotta" />
+          <Bot className="h-5 w-5 text-brand-text" />
           Initialize Leave Balances
         </h2>
         <p className="mb-3 text-sm text-muted-foreground">
@@ -146,7 +146,7 @@ export default function HRSettingsPage() {
           <button
             onClick={handleInitBalances}
             disabled={initingBalances}
-            className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
           >
             {initingBalances ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             Initialize for {year}
@@ -170,7 +170,7 @@ export default function HRSettingsPage() {
       <div className="rounded-xl border bg-card p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold">
-            <CalendarClock className="h-5 w-5 text-terracotta" />
+            <CalendarClock className="h-5 w-5 text-brand-text" />
             Public Holidays — {year}
           </h2>
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-lg border bg-background px-3 py-1.5 text-sm">
@@ -209,7 +209,7 @@ export default function HRSettingsPage() {
           <button
             onClick={handleAdd}
             disabled={adding || !newHoliday.date || !newHoliday.name}
-            className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+            className="flex items-center gap-1 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
           >
             {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Add
@@ -232,7 +232,7 @@ export default function HRSettingsPage() {
                     const day = d.getDate();
                     const dayName = d.toLocaleDateString("en-MY", { weekday: "short" });
                     return (
-                      <div key={h.id} className="flex items-center gap-3 rounded-lg border border-gray-100 bg-white p-3">
+                      <div key={h.id} className="flex items-center gap-3 rounded-lg border border-line bg-surface p-3">
                         <div className="flex h-10 w-10 flex-col items-center justify-center rounded-lg bg-red-50 text-red-600">
                           <span className="text-[10px] font-bold">{dayName.toUpperCase()}</span>
                           <span className="text-sm font-bold leading-tight">{day}</span>
@@ -244,7 +244,7 @@ export default function HRSettingsPage() {
                         <button
                           onClick={() => handleDelete(h.id)}
                           disabled={deleting === h.id}
-                          className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                          className="rounded-lg p-2 text-text-3 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                         >
                           {deleting === h.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                         </button>

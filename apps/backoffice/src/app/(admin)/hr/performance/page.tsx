@@ -193,7 +193,7 @@ export default function PerformancePage() {
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <HrPageHeader
         title="Performance"
-        icon={<TrendingUp className="h-6 w-6 text-terracotta" />}
+        icon={<TrendingUp className="h-6 w-6 text-brand-text" />}
         description={
           activeTab === "allowance"
             ? "What the levers scored, what was deducted, and what we actually pay. Waive a single deduction, or replace the month outright."
@@ -219,7 +219,7 @@ export default function PerformancePage() {
               onClick={() => setTab(t.id)}
               className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
                 activeTab === t.id
-                  ? "border-terracotta text-terracotta"
+                  ? "border-ink text-brand-text"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >

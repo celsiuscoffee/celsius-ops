@@ -163,20 +163,20 @@ export function CommandPalette() {
       onClick={() => setOpen(false)}
     >
       <div
-        className="w-full max-w-xl overflow-hidden rounded-xl border bg-white shadow-2xl"
+        className="w-full max-w-xl overflow-hidden rounded-xl border bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b px-4 py-3">
-          <Search className="h-4 w-4 text-gray-400" />
+          <Search className="h-4 w-4 text-text-3" />
           <input
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onInputKey}
             placeholder="Search pages, or employees by name, phone, or IC…"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400"
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-text-3"
           />
-          <kbd className="hidden rounded border bg-gray-100 px-1.5 py-0.5 text-[10px] font-mono text-gray-500 sm:inline">
+          <kbd className="hidden rounded border bg-sunken px-1.5 py-0.5 text-[10px] font-mono text-text-2 sm:inline">
             ESC
           </kbd>
         </div>
@@ -184,7 +184,7 @@ export function CommandPalette() {
         <div className="max-h-[50vh] overflow-y-auto">
           {pages.length > 0 && (
             <>
-              <p className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              <p className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-text-3">
                 Pages
               </p>
               <ul className="pb-1">
@@ -196,17 +196,17 @@ export function CommandPalette() {
                         onClick={() => go(p.href)}
                         onMouseEnter={() => setHighlight(i)}
                         className={`flex w-full items-center gap-3 px-4 py-2 text-left text-sm ${
-                          isActive ? "bg-terracotta/10" : "hover:bg-gray-50"
+                          isActive ? "bg-brand-soft" : "hover:bg-sunken"
                         }`}
                       >
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-600">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sunken text-text-2">
                           {p.icon}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-medium">{p.label}</span>
-                          <span className="block truncate text-[10px] text-gray-500">{p.crumb}</span>
+                          <span className="block truncate text-[10px] text-text-2">{p.crumb}</span>
                         </span>
-                        {isActive && <CornerDownLeft className="h-3.5 w-3.5 text-gray-400" />}
+                        {isActive && <CornerDownLeft className="h-3.5 w-3.5 text-text-3" />}
                       </button>
                     </li>
                   );
@@ -216,18 +216,18 @@ export function CommandPalette() {
           )}
 
           {loading ? (
-            <div className="flex items-center justify-center gap-2 py-8 text-xs text-gray-500">
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-text-2">
               <Loader2 className="h-3 w-3 animate-spin" /> Loading directory…
             </div>
           ) : total === 0 ? (
-            <p className="py-8 text-center text-xs text-gray-400">
+            <p className="py-8 text-center text-xs text-text-3">
               {q ? `No matches for "${q}"` : "No employees yet"}
             </p>
           ) : (
             filtered.length > 0 && (
               <>
                 {pages.length > 0 && (
-                  <p className="border-t px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                  <p className="border-t px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-text-3">
                     Employees
                   </p>
                 )}
@@ -242,7 +242,7 @@ export function CommandPalette() {
                           onClick={() => go(`/hr/employees/${e.id}`)}
                           onMouseEnter={() => setHighlight(idx)}
                           className={`flex w-full items-center gap-3 px-4 py-2 text-left text-sm ${
-                            isActive ? "bg-terracotta/10" : "hover:bg-gray-50"
+                            isActive ? "bg-brand-soft" : "hover:bg-sunken"
                           }`}
                         >
                           {photo ? (
@@ -253,7 +253,7 @@ export function CommandPalette() {
                               className="h-8 w-8 rounded-full object-cover"
                             />
                           ) : (
-                            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-200 text-[11px] font-semibold text-gray-600">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-line text-[11px] font-semibold text-text-2">
                               {(e.fullName || e.name || "?").charAt(0).toUpperCase()}
                             </span>
                           )}
@@ -261,12 +261,12 @@ export function CommandPalette() {
                             <span className="block truncate font-medium">
                               {e.fullName || e.name}
                             </span>
-                            <span className="block truncate text-[10px] text-gray-500">
+                            <span className="block truncate text-[10px] text-text-2">
                               {[e.role, e.hrProfile?.position, e.outlet?.name].filter(Boolean).join(" · ")}
                             </span>
                           </span>
                           {e.phone && (
-                            <span className="hidden text-[10px] text-gray-400 sm:inline">{e.phone}</span>
+                            <span className="hidden text-[10px] text-text-3 sm:inline">{e.phone}</span>
                           )}
                         </button>
                       </li>
@@ -278,14 +278,14 @@ export function CommandPalette() {
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t px-4 py-2 text-[10px] text-gray-400">
+        <div className="flex items-center justify-between border-t px-4 py-2 text-[10px] text-text-3">
           <span>
-            <kbd className="rounded border bg-gray-100 px-1 font-mono">↑</kbd>{" "}
-            <kbd className="rounded border bg-gray-100 px-1 font-mono">↓</kbd> navigate ·{" "}
-            <kbd className="rounded border bg-gray-100 px-1 font-mono">↵</kbd> open
+            <kbd className="rounded border bg-sunken px-1 font-mono">↑</kbd>{" "}
+            <kbd className="rounded border bg-sunken px-1 font-mono">↓</kbd> navigate ·{" "}
+            <kbd className="rounded border bg-sunken px-1 font-mono">↵</kbd> open
           </span>
           <span>
-            <kbd className="rounded border bg-gray-100 px-1 font-mono">⌘K</kbd> toggle
+            <kbd className="rounded border bg-sunken px-1 font-mono">⌘K</kbd> toggle
           </span>
         </div>
       </div>

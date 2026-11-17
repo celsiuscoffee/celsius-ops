@@ -130,7 +130,7 @@ export default function POSSettingsPage() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+        <Loader2 className="h-5 w-5 animate-spin text-text-3" />
       </div>
     );
   }
@@ -138,8 +138,8 @@ export default function POSSettingsPage() {
   if (!editing) {
     return (
       <div className="p-6">
-        <h1 className="text-2xl font-bold text-[#160800]">POS Settings</h1>
-        <p className="mt-2 text-sm text-gray-500">No outlets configured.</p>
+        <h1 className="text-2xl font-bold text-text">POS Settings</h1>
+        <p className="mt-2 text-sm text-text-2">No outlets configured.</p>
       </div>
     );
   }
@@ -149,7 +149,7 @@ export default function POSSettingsPage() {
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#160800]">POS Settings</h1>
+          <h1 className="text-2xl font-bold text-text">POS Settings</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Per-outlet POS register, receipt, and payment terminal settings. The POS app reads from here at runtime.
           </p>
@@ -157,7 +157,7 @@ export default function POSSettingsPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors disabled:opacity-60"
+          className="flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors disabled:opacity-60"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save Settings
@@ -165,8 +165,8 @@ export default function POSSettingsPage() {
       </div>
 
       {/* Outlet picker */}
-      <div className="bg-white rounded-2xl p-4">
-        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">Outlet</p>
+      <div className="bg-surface rounded-2xl p-4">
+        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-text-2">Outlet</p>
         <div className="flex flex-wrap gap-2">
           {all.map((s) => (
             <button
@@ -174,8 +174,8 @@ export default function POSSettingsPage() {
               onClick={() => pickOutlet(s.outlet_id)}
               className={`rounded-xl border px-4 py-2 text-sm font-medium transition-colors ${
                 selected === s.outlet_id
-                  ? "border-[#160800] bg-[#160800] text-white"
-                  : "border-gray-200 bg-white text-gray-700 hover:border-[#160800]"
+                  ? "border-ink bg-ink text-on-ink"
+                  : "border-line bg-surface text-text-2 hover:border-ink"
               }`}
             >
               {outletLabel(s.outlet_id)}
@@ -281,7 +281,7 @@ export default function POSSettingsPage() {
 
         {/* QR */}
         <Section title="QR Code on Receipt" Icon={QrCode}>
-          <p className="text-[11px] text-gray-500 -mt-1">Pick what the QR at the bottom of the receipt points to.</p>
+          <p className="text-[11px] text-text-2 -mt-1">Pick what the QR at the bottom of the receipt points to.</p>
           <Field label="Receipt QR shows">
             <select
               value={editing.receipt_qr_mode ?? "review"}
@@ -337,14 +337,14 @@ export default function POSSettingsPage() {
                   className="input"
                 />
               </Field>
-              <p className="text-[11px] text-gray-500">
+              <p className="text-[11px] text-text-2">
                 Point this at <span className="font-mono">order.celsiuscoffee.com</span> (installs as an app on both iOS &amp; Android), or a link that routes to the App Store / Play Store.
               </p>
             </>
           )}
 
           {(editing.receipt_qr_mode ?? "review") === "off" && (
-            <p className="text-[11px] text-gray-500">No QR will print at the bottom of the receipt.</p>
+            <p className="text-[11px] text-text-2">No QR will print at the bottom of the receipt.</p>
           )}
         </Section>
 
@@ -367,7 +367,7 @@ export default function POSSettingsPage() {
           {editing.receipt_promo_enabled && editing.receipt_promo_text && (
             <div className="rounded-lg border border-dashed border-[#A2492C]/30 bg-[#A2492C]/5 p-3">
               <p className="text-[10px] font-bold text-[#A2492C] uppercase tracking-wide mb-1">Preview</p>
-              <p className="whitespace-pre-wrap text-xs font-semibold text-[#160800]">{editing.receipt_promo_text}</p>
+              <p className="whitespace-pre-wrap text-xs font-semibold text-text">{editing.receipt_promo_text}</p>
             </div>
           )}
         </Section>
@@ -379,7 +379,7 @@ export default function POSSettingsPage() {
             onChange={(v) => update("print_master_docket", v)}
             label="Counter master docket (full-order expo slip)"
           />
-          <p className="text-[11px] text-gray-500 -mt-1">
+          <p className="text-[11px] text-text-2 -mt-1">
             When on, each till prints the whole order as a consolidated counter/expo
             slip on its built-in printer, on top of the per-station kitchen dockets.
             Turn off if the customer receipt + station dockets are enough. The
@@ -482,23 +482,23 @@ export default function POSSettingsPage() {
 
         {/* About this outlet — readonly badge */}
         <Section title="Outlet" Icon={Store}>
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-text-2">
             <span className="font-medium">{outletLabel(editing.outlet_id)}</span>
-            <span className="ml-2 text-xs text-gray-400">({editing.outlet_id})</span>
+            <span className="ml-2 text-xs text-text-3">({editing.outlet_id})</span>
           </p>
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-text-2">
             Outlet master data (name, address, phone) is managed in Settings → Outlets.
           </p>
         </Section>
       </div>
 
       {/* Table Layout — visual floor plan (drag tables on a canvas). */}
-      <div className="bg-white rounded-2xl p-5 space-y-3">
-        <div className="flex items-center gap-2 pb-1 border-b border-gray-100">
+      <div className="bg-surface rounded-2xl p-5 space-y-3">
+        <div className="flex items-center gap-2 pb-1 border-b border-line">
           <Grid3x3 className="h-4 w-4 text-[#A2492C]" />
-          <h3 className="text-sm font-bold text-[#160800]">Table Layout</h3>
+          <h3 className="text-sm font-bold text-text">Table Layout</h3>
         </div>
-        <p className="text-[11px] text-gray-500 -mt-1">
+        <p className="text-[11px] text-text-2 -mt-1">
           Build your floor plan: add floors, add tables, drag them to match your real
           room, and set seats + shape. The POS register shows the same layout with
           live orders mapped onto each table. Remember to <b>Save Settings</b>.
@@ -537,10 +537,10 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-2xl p-5 space-y-3">
-      <div className="flex items-center gap-2 pb-1 border-b border-gray-100">
+    <div className="bg-surface rounded-2xl p-5 space-y-3">
+      <div className="flex items-center gap-2 pb-1 border-b border-line">
         <Icon className="h-4 w-4 text-[#A2492C]" />
-        <h3 className="text-sm font-bold text-[#160800]">{title}</h3>
+        <h3 className="text-sm font-bold text-text">{title}</h3>
       </div>
       {children}
     </div>
@@ -550,7 +550,7 @@ function Section({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-gray-600">{label}</label>
+      <label className="mb-1 block text-xs font-medium text-text-2">{label}</label>
       {children}
     </div>
   );
@@ -566,10 +566,10 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
           onChange={(e) => onChange(e.target.checked)}
           className="peer sr-only"
         />
-        <span className="block h-5 w-9 rounded-full bg-gray-200 transition-colors peer-checked:bg-[#160800]" />
-        <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
+        <span className="block h-5 w-9 rounded-full bg-line transition-colors peer-checked:bg-ink" />
+        <span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-surface shadow transition-transform peer-checked:translate-x-4" />
       </span>
-      <span className="text-xs text-gray-700">{label}</span>
+      <span className="text-xs text-text-2">{label}</span>
     </label>
   );
 }

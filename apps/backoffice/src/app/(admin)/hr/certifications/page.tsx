@@ -71,7 +71,7 @@ export default function CertificationsPage() {
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <HrPageHeader
         title="Training & Certification"
-        icon={<Award className="h-6 w-6 text-terracotta" />}
+        icon={<Award className="h-6 w-6 text-brand-text" />}
         description="Track Sijil Pengendali Makanan, halal, first aid, and other certs. Inspectors check on the spot — keep these current."
       />
 
@@ -94,7 +94,7 @@ export default function CertificationsPage() {
                     {c.valid_holders}/{c.total_staff} valid
                   </span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+                <div className="h-1.5 overflow-hidden rounded-full bg-sunken">
                   <div
                     className={`h-full transition-all ${pct < 80 ? "bg-red-500" : pct < 100 ? "bg-amber-500" : "bg-emerald-500"}`}
                     style={{ width: `${Math.min(pct, 100)}%` }}
@@ -113,7 +113,7 @@ export default function CertificationsPage() {
             key={f}
             onClick={() => setFilter(f)}
             className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
-              filter === f ? "border-terracotta bg-terracotta text-white" : "bg-background hover:bg-muted"
+              filter === f ? "border-ink bg-ink text-on-ink" : "bg-background hover:bg-muted"
             }`}
           >
             {f === "expiring" ? "Expiring within 60 days" : f === "expired" ? "Already expired" : "All certifications"}
@@ -133,7 +133,7 @@ export default function CertificationsPage() {
 
       {/* Cert list */}
       {isLoading ? (
-        <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
+        <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-text-3" /></div>
       ) : certs.length === 0 ? (
         <div className="flex flex-col items-center rounded-xl border bg-card py-16 text-center">
           <CheckCircle2 className="mb-3 h-12 w-12 text-emerald-500" />
@@ -158,7 +158,7 @@ export default function CertificationsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2">
                     <p className="font-semibold">{c.user_name || "Unknown"}</p>
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700">
+                    <span className="rounded-full bg-sunken px-2 py-0.5 text-[10px] font-medium text-text-2">
                       {CERT_TYPE_LABELS[c.cert_type] || c.cert_type}
                     </span>
                     {c.outlet_name && (

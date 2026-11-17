@@ -85,7 +85,7 @@ export default function ShiftSwapsPage() {
       <PromptDialog />
       <HrPageHeader
         title="Shift Swap Requests"
-        icon={<ArrowLeftRight className="h-6 w-6 text-terracotta" />}
+        icon={<ArrowLeftRight className="h-6 w-6 text-brand-text" />}
         description="Approving a request swaps the user_id on both shifts. Reject if the swap creates coverage gaps."
         action={
           <select
@@ -120,19 +120,19 @@ export default function ShiftSwapsPage() {
                   : (r.status === "rejected" || r.status === "consent_declined") ? "bg-red-100 text-red-700"
                   : r.status === "pending_approval" ? "bg-amber-100 text-amber-800"
                   : r.status === "pending_consent" ? "bg-blue-100 text-blue-800"
-                  : "bg-gray-100 text-gray-600"
+                  : "bg-sunken text-text-2"
                 }`}>{r.status.replace(/_/g, " ")}</span>
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                 <div className="rounded border p-2">
-                  <div className="font-medium text-gray-600">{r.requester_name}&apos;s shift</div>
+                  <div className="font-medium text-text-2">{r.requester_name}&apos;s shift</div>
                   {r.requester_shift ? (
                     <div className="mt-1 font-mono">{r.requester_shift.shift_date} · {r.requester_shift.start_time}–{r.requester_shift.end_time}</div>
                   ) : <div className="mt-1 italic text-red-600">Shift no longer exists</div>}
                 </div>
                 <div className="rounded border p-2">
-                  <div className="font-medium text-gray-600">{r.target_name}&apos;s shift</div>
+                  <div className="font-medium text-text-2">{r.target_name}&apos;s shift</div>
                   {r.target_shift ? (
                     <div className="mt-1 font-mono">{r.target_shift.shift_date} · {r.target_shift.start_time}–{r.target_shift.end_time}</div>
                   ) : <div className="mt-1 italic text-red-600">Shift no longer exists</div>}

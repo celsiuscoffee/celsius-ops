@@ -205,7 +205,7 @@ function TierCard({ tier, onEdit }: { tier: Tier; onEdit: () => void }) {
           <span
             className={cn(
               "font-medium",
-              tier.is_active ? "text-emerald-600" : "text-gray-500",
+              tier.is_active ? "text-emerald-600" : "text-text-2",
             )}
           >
             {tier.is_active ? "Active" : "Inactive"}

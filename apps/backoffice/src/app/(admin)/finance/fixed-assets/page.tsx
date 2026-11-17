@@ -297,7 +297,7 @@ export default function FixedAssetsPage() {
 
   const statusBadge = (a: Asset) => {
     if (a.status === "disposed") {
-      return <Badge className="bg-gray-500/10 text-gray-500 text-[10px]">Disposed{a.disposedDate ? ` ${a.disposedDate}` : ""}</Badge>;
+      return <Badge className="bg-gray-500/10 text-text-2 text-[10px]">Disposed{a.disposedDate ? ` ${a.disposedDate}` : ""}</Badge>;
     }
     if (a.nbv <= a.residual) {
       return <Badge className="bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px]">Fully depreciated</Badge>;
@@ -472,7 +472,7 @@ export default function FixedAssetsPage() {
                           <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{RM(c.total)}</td>
                           <td className="px-3 py-2 text-right">
                             {c.alreadyPosted ? (
-                              <Badge className="bg-gray-500/10 text-gray-500 text-[10px]">Already posted</Badge>
+                              <Badge className="bg-gray-500/10 text-text-2 text-[10px]">Already posted</Badge>
                             ) : c.transactionId ? (
                               <Badge className="bg-green-500/10 text-green-700 dark:text-green-400 text-[10px]">Posted</Badge>
                             ) : (

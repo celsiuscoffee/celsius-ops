@@ -205,7 +205,7 @@ export function ProductForm({ product, categories }: Props) {
           <ArrowLeft className="h-4 w-4" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-[#160800]">
+          <h1 className="text-2xl font-bold text-text">
             {isEditing ? "Edit Product" : "Add Product"}
           </h1>
           {isEditing && (
@@ -214,7 +214,7 @@ export function ProductForm({ product, categories }: Props) {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-5 sm:p-6 space-y-5">
+      <form onSubmit={handleSubmit} className="bg-surface rounded-2xl p-5 sm:p-6 space-y-5">
         {/* Name */}
         <Field label="Name" required>
           <input
@@ -482,7 +482,7 @@ export function ProductForm({ product, categories }: Props) {
               <select
                 value={form.kitchen_station ?? ""}
                 onChange={(e) => setForm((f) => ({ ...f, kitchen_station: e.target.value }))}
-                className="w-full px-3 py-2 border rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full px-3 py-2 border rounded-xl text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
               >
                 <option value="Kitchen">Kitchen</option>
                 <option value="Bar">Bar</option>
@@ -584,8 +584,8 @@ export function ProductForm({ product, categories }: Props) {
                     }))}
                     className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                       on
-                        ? "bg-[#160800] text-white border-[#160800]"
-                        : "bg-white text-muted-foreground border-gray-200 hover:border-[#160800]"
+                        ? "bg-ink text-on-ink border-ink"
+                        : "bg-surface text-muted-foreground border-line hover:border-ink"
                     }`}
                   >
                     {label}
@@ -631,14 +631,14 @@ export function ProductForm({ product, categories }: Props) {
         <div className="flex items-center justify-end gap-3 pt-2 border-t">
           <Link
             href="/pickup/menu"
-            className="px-4 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-[#160800] transition-colors"
+            className="px-4 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-text transition-colors"
           >
             Cancel
           </Link>
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center gap-2 bg-[#160800] text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors disabled:opacity-60"
+            className="flex items-center gap-2 bg-ink text-on-ink px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             {isEditing ? "Save Changes" : "Create Product"}
@@ -654,7 +654,7 @@ export function ProductForm({ product, categories }: Props) {
         >
           <button
             onClick={() => setZoomedImage(null)}
-            className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2 transition-colors"
+            className="absolute top-4 right-4 bg-surface/10 hover:bg-surface/20 text-white rounded-full p-2 transition-colors"
           >
             <X className="h-5 w-5" />
           </button>

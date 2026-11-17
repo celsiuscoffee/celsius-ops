@@ -58,7 +58,7 @@ export default function OpsPerformancePage() {
   const { data, isLoading } = useFetch<PerformanceData>(apiUrl);
 
   const stats = data ? [
-    { label: "Total Checklists", value: data.summary.totalChecklists, icon: ClipboardCheck, color: "text-terracotta", bg: "bg-terracotta/10" },
+    { label: "Total Checklists", value: data.summary.totalChecklists, icon: ClipboardCheck, color: "text-brand-text", bg: "bg-brand-soft" },
     { label: "Completed", value: data.summary.completedChecklists, icon: CheckCircle2, color: "text-green-600", bg: "bg-green-100" },
     { label: "Completion Rate", value: `${data.summary.completionRate}%`, icon: TrendingUp, color: "text-blue-600", bg: "bg-blue-100" },
     { label: "Photo Compliance", value: `${data.summary.photoRate}%`, icon: Camera, color: "text-purple-600", bg: "bg-purple-100" },
@@ -67,8 +67,8 @@ export default function OpsPerformancePage() {
   return (
     <div className="p-3 sm:p-6">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Ops Performance</h2>
-        <p className="mt-0.5 text-sm text-gray-500">Monitor staff checklist completion and compliance</p>
+        <h2 className="text-xl font-semibold text-text">Ops Performance</h2>
+        <p className="mt-0.5 text-sm text-text-2">Monitor staff checklist completion and compliance</p>
       </div>
 
       {/* Filters */}
@@ -76,7 +76,7 @@ export default function OpsPerformancePage() {
         <select
           value={outletId}
           onChange={(e) => setOutletId(e.target.value)}
-          className="rounded-md border border-gray-200 px-3 py-2 text-sm"
+          className="rounded-md border border-line px-3 py-2 text-sm"
         >
           <option value="">All Outlets</option>
           {outlets?.map((o) => (
@@ -85,17 +85,17 @@ export default function OpsPerformancePage() {
         </select>
         <div className="flex items-center gap-2">
           <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-auto" />
-          <span className="text-sm text-gray-400">to</span>
+          <span className="text-sm text-text-3">to</span>
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-auto" />
         </div>
       </div>
 
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       ) : !data ? (
-        <p className="text-sm text-gray-500">No data available</p>
+        <p className="text-sm text-text-2">No data available</p>
       ) : (
         <>
           {/* Summary Stats */}
@@ -107,8 +107,8 @@ export default function OpsPerformancePage() {
                     <stat.icon className={`h-5 w-5 ${stat.color}`} />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                    <p className="text-xs text-gray-500">{stat.label}</p>
+                    <p className="text-2xl font-bold text-text">{stat.value}</p>
+                    <p className="text-xs text-text-2">{stat.label}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -119,7 +119,7 @@ export default function OpsPerformancePage() {
           {data.incomplete.length > 0 && (
             <Card className="mb-8 border-yellow-200">
               <CardContent className="p-5">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-text mb-4 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 text-yellow-500" />Needs Attention
                   <Badge variant="outline" className="text-[10px] text-yellow-600 border-yellow-300 ml-auto">
                     {data.incomplete.length}
@@ -129,8 +129,8 @@ export default function OpsPerformancePage() {
                   {data.incomplete.map((item) => (
                     <div key={item.id} className="flex items-center gap-3 rounded-lg border border-yellow-100 bg-yellow-50/30 p-3">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">{item.sopTitle}</p>
-                        <p className="text-[10px] text-gray-400">
+                        <p className="text-sm font-medium text-text">{item.sopTitle}</p>
+                        <p className="text-[10px] text-text-3">
                           {item.outlet} · {item.assignedTo} · {item.shift}
                         </p>
                       </div>
@@ -148,20 +148,20 @@ export default function OpsPerformancePage() {
           {data.dailyTrend.length > 0 && (
             <Card className="mb-8">
               <CardContent className="p-5">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">Daily Completion</h3>
+                <h3 className="text-sm font-semibold text-text mb-4">Daily Completion</h3>
                 <div className="flex items-end gap-1 h-32">
                   {data.dailyTrend.map((d) => {
                     const rate = d.total > 0 ? (d.completed / d.total) * 100 : 0;
                     return (
                       <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-                        <span className="text-[9px] text-gray-400">{Math.round(rate)}%</span>
-                        <div className="w-full bg-gray-100 rounded-t relative" style={{ height: "80px" }}>
+                        <span className="text-[9px] text-text-3">{Math.round(rate)}%</span>
+                        <div className="w-full bg-sunken rounded-t relative" style={{ height: "80px" }}>
                           <div
-                            className="absolute bottom-0 w-full bg-terracotta rounded-t transition-all"
+                            className="absolute bottom-0 w-full bg-ink rounded-t transition-all"
                             style={{ height: `${rate}%` }}
                           />
                         </div>
-                        <span className="text-[9px] text-gray-400">
+                        <span className="text-[9px] text-text-3">
                           {new Date(d.date).toLocaleDateString("en", { weekday: "short" })}
                         </span>
                       </div>
@@ -179,11 +179,11 @@ export default function OpsPerformancePage() {
                 {data.staffBreakdown.length === 0 ? (
                   <div>
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                        <Users className="h-4 w-4 text-gray-400" />Staff Performance
+                      <h3 className="text-sm font-semibold text-text flex items-center gap-2">
+                        <Users className="h-4 w-4 text-text-3" />Staff Performance
                       </h3>
                     </div>
-                    <p className="text-sm text-gray-400 text-center py-4">No staff data</p>
+                    <p className="text-sm text-text-3 text-center py-4">No staff data</p>
                   </div>
                 ) : (
                   <>
@@ -197,17 +197,17 @@ export default function OpsPerformancePage() {
                           <Link key={s.id} href={`/ops/performance/staff/${s.id}`}>
                             <div className="flex items-center gap-3 rounded-lg border border-green-100 bg-green-50/50 p-3 hover:bg-green-50 transition-colors cursor-pointer">
                               <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                                i === 0 ? "bg-yellow-400 text-white" : i === 1 ? "bg-gray-300 text-white" : "bg-amber-600 text-white"
+                                i === 0 ? "bg-yellow-400 text-white" : i === 1 ? "bg-line text-white" : "bg-amber-600 text-white"
                               }`}>
                                 {i + 1}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
-                                <p className="text-[10px] text-gray-400">{s.role}</p>
+                                <p className="text-sm font-medium text-text truncate">{s.name}</p>
+                                <p className="text-[10px] text-text-3">{s.role}</p>
                               </div>
                               <div className="text-right shrink-0">
                                 <p className="text-lg font-bold text-green-600">{s.itemsCompleted}</p>
-                                <p className="text-[10px] text-gray-400">tasks done</p>
+                                <p className="text-[10px] text-text-3">tasks done</p>
                               </div>
                             </div>
                           </Link>
@@ -229,12 +229,12 @@ export default function OpsPerformancePage() {
                                   {s.name.charAt(0)}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
-                                  <p className="text-[10px] text-gray-400">{s.role}</p>
+                                  <p className="text-sm font-medium text-text truncate">{s.name}</p>
+                                  <p className="text-[10px] text-text-3">{s.role}</p>
                                 </div>
                                 <div className="text-right shrink-0">
                                   <p className="text-lg font-bold text-red-500">{s.itemsCompleted}</p>
-                                  <p className="text-[10px] text-gray-400">tasks done</p>
+                                  <p className="text-[10px] text-text-3">tasks done</p>
                                 </div>
                               </div>
                             </Link>
@@ -251,21 +251,21 @@ export default function OpsPerformancePage() {
             <Card>
               <CardContent className="p-5">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-gray-400" />Outlet Compliance
+                  <h3 className="text-sm font-semibold text-text flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-text-3" />Outlet Compliance
                   </h3>
                 </div>
                 {data.outletBreakdown.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-4">No outlet data</p>
+                  <p className="text-sm text-text-3 text-center py-4">No outlet data</p>
                 ) : (
                   <div className="space-y-2">
                     {data.outletBreakdown.map((o) => (
-                      <div key={o.id} className="flex items-center gap-3 rounded-lg border border-gray-100 p-3">
+                      <div key={o.id} className="flex items-center gap-3 rounded-lg border border-line p-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">{o.name}</p>
-                          <p className="text-[10px] text-gray-400">{o.completed}/{o.total} completed</p>
+                          <p className="text-sm font-medium text-text">{o.name}</p>
+                          <p className="text-[10px] text-text-3">{o.completed}/{o.total} completed</p>
                         </div>
-                        <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="w-24 h-2 bg-sunken rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full ${o.completionRate >= 80 ? "bg-green-500" : o.completionRate >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
                             style={{ width: `${o.completionRate}%` }}

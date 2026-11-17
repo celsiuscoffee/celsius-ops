@@ -81,7 +81,7 @@ function StarRating({ rating, size = 16 }: { rating: number; size?: number }) {
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
-          className={i <= rating ? "fill-amber-400 text-amber-400" : "text-gray-300"}
+          className={i <= rating ? "fill-amber-400 text-amber-400" : "text-text-3"}
           style={{ width: size, height: size }}
         />
       ))}
@@ -140,10 +140,10 @@ function ReviewCard({
   };
 
   return (
-    <div className="rounded-xl border border-border bg-white p-5">
+    <div className="rounded-xl border border-border bg-surface p-5">
       <div className="flex items-start gap-3">
         {/* Avatar */}
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-terracotta/10 text-sm font-bold text-terracotta">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-bold text-brand-text">
           {review.reviewer.name.slice(0, 1).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
@@ -210,7 +210,7 @@ function ReviewCard({
                 <button
                   onClick={handleReply}
                   disabled={saving || !replyText.trim()}
-                  className="flex items-center gap-1.5 rounded-lg bg-brand-dark px-4 py-1.5 text-xs font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg bg-ink px-4 py-1.5 text-xs font-medium text-on-ink hover:bg-ink/90 disabled:opacity-50 transition-colors"
                 >
                   {saving && <Loader2 className="h-3 w-3 animate-spin" />}
                   Save
@@ -228,7 +228,7 @@ function ReviewCard({
 
 function FeedbackCard({ fb, showOutlet, badge }: { fb: Feedback & { outletName?: string }; showOutlet?: boolean; badge?: string }) {
   return (
-    <div className="rounded-xl border border-border bg-white p-5">
+    <div className="rounded-xl border border-border bg-surface p-5">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-600">
           {fb.name?.slice(0, 1).toUpperCase() || "?"}
@@ -326,7 +326,7 @@ function GbpPostModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6">
+      <div className="w-full max-w-lg rounded-2xl bg-surface p-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold">GBP Update Post</h2>
@@ -347,8 +347,8 @@ function GbpPostModal({
                 onClick={() => setPostType(key)}
                 className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
                   postType === key
-                    ? "bg-brand-dark text-white"
-                    : "border border-border bg-white text-muted-foreground hover:bg-muted"
+                    ? "bg-ink text-on-ink"
+                    : "border border-border bg-surface text-muted-foreground hover:bg-muted"
                 }`}
               >
                 {label}
@@ -361,7 +361,7 @@ function GbpPostModal({
         {!generatedText && !generating && (
           <button
             onClick={() => generate()}
-            className="mt-4 w-full flex items-center justify-center gap-2 rounded-lg bg-terracotta px-4 py-2.5 text-sm font-medium text-white hover:bg-terracotta/90 transition-colors"
+            className="mt-4 w-full flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-on-ink hover:bg-ink/90 transition-colors"
           >
             <Sparkles className="h-4 w-4" />
             Generate Post
@@ -370,7 +370,7 @@ function GbpPostModal({
 
         {generating && (
           <div className="mt-4 flex items-center justify-center gap-2 py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-terracotta" />
+            <Loader2 className="h-5 w-5 animate-spin text-brand-text" />
             <span className="text-sm text-muted-foreground">Generating...</span>
           </div>
         )}
@@ -381,7 +381,7 @@ function GbpPostModal({
             <textarea
               value={editedText}
               onChange={(e) => setEditedText(e.target.value)}
-              className="w-full rounded-lg border border-border bg-white p-3 text-sm outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+              className="w-full rounded-lg border border-border bg-surface p-3 text-sm outline-none focus:ring-2 focus:ring-ring/50 resize-none"
               rows={5}
               maxLength={1500}
             />
@@ -397,7 +397,7 @@ function GbpPostModal({
                 <button
                   onClick={publish}
                   disabled={posting || !editedText.trim()}
-                  className="flex items-center gap-1.5 rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink/90 disabled:opacity-50 transition-colors"
                 >
                   {posting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   Post to GBP
@@ -499,7 +499,7 @@ function AutoReplyModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-surface p-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold">Auto-Reply Reviews</h2>
@@ -512,7 +512,7 @@ function AutoReplyModal({
 
         {!results && !loading && (
           <div className="mt-6 text-center">
-            <Sparkles className="mx-auto h-10 w-10 text-terracotta" />
+            <Sparkles className="mx-auto h-10 w-10 text-brand-text" />
             <p className="mt-3 text-sm text-foreground font-medium">AI will reply to all unreplied Google reviews</p>
             <ul className="mt-2 text-xs text-muted-foreground space-y-1">
               <li>4-5 star reviews: auto-posted immediately</li>
@@ -520,7 +520,7 @@ function AutoReplyModal({
             </ul>
             <button
               onClick={runAutoReply}
-              className="mt-4 rounded-lg bg-brand-dark px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-dark/90 transition-colors"
+              className="mt-4 rounded-lg bg-ink px-6 py-2.5 text-sm font-medium text-on-ink hover:bg-ink/90 transition-colors"
             >
               Run Auto-Reply
             </button>
@@ -529,7 +529,7 @@ function AutoReplyModal({
 
         {loading && (
           <div className="mt-6 flex flex-col items-center gap-3 py-10">
-            <Loader2 className="h-8 w-8 animate-spin text-terracotta" />
+            <Loader2 className="h-8 w-8 animate-spin text-brand-text" />
             <p className="text-sm text-muted-foreground">Generating replies with AI...</p>
           </div>
         )}
@@ -607,7 +607,7 @@ function AutoReplyModal({
                           <textarea
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
-                            className="w-full rounded-lg border border-border bg-white p-2 text-xs outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+                            className="w-full rounded-lg border border-border bg-surface p-2 text-xs outline-none focus:ring-2 focus:ring-ring/50 resize-none"
                             rows={4}
                           />
                           <div className="mt-1.5 flex items-center gap-2">
@@ -620,7 +620,7 @@ function AutoReplyModal({
                             <button
                               onClick={() => approveReply(r, editText)}
                               disabled={posting[r.reviewId]}
-                              className="flex items-center gap-1 rounded-lg bg-brand-dark px-3 py-1 text-xs font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50"
+                              className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1 text-xs font-medium text-on-ink hover:bg-ink/90 disabled:opacity-50"
                             >
                               {posting[r.reviewId] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
                               Post edited reply
@@ -727,7 +727,7 @@ function BatchAutoReplyModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-surface p-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-bold">Batch Auto-Reply</h2>
@@ -740,7 +740,7 @@ function BatchAutoReplyModal({ onClose }: { onClose: () => void }) {
 
         {!data && !loading && (
           <div className="mt-6 text-center">
-            <Sparkles className="mx-auto h-10 w-10 text-terracotta" />
+            <Sparkles className="mx-auto h-10 w-10 text-brand-text" />
             <p className="mt-3 text-sm font-medium">Reply to all unreplied reviews across all outlets</p>
             <ul className="mt-2 text-xs text-muted-foreground space-y-1">
               <li>4-5 star: auto-posted immediately</li>
@@ -748,7 +748,7 @@ function BatchAutoReplyModal({ onClose }: { onClose: () => void }) {
             </ul>
             <button
               onClick={runBatch}
-              className="mt-4 rounded-lg bg-brand-dark px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-dark/90 transition-colors"
+              className="mt-4 rounded-lg bg-ink px-6 py-2.5 text-sm font-medium text-on-ink hover:bg-ink/90 transition-colors"
             >
               Run Batch Auto-Reply
             </button>
@@ -757,7 +757,7 @@ function BatchAutoReplyModal({ onClose }: { onClose: () => void }) {
 
         {loading && (
           <div className="mt-6 flex flex-col items-center gap-3 py-10">
-            <Loader2 className="h-8 w-8 animate-spin text-terracotta" />
+            <Loader2 className="h-8 w-8 animate-spin text-brand-text" />
             <p className="text-sm text-muted-foreground">Processing all outlets...</p>
           </div>
         )}
@@ -923,8 +923,8 @@ function DashboardView() {
             onClick={() => setPeriod(p)}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               period === p
-                ? "bg-brand-dark text-white"
-                : "border border-border bg-white text-muted-foreground hover:bg-muted"
+                ? "bg-ink text-on-ink"
+                : "border border-border bg-surface text-muted-foreground hover:bg-muted"
             }`}
           >
             {p === "day" ? "Today" : p === "week" ? "7 Days" : p === "month" ? "30 Days" : "Custom"}
@@ -936,14 +936,14 @@ function DashboardView() {
               type="date"
               value={customFrom}
               onChange={(e) => setCustomFrom(e.target.value)}
-              className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
             />
             <span className="text-sm text-muted-foreground">to</span>
             <input
               type="date"
               value={customTo}
               onChange={(e) => setCustomTo(e.target.value)}
-              className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring/50"
             />
           </div>
         )}
@@ -953,7 +953,7 @@ function DashboardView() {
       <div className="mt-4 flex items-center gap-2">
         <button
           onClick={() => setShowBatchReply(true)}
-          className="flex items-center gap-1.5 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta/90 transition-colors"
+          className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink/90 transition-colors"
         >
           <Sparkles className="h-4 w-4" />
           Auto-Reply All Outlets
@@ -967,7 +967,7 @@ function DashboardView() {
 
       {/* Aggregated stats */}
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-border bg-white p-4">
+        <div className="rounded-xl border border-border bg-surface p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <TrendingUp className="h-4 w-4" />
             <span className="text-xs font-medium">Avg Rating</span>
@@ -978,7 +978,7 @@ function DashboardView() {
           </div>
           <p className="mt-0.5 text-[10px] text-muted-foreground">{periodLabel}</p>
         </div>
-        <div className="rounded-xl border border-border bg-white p-4">
+        <div className="rounded-xl border border-border bg-surface p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <svg className="h-4 w-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
             <span className="text-xs font-medium">Google Reviews</span>
@@ -986,7 +986,7 @@ function DashboardView() {
           <span className="mt-2 block text-2xl font-bold">{data?.totalGoogleReviews ?? 0}</span>
           <p className="mt-0.5 text-[10px] text-muted-foreground">{periodLabel}</p>
         </div>
-        <div className="rounded-xl border border-border bg-white p-4">
+        <div className="rounded-xl border border-border bg-surface p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <MessageSquare className="h-4 w-4" />
             <span className="text-xs font-medium">Feedback</span>
@@ -996,7 +996,7 @@ function DashboardView() {
           </span>
           <p className="mt-0.5 text-[10px] text-muted-foreground">{periodLabel}</p>
         </div>
-        <div className="rounded-xl border border-border bg-white p-4">
+        <div className="rounded-xl border border-border bg-surface p-4">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Store className="h-4 w-4" />
             <span className="text-xs font-medium">Outlets</span>
@@ -1014,8 +1014,8 @@ function DashboardView() {
             onClick={() => setFilterOutletId(filterOutletId === outlet.outletId ? null : outlet.outletId)}
             className={`rounded-xl border p-4 text-left transition-colors ${
               filterOutletId === outlet.outletId
-                ? "border-terracotta bg-terracotta/5 ring-1 ring-terracotta"
-                : "border-border bg-white hover:border-terracotta/40"
+                ? "border-ink bg-brand-soft ring-1 ring-brand"
+                : "border-border bg-surface hover:border-ink/40"
             }`}
           >
             <h3 className="text-sm font-semibold truncate">{outlet.outletName}</h3>
@@ -1075,18 +1075,18 @@ function DashboardView() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search..."
-              className="w-48 rounded-lg border border-border bg-white py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+              className="w-48 rounded-lg border border-border bg-surface py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/50"
             />
           </div>
           <div className="relative">
             <button
               onClick={() => setShowFilter(!showFilter)}
-              className={`rounded-lg border p-2 transition-colors ${filterRating ? "border-terracotta bg-terracotta/10 text-terracotta" : "border-border bg-white text-muted-foreground hover:bg-muted"}`}
+              className={`rounded-lg border p-2 transition-colors ${filterRating ? "border-ink bg-brand-soft text-brand-text" : "border-border bg-surface text-muted-foreground hover:bg-muted"}`}
             >
               <Filter className="h-4 w-4" />
             </button>
             {showFilter && (
-              <div className="absolute right-0 top-10 z-20 w-48 rounded-xl border border-border bg-white p-3 shadow-lg">
+              <div className="absolute right-0 top-10 z-20 w-48 rounded-xl border border-border bg-surface p-3 shadow-lg">
                 <p className="text-xs font-semibold text-muted-foreground mb-2">Filter by rating</p>
                 <div className="space-y-1">
                   <button
@@ -1122,7 +1122,7 @@ function DashboardView() {
         {!isLoading && dashTab === "google" && (
           <>
             {filteredGoogleReviews.length === 0 ? (
-              <div className="rounded-xl border border-border bg-white p-10 text-center">
+              <div className="rounded-xl border border-border bg-surface p-10 text-center">
                 <Star className="mx-auto h-10 w-10 text-muted-foreground/30" />
                 <p className="mt-3 text-sm text-muted-foreground">No 4-5 star reviews in this period</p>
               </div>
@@ -1142,7 +1142,7 @@ function DashboardView() {
         {!isLoading && dashTab === "internal" && (
           <>
             {filteredFeedback.length === 0 ? (
-              <div className="rounded-xl border border-border bg-white p-10 text-center">
+              <div className="rounded-xl border border-border bg-surface p-10 text-center">
                 <MessageSquare className="mx-auto h-10 w-10 text-muted-foreground/30" />
                 <p className="mt-3 text-sm text-muted-foreground">No feedback in this period</p>
               </div>
@@ -1184,14 +1184,14 @@ export default function ReviewsPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/reviews/feedback"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
           >
             <MessageSquare className="h-4 w-4" />
             Feedback management
           </Link>
           <Link
             href="/reviews/settings"
-            className="flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
           >
             <Settings className="h-4 w-4" />
             Review settings

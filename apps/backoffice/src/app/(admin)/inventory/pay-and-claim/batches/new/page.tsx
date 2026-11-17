@@ -271,7 +271,7 @@ export default function NewBatchPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs">{inv.invoiceNumber}</span>
-                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
+                          <span className="rounded-full bg-sunken px-1.5 py-0.5 text-[10px] text-text-2">
                             {inv.status}
                           </span>
                           <span className="text-xs text-muted-foreground">

@@ -107,7 +107,7 @@ export default function DashboardPage() {
           <div className="inline-flex rounded-lg border p-0.5">
             {PERIODS.map((p) => (
               <button key={p.key} onClick={() => setPeriod(p.key)}
-                className={`rounded-md px-3 py-1 text-xs transition ${period === p.key ? "bg-terracotta text-white" : "text-muted-foreground hover:bg-muted"}`}>
+                className={`rounded-md px-3 py-1 text-xs transition ${period === p.key ? "bg-ink text-on-ink" : "text-muted-foreground hover:bg-muted"}`}>
                 {p.label}
               </button>
             ))}
@@ -123,12 +123,12 @@ export default function DashboardPage() {
       {data && data.canSeeAllOutlets && (
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setOutlet("all")}
-            className={`rounded-full border px-3 py-1 text-xs ${outlet === "all" ? "border-terracotta bg-terracotta/10 text-terracotta" : "text-muted-foreground hover:bg-muted"}`}>
+            className={`rounded-full border px-3 py-1 text-xs ${outlet === "all" ? "border-ink bg-brand-soft text-brand-text" : "text-muted-foreground hover:bg-muted"}`}>
             All outlets
           </button>
           {data.outlets.map((o) => (
             <button key={o.id} onClick={() => setOutlet(o.id)}
-              className={`rounded-full border px-3 py-1 text-xs ${outlet === o.id ? "border-terracotta bg-terracotta/10 text-terracotta" : "text-muted-foreground hover:bg-muted"}`}>
+              className={`rounded-full border px-3 py-1 text-xs ${outlet === o.id ? "border-ink bg-brand-soft text-brand-text" : "text-muted-foreground hover:bg-muted"}`}>
               {o.name}
             </button>
           ))}

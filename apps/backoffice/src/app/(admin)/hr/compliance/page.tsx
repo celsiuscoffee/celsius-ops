@@ -116,7 +116,7 @@ export default function CompliancePage() {
       <ConfirmDialog />
       <HrPageHeader
         title="Compliance Calendar"
-        icon={<ShieldAlert className="h-6 w-6 text-terracotta" />}
+        icon={<ShieldAlert className="h-6 w-6 text-brand-text" />}
         description="LHDN, KWSP, PERKESO, HRDF deadlines. Work-permit and license renewals. Recurring events auto-schedule the next occurrence on completion."
         action={
           <>
@@ -130,7 +130,7 @@ export default function CompliancePage() {
               Seed standard MY events
             </button>
             {!showAdd && (
-              <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:bg-terracotta-dark">
+              <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ink-hover">
                 <Plus className="h-4 w-4" /> Add event
               </button>
             )}
@@ -176,8 +176,8 @@ export default function CompliancePage() {
           </div>
           {err && <p className="mt-3 text-xs text-red-600">{err}</p>}
           <div className="mt-4 flex justify-end gap-2">
-            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50">Cancel</button>
-            <button onClick={submit} disabled={saving} className="flex items-center gap-2 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50">
+            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-sm hover:bg-sunken">Cancel</button>
+            <button onClick={submit} disabled={saving} className="flex items-center gap-2 rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save
             </button>
@@ -226,13 +226,13 @@ function EventRow({ event, onDone, onDelete }: { event: Event; onDone: (id: stri
   const cat = CATEGORIES.find((c) => c.v === event.category)?.l || event.category;
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 text-sm">
-      <span className="font-mono text-xs text-gray-500 w-24">{event.due_date}</span>
+      <span className="font-mono text-xs text-text-2 w-24">{event.due_date}</span>
       <div className="min-w-0 flex-1">
         <div className="font-medium">{event.title}</div>
         <div className="mt-0.5 text-[10px] text-muted-foreground">{cat} · {event.recurrence}</div>
       </div>
       {event.status !== "done" && (
-        <button onClick={() => onDone(event.id)} className="rounded border bg-white px-2 py-1 text-[10px] hover:bg-emerald-50">
+        <button onClick={() => onDone(event.id)} className="rounded border bg-surface px-2 py-1 text-[10px] hover:bg-emerald-50">
           Mark done
         </button>
       )}

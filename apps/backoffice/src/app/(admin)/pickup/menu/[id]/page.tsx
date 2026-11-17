@@ -41,10 +41,10 @@ export default function EditProductPage() {
   if (notFound || !product) {
     return (
       <div className="p-6 max-w-3xl mx-auto space-y-4">
-        <Link href="/pickup/menu" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-[#160800]">
+        <Link href="/pickup/menu" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-text">
           <ArrowLeft className="h-4 w-4" /> Back to products
         </Link>
-        <div className="bg-white rounded-2xl p-8 text-center">
+        <div className="bg-surface rounded-2xl p-8 text-center">
           <p className="text-sm text-muted-foreground">Product not found.</p>
         </div>
       </div>

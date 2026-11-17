@@ -9,11 +9,11 @@ import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { storeLabel } from "@/lib/pickup/store-label";
 
 const STATUS_COLOUR: Record<string, string> = {
-  pending:   "bg-gray-100 text-gray-600",
+  pending:   "bg-sunken text-text-2",
   paid:      "bg-blue-100 text-blue-600",
   preparing: "bg-amber-100 text-amber-700",
   ready:     "bg-green-100 text-green-700",
-  completed: "bg-gray-100 text-gray-500",
+  completed: "bg-sunken text-text-2",
   failed:    "bg-red-100 text-red-600",
 };
 
@@ -136,7 +136,7 @@ export default function PickupOrders() {
     <div className="p-3 sm:p-6 space-y-5 max-w-6xl">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#160800]">Orders</h1>
+          <h1 className="text-2xl font-bold text-text">Orders</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {filtered.length} {filtered.length === 1 ? 'order' : 'orders'} · RM {(totalRevenue / 100).toFixed(2)} total
           </p>
@@ -144,14 +144,14 @@ export default function PickupOrders() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowExport(true)}
-            className="flex items-center gap-1.5 text-sm font-medium bg-[#160800] text-white px-3 py-1.5 rounded-xl hover:bg-[#160800]/90 transition-colors"
+            className="flex items-center gap-1.5 text-sm font-medium bg-ink text-on-ink px-3 py-1.5 rounded-xl hover:bg-ink/90 transition-colors"
           >
             <Download className="h-4 w-4" strokeWidth={1.75} />
             Export CSV
           </button>
           <button
             onClick={load}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-[#160800] transition-colors"
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-text transition-colors"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -160,7 +160,7 @@ export default function PickupOrders() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-2xl p-4 space-y-3">
+      <div className="bg-surface rounded-2xl p-4 space-y-3">
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -235,7 +235,7 @@ export default function PickupOrders() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl overflow-hidden">
+      <div className="bg-surface rounded-2xl overflow-hidden">
         {loading ? (
           <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>
         ) : filtered.length === 0 ? (
@@ -271,7 +271,7 @@ export default function PickupOrders() {
                       {order.customer_name ?? "—"}{order.customer_phone ? ` · ${order.customer_phone}` : ""}
                     </span>
                     <span className="text-sm">{storeLabel(order.store_id)}</span>
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit ${CHANNEL_BADGE[ch] ?? "bg-gray-100 text-gray-600"}`}>
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit ${CHANNEL_BADGE[ch] ?? "bg-sunken text-text-2"}`}>
                       {CHANNEL_LABEL[ch] ?? ch}
                     </span>
                     <span className="text-sm text-muted-foreground">
@@ -280,7 +280,7 @@ export default function PickupOrders() {
                       {new Date(order.created_at).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}
                     </span>
                     <span className="text-sm font-semibold">RM {(order.total / 100).toFixed(2)}</span>
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit ${STATUS_COLOUR[order.status] ?? "bg-gray-100 text-gray-600"}`}>
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit ${STATUS_COLOUR[order.status] ?? "bg-sunken text-text-2"}`}>
                       {order.status}
                     </span>
                     <ChevronRight className="h-4 w-4 text-muted-foreground hidden md:block" />
@@ -300,10 +300,10 @@ export default function PickupOrders() {
       {/* Export CSV Modal */}
       {showExport && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-xl">
+          <div className="bg-surface rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-[#160800]">Export Orders</h2>
-              <button onClick={() => setShowExport(false)} className="text-muted-foreground hover:text-[#160800]">
+              <h2 className="font-bold text-text">Export Orders</h2>
+              <button onClick={() => setShowExport(false)} className="text-muted-foreground hover:text-text">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -344,7 +344,7 @@ export default function PickupOrders() {
             <button
               onClick={handleExport}
               disabled={exporting || !exportFrom || !exportTo}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#160800] text-white text-sm font-semibold rounded-xl hover:bg-[#160800]/90 transition-colors disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 py-2.5 bg-ink text-on-ink text-sm font-semibold rounded-xl hover:bg-ink/90 transition-colors disabled:opacity-50"
             >
               <Download className="h-4 w-4" strokeWidth={1.75} />
               {exporting ? "Downloading..." : "Download CSV"}

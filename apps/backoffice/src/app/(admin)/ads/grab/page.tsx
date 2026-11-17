@@ -75,21 +75,21 @@ export default function GrabMarketingPage() {
           <h1 className="text-xl font-semibold">GrabFood Marketing</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm">
+          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm">
             <option value="all">All outlets</option>
             {(outlets ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm" />
-          <span className="text-neutral-400">→</span>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm" />
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
+          <span className="text-text-3">→</span>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
         </div>
       </div>
 
       {/* tabs */}
-      <div className="flex gap-1 border-b border-neutral-200">
+      <div className="flex gap-1 border-b border-line">
         {([["overview", "Overview"], ["campaigns", "Campaigns"], ["spend", "Ad Spend"]] as [Tab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${tab === k ? "border-emerald-600 text-emerald-700" : "border-transparent text-neutral-500 hover:text-neutral-800"}`}>
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px ${tab === k ? "border-emerald-600 text-emerald-700" : "border-transparent text-text-2 hover:text-text"}`}>
             {label}
           </button>
         ))}
@@ -118,15 +118,15 @@ function OverviewTab({ q }: { q: Q<Overview> }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {stats.map((s) => (
           <Card key={s.label} className="p-4">
-            <div className="text-xs uppercase tracking-wide text-neutral-500">{s.label}</div>
-            <div className={`mt-1 text-lg font-semibold ${s.accent ? "text-emerald-700" : "text-neutral-900"}`}>{s.value}</div>
+            <div className="text-xs uppercase tracking-wide text-text-2">{s.label}</div>
+            <div className={`mt-1 text-lg font-semibold ${s.accent ? "text-emerald-700" : "text-text"}`}>{s.value}</div>
           </Card>
         ))}
       </div>
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-xs text-neutral-500">
+            <thead className="bg-sunken text-xs text-text-2">
               <tr>
                 <th className="px-3 py-2 text-left font-normal">Outlet</th>
                 <th className="px-3 py-2 text-right font-normal">Orders</th>
@@ -137,9 +137,9 @@ function OverviewTab({ q }: { q: Q<Overview> }) {
                 <th className="px-3 py-2 text-right font-normal">% of rev</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody className="divide-y divide-line">
               {byOutlet.length === 0 ? (
-                <tr><td colSpan={7} className="p-8 text-center text-neutral-500">No GrabFood activity in this range.</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-text-2">No GrabFood activity in this range.</td></tr>
               ) : byOutlet.map((r) => (
                 <tr key={r.outletId}>
                   <td className="px-3 py-2">{r.name}</td>
@@ -155,7 +155,7 @@ function OverviewTab({ q }: { q: Q<Overview> }) {
           </table>
         </div>
       </Card>
-      <p className="text-xs text-neutral-400">
+      <p className="text-xs text-text-3">
         Promo cost = merchant-funded discounts on GrabFood orders (Grab-funded promos excluded). GrabAds spend is entered
         manually on the Ad Spend tab — GrabAds paid advertising isn&apos;t exposed by the GrabFood Partner API.
       </p>
@@ -170,20 +170,20 @@ function CampaignsTab({ q, onSync, syncing, syncMsg }: {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-neutral-500">Promotions mirrored from GrabFood (read-only).</p>
+        <p className="text-sm text-text-2">Promotions mirrored from GrabFood (read-only).</p>
         <button onClick={onSync} disabled={syncing}
           className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60">
           {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Sync from Grab
         </button>
       </div>
-      {syncMsg && <p className="text-xs text-neutral-500">{syncMsg}</p>}
+      {syncMsg && <p className="text-xs text-text-2">{syncMsg}</p>}
       <Card className="overflow-hidden">
         {q.isLoading || !q.data ? <Spinner /> : q.data.campaigns.length === 0 ? (
-          <p className="p-8 text-center text-sm text-neutral-500">No campaigns synced yet — hit &ldquo;Sync from Grab&rdquo;.</p>
+          <p className="p-8 text-center text-sm text-text-2">No campaigns synced yet — hit &ldquo;Sync from Grab&rdquo;.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-neutral-50 text-xs text-neutral-500">
+              <thead className="bg-sunken text-xs text-text-2">
                 <tr>
                   <th className="px-3 py-2 text-left font-normal">Campaign</th>
                   <th className="px-3 py-2 text-left font-normal">Outlet</th>
@@ -192,7 +192,7 @@ function CampaignsTab({ q, onSync, syncing, syncMsg }: {
                   <th className="px-3 py-2 text-left font-normal">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-100">
+              <tbody className="divide-y divide-line">
                 {q.data.campaigns.map((c) => (
                   <tr key={c.id}>
                     <td className="px-3 py-2">{c.name ?? c.grabCampaignId}</td>
@@ -247,31 +247,31 @@ function SpendTab({ q, outlets, defaults }: {
   return (
     <div className="space-y-3">
       <Card className="p-4">
-        <div className="text-sm font-medium text-neutral-800">Add GrabAds spend</div>
-        <p className="mt-0.5 text-xs text-neutral-500">From your Grab merchant billing/payout statement (GrabAds isn&apos;t in the API).</p>
+        <div className="text-sm font-medium text-text">Add GrabAds spend</div>
+        <p className="mt-0.5 text-xs text-text-2">From your Grab merchant billing/payout statement (GrabAds isn&apos;t in the API).</p>
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-6">
-          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm lg:col-span-2">
+          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm lg:col-span-2">
             <option value="">Select outlet…</option>
             {outlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
-          <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm" />
-          <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm" />
-          <input type="number" min="0" step="0.01" placeholder="Amount (RM)" value={amount} onChange={(e) => setAmount(e.target.value)} className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm" />
+          <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
+          <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
+          <input type="number" min="0" step="0.01" placeholder="Amount (RM)" value={amount} onChange={(e) => setAmount(e.target.value)} className="rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
           <button onClick={add} disabled={busy} className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60">
             {busy ? "Adding…" : "Add"}
           </button>
         </div>
-        <input type="text" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} className="mt-2 w-full rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm" />
+        <input type="text" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} className="mt-2 w-full rounded-md border border-line bg-surface px-3 py-1.5 text-sm" />
         {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
       </Card>
 
       <Card className="overflow-hidden">
         {q.isLoading || !q.data ? <Spinner /> : q.data.entries.length === 0 ? (
-          <p className="p-8 text-center text-sm text-neutral-500">No ad spend entered for this range.</p>
+          <p className="p-8 text-center text-sm text-text-2">No ad spend entered for this range.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-neutral-50 text-xs text-neutral-500">
+              <thead className="bg-sunken text-xs text-text-2">
                 <tr>
                   <th className="px-3 py-2 text-left font-normal">Outlet</th>
                   <th className="px-3 py-2 text-left font-normal">Period</th>
@@ -280,15 +280,15 @@ function SpendTab({ q, outlets, defaults }: {
                   <th className="px-3 py-2 text-right font-normal"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-100">
+              <tbody className="divide-y divide-line">
                 {q.data.entries.map((e) => (
                   <tr key={e.id}>
                     <td className="px-3 py-2">{e.outletName}</td>
                     <td className="px-3 py-2">{e.periodStart} → {e.periodEnd}</td>
                     <td className="px-3 py-2 text-right font-medium">{fmtMYR(e.amountMYR)}</td>
-                    <td className="px-3 py-2 text-neutral-500">{e.note ?? "—"}</td>
+                    <td className="px-3 py-2 text-text-2">{e.note ?? "—"}</td>
                     <td className="px-3 py-2 text-right">
-                      <button onClick={() => del(e.id)} className="text-neutral-400 hover:text-red-600" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => del(e.id)} className="text-text-3 hover:text-red-600" title="Delete"><Trash2 className="h-4 w-4" /></button>
                     </td>
                   </tr>
                 ))}
@@ -302,5 +302,5 @@ function SpendTab({ q, outlets, defaults }: {
 }
 
 function Spinner() {
-  return <div className="flex h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-neutral-400" /></div>;
+  return <div className="flex h-48 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-text-3" /></div>;
 }

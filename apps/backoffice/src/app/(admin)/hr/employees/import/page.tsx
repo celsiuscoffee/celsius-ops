@@ -182,7 +182,7 @@ export default function LoeImportPage() {
 
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Sparkles className="h-6 w-6 text-terracotta" /> Import Employees from LoE
+          <Sparkles className="h-6 w-6 text-brand-text" /> Import Employees from LoE
         </h1>
         <p className="text-sm text-muted-foreground">
           Drop Letters of Employment (PDF) — we&apos;ll parse each one, let you review, then create
@@ -207,19 +207,19 @@ export default function LoeImportPage() {
           className={
             "rounded-xl border-2 border-dashed p-10 text-center transition " +
             (dragOver
-              ? "border-terracotta bg-terracotta/5"
-              : "border-gray-300 bg-card")
+              ? "border-ink bg-brand-soft"
+              : "border-line-2 bg-card")
           }
         >
           {parsing ? (
-            <Loader2 className="mx-auto h-8 w-8 animate-spin text-terracotta" />
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-brand-text" />
           ) : (
-            <Upload className={"mx-auto h-8 w-8 " + (dragOver ? "text-terracotta" : "text-muted-foreground")} />
+            <Upload className={"mx-auto h-8 w-8 " + (dragOver ? "text-brand-text" : "text-muted-foreground")} />
           )}
           <p className="mt-3 text-sm font-medium">
             {parsing ? "Parsing with AI…" : dragOver ? "Drop to parse" : "Drop LoE PDFs here, or"}
           </p>
-          <label className="mt-3 inline-block cursor-pointer rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90">
+          <label className="mt-3 inline-block cursor-pointer rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink/90">
             Choose files
             <input
               type="file"
@@ -239,7 +239,7 @@ export default function LoeImportPage() {
               <button
                 onClick={parseAll}
                 disabled={parsing}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90 disabled:opacity-50"
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink/90 disabled:opacity-50"
               >
                 {parsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 Parse with AI
@@ -373,7 +373,7 @@ export default function LoeImportPage() {
                 <span className="font-medium">{r.fileName}</span>
                 {r.error && <span className="text-xs text-muted-foreground">— {r.error}</span>}
                 {r.userId && (
-                  <Link href={`/hr/employees/${r.userId}`} className="ml-auto text-xs text-terracotta hover:underline">
+                  <Link href={`/hr/employees/${r.userId}`} className="ml-auto text-xs text-brand-text hover:underline">
                     Open profile →
                   </Link>
                 )}
@@ -390,7 +390,7 @@ export default function LoeImportPage() {
             </button>
             <button
               onClick={() => router.push("/hr/employees")}
-              className="rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90"
+              className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink/90"
             >
               Back to Employees
             </button>

@@ -370,7 +370,7 @@ export default function EmployeesPage() {
             {configured}/{total} profiles configured
           </p>
           {scope === "direct-reports" && (
-            <p className="mt-1 text-xs text-terracotta">Showing your direct reports only.</p>
+            <p className="mt-1 text-xs text-brand-text">Showing your direct reports only.</p>
           )}
         </div>
         {canCreate && (
@@ -386,7 +386,7 @@ export default function EmployeesPage() {
             </Link>
             <button
               onClick={() => setShowCreate(true)}
-              className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90"
+              className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink/90"
             >
               <Plus className="h-4 w-4" />
               New Employee
@@ -421,7 +421,7 @@ export default function EmployeesPage() {
             onClick={() => setFilter(tab.key)}
             className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
               filter === tab.key
-                ? "border-terracotta bg-terracotta text-white"
+                ? "border-ink bg-ink text-on-ink"
                 : "bg-background hover:bg-muted"
             }`}
           >
@@ -476,7 +476,7 @@ export default function EmployeesPage() {
           <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
-              className="h-4 w-4 rounded border-gray-300 text-terracotta focus:ring-terracotta"
+              className="h-4 w-4 rounded border-line-2 text-brand-text focus:ring-brand"
               checked={allVisibleSelected}
               ref={(el) => {
                 // Show indeterminate when only some visible rows are picked.
@@ -535,7 +535,7 @@ export default function EmployeesPage() {
               }}
               className={`flex cursor-pointer items-center gap-4 rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md ${
                 resigned ? "opacity-70" : ""
-              } ${isSelected ? "ring-2 ring-terracotta/60" : ""}`}
+              } ${isSelected ? "ring-2 ring-brand/60" : ""}`}
             >
               {/* Bulk-select checkbox. Stops propagation so toggling doesn't
                   also navigate to the profile. */}
@@ -547,7 +547,7 @@ export default function EmployeesPage() {
                   e.stopPropagation();
                   toggleSelected(emp.id);
                 }}
-                className="h-4 w-4 shrink-0 rounded border-gray-300 text-terracotta focus:ring-terracotta"
+                className="h-4 w-4 shrink-0 rounded border-line-2 text-brand-text focus:ring-brand"
                 aria-label={`Select ${emp.fullName || emp.name}`}
               />
               {/* Profile photo — first clock-in selfie. Falls back to initials. */}
@@ -560,7 +560,7 @@ export default function EmployeesPage() {
                 />
               ) : (
                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${
-                  resigned ? "bg-red-300" : hasProfile ? "bg-green-500" : "bg-gray-300"
+                  resigned ? "bg-red-300" : hasProfile ? "bg-green-500" : "bg-line"
                 }`}>
                   {(emp.fullName || emp.name).split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                 </div>
@@ -571,7 +571,7 @@ export default function EmployeesPage() {
                   {emp.fullName && emp.name !== emp.fullName && (
                     <span className="text-xs text-muted-foreground">({emp.name})</span>
                   )}
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                  <span className="rounded-full bg-sunken px-2 py-0.5 text-[10px] font-medium text-text-2">
                     {emp.role}
                   </span>
                   {emp.hrProfile?.employment_type === "part_time" && (
@@ -653,7 +653,7 @@ export default function EmployeesPage() {
                 ) : (
                   <AlertCircle className="h-5 w-5 text-amber-400" />
                 )}
-                <ChevronRight className="h-4 w-4 text-gray-300" />
+                <ChevronRight className="h-4 w-4 text-text-3" />
               </div>
             </div>
           );
@@ -669,7 +669,7 @@ export default function EmployeesPage() {
             </span>
             <button
               onClick={() => setBulkMemoOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-semibold text-white hover:bg-terracotta/90"
+              className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-on-ink hover:bg-ink/90"
             >
               <MessageSquare className="h-3.5 w-3.5" />
               Issue memo to {selectedIds.size}
@@ -777,7 +777,7 @@ export default function EmployeesPage() {
               <button
                 onClick={sendBulkMemo}
                 disabled={bulkSending || !bulkMemoTitle.trim() || !bulkMemoBody.trim()}
-                className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink/90 disabled:opacity-50"
               >
                 {bulkSending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Send to {selectedIds.size}
@@ -819,13 +819,13 @@ export default function EmployeesPage() {
                   className={
                     "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-xs transition " +
                     (loeDragOver
-                      ? "border-terracotta bg-terracotta/10 text-terracotta"
-                      : "border-gray-300 bg-muted/20 text-muted-foreground hover:bg-muted/30")
+                      ? "border-ink bg-brand-soft text-brand-text"
+                      : "border-line-2 bg-muted/20 text-muted-foreground hover:bg-muted/30")
                   }
                 >
                   {parsingLoe ? (
                     <>
-                      <Loader2 className="h-5 w-5 animate-spin text-terracotta" />
+                      <Loader2 className="h-5 w-5 animate-spin text-brand-text" />
                       <span className="font-medium text-foreground">Parsing LoE with AI…</span>
                     </>
                   ) : loeDragOver ? (
@@ -835,7 +835,7 @@ export default function EmployeesPage() {
                     </>
                   ) : (
                     <>
-                      <Sparkles className="h-5 w-5 text-terracotta" />
+                      <Sparkles className="h-5 w-5 text-brand-text" />
                       <span className="font-semibold text-foreground">Upload LoE to auto-fill</span>
                       <span>We&apos;ll read the letter and prefill the fields below. The PDF also saves to the employee&apos;s Documents.</span>
                       <span className="text-[10px]">Drop a file here, or click to choose · Skip to fill manually</span>
@@ -1012,7 +1012,7 @@ export default function EmployeesPage() {
               <button
                 onClick={handleCreate}
                 disabled={creating || !newEmp.name || (wantsLogin && !newEmp.phone)}
-                className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-semibold text-white hover:bg-terracotta/90 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink/90 disabled:opacity-50"
               >
                 {creating && <Loader2 className="h-4 w-4 animate-spin" />}
                 Create employee

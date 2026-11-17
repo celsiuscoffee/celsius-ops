@@ -11,6 +11,13 @@ current month.
 
 ## Verified facts
 
+- 2026-11-17 — **Step 6 part 1: every backoffice page on the Celsius UI palette** (PR
+  celsiuscoffee/celsius-ops#1278, `docs/design/backoffice-structure.md` §2e). Codemod over 176
+  files; main buttons are espresso `bg-ink text-on-ink` (white text on ink was unreadable in
+  dark mode until the second pass). `lib/celsius-ui-palette.test.ts` blocks the old classes.
+  `/ops/audit` and `/loyalty/loops` crash on an empty `[]` mock before and after (mock shape,
+  not this change). Next: page-by-page layouts, most-used first (read Office Usage).
+
 - 2026-11-17 — **Restructure step 5 (list B merges) built**, PR celsiuscoffee/celsius-ops#1278,
   `docs/design/backoffice-structure.md` §2d: Perishables shares the Ingredients editor (fixes the
   old copy dropping suppliers on edit), `/pickup` → Pickup App under Sales › Reports, SOP

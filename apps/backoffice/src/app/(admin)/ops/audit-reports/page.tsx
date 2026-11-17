@@ -112,8 +112,8 @@ export default function AuditReportsPage() {
       <AuditNav />
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Audit Reports</h2>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h2 className="text-xl font-semibold text-text">Audit Reports</h2>
+        <p className="mt-0.5 text-sm text-text-2">
           Manager audits submitted by Area Managers, Heads of Chef & Barista
         </p>
       </div>
@@ -123,23 +123,23 @@ export default function AuditReportsPage() {
         <CardContent className="p-4">
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-gray-500">From</label>
+              <label className="mb-1 block text-[11px] font-medium text-text-2">From</label>
               <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 w-[150px]" />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-gray-500">To</label>
+              <label className="mb-1 block text-[11px] font-medium text-text-2">To</label>
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 w-[150px]" />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-gray-500">Outlet</label>
-              <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="h-9 rounded-md border border-gray-200 px-2 text-sm">
+              <label className="mb-1 block text-[11px] font-medium text-text-2">Outlet</label>
+              <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="h-9 rounded-md border border-line px-2 text-sm">
                 <option value="">All outlets</option>
                 {outlets?.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-gray-500">Role</label>
-              <select value={roleType} onChange={(e) => setRoleType(e.target.value)} className="h-9 rounded-md border border-gray-200 px-2 text-sm">
+              <label className="mb-1 block text-[11px] font-medium text-text-2">Role</label>
+              <select value={roleType} onChange={(e) => setRoleType(e.target.value)} className="h-9 rounded-md border border-line px-2 text-sm">
                 <option value="all">All roles</option>
                 <option value="area_manager">Area Manager</option>
                 <option value="chef_head">Head of Chef</option>
@@ -147,22 +147,22 @@ export default function AuditReportsPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-gray-500">Auditor</label>
-              <select value={auditorId} onChange={(e) => setAuditorId(e.target.value)} className="h-9 rounded-md border border-gray-200 px-2 text-sm">
+              <label className="mb-1 block text-[11px] font-medium text-text-2">Auditor</label>
+              <select value={auditorId} onChange={(e) => setAuditorId(e.target.value)} className="h-9 rounded-md border border-line px-2 text-sm">
                 <option value="">All auditors</option>
                 {staff?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-[11px] font-medium text-gray-500">Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-9 rounded-md border border-gray-200 px-2 text-sm">
+              <label className="mb-1 block text-[11px] font-medium text-text-2">Status</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-9 rounded-md border border-line px-2 text-sm">
                 <option value="all">All</option>
                 <option value="IN_PROGRESS">In Progress</option>
                 <option value="COMPLETED">Completed</option>
               </select>
             </div>
             <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
               <Input placeholder="Search template, outlet, auditor, auditee..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
             </div>
           </div>
@@ -172,22 +172,22 @@ export default function AuditReportsPage() {
       {/* Summary */}
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Card><CardContent className="p-3">
-          <div className="text-[11px] font-medium text-gray-500">Total</div>
+          <div className="text-[11px] font-medium text-text-2">Total</div>
           <div className="mt-0.5 text-xl font-semibold">{total}</div>
         </CardContent></Card>
         <Card><CardContent className="p-3">
-          <div className="text-[11px] font-medium text-gray-500">Completed</div>
+          <div className="text-[11px] font-medium text-text-2">Completed</div>
           <div className="mt-0.5 text-xl font-semibold text-green-600">{completed}</div>
         </CardContent></Card>
         <Card><CardContent className="p-3">
-          <div className="text-[11px] font-medium text-gray-500">In Progress</div>
+          <div className="text-[11px] font-medium text-text-2">In Progress</div>
           <div className="mt-0.5 text-xl font-semibold text-blue-600">{inProgress}</div>
         </CardContent></Card>
         <Card><CardContent className="p-3">
-          <div className="text-[11px] font-medium text-gray-500">Avg Score</div>
+          <div className="text-[11px] font-medium text-text-2">Avg Score</div>
           <div className="mt-0.5 text-xl font-semibold">
             {avgScore !== null ? avgScore.toFixed(1) : "—"}
-            <span className="ml-1 text-xs font-normal text-gray-400">
+            <span className="ml-1 text-xs font-normal text-text-3">
               · {totalPhotos} photos
             </span>
           </div>
@@ -197,7 +197,7 @@ export default function AuditReportsPage() {
       {/* Loading */}
       {isLoading && (
         <div className="flex justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       )}
 
@@ -205,8 +205,8 @@ export default function AuditReportsPage() {
       {!isLoading && filtered.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
-            <ClipboardCheck className="mx-auto h-10 w-10 text-gray-300" />
-            <p className="mt-3 text-sm text-gray-500">No audit reports match these filters</p>
+            <ClipboardCheck className="mx-auto h-10 w-10 text-text-3" />
+            <p className="mt-3 text-sm text-text-2">No audit reports match these filters</p>
           </CardContent>
         </Card>
       )}
@@ -219,14 +219,14 @@ export default function AuditReportsPage() {
             href={`/ops/audit-reports/${r.id}`}
             className="block"
           >
-            <Card className="transition hover:border-terracotta/40 hover:shadow-sm">
+            <Card className="transition hover:border-ink/40 hover:shadow-sm">
               <CardContent className="flex items-center gap-4 p-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-gray-900 truncate">
+                    <span className="font-medium text-text truncate">
                       {r.template.name}
                     </span>
-                    <Badge className={`text-[10px] ${ROLE_COLORS[r.template.roleType] || "bg-gray-100 text-gray-600"}`}>
+                    <Badge className={`text-[10px] ${ROLE_COLORS[r.template.roleType] || "bg-sunken text-text-2"}`}>
                       {ROLE_LABELS[r.template.roleType] || r.template.roleType}
                     </Badge>
                     <Badge className={`text-[10px] ${STATUS_COLORS[r.status]}`}>
@@ -237,7 +237,7 @@ export default function AuditReportsPage() {
                       )}
                     </Badge>
                   </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-2">
                     <span className="flex items-center gap-1">
                       <Building2 className="h-3 w-3" /> {r.outlet.name}
                     </span>
@@ -263,16 +263,16 @@ export default function AuditReportsPage() {
 
                 <div className="shrink-0 text-right">
                   {r.overallScore !== null ? (
-                    <div className="text-lg font-semibold text-gray-900">
+                    <div className="text-lg font-semibold text-text">
                       {r.overallScore.toFixed(1)}
                     </div>
                   ) : (
-                    <div className="text-sm text-gray-300">—</div>
+                    <div className="text-sm text-text-3">—</div>
                   )}
-                  <div className="text-[10px] text-gray-400">score</div>
+                  <div className="text-[10px] text-text-3">score</div>
                 </div>
 
-                <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+                <ChevronRight className="h-4 w-4 shrink-0 text-text-3" />
               </CardContent>
             </Card>
           </Link>

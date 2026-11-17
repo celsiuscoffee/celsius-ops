@@ -242,10 +242,10 @@ export default function PrepRecipesPage() {
     <div className="space-y-5 p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold text-gray-900">
-            <ChefHat className="h-5 w-5 text-terracotta" /> Prep Recipes
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-text">
+            <ChefHat className="h-5 w-5 text-brand-text" /> Prep Recipes
           </h1>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+          <p className="mt-1 max-w-2xl text-sm text-text-2">
             What Central Preparation turns raw stock into — 10kg raw chicken → 10 pcs Grilled
             Chicken. Outlet menus consume the prepped item; this is the missing half that depletes
             the raw stock behind it and checks the transfer price against real raw cost.
@@ -257,7 +257,7 @@ export default function PrepRecipesPage() {
       </div>
 
       <div className="relative max-w-xs">
-        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
         <Input
           value={listSearch}
           onChange={(e) => setListSearch(e.target.value)}
@@ -267,14 +267,14 @@ export default function PrepRecipesPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-12 text-sm text-gray-500">
+        <div className="flex items-center gap-2 py-12 text-sm text-text-2">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading recipes…
         </div>
       ) : visible.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-200 py-14 text-center">
-          <ChefHat className="mx-auto h-8 w-8 text-gray-300" />
-          <p className="mt-2 text-sm font-medium text-gray-700">No prep recipes yet</p>
-          <p className="mx-auto mt-1 max-w-md text-xs text-gray-500">
+        <div className="rounded-lg border border-dashed border-line py-14 text-center">
+          <ChefHat className="mx-auto h-8 w-8 text-text-3" />
+          <p className="mt-2 text-sm font-medium text-text-2">No prep recipes yet</p>
+          <p className="mx-auto mt-1 max-w-md text-xs text-text-2">
             Until a prepped item has a recipe, its raw inputs never deplete in theory and show up
             as pure variance in the consumption report.
           </p>
@@ -284,26 +284,26 @@ export default function PrepRecipesPage() {
           {visible.map((r) => {
             const drift = r.variancePct != null && Math.abs(r.variancePct) > VARIANCE_WARN_PCT;
             return (
-              <div key={r.id} className="rounded-lg border border-gray-200 bg-white p-4">
+              <div key={r.id} className="rounded-lg border border-line bg-surface p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-gray-900">{r.outputProductName}</span>
-                      <Badge className="border-gray-200 bg-gray-50 text-gray-600">
+                      <span className="font-medium text-text">{r.outputProductName}</span>
+                      <Badge className="border-line bg-sunken text-text-2">
                         yields {r.yieldQuantity} {r.yieldUom}
                       </Badge>
                       {!r.isActive && (
-                        <Badge className="border-gray-200 bg-gray-100 text-gray-500">Inactive</Badge>
+                        <Badge className="border-line bg-sunken text-text-2">Inactive</Badge>
                       )}
                       {r.prepMinutes != null ? (
-                        <Badge className="border-gray-200 bg-gray-50 text-gray-600">
+                        <Badge className="border-line bg-sunken text-text-2">
                           {r.prepMinutes} min/batch
                           {r.minutesPerUnit != null && (
-                            <span className="text-gray-400"> · {r.minutesPerUnit.toFixed(2)}/{r.yieldUom}</span>
+                            <span className="text-text-3"> · {r.minutesPerUnit.toFixed(2)}/{r.yieldUom}</span>
                           )}
                         </Badge>
                       ) : (
-                        <Badge className="border-gray-200 bg-gray-100 text-gray-500">Not timed</Badge>
+                        <Badge className="border-line bg-sunken text-text-2">Not timed</Badge>
                       )}
                       {r.anyCostMissing && (
                         <Badge className="border-amber-200 bg-amber-50 text-amber-700">
@@ -312,7 +312,7 @@ export default function PrepRecipesPage() {
                         </Badge>
                       )}
                     </div>
-                    {r.prepNote && <p className="mt-1 text-xs text-gray-500">{r.prepNote}</p>}
+                    {r.prepNote && <p className="mt-1 text-xs text-text-2">{r.prepNote}</p>}
                   </div>
                   <div className="flex items-center gap-1">
                     <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>
@@ -325,18 +325,18 @@ export default function PrepRecipesPage() {
                 </div>
 
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-md bg-gray-50 p-3">
-                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                  <div className="rounded-md bg-sunken p-3">
+                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-text-2">
                       Raw inputs
                     </p>
                     <ul className="space-y-1">
                       {r.items.map((i) => (
-                        <li key={i.id} className="flex justify-between gap-3 text-xs text-gray-700">
+                        <li key={i.id} className="flex justify-between gap-3 text-xs text-text-2">
                           <span className="truncate">
                             {i.productName}
-                            <span className="text-gray-400"> · {i.quantityUsed} {i.uom || i.baseUom}</span>
+                            <span className="text-text-3"> · {i.quantityUsed} {i.uom || i.baseUom}</span>
                           </span>
-                          <span className={i.costMissing ? "text-amber-600" : "text-gray-500"}>
+                          <span className={i.costMissing ? "text-amber-600" : "text-text-2"}>
                             {i.costMissing ? "no price" : formatRM(i.lineCost)}
                           </span>
                         </li>
@@ -344,31 +344,31 @@ export default function PrepRecipesPage() {
                     </ul>
                   </div>
 
-                  <div className="rounded-md bg-gray-50 p-3">
-                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                  <div className="rounded-md bg-sunken p-3">
+                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-text-2">
                       Cost check
                     </p>
                     <dl className="space-y-1 text-xs">
                       <div className="flex justify-between">
-                        <dt className="text-gray-500">Batch cost</dt>
-                        <dd className="text-gray-800">{formatRM(r.batchCost)}</dd>
+                        <dt className="text-text-2">Batch cost</dt>
+                        <dd className="text-text">{formatRM(r.batchCost)}</dd>
                       </div>
                       {/* Per-BASE-unit figures need 4dp: a gram-based prep item
                           costs ~RM0.03/g, which 2dp rounds into uselessness. */}
                       <div className="flex justify-between">
-                        <dt className="text-gray-500">Computed / {r.outputBaseUom}</dt>
-                        <dd className="font-medium text-gray-900">{formatRM(r.costPerUnit, { decimals: 4 })}</dd>
+                        <dt className="text-text-2">Computed / {r.outputBaseUom}</dt>
+                        <dd className="font-medium text-text">{formatRM(r.costPerUnit, { decimals: 4 })}</dd>
                       </div>
                       <div className="flex justify-between">
-                        <dt className="text-gray-500">Central Prep price</dt>
-                        <dd className="text-gray-800">
+                        <dt className="text-text-2">Central Prep price</dt>
+                        <dd className="text-text">
                           {r.transferPrice != null ? formatRM(r.transferPrice, { decimals: 4 }) : "—"}
                         </dd>
                       </div>
                       {r.variance != null && (
-                        <div className="flex justify-between border-t border-gray-200 pt-1">
-                          <dt className="text-gray-500">Difference</dt>
-                          <dd className={drift ? "font-medium text-amber-700" : "text-gray-600"}>
+                        <div className="flex justify-between border-t border-line pt-1">
+                          <dt className="text-text-2">Difference</dt>
+                          <dd className={drift ? "font-medium text-amber-700" : "text-text-2"}>
                             {r.variance > 0 ? "+" : ""}{formatRM(r.variance, { decimals: 4 })}
                             {r.variancePct != null && ` (${r.variancePct > 0 ? "+" : ""}${r.variancePct}%)`}
                           </dd>
@@ -397,13 +397,13 @@ export default function PrepRecipesPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">Prepped item (output)</label>
+              <label className="mb-1 block text-xs font-medium text-text-2">Prepped item (output)</label>
               {form.outputProductId ? (
-                <div className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2">
-                  <span className="text-sm text-gray-800">{form.outputName}</span>
+                <div className="flex items-center justify-between rounded-md border border-line px-3 py-2">
+                  <span className="text-sm text-text">{form.outputName}</span>
                   {!editingId && (
                     <button onClick={() => { set("outputProductId", ""); set("outputName", ""); }}>
-                      <X className="h-3.5 w-3.5 text-gray-400" />
+                      <X className="h-3.5 w-3.5 text-text-3" />
                     </button>
                   )}
                 </div>
@@ -415,7 +415,7 @@ export default function PrepRecipesPage() {
                     placeholder="Search the prepped product…"
                   />
                   {outputSearch && (
-                    <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-gray-200">
+                    <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-line">
                       {outputChoices.map((p) => (
                         <button
                           key={p.id}
@@ -424,13 +424,13 @@ export default function PrepRecipesPage() {
                             if (!form.yieldUom) set("yieldUom", p.baseUom);
                             setOutputSearch("");
                           }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                          className="block w-full px-3 py-2 text-left text-sm hover:bg-sunken"
                         >
-                          {p.name} <span className="text-xs text-gray-400">{p.sku}</span>
+                          {p.name} <span className="text-xs text-text-3">{p.sku}</span>
                         </button>
                       ))}
                       {outputChoices.length === 0 && (
-                        <p className="px-3 py-2 text-xs text-gray-500">
+                        <p className="px-3 py-2 text-xs text-text-2">
                           No match — items with a recipe already are hidden.
                         </p>
                       )}
@@ -442,7 +442,7 @@ export default function PrepRecipesPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-700">Batch yields</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Batch yields</label>
                 <Input
                   type="number"
                   value={form.yieldQuantity}
@@ -451,7 +451,7 @@ export default function PrepRecipesPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-700">Unit</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Unit</label>
                 <Input
                   value={form.yieldUom}
                   onChange={(e) => set("yieldUom", e.target.value)}
@@ -461,7 +461,7 @@ export default function PrepRecipesPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">
+              <label className="mb-1 block text-xs font-medium text-text-2">
                 Prep time — one person, one batch (minutes)
               </label>
               <Input
@@ -470,13 +470,13 @@ export default function PrepRecipesPage() {
                 onChange={(e) => set("prepMinutes", e.target.value)}
                 placeholder="e.g. 45"
               />
-              <p className="mt-1 text-[11px] text-gray-400">
+              <p className="mt-1 text-[11px] text-text-3">
                 Hands-on minutes for ONE person to finish the whole batch. Leave blank if not timed
                 yet — the Prep Manhours report counts untimed recipes separately instead of assuming
                 they are free.
                 {form.prepMinutes.trim() !== "" && parseFloat(form.yieldQuantity) > 0 && (
                   <> That is{" "}
-                    <span className="font-medium text-gray-600">
+                    <span className="font-medium text-text-2">
                       {(Number(form.prepMinutes) / parseFloat(form.yieldQuantity)).toFixed(2)} min
                     </span>{" "}
                     per {form.yieldUom || "unit"}.
@@ -486,12 +486,12 @@ export default function PrepRecipesPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">Raw inputs</label>
+              <label className="mb-1 block text-xs font-medium text-text-2">Raw inputs</label>
               {form.lines.length > 0 && (
                 <div className="mb-2 space-y-1.5">
                   {form.lines.map((l) => (
                     <div key={l.productId} className="flex items-center gap-2">
-                      <span className="flex-1 truncate text-sm text-gray-800">{l.name}</span>
+                      <span className="flex-1 truncate text-sm text-text">{l.name}</span>
                       <Input
                         type="number"
                         value={l.quantityUsed}
@@ -499,9 +499,9 @@ export default function PrepRecipesPage() {
                         placeholder="qty"
                         className="w-24"
                       />
-                      <span className="w-10 text-xs text-gray-500">{l.uom}</span>
+                      <span className="w-10 text-xs text-text-2">{l.uom}</span>
                       <button onClick={() => removeLine(l.productId)}>
-                        <X className="h-3.5 w-3.5 text-gray-400" />
+                        <X className="h-3.5 w-3.5 text-text-3" />
                       </button>
                     </div>
                   ))}
@@ -513,25 +513,25 @@ export default function PrepRecipesPage() {
                 placeholder="Add a raw input…"
               />
               {inputSearch && (
-                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-gray-200">
+                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-line">
                   {inputChoices.map((p) => (
                     <button
                       key={p.id}
                       onClick={() => addLine(p)}
-                      className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                      className="block w-full px-3 py-2 text-left text-sm hover:bg-sunken"
                     >
-                      {p.name} <span className="text-xs text-gray-400">{p.baseUom}</span>
+                      {p.name} <span className="text-xs text-text-3">{p.baseUom}</span>
                     </button>
                   ))}
                   {inputChoices.length === 0 && (
-                    <p className="px-3 py-2 text-xs text-gray-500">No match.</p>
+                    <p className="px-3 py-2 text-xs text-text-2">No match.</p>
                   )}
                 </div>
               )}
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">Prep note (optional)</label>
+              <label className="mb-1 block text-xs font-medium text-text-2">Prep note (optional)</label>
               <Input
                 value={form.prepNote}
                 onChange={(e) => set("prepNote", e.target.value)}
@@ -540,14 +540,14 @@ export default function PrepRecipesPage() {
             </div>
 
             {previewCost.batch > 0 && (
-              <div className="rounded-md bg-gray-50 p-3 text-xs">
+              <div className="rounded-md bg-sunken p-3 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Batch cost</span>
-                  <span className="text-gray-800">{formatRM(previewCost.batch)}</span>
+                  <span className="text-text-2">Batch cost</span>
+                  <span className="text-text">{formatRM(previewCost.batch)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Per {form.yieldUom || "unit"}</span>
-                  <span className="font-medium text-gray-900">
+                  <span className="text-text-2">Per {form.yieldUom || "unit"}</span>
+                  <span className="font-medium text-text">
                     {formatRM(previewCost.perUnit, { decimals: 4 })}
                   </span>
                 </div>

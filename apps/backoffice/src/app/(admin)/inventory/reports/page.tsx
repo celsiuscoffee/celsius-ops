@@ -8,7 +8,7 @@ const REPORTS = [
   { name: "Usage Variance", description: "Actual usage (stock movements) vs expected (recipe BOM × sales) — over-portioning, theft, spoilage", icon: Scale, color: "bg-amber-50 text-amber-600", href: "/inventory/reports/ingredient-variance" },
   { name: "COGS Report", description: "Actual vs expected ingredient usage and cost variance per outlet per period", icon: DollarSign, color: "bg-red-50 text-red-600", href: "/inventory/reports/cogs" },
   { name: "Purchase Summary", description: "Total spending by supplier, product, and period with trend comparison", icon: ShoppingCart, color: "bg-green-50 text-green-600", href: "/inventory/reports/purchase-summary" },
-  { name: "Wastage Report", description: "Cost of waste by reason (expired, spillage, breakage), outlet, and period", icon: Trash2, color: "bg-terracotta/10 text-terracotta", href: "/inventory/reports/wastage" },
+  { name: "Wastage Report", description: "Cost of waste by reason (expired, spillage, breakage), outlet, and period", icon: Trash2, color: "bg-brand-soft text-brand-text", href: "/inventory/reports/wastage" },
   { name: "Prep Manhours", description: "Prep hours the period demanded (sales × recipes × prep time) vs rostered hours — is there enough labour to prep?", icon: Clock, color: "bg-indigo-50 text-indigo-600", href: "/inventory/reports/prep-labour" },
   { name: "Supplier Scorecard", description: "On-time delivery rate, short deliveries, price changes per supplier", icon: Truck, color: "bg-purple-50 text-purple-600", href: "/inventory/reports/supplier-scorecard" },
 ];
@@ -16,25 +16,25 @@ const REPORTS = [
 export default function ReportsPage() {
   return (
     <div className="p-3 sm:p-6">
-      <h2 className="text-xl font-semibold text-gray-900">Reports</h2>
-      <p className="mt-0.5 text-sm text-gray-500">{REPORTS.length} reports for Celsius Coffee operations</p>
+      <h2 className="text-xl font-semibold text-text">Reports</h2>
+      <p className="mt-0.5 text-sm text-text-2">{REPORTS.length} reports for Celsius Coffee operations</p>
 
       <div className="mt-6 space-y-3">
         {REPORTS.map((report) => {
           const Icon = report.icon;
           const content = (
-            <div className="flex w-full items-center gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4 text-left transition-shadow hover:shadow-md">
+            <div className="flex w-full items-center gap-4 rounded-xl border border-line bg-surface px-5 py-4 text-left transition-shadow hover:shadow-md">
               <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${report.color}`}>
                 <Icon className="h-5 w-5" />
               </div>
               <div className="flex-1">
-                <p className="font-semibold text-gray-900">{report.name}</p>
-                <p className="mt-0.5 text-sm text-gray-500">{report.description}</p>
+                <p className="font-semibold text-text">{report.name}</p>
+                <p className="mt-0.5 text-sm text-text-2">{report.description}</p>
               </div>
               {report.href ? (
-                <ArrowRight className="h-5 w-5 shrink-0 text-terracotta" />
+                <ArrowRight className="h-5 w-5 shrink-0 text-brand-text" />
               ) : (
-                <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-400">Coming soon</span>
+                <span className="shrink-0 rounded-full bg-sunken px-2.5 py-0.5 text-xs text-text-3">Coming soon</span>
               )}
             </div>
           );

@@ -257,7 +257,7 @@ export default function PickupSettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center text-gray-400">
+      <div className="flex h-64 items-center justify-center text-text-3">
         <Loader2 className="h-5 w-5 animate-spin" />
       </div>
     );
@@ -266,8 +266,8 @@ export default function PickupSettingsPage() {
   return (
     <div className="p-3 sm:p-6">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Pickup App Settings</h2>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h2 className="text-xl font-semibold text-text">Pickup App Settings</h2>
+        <p className="mt-0.5 text-sm text-text-2">
           Settings consumed by the customer-facing pickup app and order endpoint.
           Org-wide settings (SST, loyalty earn rate, staff PIN) live under
           Settings → System.
@@ -299,7 +299,7 @@ export default function PickupSettingsPage() {
             <input type="number" step="1" min={0}
               value={minOrder.rm}
               onChange={(e) => setMinOrder({ rm: Number(e.target.value) })}
-              className="w-32 rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+              className="w-32 rounded-lg border border-line px-3 py-2 text-sm" />
           </Field>
           <SaveBtn busy={saving === "min_order_value"} onClick={() => save("min_order_value", minOrder)} />
         </Card>
@@ -315,7 +315,7 @@ export default function PickupSettingsPage() {
             <input type="text"
               value={maint.message}
               onChange={(e) => setMaint({ ...maint, message: e.target.value })}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm"
               placeholder="Brief outage — back at 11am" />
           </Field>
           <SaveBtn busy={saving === "maintenance"} onClick={() => save("maintenance", maint)} />
@@ -330,14 +330,14 @@ export default function PickupSettingsPage() {
               <input type="text"
                 value={appVer.ios}
                 onChange={(e) => setAppVer({ ...appVer, ios: e.target.value })}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm"
                 placeholder="1.0.0" />
             </Field>
             <Field label="Android min version">
               <input type="text"
                 value={appVer.android}
                 onChange={(e) => setAppVer({ ...appVer, android: e.target.value })}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm"
                 placeholder="1.0.0" />
             </Field>
           </div>
@@ -358,13 +358,13 @@ export default function PickupSettingsPage() {
               const busy      = togglingOutlet === storeId;
               return (
                 <div key={storeId}
-                     className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                     className="flex items-center justify-between rounded-lg border border-line bg-sunken px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${open ? "bg-emerald-500" : "bg-gray-300"}`} />
-                    <span className="text-sm font-medium text-gray-800">
+                    <span className={`h-2 w-2 rounded-full ${open ? "bg-emerald-500" : "bg-line"}`} />
+                    <span className="text-sm font-medium text-text">
                       {OUTLET_LABELS[storeId] ?? storeId}
                     </span>
-                    <span className={`text-[10px] font-semibold uppercase tracking-wide ${open ? "text-emerald-600" : "text-gray-500"}`}>
+                    <span className={`text-[10px] font-semibold uppercase tracking-wide ${open ? "text-emerald-600" : "text-text-2"}`}>
                       {open ? "Open" : "Closed"}
                     </span>
                     {overridden && (
@@ -400,22 +400,22 @@ export default function PickupSettingsPage() {
               sub="Auto-open / auto-close via cron. Days: 1=Mon … 7=Sun.">
           <div className="mt-2 space-y-3">
             {Object.entries(outletHours).map(([storeId, hours]) => (
-              <div key={storeId} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                <p className="mb-2 text-xs font-semibold text-gray-700">
+              <div key={storeId} className="rounded-lg border border-line bg-sunken p-3">
+                <p className="mb-2 text-xs font-semibold text-text-2">
                   {OUTLET_LABELS[storeId] ?? storeId}
                 </p>
                 <div className="flex flex-wrap items-center gap-3">
-                  <label className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                  <label className="flex items-center gap-1.5 text-[11px] text-text-2">
                     Open
                     <input type="time" value={hours.open}
                       onChange={(e) => setOutletHours((p) => ({ ...p, [storeId]: { ...p[storeId]!, open: e.target.value } }))}
-                      className="rounded border border-gray-200 px-2 py-1 text-xs" />
+                      className="rounded border border-line px-2 py-1 text-xs" />
                   </label>
-                  <label className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                  <label className="flex items-center gap-1.5 text-[11px] text-text-2">
                     Close
                     <input type="time" value={hours.close}
                       onChange={(e) => setOutletHours((p) => ({ ...p, [storeId]: { ...p[storeId]!, close: e.target.value } }))}
-                      className="rounded border border-gray-200 px-2 py-1 text-xs" />
+                      className="rounded border border-line px-2 py-1 text-xs" />
                   </label>
                   <div className="flex gap-1">
                     {DAY_LABELS.map((d, i) => {
@@ -425,7 +425,7 @@ export default function PickupSettingsPage() {
                         <button key={day} type="button"
                           onClick={() => toggleOutletDay(storeId, day)}
                           className={`h-6 w-6 rounded text-[10px] font-semibold transition-colors ${
-                            active ? "bg-teal-600 text-white" : "bg-white text-gray-400 border border-gray-200"
+                            active ? "bg-teal-600 text-white" : "bg-surface text-text-3 border border-line"
                           }`}>
                           {d}
                         </button>
@@ -451,14 +451,14 @@ export default function PickupSettingsPage() {
           <Field label="Title">
             <input type="text" value={blastTitle}
               onChange={(e) => setBlastTitle(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm"
               placeholder="New menu drop 🎉" />
           </Field>
           <Field label="Body">
             <textarea value={blastBody}
               onChange={(e) => setBlastBody(e.target.value)}
               rows={3}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm"
               placeholder="Check out our new seasonal drinks, available now at all outlets." />
           </Field>
           <div className="mt-4 flex justify-end">
@@ -481,12 +481,12 @@ function Card({ icon, bg, title, sub, children }: {
   icon: React.ReactNode; bg: string; title: string; sub: string; children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">
+    <div className="rounded-xl border border-line bg-surface p-5">
       <div className="mb-3 flex items-center gap-3">
         <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${bg}`}>{icon}</div>
         <div className="flex-1">
-          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-          <p className="mt-0.5 text-xs text-gray-500">{sub}</p>
+          <h3 className="text-sm font-semibold text-text">{title}</h3>
+          <p className="mt-0.5 text-xs text-text-2">{sub}</p>
         </div>
       </div>
       {children}
@@ -499,7 +499,7 @@ function Field({ label, children, inline }: {
 }) {
   return (
     <label className={`mt-3 block ${inline ? "flex items-center gap-3" : ""}`}>
-      <span className="block text-[11px] font-medium text-gray-600">{label}</span>
+      <span className="block text-[11px] font-medium text-text-2">{label}</span>
       <div className={inline ? "" : "mt-1"}>{children}</div>
     </label>
   );
@@ -520,11 +520,11 @@ function Toggle({
       onClick={() => onChange(!checked)}
       disabled={disabled}
       className={`relative inline-flex h-6 w-10 items-center rounded-full transition-colors ${
-        checked ? "bg-emerald-500" : "bg-gray-300"
+        checked ? "bg-emerald-500" : "bg-line"
       } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
     >
       <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+        className={`inline-block h-4 w-4 transform rounded-full bg-surface shadow transition-transform ${
           checked ? "translate-x-5" : "translate-x-1"
         }`}
       />
@@ -536,7 +536,7 @@ function SaveBtn({ busy, onClick }: { busy: boolean; onClick: () => void }) {
   return (
     <div className="mt-4 flex justify-end">
       <button type="button" onClick={onClick} disabled={busy}
-        className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50">
+        className="flex items-center gap-2 rounded-lg bg-ink px-4 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
         Save
       </button>

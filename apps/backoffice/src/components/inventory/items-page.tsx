@@ -388,10 +388,10 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">{N.Many}</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{products.length} {N.many} across {new Set(products.map((p) => p.group)).size} groups</p>
+          <h2 className="text-xl font-semibold text-text">{N.Many}</h2>
+          <p className="mt-0.5 text-sm text-text-2">{products.length} {N.many} across {new Set(products.map((p) => p.group)).size} groups</p>
         </div>
-        <Button onClick={openAdd} className="bg-terracotta hover:bg-terracotta-dark">
+        <Button onClick={openAdd} className="bg-ink hover:bg-ink-hover">
           <Plus className="mr-1.5 h-4 w-4" />
           Add {N.One}
         </Button>
@@ -400,7 +400,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
       {/* Filters */}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <Input
             placeholder="Search by name or SKU..."
             value={search}
@@ -415,8 +415,8 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
               onClick={() => setGroupFilter(grp)}
               className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                 groupFilter === grp
-                  ? "border-terracotta bg-terracotta/5 text-terracotta-dark"
-                  : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                  ? "border-ink bg-brand-soft text-brand-text"
+                  : "border-line text-text-2 hover:bg-sunken"
               }`}
             >
               {grp}
@@ -426,71 +426,71 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
       </div>
 
       {/* Table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
+      <div className="mt-4 rounded-xl border border-line bg-surface overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
+            <tr className="border-b border-line bg-sunken/50">
               <th className="w-10 px-4 py-3">
                 <input
                   type="checkbox"
                   checked={allFilteredSelected && filteredIds.length > 0}
                   onChange={toggleSelectAll}
-                  className="h-4 w-4 rounded border-gray-300 text-terracotta accent-terracotta"
+                  className="h-4 w-4 rounded border-line-2 text-brand-text accent-ink"
                 />
               </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">{N.One}</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">SKU</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Group</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Base UOM</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Storage</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Check</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Packages</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Suppliers</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">{N.One}</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">SKU</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Group</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Base UOM</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Storage</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Check</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Packages</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Suppliers</th>
+              <th className="px-4 py-3 text-right font-medium text-text-2">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
                 <td colSpan={10} className="px-4 py-12 text-center">
-                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-terracotta" />
-                  <p className="mt-2 text-sm text-gray-500">Loading {N.many}...</p>
+                  <Loader2 className="mx-auto h-6 w-6 animate-spin text-brand-text" />
+                  <p className="mt-2 text-sm text-text-2">Loading {N.many}...</p>
                 </td>
               </tr>
             )}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-sm text-gray-400">No {N.many} found</td>
+                <td colSpan={10} className="px-4 py-12 text-center text-sm text-text-3">No {N.many} found</td>
               </tr>
             )}
             {!loading && filtered.map((product) => (
               <tr
                 key={product.id}
-                className={`border-b border-gray-50 transition-colors ${selected.has(product.id) ? "bg-terracotta/5" : "hover:bg-gray-50/50"}`}
+                className={`border-b border-line transition-colors ${selected.has(product.id) ? "bg-brand-soft" : "hover:bg-sunken/50"}`}
               >
                 <td className="w-10 px-4 py-3">
                   <input
                     type="checkbox"
                     checked={selected.has(product.id)}
                     onChange={() => toggleSelect(product.id)}
-                    className="h-4 w-4 rounded border-gray-300 text-terracotta accent-terracotta"
+                    className="h-4 w-4 rounded border-line-2 text-brand-text accent-ink"
                   />
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100">
-                      <Package className="h-4 w-4 text-gray-400" />
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sunken">
+                      <Package className="h-4 w-4 text-text-3" />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">{product.name}</p>
+                      <p className="font-medium text-text">{product.name}</p>
                       {product.shelfLifeDays && (
-                        <p className="text-xs text-terracotta">{product.shelfLifeDays}d shelf life</p>
+                        <p className="text-xs text-brand-text">{product.shelfLifeDays}d shelf life</p>
                       )}
                     </div>
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
+                  <code className="rounded bg-sunken px-1.5 py-0.5 text-xs text-text-2">
                     {product.sku}
                   </code>
                 </td>
@@ -499,17 +499,17 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                     {product.group}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-gray-600">{product.baseUom}</td>
-                <td className="px-4 py-3 text-gray-600">{product.storageArea || "—"}</td>
+                <td className="px-4 py-3 text-text-2">{product.baseUom}</td>
+                <td className="px-4 py-3 text-text-2">{product.storageArea || "—"}</td>
                 <td className="px-4 py-3">
-                  <Badge variant="outline" className={`text-xs ${product.checkFrequency === "DAILY" ? "border-red-200 bg-red-50 text-red-600" : product.checkFrequency === "WEEKLY" ? "border-amber-200 bg-amber-50 text-amber-600" : "border-gray-200 text-gray-500"}`}>
+                  <Badge variant="outline" className={`text-xs ${product.checkFrequency === "DAILY" ? "border-red-200 bg-red-50 text-red-600" : product.checkFrequency === "WEEKLY" ? "border-amber-200 bg-amber-50 text-amber-600" : "border-line text-text-2"}`}>
                     {product.checkFrequency === "DAILY" ? "Daily" : product.checkFrequency === "WEEKLY" ? "Weekly" : "Monthly"}
                   </Badge>
                 </td>
                 <td className="px-4 py-3">
                   <button
                     onClick={() => setExpandedId(expandedId === product.id ? null : product.id)}
-                    className="flex items-center gap-1 text-xs text-terracotta hover:underline"
+                    className="flex items-center gap-1 text-xs text-brand-text hover:underline"
                   >
                     {product.packages.length} UOMs
                     <ChevronDown className={`h-3 w-3 transition-transform ${expandedId === product.id ? "rotate-180" : ""}`} />
@@ -517,8 +517,8 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                   {expandedId === product.id && (
                     <div className="mt-1 space-y-0.5">
                       {product.packages.map((pkg) => (
-                        <p key={pkg.name} className="text-xs text-gray-500">
-                          {pkg.sku && <code className="mr-1 rounded bg-gray-100 px-1 text-[10px]">{pkg.sku}</code>}
+                        <p key={pkg.name} className="text-xs text-text-2">
+                          {pkg.sku && <code className="mr-1 rounded bg-sunken px-1 text-[10px]">{pkg.sku}</code>}
                           1 {pkg.name} = {pkg.conversion > 1 ? `${pkg.conversion.toLocaleString()} ${product.baseUom}` : pkg.label}
                         </p>
                       ))}
@@ -528,20 +528,20 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
                     {product.suppliers.filter((s) => s.name !== "Ad-hoc Purchase").map((s, i) => (
-                      <span key={i} className="text-xs text-gray-500">{s.name} (RM{s.price.toFixed(2)})</span>
+                      <span key={i} className="text-xs text-text-2">{s.name} (RM{s.price.toFixed(2)})</span>
                     ))}
-                    {product.suppliers.filter((s) => s.name !== "Ad-hoc Purchase").length === 0 && <span className="text-xs text-gray-300">—</span>}
+                    {product.suppliers.filter((s) => s.name !== "Ad-hoc Purchase").length === 0 && <span className="text-xs text-text-3">—</span>}
                   </div>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
                     <button
                       onClick={() => openEdit(product)}
-                      className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                      className="rounded-md p-1.5 text-text-3 hover:bg-sunken hover:text-text-2"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={() => handleDelete(product.id)} className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500">
+                    <button onClick={() => handleDelete(product.id)} className="rounded-md p-1.5 text-text-3 hover:bg-red-50 hover:text-red-500">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -554,27 +554,27 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-gray-200 bg-white px-5 py-3 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-line bg-surface px-5 py-3 shadow-lg">
           <div className="flex items-center gap-2">
-            <CheckSquare className="h-4 w-4 text-terracotta" />
-            <span className="text-sm font-medium text-gray-900">{selected.size} selected</span>
+            <CheckSquare className="h-4 w-4 text-brand-text" />
+            <span className="text-sm font-medium text-text">{selected.size} selected</span>
           </div>
-          <div className="h-5 w-px bg-gray-200" />
+          <div className="h-5 w-px bg-line" />
           <button
             onClick={() => setBulkAction("group")}
-            className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-text-2 hover:bg-sunken"
           >
             Change Group
           </button>
           <button
             onClick={() => setBulkAction("storage")}
-            className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-text-2 hover:bg-sunken"
           >
             Change Storage
           </button>
           <button
             onClick={() => setBulkAction("frequency")}
-            className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-text-2 hover:bg-sunken"
           >
             Change Frequency
           </button>
@@ -585,8 +585,8 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
           >
             Delete
           </button>
-          <div className="h-5 w-px bg-gray-200" />
-          <button onClick={clearSelection} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+          <div className="h-5 w-px bg-line" />
+          <button onClick={clearSelection} className="rounded-lg p-1.5 text-text-3 hover:bg-sunken hover:text-text-2">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -602,11 +602,11 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
               {bulkAction === "frequency" && "Change Check Frequency"}
             </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-gray-500">Apply to {selected.size} selected {N.many}</p>
+          <p className="text-sm text-text-2">Apply to {selected.size} selected {N.many}</p>
           <div className="mt-2">
             {bulkAction === "group" && (
               <select
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-line px-3 py-2 text-sm"
                 defaultValue=""
                 onChange={(e) => {
                   if (e.target.value) handleBulkUpdate({ groupId: e.target.value });
@@ -620,7 +620,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
             )}
             {bulkAction === "storage" && (
               <select
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-line px-3 py-2 text-sm"
                 defaultValue=""
                 onChange={(e) => {
                   if (e.target.value) handleBulkUpdate({ storageArea: e.target.value });
@@ -634,7 +634,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
             )}
             {bulkAction === "frequency" && (
               <select
-                className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-line px-3 py-2 text-sm"
                 defaultValue=""
                 onChange={(e) => {
                   if (e.target.value) handleBulkUpdate({ checkFrequency: e.target.value });
@@ -648,7 +648,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
             )}
           </div>
           {bulkSaving && (
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+            <div className="flex items-center gap-2 text-sm text-text-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Updating...
             </div>
           )}
@@ -663,11 +663,11 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
           </DialogHeader>
           <div className="grid gap-5 py-3 overflow-y-auto flex-1 min-h-0">
             {/* Basic Info */}
-            <div className="rounded-lg border border-gray-200 bg-gray-50/30 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Basic Info</p>
+            <div className="rounded-lg border border-line bg-sunken/30 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-3">Basic Info</p>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">{N.One} name</label>
+                  <label className="text-sm font-medium text-text-2">{N.One} name</label>
                   <Input
                     className="mt-1.5 h-10"
                     placeholder="e.g. Monin Caramel Syrup"
@@ -676,7 +676,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">SKU Code</label>
+                  <label className="text-sm font-medium text-text-2">SKU Code</label>
                   <Input
                     className="mt-1.5 h-10"
                     placeholder="e.g. FM001"
@@ -685,9 +685,9 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Group</label>
+                  <label className="text-sm font-medium text-text-2">Group</label>
                   <select
-                    className="mt-1.5 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                    className="mt-1.5 h-10 w-full rounded-md border border-line px-3 text-sm"
                     value={form.groupId}
                     onChange={(e) => updateField("groupId", e.target.value)}
                   >
@@ -698,9 +698,9 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Base UOM</label>
+                  <label className="text-sm font-medium text-text-2">Base UOM</label>
                   <select
-                    className="mt-1.5 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                    className="mt-1.5 h-10 w-full rounded-md border border-line px-3 text-sm"
                     value={form.baseUom}
                     onChange={(e) => updateField("baseUom", e.target.value)}
                   >
@@ -711,7 +711,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Description</label>
+                  <label className="text-sm font-medium text-text-2">Description</label>
                   <Input
                     className="mt-1.5 h-10"
                     placeholder="Optional notes..."
@@ -723,13 +723,13 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
             </div>
 
             {/* Storage & Tracking */}
-            <div className="rounded-lg border border-gray-200 bg-gray-50/30 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Storage &amp; Tracking</p>
+            <div className="rounded-lg border border-line bg-sunken/30 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-3">Storage &amp; Tracking</p>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Storage Area</label>
+                  <label className="text-sm font-medium text-text-2">Storage Area</label>
                   <select
-                    className="mt-1.5 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                    className="mt-1.5 h-10 w-full rounded-md border border-line px-3 text-sm"
                     value={form.storageArea}
                     onChange={(e) => updateField("storageArea", e.target.value)}
                   >
@@ -740,7 +740,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                   </select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Shelf Life (days)</label>
+                  <label className="text-sm font-medium text-text-2">Shelf Life (days)</label>
                   <Input
                     className="mt-1.5 h-10"
                     type="number"
@@ -750,9 +750,9 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Check Frequency</label>
+                  <label className="text-sm font-medium text-text-2">Check Frequency</label>
                   <select
-                    className="mt-1.5 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                    className="mt-1.5 h-10 w-full rounded-md border border-line px-3 text-sm"
                     value={form.checkFrequency}
                     onChange={(e) => updateField("checkFrequency", e.target.value)}
                   >
@@ -765,8 +765,8 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
             </div>
 
             {/* Packages */}
-            <div className="rounded-lg border border-gray-200 bg-gray-50/30 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Packages</p>
+            <div className="rounded-lg border border-line bg-sunken/30 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-3">Packages</p>
 
               {/* UOM — unit packages (no containsPackageId) */}
               {(() => {
@@ -774,20 +774,20 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                 const bulkPkgs = form.packages.filter((p) => !!p.containsPackageId);
                 return (
                   <>
-                    <p className="mb-2 text-xs font-medium text-gray-500">UOM <span className="font-normal text-gray-400">— countable unit (e.g. 1,000ml Bottle)</span></p>
+                    <p className="mb-2 text-xs font-medium text-text-2">UOM <span className="font-normal text-text-3">— countable unit (e.g. 1,000ml Bottle)</span></p>
                     {unitPkgs.length > 0 && (
                       <div className="mb-3 space-y-2">
                         {unitPkgs.map((pkg) => {
                           const origIdx = form.packages.indexOf(pkg);
                           return (
-                            <div key={origIdx} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5">
-                              <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">{pkg.sku || "—"}</code>
-                              <span className="text-sm font-medium text-gray-700">{pkg.packageLabel || pkg.packageName}</span>
-                              <span className="text-xs text-gray-400">=</span>
-                              <span className="text-sm text-gray-600">{Number(pkg.conversionFactor).toLocaleString()} {form.baseUom || "units"}</span>
+                            <div key={origIdx} className="flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-2.5">
+                              <code className="rounded bg-sunken px-1.5 py-0.5 text-xs text-text-2">{pkg.sku || "—"}</code>
+                              <span className="text-sm font-medium text-text-2">{pkg.packageLabel || pkg.packageName}</span>
+                              <span className="text-xs text-text-3">=</span>
+                              <span className="text-sm text-text-2">{Number(pkg.conversionFactor).toLocaleString()} {form.baseUom || "units"}</span>
                               {pkg.isDefault && <Badge variant="outline" className="text-xs border-blue-200 bg-blue-50 text-blue-600">Default</Badge>}
                               <div className="flex-1" />
-                              <button type="button" onClick={() => setForm((prev) => ({ ...prev, packages: prev.packages.filter((_, idx) => idx !== origIdx) }))} className="text-gray-400 hover:text-red-500"><X className="h-4 w-4" /></button>
+                              <button type="button" onClick={() => setForm((prev) => ({ ...prev, packages: prev.packages.filter((_, idx) => idx !== origIdx) }))} className="text-text-3 hover:text-red-500"><X className="h-4 w-4" /></button>
                             </div>
                           );
                         })}
@@ -797,10 +797,10 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                     {/* Add UOM */}
                     <div className="mb-4 flex flex-wrap items-end gap-3">
                       <div className="w-32">
-                        <label className="text-xs text-gray-500">Type</label>
+                        <label className="text-xs text-text-2">Type</label>
                         <select
                           id="new-uom-type"
-                          className="mt-1 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                          className="mt-1 h-10 w-full rounded-md border border-line px-3 text-sm"
                           defaultValue=""
                         >
                           <option value="" disabled>Select...</option>
@@ -808,10 +808,10 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                         </select>
                       </div>
                       <div className="w-24">
-                        <label className="text-xs text-gray-500">Size</label>
+                        <label className="text-xs text-text-2">Size</label>
                         <Input id="new-uom-size" type="number" placeholder="1000" className="mt-1 h-10" />
                       </div>
-                      <span className="pb-2 text-sm text-gray-400">{form.baseUom || "units"}</span>
+                      <span className="pb-2 text-sm text-text-3">{form.baseUom || "units"}</span>
                       <Button
                         type="button"
                         variant="outline"
@@ -850,7 +850,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                     </div>
 
                     {/* Bulk Packaging */}
-                    <p className="mb-2 text-xs font-medium text-gray-500">Bulk Packaging <span className="font-normal text-gray-400">— how it&apos;s purchased (e.g. Carton of 12× Bottle)</span></p>
+                    <p className="mb-2 text-xs font-medium text-text-2">Bulk Packaging <span className="font-normal text-text-3">— how it&apos;s purchased (e.g. Carton of 12× Bottle)</span></p>
                     {bulkPkgs.length > 0 && (
                       <div className="mb-3 space-y-2">
                         {bulkPkgs.map((pkg) => {
@@ -858,14 +858,14 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                           const childPkg = form.packages.find((p, idx) => p.id === pkg.containsPackageId || `new-${idx}` === pkg.containsPackageId);
                           const qty = childPkg ? Math.round(Number(pkg.conversionFactor) / Number(childPkg.conversionFactor)) : 0;
                           return (
-                            <div key={origIdx} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5">
-                              <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">{pkg.sku || "—"}</code>
-                              <span className="text-sm font-medium text-gray-700">{pkg.packageLabel || pkg.packageName}</span>
-                              {childPkg && <span className="text-xs text-gray-400">({qty}× {childPkg.packageLabel || childPkg.packageName})</span>}
-                              <span className="text-xs text-gray-400">=</span>
-                              <span className="text-sm text-gray-600">{Number(pkg.conversionFactor).toLocaleString()} {form.baseUom || "units"}</span>
+                            <div key={origIdx} className="flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-2.5">
+                              <code className="rounded bg-sunken px-1.5 py-0.5 text-xs text-text-2">{pkg.sku || "—"}</code>
+                              <span className="text-sm font-medium text-text-2">{pkg.packageLabel || pkg.packageName}</span>
+                              {childPkg && <span className="text-xs text-text-3">({qty}× {childPkg.packageLabel || childPkg.packageName})</span>}
+                              <span className="text-xs text-text-3">=</span>
+                              <span className="text-sm text-text-2">{Number(pkg.conversionFactor).toLocaleString()} {form.baseUom || "units"}</span>
                               <div className="flex-1" />
-                              <button type="button" onClick={() => setForm((prev) => ({ ...prev, packages: prev.packages.filter((_, idx) => idx !== origIdx) }))} className="text-gray-400 hover:text-red-500"><X className="h-4 w-4" /></button>
+                              <button type="button" onClick={() => setForm((prev) => ({ ...prev, packages: prev.packages.filter((_, idx) => idx !== origIdx) }))} className="text-text-3 hover:text-red-500"><X className="h-4 w-4" /></button>
                             </div>
                           );
                         })}
@@ -876,10 +876,10 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                     {unitPkgs.length > 0 && (
                       <div className="flex flex-wrap items-end gap-3">
                         <div className="w-32">
-                          <label className="text-xs text-gray-500">Container</label>
+                          <label className="text-xs text-text-2">Container</label>
                           <select
                             id="new-bulk-type"
-                            className="mt-1 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                            className="mt-1 h-10 w-full rounded-md border border-line px-3 text-sm"
                             defaultValue=""
                           >
                             <option value="" disabled>Select...</option>
@@ -887,13 +887,13 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                           </select>
                         </div>
                         <div className="w-20">
-                          <label className="text-xs text-gray-500">Qty</label>
+                          <label className="text-xs text-text-2">Qty</label>
                           <Input id="new-bulk-qty" type="number" placeholder="12" className="mt-1 h-10" />
                         </div>
-                        <span className="pb-2 text-sm text-gray-400">×</span>
+                        <span className="pb-2 text-sm text-text-3">×</span>
                         <div className="w-44">
-                          <label className="text-xs text-gray-500">Contains</label>
-                          <select id="new-bulk-contains" className="mt-1 h-10 w-full rounded-md border border-gray-200 px-3 text-sm" defaultValue="">
+                          <label className="text-xs text-text-2">Contains</label>
+                          <select id="new-bulk-contains" className="mt-1 h-10 w-full rounded-md border border-line px-3 text-sm" defaultValue="">
                             <option value="" disabled>Select UOM...</option>
                             {unitPkgs.map((pkg) => {
                               const idx = form.packages.indexOf(pkg);
@@ -951,20 +951,20 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
             </div>
 
             {/* Suppliers & Pricing */}
-            <div className="rounded-lg border border-gray-200 bg-gray-50/30 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Suppliers &amp; Pricing</p>
+            <div className="rounded-lg border border-line bg-sunken/30 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-3">Suppliers &amp; Pricing</p>
 
               {/* Existing supplier entries */}
               {form.suppliers.length > 0 && (
                 <div className="mb-3 space-y-2">
                   {form.suppliers.map((entry, i) => (
-                    <div key={i} className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5">
-                      <span className="flex-1 text-sm font-medium text-gray-700">
+                    <div key={i} className="flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-2.5">
+                      <span className="flex-1 text-sm font-medium text-text-2">
                         {entry.supplierId
                           ? supplierOptions.find((s) => s.id === entry.supplierId)?.name ?? "Supplier"
                           : entry.supplierName ?? "New Supplier"}
                         {entry.productPackageId && (
-                          <span className="ml-1.5 text-xs text-gray-400">
+                          <span className="ml-1.5 text-xs text-text-3">
                             ({form.packages.find((p, idx) => p.id === entry.productPackageId || `new-${idx}` === entry.productPackageId)?.packageLabel
                               || form.packages.find((p, idx) => p.id === entry.productPackageId || `new-${idx}` === entry.productPackageId)?.packageName
                               || "Package"})
@@ -972,7 +972,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                         )}
                       </span>
                       <span className="rounded-full bg-green-50 px-3 py-0.5 text-sm font-medium text-green-700">RM{entry.price.toFixed(2)}</span>
-                      <button onClick={() => removeSupplierEntry(i)} className="text-gray-400 hover:text-red-500">
+                      <button onClick={() => removeSupplierEntry(i)} className="text-text-3 hover:text-red-500">
                         <X className="h-4 w-4" />
                       </button>
                     </div>
@@ -984,22 +984,22 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
               {!showNewSupplier && (
                 <div className="flex items-end gap-3">
                   <div className="flex-1 relative" ref={supplierDropdownRef}>
-                    <label className="text-xs text-gray-500">Supplier</label>
+                    <label className="text-xs text-text-2">Supplier</label>
                     <input
                       type="text"
-                      className="mt-1 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                      className="mt-1 h-10 w-full rounded-md border border-line px-3 text-sm"
                       placeholder="Search supplier..."
                       value={supplierSearchTerm}
                       onChange={(e) => { setSupplierSearchTerm(e.target.value); setSelectedSupplierId(""); setSupplierDropdownOpen(true); }}
                       onFocus={() => setSupplierDropdownOpen(true)}
                     />
                     {supplierDropdownOpen && filteredSupplierOptions.length > 0 && (
-                      <div className="absolute bottom-full z-50 mb-1 max-h-48 w-full overflow-auto rounded-md border bg-white shadow-lg">
+                      <div className="absolute bottom-full z-50 mb-1 max-h-48 w-full overflow-auto rounded-md border bg-surface shadow-lg">
                         {filteredSupplierOptions.map((s) => (
                           <button
                             key={s.id}
                             type="button"
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100"
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-sunken"
                             onClick={() => { setSelectedSupplierId(s.id); setSupplierSearchTerm(s.name); setSupplierDropdownOpen(false); }}
                           >
                             {s.name}
@@ -1010,10 +1010,10 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                   </div>
                   {form.packages.length > 0 && (
                     <div className="w-36">
-                      <label className="text-xs text-gray-500">Package</label>
+                      <label className="text-xs text-text-2">Package</label>
                       <select
                         id="supplier-pkg-select"
-                        className="mt-1 h-10 w-full rounded-md border border-gray-200 px-3 text-sm"
+                        className="mt-1 h-10 w-full rounded-md border border-line px-3 text-sm"
                         defaultValue=""
                       >
                         <option value="">Base ({form.baseUom})</option>
@@ -1024,7 +1024,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                     </div>
                   )}
                   <div className="w-32">
-                    <label className="text-xs text-gray-500">Price (RM)</label>
+                    <label className="text-xs text-text-2">Price (RM)</label>
                     <Input
                       type="number"
                       placeholder="0.00"
@@ -1050,16 +1050,16 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                 <button
                   type="button"
                   onClick={() => setShowNewSupplier(true)}
-                  className="mt-3 text-sm text-terracotta hover:underline"
+                  className="mt-3 text-sm text-brand-text hover:underline"
                 >
                   + Create New Supplier
                 </button>
               ) : (
-                <div className="mt-3 space-y-3 rounded-lg border border-dashed border-gray-300 bg-white p-4">
-                  <p className="text-sm font-medium text-gray-700">New Supplier</p>
+                <div className="mt-3 space-y-3 rounded-lg border border-dashed border-line-2 bg-surface p-4">
+                  <p className="text-sm font-medium text-text-2">New Supplier</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-gray-500">Supplier Name</label>
+                      <label className="text-xs text-text-2">Supplier Name</label>
                       <Input
                         placeholder="e.g. Jinka Supply"
                         value={newSupplierName}
@@ -1068,7 +1068,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500">Phone (optional)</label>
+                      <label className="text-xs text-text-2">Phone (optional)</label>
                       <Input
                         placeholder="e.g. 012-3456789"
                         value={newSupplierPhone}
@@ -1079,7 +1079,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                   </div>
                   <div className="flex items-end gap-3">
                     <div className="w-32">
-                      <label className="text-xs text-gray-500">Price (RM)</label>
+                      <label className="text-xs text-text-2">Price (RM)</label>
                       <Input
                         type="number"
                         placeholder="0.00"
@@ -1100,7 +1100,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
                     <button
                       type="button"
                       onClick={() => { setShowNewSupplier(false); setNewSupplierName(""); setNewSupplierPhone(""); }}
-                      className="text-sm text-gray-400 hover:text-gray-600"
+                      className="text-sm text-text-3 hover:text-text-2"
                     >
                       Cancel
                     </button>
@@ -1110,7 +1110,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
             </div>
           </div>
           <div className="flex-shrink-0 border-t pt-4">
-            <Button onClick={handleSubmit} disabled={saving || !form.name || !form.sku || !form.groupId} className="h-11 w-full bg-terracotta text-base hover:bg-terracotta-dark disabled:opacity-50">
+            <Button onClick={handleSubmit} disabled={saving || !form.name || !form.sku || !form.groupId} className="h-11 w-full bg-ink text-base hover:bg-ink-hover disabled:opacity-50">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
               {editingId ? "Save changes" : `Add ${N.one}`}
             </Button>

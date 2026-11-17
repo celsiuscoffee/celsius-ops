@@ -119,8 +119,8 @@ export function HrModuleTabs() {
             className={
               "whitespace-nowrap border-b-2 px-3 pb-2 pt-1 text-sm font-medium transition " +
               (active
-                ? "border-terracotta text-terracotta"
-                : "border-transparent text-muted-foreground hover:border-gray-300 hover:text-foreground")
+                ? "border-ink text-brand-text"
+                : "border-transparent text-muted-foreground hover:border-line-2 hover:text-foreground")
             }
           >
             {t.label}

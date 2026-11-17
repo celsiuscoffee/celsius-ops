@@ -204,7 +204,7 @@ export default function PayrollRunPage() {
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/hr/payroll" className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100">
+          <Link href="/hr/payroll" className="rounded-md p-1.5 text-text-3 hover:bg-sunken">
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div>
@@ -265,7 +265,7 @@ export default function PayrollRunPage() {
             />
           </Field>
           <Field label="Cycle Period">
-            <div className="rounded-md border bg-gray-50 px-3 py-2 text-sm font-mono text-gray-600">
+            <div className="rounded-md border bg-sunken px-3 py-2 text-sm font-mono text-text-2">
               {cycleStart} → {cycleEnd}
             </div>
           </Field>
@@ -279,7 +279,7 @@ export default function PayrollRunPage() {
             <button
               onClick={runCompute}
               disabled={computing}
-              className="inline-flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
             >
               {computing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {computing ? "Computing…" : "Preview Compute"}
@@ -287,7 +287,7 @@ export default function PayrollRunPage() {
           ) : (
             <button
               onClick={() => { setStep("setup"); setRun(null); setItems([]); }}
-              className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
+              className="rounded-lg border px-4 py-2 text-sm hover:bg-sunken"
             >
               Edit setup
             </button>
@@ -305,7 +305,7 @@ export default function PayrollRunPage() {
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Employees <span className="ml-1 text-gray-400">({items.length})</span>
+                Employees <span className="ml-1 text-text-3">({items.length})</span>
               </h2>
             </div>
             <input
@@ -340,10 +340,10 @@ export default function PayrollRunPage() {
                       <tr
                         key={item.id}
                         onClick={() => setExpanded(isExpanded ? null : item.id)}
-                        className="cursor-pointer border-b last:border-b-0 hover:bg-gray-50/60"
+                        className="cursor-pointer border-b last:border-b-0 hover:bg-sunken/60"
                       >
                         <td className="py-2.5 pr-2">
-                          {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
+                          {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-text-3" /> : <ChevronRight className="h-3.5 w-3.5 text-text-3" />}
                         </td>
                         <td className="py-2.5 pr-3 font-medium">
                           {item.employee_name ?? item.user_id.slice(0, 8)}
@@ -356,8 +356,8 @@ export default function PayrollRunPage() {
                         <td className="py-2.5 pr-3 text-right font-mono">RM {item.basic_salary.toFixed(2)}</td>
                         <td className="py-2.5 pr-3 text-right font-mono">{item.total_ot_hours.toFixed(1)}</td>
                         <td className="py-2.5 pr-3 text-right font-mono">RM {item.total_gross.toFixed(2)}</td>
-                        <td className="py-2.5 pr-3 text-right font-mono text-gray-500">RM {item.epf_employee.toFixed(2)}</td>
-                        <td className="py-2.5 pr-3 text-right font-mono text-gray-500">RM {item.pcb_tax.toFixed(2)}</td>
+                        <td className="py-2.5 pr-3 text-right font-mono text-text-2">RM {item.epf_employee.toFixed(2)}</td>
+                        <td className="py-2.5 pr-3 text-right font-mono text-text-2">RM {item.pcb_tax.toFixed(2)}</td>
                         <td className="py-2.5 pr-3 text-right font-mono font-semibold">RM {item.net_pay.toFixed(2)}</td>
                         <td className="py-2.5 pr-3">
                           {flags.length > 0 && (
@@ -366,7 +366,7 @@ export default function PayrollRunPage() {
                                 ? "bg-red-100 text-red-800"
                                 : flags.some((f) => f.severity === "warn")
                                   ? "bg-amber-100 text-amber-800"
-                                  : "bg-gray-100 text-gray-700"
+                                  : "bg-sunken text-text-2"
                             }`}>
                               <AlertTriangle className="h-2.5 w-2.5" />
                               {flags.length}
@@ -375,7 +375,7 @@ export default function PayrollRunPage() {
                         </td>
                       </tr>
                       {isExpanded && (
-                        <tr className="bg-gray-50/60">
+                        <tr className="bg-sunken/60">
                           <td colSpan={9} className="px-6 py-3">
                             <EmployeeBreakdown
                               item={item}
@@ -431,7 +431,7 @@ export default function PayrollRunPage() {
                       <span className={`mt-0.5 shrink-0 rounded px-1 text-[9px] font-bold uppercase ${
                         f.severity === "block" ? "bg-red-100 text-red-800"
                         : f.severity === "warn" ? "bg-amber-100 text-amber-800"
-                        : "bg-gray-100 text-gray-700"
+                        : "bg-sunken text-text-2"
                       }`}>{f.severity}</span>
                       <span>
                         {f.message}
@@ -440,7 +440,7 @@ export default function PayrollRunPage() {
                     </li>
                   ))}
                   {totalAnomalies > 8 && (
-                    <li className="text-gray-400">+ {totalAnomalies - 8} more (expand rows above)</li>
+                    <li className="text-text-3">+ {totalAnomalies - 8} more (expand rows above)</li>
                   )}
                 </ul>
               )}
@@ -452,25 +452,25 @@ export default function PayrollRunPage() {
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Totals</h2>
               </div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                <span className="text-gray-500">Gross</span>
+                <span className="text-text-2">Gross</span>
                 <span className="text-right font-mono">RM {run.total_gross.toFixed(2)}</span>
-                <span className="text-gray-500">Deductions</span>
+                <span className="text-text-2">Deductions</span>
                 <span className="text-right font-mono text-red-700">− RM {run.total_deductions.toFixed(2)}</span>
-                <span className="text-gray-500 font-medium">Net payout</span>
+                <span className="text-text-2 font-medium">Net payout</span>
                 <span className="text-right font-mono font-semibold text-emerald-700">RM {run.total_net.toFixed(2)}</span>
-                <span className="text-gray-500">Employer statutory</span>
-                <span className="text-right font-mono text-gray-600">+ RM {run.total_employer_cost.toFixed(2)}</span>
-                <span className="col-span-2 mt-1 border-t pt-1 text-xs text-gray-400">Total company outflow: RM {(run.total_net + run.total_employer_cost).toFixed(2)}</span>
+                <span className="text-text-2">Employer statutory</span>
+                <span className="text-right font-mono text-text-2">+ RM {run.total_employer_cost.toFixed(2)}</span>
+                <span className="col-span-2 mt-1 border-t pt-1 text-xs text-text-3">Total company outflow: RM {(run.total_net + run.total_employer_cost).toFixed(2)}</span>
               </div>
             </div>
           </div>
 
           <div className="mt-5 flex items-center justify-between border-t pt-4">
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-text-2">
               {canApprove ? "All checks passed. Safe to approve." : blockingCount > 0 ? `${blockingCount} blocking issue${blockingCount === 1 ? "" : "s"} must be fixed first.` : "Cycle is empty."}
             </div>
             <div className="flex items-center gap-2">
-              <Link href="/hr/payroll" className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50">
+              <Link href="/hr/payroll" className="rounded-lg border px-4 py-2 text-sm hover:bg-sunken">
                 Save Draft & Exit
               </Link>
               <button
@@ -523,14 +523,14 @@ function StepIndicator({ step }: { step: Step }) {
         return (
           <div key={s.key} className="flex items-center gap-1.5">
             <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
-              done ? "bg-emerald-500 text-white"
-              : active ? "bg-terracotta text-white"
-              : "bg-gray-200 text-gray-500"
+              done ? "bg-emerald-500 text-on-ink"
+              : active ? "bg-ink text-on-ink"
+              : "bg-line text-text-2"
             }`}>
               {done ? "✓" : i + 1}
             </span>
-            <span className={`text-xs ${active ? "font-semibold text-gray-900" : "text-gray-500"}`}>{s.label}</span>
-            {i < steps.length - 1 && <span className="mx-1 h-px w-6 bg-gray-300" />}
+            <span className={`text-xs ${active ? "font-semibold text-text" : "text-text-2"}`}>{s.label}</span>
+            {i < steps.length - 1 && <span className="mx-1 h-px w-6 bg-line" />}
           </div>
         );
       })}
@@ -586,7 +586,7 @@ function EmployeeBreakdown({
       <div className="grid grid-cols-1 gap-4 text-xs md:grid-cols-3">
         {/* Earnings */}
         <div>
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Earnings</p>
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-text-2">Earnings</p>
           <EditableRow
             label={earnLines[0].label}
             detail={earnLines[0].detail}
@@ -640,7 +640,7 @@ function EmployeeBreakdown({
 
         {/* Deductions */}
         <div>
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Deductions (Employee)</p>
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-text-2">Deductions (Employee)</p>
           <EditableRow label="EPF" value={item.epf_employee} field="epf_employee" item={item} editable={editable} onItemUpdated={onItemUpdated} />
           <EditableRow label="SOCSO" value={item.socso_employee} field="socso_employee" item={item} editable={editable} onItemUpdated={onItemUpdated} />
           <EditableRow label="EIS" value={item.eis_employee} field="eis_employee" item={item} editable={editable} onItemUpdated={onItemUpdated} />
@@ -672,7 +672,7 @@ function EmployeeBreakdown({
 
         {/* Employer + flags */}
         <div>
-          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Employer Contributions</p>
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-text-2">Employer Contributions</p>
           <EditableRow label="EPF" value={item.epf_employer} field="epf_employer" item={item} editable={editable} onItemUpdated={onItemUpdated} />
           <EditableRow label="SOCSO" value={item.socso_employer} field="socso_employer" item={item} editable={editable} onItemUpdated={onItemUpdated} />
           <EditableRow label="EIS" value={item.eis_employer} field="eis_employer" item={item} editable={editable} onItemUpdated={onItemUpdated} />
@@ -690,21 +690,21 @@ function EmployeeBreakdown({
       </div>
 
       {/* Ad-hoc adjustments + per-employee payslip */}
-      <div className="rounded-md border bg-white p-3">
+      <div className="rounded-md border bg-surface p-3">
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-text-2">
             Ad-hoc Adjustments
           </p>
           <a
             href={`/api/hr/payroll/payslip?run_id=${runId}&user_id=${item.user_id}`}
-            className="flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-medium text-gray-700 hover:bg-muted"
+            className="flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-medium text-text-2 hover:bg-muted"
           >
             <FileText className="h-3 w-3" /> Download payslip
           </a>
         </div>
 
         {(adjustmentAllowances.length === 0 && adjustmentDeductions.length === 0) ? (
-          <p className="mb-2 text-[10px] text-gray-400">
+          <p className="mb-2 text-[10px] text-text-3">
             No ad-hoc adjustments.
             {editable ? " Use the form below to add one-off bonuses, reimbursements, or recoveries." : ""}
           </p>
@@ -831,14 +831,14 @@ function AdjustmentRow({
   };
 
   return (
-    <li className="flex items-center gap-2 rounded border bg-gray-50/60 px-2 py-1.5 text-[11px]">
+    <li className="flex items-center gap-2 rounded border bg-sunken/60 px-2 py-1.5 text-[11px]">
       <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
         kind === "allowance" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
       }`}>{kind === "allowance" ? "+" : "−"}</span>
-      <span className="min-w-0 flex-1 truncate">{label} <span className="text-gray-400">· {code}</span></span>
+      <span className="min-w-0 flex-1 truncate">{label} <span className="text-text-3">· {code}</span></span>
       {editing ? (
         <span className="flex items-center gap-1">
-          <span className="text-[9px] text-gray-400">RM</span>
+          <span className="text-[9px] text-text-3">RM</span>
           <input
             autoFocus
             type="number"
@@ -851,7 +851,7 @@ function AdjustmentRow({
               if (e.key === "Escape") setEditing(false);
             }}
             disabled={saving}
-            className="w-20 rounded border bg-white px-1 py-0.5 text-right font-mono text-[10px]"
+            className="w-20 rounded border bg-surface px-1 py-0.5 text-right font-mono text-[10px]"
           />
           <button
             onClick={save}
@@ -863,7 +863,7 @@ function AdjustmentRow({
           <button
             onClick={() => setEditing(false)}
             disabled={saving}
-            className="rounded border px-1.5 py-0.5 text-[9px] text-gray-600"
+            className="rounded border px-1.5 py-0.5 text-[9px] text-text-2"
           >
             ✕
           </button>
@@ -920,7 +920,7 @@ function PreflightPanel({ month, year }: { month: number; year: number }) {
 
   if (!data) {
     return (
-      <div className="mt-4 rounded-md border bg-gray-50 p-3 text-xs text-gray-500">
+      <div className="mt-4 rounded-md border bg-sunken p-3 text-xs text-text-2">
         <Loader2 className="mr-2 inline h-3 w-3 animate-spin" />
         Checking employee readiness…
       </div>
@@ -932,9 +932,9 @@ function PreflightPanel({ month, year }: { month: number; year: number }) {
   const allClean = summary.blocked === 0 && summary.warning === 0;
 
   return (
-    <div className="mt-4 rounded-md border bg-gray-50 p-3">
+    <div className="mt-4 rounded-md border bg-sunken p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-semibold uppercase tracking-wide text-gray-500">Pre-run check</span>
+        <span className="font-semibold uppercase tracking-wide text-text-2">Pre-run check</span>
         <span className="rounded bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">Full-timers only</span>
         <Pill color="emerald" label={`${summary.ready} ready`} />
         {summary.warning > 0 && <Pill color="amber" label={`${summary.warning} warning`} />}
@@ -944,7 +944,7 @@ function PreflightPanel({ month, year }: { month: number; year: number }) {
           <Pill color="amber" label={`${summary.final_payroll} final payroll`} />
         )}
         {(summary.excluded_non_full_time ?? 0) > 0 && (
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500">
+          <span className="rounded-full bg-sunken px-2 py-0.5 text-[10px] text-text-2">
             {summary.excluded_non_full_time} non-full-time → <Link href="/hr/payroll/weekly" className="text-blue-600 hover:underline">weekly</Link>
           </span>
         )}
@@ -956,7 +956,7 @@ function PreflightPanel({ month, year }: { month: number; year: number }) {
         </p>
       ) : (
         <>
-          <p className="mt-1 text-xs text-gray-600">
+          <p className="mt-1 text-xs text-text-2">
             {summary.blocked > 0
               ? `${summary.blocked} employee${summary.blocked === 1 ? "" : "s"} will be skipped during compute. Fix before running.`
               : `${summary.warning} employee${summary.warning === 1 ? "" : "s"} have missing data — compute will proceed but downstream files (bank, KWSP, PERKESO, CP39) may be incomplete.`}
@@ -970,7 +970,7 @@ function PreflightPanel({ month, year }: { month: number; year: number }) {
           {showAll && (
             <ul className="mt-2 space-y-1.5">
               {issuesOnly.map((r) => (
-                <li key={r.user_id} className="rounded border bg-white px-2 py-1.5 text-[11px]">
+                <li key={r.user_id} className="rounded border bg-surface px-2 py-1.5 text-[11px]">
                   <div className="flex items-center gap-2">
                     <Pill
                       color={r.status === "blocked" ? "red" : "amber"}
@@ -979,9 +979,9 @@ function PreflightPanel({ month, year }: { month: number; year: number }) {
                     <Link href={`/hr/employees/${r.user_id}`} className="font-medium text-blue-600 hover:underline">
                       {r.name}
                     </Link>
-                    <span className="text-gray-400">· {r.employment_type}</span>
+                    <span className="text-text-3">· {r.employment_type}</span>
                   </div>
-                  <ul className="ml-4 mt-1 list-disc space-y-0.5 text-[10px] text-gray-600">
+                  <ul className="ml-4 mt-1 list-disc space-y-0.5 text-[10px] text-text-2">
                     {r.issues.map((i) => (
                       <li key={i.code}>{i.message}</li>
                     ))}
@@ -1001,7 +1001,7 @@ function Pill({ color, label }: { color: "emerald" | "amber" | "red" | "gray"; l
     emerald: "bg-emerald-100 text-emerald-700",
     amber: "bg-amber-100 text-amber-800",
     red: "bg-red-100 text-red-700",
-    gray: "bg-gray-100 text-gray-600",
+    gray: "bg-sunken text-text-2",
   }[color];
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase ${cls}`}>{label}</span>;
 }
@@ -1081,7 +1081,7 @@ function AdjustmentForm({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="mt-1 flex items-center gap-1 rounded border border-dashed px-2 py-1 text-[10px] text-gray-600 hover:bg-muted"
+        className="mt-1 flex items-center gap-1 rounded border border-dashed px-2 py-1 text-[10px] text-text-2 hover:bg-muted"
       >
         <Plus className="h-3 w-3" /> Add adjustment
       </button>
@@ -1139,11 +1139,11 @@ function AdjustmentForm({
       )}
       {err && <p className="text-[10px] text-red-600">{err}</p>}
       <div className="flex justify-end gap-2">
-        <button onClick={reset} className="rounded border px-2 py-1 text-[10px] hover:bg-gray-50">Cancel</button>
+        <button onClick={reset} className="rounded border px-2 py-1 text-[10px] hover:bg-sunken">Cancel</button>
         <button
           onClick={submit}
           disabled={saving}
-          className="flex items-center gap-1 rounded bg-terracotta px-2 py-1 text-[10px] font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+          className="flex items-center gap-1 rounded bg-ink px-2 py-1 text-[10px] font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
         >
           {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
           Save
@@ -1156,11 +1156,11 @@ function AdjustmentForm({
 function Row({ label, value, detail, bold = false }: { label: string; value: number; detail?: string; bold?: boolean }) {
   return (
     <div className={`flex items-center justify-between ${bold ? "border-t pt-1 font-medium" : ""}`}>
-      <span className="text-gray-500">
+      <span className="text-text-2">
         {label}
         {/* Quantity and rate behind the amount — the Employment Act wants the
             overtime hours and the rate shown, not a lump sum. */}
-        {detail ? <span className="ml-1.5 text-[10px] text-gray-400">{detail}</span> : null}
+        {detail ? <span className="ml-1.5 text-[10px] text-text-3">{detail}</span> : null}
       </span>
       <span className="font-mono">RM {value.toFixed(2)}</span>
     </div>
@@ -1242,7 +1242,7 @@ function EditableRow({
 
   return (
     <div className="group flex items-center justify-between">
-      <span className="flex items-center gap-1 text-gray-500">
+      <span className="flex items-center gap-1 text-text-2">
         {label}
         {wasOverridden && (
           <span
@@ -1255,7 +1255,7 @@ function EditableRow({
       </span>
       {editing ? (
         <span className="flex items-center gap-1">
-          <span className="text-[10px] text-gray-400">RM</span>
+          <span className="text-[10px] text-text-3">RM</span>
           <input
             autoFocus
             type="number"
@@ -1268,7 +1268,7 @@ function EditableRow({
               if (e.key === "Escape") cancel();
             }}
             disabled={saving}
-            className="w-20 rounded border bg-white px-1 py-0.5 text-right font-mono text-[11px] disabled:opacity-50"
+            className="w-20 rounded border bg-surface px-1 py-0.5 text-right font-mono text-[11px] disabled:opacity-50"
           />
           <button
             onClick={save}
@@ -1280,7 +1280,7 @@ function EditableRow({
           <button
             onClick={cancel}
             disabled={saving}
-            className="rounded border px-1.5 py-0.5 text-[9px] text-gray-600 hover:bg-gray-50"
+            className="rounded border px-1.5 py-0.5 text-[9px] text-text-2 hover:bg-sunken"
           >
             ✕
           </button>
@@ -1288,7 +1288,7 @@ function EditableRow({
       ) : (
         <button
           onClick={startEdit}
-          className="rounded px-1 font-mono text-gray-900 hover:bg-amber-50"
+          className="rounded px-1 font-mono text-text hover:bg-amber-50"
           title="Click to edit"
         >
           RM {value.toFixed(2)}

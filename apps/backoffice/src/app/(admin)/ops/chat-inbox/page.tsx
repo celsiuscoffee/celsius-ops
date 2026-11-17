@@ -35,7 +35,7 @@ export default function OpsWorkspacePage() {
   return (
     <div className="p-4">
       <div className="mb-4 flex items-center gap-2">
-        <LayoutGrid className="h-5 w-5 text-terracotta" />
+        <LayoutGrid className="h-5 w-5 text-brand-text" />
         <h1 className="text-lg font-semibold">Ops Workspace</h1>
         <span className="hidden text-xs text-muted-foreground sm:inline">
           Chats, pulse, reminders, instructions &amp; a live monitor of every message
@@ -60,7 +60,7 @@ export default function OpsWorkspacePage() {
               <Icon className="h-4 w-4" />
               {label}
               {count > 0 && (
-                <Badge className="bg-terracotta px-1.5 text-[10px] text-white">{count}</Badge>
+                <Badge className="bg-ink px-1.5 text-[10px] text-on-ink">{count}</Badge>
               )}
             </button>
           );

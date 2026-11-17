@@ -68,7 +68,7 @@ export default function AllowancesPage() {
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <HrPageHeader
         title="Allowances"
-        icon={<Wallet className="h-6 w-6 text-terracotta" />}
+        icon={<Wallet className="h-6 w-6 text-brand-text" />}
         description="Live performance allowance this month. Paid with the next salary cycle."
       />
       <AllowanceTabs />
@@ -96,7 +96,7 @@ export default function AllowancesPage() {
             RM {rules.pool} pool · checklist {rules.leverChecklist} / phone {rules.leverPhone} / serving {rules.leverServing} / audit {rules.leverAudit}
             {/* The pool and lever splits live on the allowance-rules page —
                 working-time has no allowance fields at all. */}
-            <Link href="/hr/settings/allowances" className="ml-2 text-terracotta hover:underline">Configure →</Link>
+            <Link href="/hr/settings/allowances" className="ml-2 text-brand-text hover:underline">Configure →</Link>
           </span>
         )}
       </div>
@@ -106,22 +106,22 @@ export default function AllowancesPage() {
         <div className="rounded-xl border bg-card p-4">
           <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground"><Wallet className="h-4 w-4" /> Total payout</div>
           <div className="text-2xl font-bold">RM {totalPayout.toFixed(0)}</div>
-          <div className="text-xs text-gray-500">of max RM {maxPayout.toFixed(0)}</div>
+          <div className="text-xs text-text-2">of max RM {maxPayout.toFixed(0)}</div>
         </div>
         <div className="rounded-xl border bg-card p-4">
           <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground"><Trophy className="h-4 w-4" /> Full earners</div>
           <div className="text-2xl font-bold">{fullEarners}</div>
-          <div className="text-xs text-gray-500">of {staff.length} staff</div>
+          <div className="text-xs text-text-2">of {staff.length} staff</div>
         </div>
         <div className="rounded-xl border bg-card p-4">
           <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground"><AlertTriangle className="h-4 w-4" /> At risk</div>
           <div className="text-2xl font-bold text-amber-700">{atRisk}</div>
-          <div className="text-xs text-gray-500">≥1 absence or &gt;2 lates</div>
+          <div className="text-xs text-text-2">≥1 absence or &gt;2 lates</div>
         </div>
         <div className="rounded-xl border bg-card p-4">
           <div className="mb-1 flex items-center gap-2 text-xs text-muted-foreground"><TrendingUp className="h-4 w-4" /> Avg earned</div>
           <div className="text-2xl font-bold">RM {staff.length > 0 ? (totalPayout / staff.length).toFixed(0) : 0}</div>
-          <div className="text-xs text-gray-500">per staff this month</div>
+          <div className="text-xs text-text-2">per staff this month</div>
         </div>
       </div>
 
@@ -129,12 +129,12 @@ export default function AllowancesPage() {
       <div className="rounded-xl border bg-card">
         <div className="flex items-center justify-between border-b p-4">
           <h2 className="font-semibold">Per Staff — {MONTHS[month - 1]} {year}</h2>
-          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-terracotta" />}
+          {isLoading && <Loader2 className="h-4 w-4 animate-spin text-brand-text" />}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr className="text-xs text-gray-500">
+            <thead className="bg-sunken">
+              <tr className="text-xs text-text-2">
                 <th className="px-3 py-2 text-left">Staff</th>
                 <th className="px-3 py-2 text-left">Earn levers (score → RM)</th>
                 <th className="px-3 py-2 text-center">Deductions</th>
@@ -144,10 +144,10 @@ export default function AllowancesPage() {
             </thead>
             <tbody>
               {staff.map((p) => (
-                <tr key={p.userId} className="border-t hover:bg-gray-50/40">
+                <tr key={p.userId} className="border-t hover:bg-sunken/40">
                   <td className="px-3 py-2.5 align-top">
                     <div className="font-medium">{p.name}</div>
-                    <div className="text-xs text-gray-500">{p.outletName || "—"}</div>
+                    <div className="text-xs text-text-2">{p.outletName || "—"}</div>
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex flex-wrap gap-1.5">
@@ -157,7 +157,7 @@ export default function AllowancesPage() {
                         </span>
                       ))}
                       {p.levers.filter((l) => !l.applicable).map((l) => (
-                        <span key={l.key} title={l.detail} className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-400">
+                        <span key={l.key} title={l.detail} className="inline-flex items-center rounded-full bg-sunken px-2 py-0.5 text-[11px] text-text-3">
                           {l.label.replace(" completion", "").replace(" time", "")}: n/a
                         </span>
                       ))}
@@ -167,16 +167,16 @@ export default function AllowancesPage() {
                     {p.attendanceDeducted > 0 || p.reviewPenaltyTotal > 0 ? (
                       <span className="text-red-700">
                         −RM{(p.attendanceDeducted + p.reviewPenaltyTotal).toFixed(0)}
-                        <span className="ml-1 text-gray-400">({p.lateCount}L/{p.absentCount}A{p.reviewPenaltyTotal > 0 ? `/${(p.reviewPenaltyTotal / 10)}R` : ""})</span>
+                        <span className="ml-1 text-text-3">({p.lateCount}L/{p.absentCount}A{p.reviewPenaltyTotal > 0 ? `/${(p.reviewPenaltyTotal / 10)}R` : ""})</span>
                       </span>
-                    ) : <span className="text-gray-400">—</span>}
+                    ) : <span className="text-text-3">—</span>}
                   </td>
                   <td className="px-3 py-2.5 text-right">
-                    <span className="font-bold text-terracotta">RM {p.totalEarned}</span>
-                    <span className="text-xs text-gray-400"> / {p.totalMax}</span>
+                    <span className="font-bold text-brand-text">RM {p.totalEarned}</span>
+                    <span className="text-xs text-text-3"> / {p.totalMax}</span>
                   </td>
                   <td className="px-3 py-2.5">
-                    <Link href={`/hr/employees/${p.userId}`} className="text-xs text-terracotta hover:underline">View</Link>
+                    <Link href={`/hr/employees/${p.userId}`} className="text-xs text-brand-text hover:underline">View</Link>
                   </td>
                 </tr>
               ))}

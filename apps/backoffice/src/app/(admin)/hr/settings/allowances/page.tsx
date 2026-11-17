@@ -90,19 +90,19 @@ export default function AllowanceSettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Allowance Rules</h1>
-          <p className="text-sm text-gray-600">Performance allowance (v2): one pool, four KPI levers, minus attendance and review deductions.</p>
+          <p className="text-sm text-text-2">Performance allowance (v2): one pool, four KPI levers, minus attendance and review deductions.</p>
         </div>
         <button onClick={save} disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 rounded bg-terracotta text-white hover:opacity-90 disabled:opacity-50">
+          className="flex items-center gap-2 px-4 py-2 rounded bg-ink text-on-ink hover:opacity-90 disabled:opacity-50">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           {saved ? "Saved" : "Save"}
         </button>
       </div>
 
       {/* Performance pool + levers */}
-      <section className="mt-6 bg-white rounded-lg border p-5">
+      <section className="mt-6 bg-surface rounded-lg border p-5">
         <h2 className="text-lg font-semibold mb-1">Performance allowance (full-time only)</h2>
-        <p className="text-xs text-gray-500 mb-4">
+        <p className="text-xs text-text-2 mb-4">
           Full-time staff earn ONE pool split across four levers. Each lever is scored on its OWN KPI and pays nothing / half / full.
           A lever that doesn&apos;t apply to a person (e.g. kitchen never runs the register) drops and its RM redistributes across their
           applicable levers. Part-time / contract / intern are not eligible.
@@ -115,7 +115,7 @@ export default function AllowanceSettingsPage() {
 
         <div className="mt-5">
           <h3 className="text-sm font-semibold mb-1">Lever split (RM)</h3>
-          <p className="text-xs text-gray-500 mb-2">
+          <p className="text-xs text-text-2 mb-2">
             How the pool divides across the four levers (sum = {leverSum}
             {leverSum !== form.performance_allowance_amount && <span className="text-amber-600"> — differs from the pool; the levers are scaled to it automatically</span>}).
           </p>
@@ -157,7 +157,7 @@ export default function AllowanceSettingsPage() {
               <input type="number" value={form.serving_half_minutes} onChange={num("serving_half_minutes")} className="input" min={0} />
             </Field>
           </div>
-          <p className="text-xs text-gray-500 mt-3">
+          <p className="text-xs text-text-2 mt-3">
             Phone capture is scored against the outlet target = its trailing-90-day capture rate + an uplift. Set the fallback baseline and uplift below.
           </p>
           <div className="grid grid-cols-2 gap-4 mt-2">
@@ -172,9 +172,9 @@ export default function AllowanceSettingsPage() {
       </section>
 
       {/* Deductions */}
-      <section className="mt-6 bg-white rounded-lg border p-5">
+      <section className="mt-6 bg-surface rounded-lg border p-5">
         <h2 className="text-lg font-semibold mb-1">Deductions</h2>
-        <p className="text-xs text-gray-500 mb-4">Taken off the earned performance allowance each month. Floored at RM0.</p>
+        <p className="text-xs text-text-2 mb-4">Taken off the earned performance allowance each month. Floored at RM0.</p>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Lateness grace (min)">
             <input type="number" value={form.attendance_lateness_grace_minutes} onChange={num("attendance_lateness_grace_minutes")} className="input" min={0} />
@@ -197,7 +197,7 @@ export default function AllowanceSettingsPage() {
           <AlertTriangle className="w-5 h-5 text-red-600" />
           <h2 className="text-lg font-semibold">Review penalty</h2>
         </div>
-        <p className="text-xs text-gray-600 mb-4">
+        <p className="text-xs text-text-2 mb-4">
           Bad Google reviews flagged for manager attribution. An applied penalty deducts from the staff&apos;s earned allowance.
         </p>
         <div className="grid grid-cols-3 gap-4">
@@ -211,7 +211,7 @@ export default function AllowanceSettingsPage() {
             <input type="number" value={form.review_penalty_auto_dismiss_days} onChange={num("review_penalty_auto_dismiss_days")} className="input" min={1} />
           </Field>
         </div>
-        <p className="text-xs text-gray-500 mt-3">
+        <p className="text-xs text-text-2 mt-3">
           Reviews with rating ≤ {form.review_penalty_max_star_rating}★ trigger a pending penalty. Manager has {form.review_penalty_auto_dismiss_days} days to review before auto-dismiss.
         </p>
       </section>
@@ -233,7 +233,7 @@ export default function AllowanceSettingsPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-text-2 mb-1">{label}</label>
       {children}
     </div>
   );

@@ -263,16 +263,16 @@ export default function PickupAnalyticsPage() {
     <div className="p-3 sm:p-6 space-y-6 max-w-6xl">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#160800]">Pickup app</h1>
+          <h1 className="text-2xl font-bold text-text">Pickup app</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Orders, revenue and engagement from the Celsius Coffee app</p>
         </div>
-        <div className="flex gap-1 bg-white rounded-xl p-1">
+        <div className="flex gap-1 bg-surface rounded-xl p-1">
           {(["7d", "30d", "90d"] as Range[]).map((r) => (
             <button
               key={r}
               onClick={() => setRange(r)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                range === r ? "bg-[#160800] text-white" : "text-muted-foreground hover:text-[#160800]"
+                range === r ? "bg-ink text-on-ink" : "text-muted-foreground hover:text-text"
               }`}
             >
               {r === "7d" ? "7 days" : r === "30d" ? "30 days" : "90 days"}
@@ -286,12 +286,12 @@ export default function PickupAnalyticsPage() {
           margin is being given away each period and lines up with how
           operators read a P&L. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-4">
-          <p className="text-2xl font-bold text-[#160800]">{loading ? "—" : formatRM(grossRevenue / 100)}</p>
+        <div className="bg-surface rounded-2xl p-4">
+          <p className="text-2xl font-bold text-text">{loading ? "—" : formatRM(grossRevenue / 100)}</p>
           <p className="text-xs text-muted-foreground mt-0.5">Gross revenue</p>
           <p className="text-[10px] text-muted-foreground/70 mt-1">Pre-discount, pre-SST</p>
         </div>
-        <div className="bg-white rounded-2xl p-4">
+        <div className="bg-surface rounded-2xl p-4">
           <p className="text-2xl font-bold text-[#c05040]">
             {loading ? "—" : `−${formatRM(totalDiscount / 100)}`}
           </p>
@@ -300,13 +300,13 @@ export default function PickupAnalyticsPage() {
             {loading ? "—" : `${(discountRate * 100).toFixed(1)}% of gross`}
           </p>
         </div>
-        <div className="bg-white rounded-2xl p-4">
-          <p className="text-2xl font-bold text-[#160800]">{loading ? "—" : formatRM(netRevenue / 100)}</p>
+        <div className="bg-surface rounded-2xl p-4">
+          <p className="text-2xl font-bold text-text">{loading ? "—" : formatRM(netRevenue / 100)}</p>
           <p className="text-xs text-muted-foreground mt-0.5">Net revenue</p>
           <p className="text-[10px] text-muted-foreground/70 mt-1">Gross − discounts, ex-SST</p>
         </div>
-        <div className="bg-white rounded-2xl p-4">
-          <p className="text-2xl font-bold text-[#160800]">
+        <div className="bg-surface rounded-2xl p-4">
+          <p className="text-2xl font-bold text-text">
             {loading ? "—" : orders.length.toLocaleString()}
             <span className="text-sm font-medium text-muted-foreground ml-2">
               {loading ? "" : `· AOV ${formatRM(avgOrder / 100)}`}
@@ -320,7 +320,7 @@ export default function PickupAnalyticsPage() {
       </div>
 
       {/* Revenue over time */}
-      <div className="bg-white rounded-2xl p-5">
+      <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-4">Revenue Over Time</h2>
         {loading ? (
           <div className="h-52 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
@@ -354,7 +354,7 @@ export default function PickupAnalyticsPage() {
       </div>
 
       {/* Orders per day */}
-      <div className="bg-white rounded-2xl p-5">
+      <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-4">Orders Per Day</h2>
         {loading ? (
           <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
@@ -375,7 +375,7 @@ export default function PickupAnalyticsPage() {
       </div>
 
       {/* By outlet */}
-      <div className="bg-white rounded-2xl p-5">
+      <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-4">By Outlet</h2>
         {loading ? (
           <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
@@ -402,7 +402,7 @@ export default function PickupAnalyticsPage() {
       </div>
 
       {/* Top Products */}
-      <div className="bg-white rounded-2xl p-5">
+      <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-4">Top Products</h2>
         {loading ? (
           <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
@@ -432,7 +432,7 @@ export default function PickupAnalyticsPage() {
       </div>
 
       {/* Peak Hours Heatmap */}
-      <div className="bg-white rounded-2xl p-5">
+      <div className="bg-surface rounded-2xl p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-sm">Orders by Hour</h2>
           {!loading && peakHour.count > 0 && (
@@ -475,7 +475,7 @@ export default function PickupAnalyticsPage() {
           Play Console / Amplitude pulls land, the "downloads" half of
           the funnel can layer in here. */}
       <div className="pt-2">
-        <h2 className="text-lg font-bold text-[#160800]">Engagement</h2>
+        <h2 className="text-lg font-bold text-text">Engagement</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
           Activity, retention, and loyalty engagement across the period.
         </p>
@@ -493,8 +493,8 @@ export default function PickupAnalyticsPage() {
           { label: "Stickiness",     value: engagement ? `${Math.round(engagement.activity.dauMauRatio * 100)}%` : "—",
             hint: `DAU ${engagement?.activity.dau ?? 0} / MAU ${engagement?.activity.mau ?? 0}` },
         ].map(({ label, value, hint }) => (
-          <div key={label} className="bg-white rounded-2xl p-4">
-            <p className="text-2xl font-bold text-[#160800]">{engLoading ? "—" : value}</p>
+          <div key={label} className="bg-surface rounded-2xl p-4">
+            <p className="text-2xl font-bold text-text">{engLoading ? "—" : value}</p>
             <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
             <p className="text-[10px] text-muted-foreground/70 mt-1">{hint}</p>
           </div>
@@ -502,7 +502,7 @@ export default function PickupAnalyticsPage() {
       </div>
 
       {/* New vs Active per day */}
-      <div className="bg-white rounded-2xl p-5">
+      <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-4">New vs Returning Activity</h2>
         {engLoading ? (
           <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
@@ -540,7 +540,7 @@ export default function PickupAnalyticsPage() {
       </div>
 
       {/* Cohort retention heatmap */}
-      <div className="bg-white rounded-2xl p-5">
+      <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-1">Weekly Retention Cohorts</h2>
         <p className="text-[11px] text-muted-foreground mb-4">
           % of each week&apos;s first-time members that placed another order in weeks 1–4 since.
@@ -565,7 +565,7 @@ export default function PickupAnalyticsPage() {
               <tbody>
                 {engagement.cohorts.weeks.map((wk) => (
                   <tr key={wk.label} className="border-t border-muted/30">
-                    <td className="py-1.5 pr-3 text-[#160800] font-medium whitespace-nowrap">
+                    <td className="py-1.5 pr-3 text-text font-medium whitespace-nowrap">
                       {new Date(wk.label).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}
                     </td>
                     <td className="py-1.5 pr-3 text-right text-muted-foreground">{wk.size}</td>
@@ -591,7 +591,7 @@ export default function PickupAnalyticsPage() {
       </div>
 
       {/* Tier distribution */}
-      <div className="bg-white rounded-2xl p-5">
+      <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-1">Loyalty Tier Distribution</h2>
         <p className="text-[11px] text-muted-foreground mb-4">
           Snapshot across all members in this brand (not range-bound).
@@ -604,7 +604,7 @@ export default function PickupAnalyticsPage() {
           <div className="space-y-2">
             {engagement.tiers.map((t) => (
               <div key={t.slug} className="flex items-center gap-3">
-                <div className="w-20 text-[12px] font-semibold text-[#160800] capitalize">{t.tier}</div>
+                <div className="w-20 text-[12px] font-semibold text-text capitalize">{t.tier}</div>
                 <div className="flex-1 bg-muted/30 rounded-full h-5 relative overflow-hidden">
                   <div
                     className="absolute inset-y-0 left-0 rounded-full"
@@ -628,7 +628,7 @@ export default function PickupAnalyticsPage() {
       </div>
 
       {/* Reward engagement */}
-      <div className="bg-white rounded-2xl p-5">
+      <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-1">Reward Engagement</h2>
         <p className="text-[11px] text-muted-foreground mb-4">
           Vouchers issued, used, and redemptions in this period — plus all-time funnel.
@@ -647,7 +647,7 @@ export default function PickupAnalyticsPage() {
                 { label: "Lifetime redemption rate", value: `${Math.round(engagement.rewards.redemptionRate * 100)}%` },
               ].map((k) => (
                 <div key={k.label} className="bg-muted/20 rounded-xl p-3">
-                  <div className="text-lg font-bold text-[#160800]">{k.value}</div>
+                  <div className="text-lg font-bold text-text">{k.value}</div>
                   <div className="text-[10px] text-muted-foreground mt-0.5">{k.label}</div>
                 </div>
               ))}

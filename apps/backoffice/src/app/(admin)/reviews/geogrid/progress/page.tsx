@@ -85,7 +85,7 @@ function RankSparkline({ scans }: { scans: ProgressScan[] }) {
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: string }) {
   return (
-    <div className="rounded-xl border border-border bg-white p-4">
+    <div className="rounded-xl border border-border bg-surface p-4">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${tone ?? "text-foreground"}`}>{value}</p>
     </div>
@@ -140,7 +140,7 @@ export default function GeogridProgressPage() {
       ) : error ? (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{error}</div>
       ) : rows.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-border bg-white p-10 text-center">
+        <div className="mt-6 rounded-xl border border-border bg-surface p-10 text-center">
           <TrendingUp className="mx-auto h-10 w-10 text-muted-foreground/30" />
           <p className="mt-3 text-sm text-muted-foreground">
             No scans recorded yet. Progress appears here once the geogrid runs — each keyword needs two scans before movement can show.
@@ -169,7 +169,7 @@ export default function GeogridProgressPage() {
                   setOutletFilter(e.target.value);
                   setKeywordFilter("");
                 }}
-                className="mt-1 rounded-lg border border-border bg-white px-3 py-2 text-sm"
+                className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm"
               >
                 <option value="">All outlets</option>
                 {outlets.map((o) => (
@@ -179,7 +179,7 @@ export default function GeogridProgressPage() {
             </div>
             <div>
               <label className="block text-xs font-medium text-muted-foreground">Keyword</label>
-              <select value={keywordFilter} onChange={(e) => setKeywordFilter(e.target.value)} className="mt-1 rounded-lg border border-border bg-white px-3 py-2 text-sm">
+              <select value={keywordFilter} onChange={(e) => setKeywordFilter(e.target.value)} className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm">
                 <option value="">All keywords</option>
                 {keywords.map((k) => (
                   <option key={k} value={k}>{k}</option>
@@ -189,7 +189,7 @@ export default function GeogridProgressPage() {
           </div>
 
           {/* Per-keyword movement — biggest movers first */}
-          <div className="mt-4 rounded-xl border border-border bg-white p-4">
+          <div className="mt-4 rounded-xl border border-border bg-surface p-4">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">

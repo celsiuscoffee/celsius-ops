@@ -34,7 +34,7 @@ function fmtTime(iso: string | null): string {
 const SEV_CLASS: Record<string, string> = {
   HIGH: "bg-red-100 text-red-700",
   MED: "bg-amber-100 text-amber-700",
-  LOW: "bg-slate-100 text-slate-600",
+  LOW: "bg-sunken text-text-2",
 };
 
 export default function PulsePanel({ onChange }: { onChange: () => void }) {
@@ -85,7 +85,7 @@ export default function PulsePanel({ onChange }: { onChange: () => void }) {
   return (
     <Card className="h-[calc(100vh-15rem)] overflow-y-auto p-4">
       <div className="mb-3 flex items-center gap-2">
-        <ShieldAlert className="h-4 w-4 text-terracotta" />
+        <ShieldAlert className="h-4 w-4 text-brand-text" />
         <span className="text-sm font-medium">Open pulse alerts</span>
         <Input
           value={testTo}
@@ -139,7 +139,7 @@ export default function PulsePanel({ onChange }: { onChange: () => void }) {
                 }
               >
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <Badge className={"text-[10px] " + (SEV_CLASS[a.severity] ?? "bg-slate-100 text-slate-600")}>
+                  <Badge className={"text-[10px] " + (SEV_CLASS[a.severity] ?? "bg-sunken text-text-2")}>
                     {a.severity}
                   </Badge>
                   <Badge variant="secondary" className="text-[10px]">
@@ -176,7 +176,7 @@ export default function PulsePanel({ onChange }: { onChange: () => void }) {
                       size="sm"
                       disabled={busy === a.id}
                       onClick={() => act(a.id, "resolve")}
-                      className="h-7 gap-1 bg-terracotta px-2 text-xs hover:bg-terracotta-dark"
+                      className="h-7 gap-1 bg-ink px-2 text-xs hover:bg-ink-hover"
                     >
                       {busy === a.id ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />

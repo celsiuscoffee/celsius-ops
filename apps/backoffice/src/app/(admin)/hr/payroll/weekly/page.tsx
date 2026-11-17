@@ -218,7 +218,7 @@ export default function WeeklyPayrollPage() {
       {/* Compute Controls */}
       <div className="rounded-xl border bg-card p-5">
         <h2 className="mb-4 flex items-center gap-2 font-semibold">
-          <Bot className="h-5 w-5 text-terracotta" />
+          <Bot className="h-5 w-5 text-brand-text" />
           Compute Weekly Payroll
         </h2>
         <div className="flex flex-wrap items-end gap-3">
@@ -237,7 +237,7 @@ export default function WeeklyPayrollPage() {
           <button
             onClick={handleCompute}
             disabled={computing}
-            className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
           >
             {computing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
             Compute
@@ -282,7 +282,7 @@ export default function WeeklyPayrollPage() {
                           ? "bg-green-100 text-green-700"
                           : isComputed
                           ? "bg-blue-100 text-blue-700"
-                          : "bg-gray-100 text-gray-600"
+                          : "bg-sunken text-text-2"
                       }`}
                     >
                       {run.status.replace("_", " ")}
@@ -379,7 +379,7 @@ export default function WeeklyPayrollPage() {
                                   <span className="ml-2 text-[10px] text-amber-600">✎ edited</span>
                                 )}
                                 {item.bankName && item.bankAccountNumber && (
-                                  <div className="text-[10px] text-gray-400">{item.bankName} · {item.bankAccountNumber}</div>
+                                  <div className="text-[10px] text-text-3">{item.bankName} · {item.bankAccountNumber}</div>
                                 )}
                                 {(!item.bankName || !item.bankAccountNumber) && (
                                   <div className="text-[10px] text-red-500">⚠ no bank details</div>
@@ -422,7 +422,7 @@ export default function WeeklyPayrollPage() {
                                   </div>
                                 ) : (
                                   <button onClick={() => startEdit(item)}
-                                    className="rounded border px-2 py-0.5 text-[10px] hover:bg-gray-50">
+                                    className="rounded border px-2 py-0.5 text-[10px] hover:bg-sunken">
                                     <Edit2 className="h-3 w-3" />
                                   </button>
                                 )}
@@ -445,7 +445,7 @@ export default function WeeklyPayrollPage() {
 
         {runs.length === 0 && (
           <div className="rounded-xl border bg-card py-16 text-center">
-            <Banknote className="mx-auto mb-3 h-12 w-12 text-gray-300" />
+            <Banknote className="mx-auto mb-3 h-12 w-12 text-text-3" />
             <p className="text-lg font-semibold">No weekly payroll runs yet</p>
             <p className="text-sm text-muted-foreground">Pick a Monday and compute above</p>
           </div>
@@ -491,7 +491,7 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
 
   if (!data) {
     return (
-      <div className="mt-4 rounded-md border bg-gray-50 p-3 text-xs text-gray-500">
+      <div className="mt-4 rounded-md border bg-sunken p-3 text-xs text-text-2">
         <Loader2 className="mr-2 inline h-3 w-3 animate-spin" />
         Checking clock-ins + readiness…
       </div>
@@ -503,9 +503,9 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
   const noClockData = summary.total_logged_shifts === 0;
 
   return (
-    <div className="mt-4 rounded-md border bg-gray-50 p-3">
+    <div className="mt-4 rounded-md border bg-sunken p-3">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-semibold uppercase tracking-wide text-gray-500">Pre-run check</span>
+        <span className="font-semibold uppercase tracking-wide text-text-2">Pre-run check</span>
         <Pill color="blue" label={`${summary.total_logged_shifts} clocked shifts · ${summary.total_logged_hours}h`} />
         <Pill color="emerald" label={`${summary.payable} payable`} />
         {summary.warning > 0 && <Pill color="amber" label={`${summary.warning} warning`} />}
@@ -534,7 +534,7 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
         </p>
       ) : (
         <>
-          <p className="mt-1 text-xs text-gray-600">
+          <p className="mt-1 text-xs text-text-2">
             {summary.blocked > 0
               ? `${summary.blocked} blocked. Fix before running.`
               : `${summary.warning} warning${summary.warning === 1 ? "" : "s"}.`}
@@ -548,7 +548,7 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
           {showAll && (
             <ul className="mt-2 space-y-1.5">
               {issuesOnly.map((r) => (
-                <li key={r.user_id} className="rounded border bg-white px-2 py-1.5 text-[11px]">
+                <li key={r.user_id} className="rounded border bg-surface px-2 py-1.5 text-[11px]">
                   <div className="flex items-center gap-2">
                     <Pill
                       color={r.status === "blocked" ? "red" : "amber"}
@@ -557,9 +557,9 @@ function WeeklyPreflightPanel({ weekStart }: { weekStart: string }) {
                     <Link href={`/hr/employees/${r.user_id}`} className="font-medium text-blue-600 hover:underline">
                       {r.name}
                     </Link>
-                    <span className="text-gray-400">· {r.logged_shifts} shift{r.logged_shifts === 1 ? "" : "s"} · {r.logged_hours}h</span>
+                    <span className="text-text-3">· {r.logged_shifts} shift{r.logged_shifts === 1 ? "" : "s"} · {r.logged_hours}h</span>
                   </div>
-                  <ul className="ml-4 mt-1 list-disc space-y-0.5 text-[10px] text-gray-600">
+                  <ul className="ml-4 mt-1 list-disc space-y-0.5 text-[10px] text-text-2">
                     {r.issues.map((i) => (
                       <li key={i.code}>{i.message}</li>
                     ))}
@@ -584,7 +584,7 @@ function Pill({
     emerald: "bg-emerald-100 text-emerald-700",
     amber: "bg-amber-100 text-amber-800",
     red: "bg-red-100 text-red-700",
-    gray: "bg-gray-100 text-gray-600",
+    gray: "bg-sunken text-text-2",
     blue: "bg-blue-100 text-blue-700",
   }[color];
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase ${cls}`}>{label}</span>;

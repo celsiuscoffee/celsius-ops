@@ -156,19 +156,19 @@ function pctChange(current: number, previous: number): { pct: number; label: str
   const diffAbs = Math.abs(diff);
   const fmtDiff = diffAbs >= 1000 ? `${(diffAbs / 1000).toFixed(1)}k` : diffAbs.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const diffLabel = diff > 0 ? `+RM ${fmtDiff}` : diff < 0 ? `-RM ${fmtDiff}` : "";
-  if (current === 0 && previous === 0) return { pct: 0, label: "\u2014", color: "text-gray-400", diff: 0, diffLabel: "" };
+  if (current === 0 && previous === 0) return { pct: 0, label: "\u2014", color: "text-text-3", diff: 0, diffLabel: "" };
   if (previous === 0) return { pct: 0, label: "New", color: "text-green-600", diff, diffLabel };
   if (current === 0) return { pct: -100, label: "-100%", color: "text-red-500", diff, diffLabel };
   const pct = Math.round(((current - previous) / previous) * 100);
   if (pct > 0) return { pct, label: `+${pct}%`, color: "text-green-600", diff, diffLabel };
   if (pct < 0) return { pct, label: `${pct}%`, color: "text-red-500", diff, diffLabel };
-  return { pct: 0, label: "0%", color: "text-gray-400", diff: 0, diffLabel: "" };
+  return { pct: 0, label: "0%", color: "text-text-3", diff: 0, diffLabel: "" };
 }
 
 /** Color for a cell value vs daily target */
 function cellColor(val: number, target: number): string {
-  if (val === 0) return "text-gray-300";
-  if (target <= 0) return "text-gray-700";
+  if (val === 0) return "text-text-3";
+  if (target <= 0) return "text-text-2";
   const pct = (val / target) * 100;
   if (pct >= 100) return "font-semibold text-green-600";
   if (pct >= 80) return "text-yellow-600";
@@ -287,18 +287,18 @@ export default function SalesDashboard() {
     <div className="p-3 sm:p-6 pb-10 min-h-0 w-full">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Sales Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500">Sales performance by time round</p>
+        <h1 className="text-2xl font-bold text-text">Sales Dashboard</h1>
+        <p className="mt-1 text-sm text-text-2">Sales performance by time round</p>
       </div>
 
       {/* Filters bar */}
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4 mb-6">
+      <div className="rounded-xl border border-line bg-surface shadow-sm p-4 mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-2">
-            <CalendarDays className="h-5 w-5 text-[#C2452D]" />
-            <h2 className="text-sm font-semibold text-gray-900">Filters</h2>
+            <CalendarDays className="h-5 w-5 text-brand-text" />
+            <h2 className="text-sm font-semibold text-text">Filters</h2>
             {data && (
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-text-3">
                 {data.period.from === data.period.to
                   ? data.period.from
                   : `${data.period.from} to ${data.period.to}`}
@@ -311,7 +311,7 @@ export default function SalesDashboard() {
               <select
                 value={outletId}
                 onChange={(e) => setOutletId(e.target.value)}
-                className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-text-2 focus:outline-none focus:ring-1 focus:ring-brand"
               >
                 <option value="all">All Outlets</option>
                 {data.availableOutlets.map((o) => (
@@ -325,7 +325,7 @@ export default function SalesDashboard() {
             <select
               value={period}
               onChange={(e) => setPeriod(e.target.value as Period)}
-              className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+              className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-text-2 focus:outline-none focus:ring-1 focus:ring-brand"
             >
               {PERIOD_OPTIONS.map((p) => (
                 <option key={p.key} value={p.key}>
@@ -343,14 +343,14 @@ export default function SalesDashboard() {
               type="date"
               value={customFrom}
               onChange={(e) => setCustomFrom(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+              className="rounded-lg border border-line px-3 py-1.5 text-xs text-text-2 focus:outline-none focus:ring-1 focus:ring-brand"
             />
-            <span className="text-xs text-gray-400">to</span>
+            <span className="text-xs text-text-3">to</span>
             <input
               type="date"
               value={customTo}
               onChange={(e) => setCustomTo(e.target.value)}
-              className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+              className="rounded-lg border border-line px-3 py-1.5 text-xs text-text-2 focus:outline-none focus:ring-1 focus:ring-brand"
             />
           </div>
         )}
@@ -360,8 +360,8 @@ export default function SalesDashboard() {
       {loading && (
         <div className="flex items-center justify-center h-64">
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-8 w-8 animate-spin text-[#C2452D]" />
-            <p className="text-sm text-gray-500">Loading sales data...</p>
+            <Loader2 className="h-8 w-8 animate-spin text-brand-text" />
+            <p className="text-sm text-text-2">Loading sales data...</p>
           </div>
         </div>
       )}
@@ -398,66 +398,66 @@ export default function SalesDashboard() {
               const vsLabel = prev.sameTime ? "vs same time, prev period" : "vs prev period";
               return (
                 <>
-                  <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
                     <div className="flex items-start gap-3 mb-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100">
                         <DollarSign className="h-5 w-5 text-green-600" />
                       </div>
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      <p className="text-xs font-medium text-text-2 uppercase tracking-wide">
                         Total Revenue
                       </p>
                     </div>
-                    <p className="font-sans text-2xl font-bold text-gray-900">
+                    <p className="font-sans text-2xl font-bold text-text">
                       RM {data.summary.revenue.toLocaleString("en-MY", { minimumFractionDigits: 2 })}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={cn("text-xs font-semibold", revChange.color)}>{revChange.label}</span>
                       {revChange.diffLabel && <span className={cn("text-xs", revChange.color)}>{revChange.diffLabel}</span>}
-                      <span className="text-[10px] text-gray-400">{vsLabel}</span>
+                      <span className="text-[10px] text-text-3">{vsLabel}</span>
                     </div>
                     {data.deliveryQR && data.deliveryQR.orders > 0 && (
-                      <p className="text-[10px] text-gray-400 mt-1.5">
+                      <p className="text-[10px] text-text-3 mt-1.5">
                         Own sales: RM {(data.summary.ownSalesRevenue ?? data.summary.revenue).toLocaleString("en-MY", { minimumFractionDigits: 2 })}
                         {" · "}Delivery/QR: RM {data.deliveryQR.revenue.toLocaleString("en-MY", { minimumFractionDigits: 2 })}
                       </p>
                     )}
                   </div>
 
-                  <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
                     <div className="flex items-start gap-3 mb-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
                         <ShoppingCart className="h-5 w-5 text-blue-600" />
                       </div>
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      <p className="text-xs font-medium text-text-2 uppercase tracking-wide">
                         Total Orders
                       </p>
                     </div>
-                    <p className="font-sans text-2xl font-bold text-gray-900">
+                    <p className="font-sans text-2xl font-bold text-text">
                       {data.summary.orders.toLocaleString()}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={cn("text-xs font-semibold", ordChange.color)}>{ordChange.label}</span>
                       {ordChange.diff !== 0 && <span className={cn("text-xs", ordChange.color)}>{ordChange.diff > 0 ? "+" : ""}{ordChange.diff}</span>}
-                      <span className="text-[10px] text-gray-400">{vsLabel}</span>
+                      <span className="text-[10px] text-text-3">{vsLabel}</span>
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
                     <div className="flex items-start gap-3 mb-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100">
                         <TrendingUp className="h-5 w-5 text-orange-600" />
                       </div>
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      <p className="text-xs font-medium text-text-2 uppercase tracking-wide">
                         Average Order Value
                       </p>
                     </div>
-                    <p className="font-sans text-2xl font-bold text-gray-900">
+                    <p className="font-sans text-2xl font-bold text-text">
                       RM {data.summary.aov.toFixed(2)}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className={cn("text-xs font-semibold", aovChange.color)}>{aovChange.label}</span>
                       {aovChange.diffLabel && <span className={cn("text-xs", aovChange.color)}>{aovChange.diffLabel}</span>}
-                      <span className="text-[10px] text-gray-400">{vsLabel}</span>
+                      <span className="text-[10px] text-text-3">{vsLabel}</span>
                     </div>
                   </div>
                 </>
@@ -479,35 +479,35 @@ export default function SalesDashboard() {
             }
             const stale = daysAgo !== null && daysAgo >= 14;
             return (
-              <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4">
+              <div className="rounded-xl border border-line bg-surface shadow-sm p-4">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="flex items-start gap-2.5 min-w-0">
                     <div className={cn(
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                      isDefault ? "bg-gray-100" : stale ? "bg-amber-100" : "bg-emerald-100",
+                      isDefault ? "bg-sunken" : stale ? "bg-amber-100" : "bg-emerald-100",
                     )}>
                       <TrendingUp className={cn(
                         "h-4 w-4",
-                        isDefault ? "text-gray-500" : stale ? "text-amber-600" : "text-emerald-600",
+                        isDefault ? "text-text-2" : stale ? "text-amber-600" : "text-emerald-600",
                       )} />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-gray-900">AI Sales Targets</p>
+                        <p className="text-sm font-semibold text-text">AI Sales Targets</p>
                         <span className={cn(
                           "text-[10px] px-1.5 py-0.5 rounded font-medium",
-                          isDefault ? "bg-gray-100 text-gray-600" : stale ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700",
+                          isDefault ? "bg-sunken text-text-2" : stale ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700",
                         )}>
                           {isDefault ? "Using defaults" : stale ? `Stale · ${daysAgo}d ago` : daysAgo === 0 ? "Updated today" : `Updated ${daysAgo}d ago`}
                         </span>
                       </div>
-                      <p className="text-[11px] text-gray-500 mt-0.5">
+                      <p className="text-[11px] text-text-2 mt-0.5">
                         {isDefault
                           ? "No AI-set targets yet. Click Recompute to have AI set progressive targets from your trailing 28-day performance."
                           : "Targets auto-scale from trailing actuals. Only move up — never down."}
                       </p>
                       {tm?.reasoning && showReasoning && (
-                        <p className="text-[11px] text-gray-600 mt-2 p-2 bg-gray-50 rounded border border-gray-100 leading-relaxed">
+                        <p className="text-[11px] text-text-2 mt-2 p-2 bg-sunken rounded border border-line leading-relaxed">
                           {tm.reasoning.split(" | ")[0]}
                         </p>
                       )}
@@ -520,7 +520,7 @@ export default function SalesDashboard() {
                     {tm?.reasoning && (
                       <button
                         onClick={() => setShowReasoning((s) => !s)}
-                        className="text-[11px] text-gray-500 hover:text-gray-700 underline underline-offset-2"
+                        className="text-[11px] text-text-2 hover:text-text-2 underline underline-offset-2"
                       >
                         {showReasoning ? "Hide reasoning" : "Why"}
                       </button>
@@ -531,8 +531,8 @@ export default function SalesDashboard() {
                       className={cn(
                         "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
                         recomputingTargets
-                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                          : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-50",
+                          ? "bg-sunken text-text-3 cursor-not-allowed"
+                          : "bg-surface border border-line text-text-2 hover:bg-sunken",
                       )}
                     >
                       {recomputingTargets ? (
@@ -554,12 +554,12 @@ export default function SalesDashboard() {
           })()}
 
           {/* ─── AI Recommendations (moved to top) ─── */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-5">
+          <div className="rounded-xl border border-line bg-surface shadow-sm p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-[#C2452D]" />
-                <h3 className="text-sm font-semibold text-gray-900">AI Sales Coach</h3>
-                <span className="text-[10px] bg-[#C2452D]/10 text-[#C2452D] px-1.5 py-0.5 rounded font-medium">
+                <Sparkles className="h-5 w-5 text-brand-text" />
+                <h3 className="text-sm font-semibold text-text">AI Sales Coach</h3>
+                <span className="text-[10px] bg-brand-soft text-brand-text px-1.5 py-0.5 rounded font-medium">
                   Beta
                 </span>
               </div>
@@ -569,8 +569,8 @@ export default function SalesDashboard() {
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
                   aiLoading
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
+                    ? "bg-sunken text-text-3 cursor-not-allowed"
+                    : "bg-surface text-text-2 border border-line hover:bg-sunken",
                 )}
               >
                 {aiLoading ? (
@@ -592,7 +592,7 @@ export default function SalesDashboard() {
             )}
 
             {aiLoading && recommendations.length === 0 && (
-              <div className="flex items-center justify-center py-8 text-gray-400">
+              <div className="flex items-center justify-center py-8 text-text-3">
                 <Loader2 className="h-5 w-5 animate-spin mr-2" />
                 <span className="text-xs">Reading last 30 days of sales…</span>
               </div>
@@ -616,28 +616,28 @@ export default function SalesDashboard() {
                   const impactBadge: Record<string, string> = {
                     high: "bg-red-50 text-red-600",
                     medium: "bg-yellow-50 text-yellow-600",
-                    low: "bg-gray-50 text-gray-500",
+                    low: "bg-sunken text-text-2",
                   };
                   return (
                     <div
                       key={idx}
                       className={cn(
-                        "rounded-lg border border-gray-100 border-l-4 p-3",
-                        borderMap[rec.type] || "border-l-gray-300",
+                        "rounded-lg border border-line border-l-4 p-3",
+                        borderMap[rec.type] || "border-l-line-2",
                       )}
                     >
                       <div className="flex items-start gap-2">
                         <div className="mt-0.5 shrink-0">
-                          {iconMap[rec.type] || <Lightbulb className="h-4 w-4 text-gray-400" />}
+                          {iconMap[rec.type] || <Lightbulb className="h-4 w-4 text-text-3" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <p className="text-xs font-semibold text-gray-900 truncate">{rec.title}</p>
+                            <p className="text-xs font-semibold text-text truncate">{rec.title}</p>
                             <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0", impactBadge[rec.impact] || impactBadge.low)}>
                               {rec.impact}
                             </span>
                           </div>
-                          <p className="text-[11px] text-gray-500 leading-relaxed">{rec.description}</p>
+                          <p className="text-[11px] text-text-2 leading-relaxed">{rec.description}</p>
                         </div>
                       </div>
                     </div>
@@ -649,7 +649,7 @@ export default function SalesDashboard() {
 
           {/* ─── Metric Toggle ─── */}
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-gray-500 mr-1">View:</span>
+            <span className="text-xs font-medium text-text-2 mr-1">View:</span>
             {(
               [
                 { key: "revenue", label: "Revenue (RM)", icon: DollarSign },
@@ -663,8 +663,8 @@ export default function SalesDashboard() {
                 className={cn(
                   "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
                   activeMetric === m.key
-                    ? "bg-[#C2452D] text-white"
-                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
+                    ? "bg-ink text-on-ink"
+                    : "bg-surface text-text-2 border border-line hover:bg-sunken",
                 )}
               >
                 <m.icon className="h-3.5 w-3.5" />
@@ -674,26 +674,26 @@ export default function SalesDashboard() {
           </div>
 
           {/* ─── Rounds Grid Table ─── */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-xl border border-line bg-surface shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 sticky left-0 bg-gray-50 z-10 min-w-[140px]">
+                  <tr className="bg-sunken border-b border-line">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-2 sticky left-0 bg-sunken z-10 min-w-[140px]">
                       Round
                     </th>
                     {data.dates.map((d) => (
                       <th
                         key={d}
-                        className="px-3 py-3 text-center text-xs font-medium text-gray-500 min-w-[90px]"
+                        className="px-3 py-3 text-center text-xs font-medium text-text-2 min-w-[90px]"
                       >
                         {data.dates.length === 1 ? formatDate(d) : formatDateShort(d)}
                       </th>
                     ))}
-                    <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-700 min-w-[80px] bg-gray-100">
+                    <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-2 min-w-[80px] bg-sunken">
                       Total
                     </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-700 min-w-[80px] bg-gray-100">
+                    <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-2 min-w-[80px] bg-sunken">
                       Avg
                     </th>
                     <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-blue-50 text-blue-700" title="Dine-In">
@@ -705,12 +705,12 @@ export default function SalesDashboard() {
                     <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-purple-50 text-purple-700" title="Delivery">
                       <Truck className="h-3.5 w-3.5 mx-auto" />
                     </th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[70px] bg-gray-100 text-gray-600">
+                    <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[70px] bg-sunken text-text-2">
                       %
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-line">
                   {data.rounds.map((round) => {
                     const getValue = (cell: DailyCell) => {
                       if (activeMetric === "revenue") return cell.revenue;
@@ -746,11 +746,11 @@ export default function SalesDashboard() {
                     const chDelivery = activeMetric === "revenue" ? round.totals.delivery.revenue : round.totals.delivery.orders;
 
                     return (
-                      <tr key={round.key} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 py-3 sticky left-0 bg-white z-10">
+                      <tr key={round.key} className="hover:bg-sunken/50 transition-colors">
+                        <td className="px-4 py-3 sticky left-0 bg-surface z-10">
                           <div>
-                            <p className="font-medium text-gray-900">{round.label}</p>
-                            <p className="text-[11px] text-gray-400">{round.timeRange}</p>
+                            <p className="font-medium text-text">{round.label}</p>
+                            <p className="text-[11px] text-text-3">{round.timeRange}</p>
                           </div>
                         </td>
                         {round.daily.map((cell) => {
@@ -772,13 +772,13 @@ export default function SalesDashboard() {
                             </td>
                           );
                         })}
-                        <td className="px-3 py-3 text-center bg-gray-50">
-                          <span className="font-sans font-bold text-gray-900">
+                        <td className="px-3 py-3 text-center bg-sunken">
+                          <span className="font-sans font-bold text-text">
                             {typeof totalVal === "number" ? formatValue(totalVal) : totalVal}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-center bg-gray-50">
-                          <span className="font-sans font-medium text-gray-600">
+                        <td className="px-3 py-3 text-center bg-sunken">
+                          <span className="font-sans font-medium text-text-2">
                             {typeof getAvg() === "number"
                               ? formatValue(getAvg() as number)
                               : getAvg()}
@@ -786,17 +786,17 @@ export default function SalesDashboard() {
                         </td>
                         {/* Channel columns */}
                         <td className="px-2 py-3 text-center bg-blue-50/30">
-                          <span className="font-sans text-xs text-gray-700">
+                          <span className="font-sans text-xs text-text-2">
                             {activeMetric === "aov" ? "-" : chDineIn > 0 ? (activeMetric === "revenue" ? formatRM(chDineIn) : chDineIn) : "-"}
                           </span>
                         </td>
                         <td className="px-2 py-3 text-center bg-amber-50/30">
-                          <span className="font-sans text-xs text-gray-700">
+                          <span className="font-sans text-xs text-text-2">
                             {activeMetric === "aov" ? "-" : chTakeaway > 0 ? (activeMetric === "revenue" ? formatRM(chTakeaway) : chTakeaway) : "-"}
                           </span>
                         </td>
                         <td className="px-2 py-3 text-center bg-purple-50/30">
-                          <span className="font-sans text-xs text-gray-700">
+                          <span className="font-sans text-xs text-text-2">
                             {activeMetric === "aov" ? "-" : chDelivery > 0 ? (activeMetric === "revenue" ? formatRM(chDelivery) : chDelivery) : "-"}
                           </span>
                         </td>
@@ -811,8 +811,8 @@ export default function SalesDashboard() {
                   })}
 
                   {/* Grand total row */}
-                  <tr className="bg-gray-100 font-semibold border-t-2 border-gray-300">
-                    <td className="px-4 py-3 sticky left-0 bg-gray-100 z-10 text-gray-900">
+                  <tr className="bg-sunken font-semibold border-t-2 border-line-2">
+                    <td className="px-4 py-3 sticky left-0 bg-sunken z-10 text-text">
                       Total
                     </td>
                     {data.dates.map((d) => {
@@ -842,19 +842,19 @@ export default function SalesDashboard() {
                       }
 
                       return (
-                        <td key={d} className="px-3 py-3 text-center text-gray-900">
+                        <td key={d} className="px-3 py-3 text-center text-text">
                           {displayVal}
                         </td>
                       );
                     })}
-                    <td className="px-3 py-3 text-center bg-gray-200 text-gray-900">
+                    <td className="px-3 py-3 text-center bg-line text-text">
                       {activeMetric === "revenue"
                         ? `RM ${data.summary.revenue.toLocaleString("en-MY", { minimumFractionDigits: 0 })}`
                         : activeMetric === "orders"
                           ? data.summary.orders.toLocaleString()
                           : data.summary.aov.toFixed(1)}
                     </td>
-                    <td className="px-3 py-3 text-center bg-gray-200 text-gray-600">-</td>
+                    <td className="px-3 py-3 text-center bg-line text-text-2">-</td>
                     {/* Grand total channels */}
                     {(() => {
                       const gtDineIn = data.rounds.reduce((s, r) => s + (activeMetric === "revenue" ? r.totals.dineIn.revenue : r.totals.dineIn.orders), 0);
@@ -862,19 +862,19 @@ export default function SalesDashboard() {
                       const gtDelivery = data.rounds.reduce((s, r) => s + (activeMetric === "revenue" ? r.totals.delivery.revenue : r.totals.delivery.orders), 0);
                       return (
                         <>
-                          <td className="px-2 py-3 text-center bg-blue-100/50 text-gray-900 text-xs font-bold">
+                          <td className="px-2 py-3 text-center bg-blue-100/50 text-text text-xs font-bold">
                             {activeMetric === "aov" ? "-" : gtDineIn > 0 ? (activeMetric === "revenue" ? formatRM(gtDineIn) : gtDineIn) : "-"}
                           </td>
-                          <td className="px-2 py-3 text-center bg-amber-100/50 text-gray-900 text-xs font-bold">
+                          <td className="px-2 py-3 text-center bg-amber-100/50 text-text text-xs font-bold">
                             {activeMetric === "aov" ? "-" : gtTakeaway > 0 ? (activeMetric === "revenue" ? formatRM(gtTakeaway) : gtTakeaway) : "-"}
                           </td>
-                          <td className="px-2 py-3 text-center bg-purple-100/50 text-gray-900 text-xs font-bold">
+                          <td className="px-2 py-3 text-center bg-purple-100/50 text-text text-xs font-bold">
                             {activeMetric === "aov" ? "-" : gtDelivery > 0 ? (activeMetric === "revenue" ? formatRM(gtDelivery) : gtDelivery) : "-"}
                           </td>
                         </>
                       );
                     })()}
-                    <td className="px-3 py-3 text-center bg-gray-200">
+                    <td className="px-3 py-3 text-center bg-line">
                       {(() => {
                         const avgPct = data.rounds.filter((r) => r.totals.pctOfTarget > 0).length > 0
                           ? Math.round(data.rounds.reduce((s, r) => s + r.totals.pctOfTarget, 0) / data.rounds.filter((r) => r.totals.pctOfTarget > 0).length)
@@ -891,12 +891,12 @@ export default function SalesDashboard() {
 
           {/* ─── Outside-round info ─── */}
           {data.outsideRounds.orders > 0 && (
-            <div className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 text-xs text-gray-500">
-              <span className="font-medium text-gray-700">
+            <div className="rounded-lg border border-line bg-sunken px-4 py-3 text-xs text-text-2">
+              <span className="font-medium text-text-2">
                 {data.outsideRounds.orders} order{data.outsideRounds.orders !== 1 ? "s" : ""}
               </span>{" "}
               outside tracked rounds (before 8AM or after 11PM) totalling{" "}
-              <span className="font-medium text-gray-700">
+              <span className="font-medium text-text-2">
                 RM {data.outsideRounds.revenue.toLocaleString("en-MY", { minimumFractionDigits: 2 })}
               </span>
             </div>
@@ -936,12 +936,12 @@ export default function SalesDashboard() {
               <div className="rounded-xl border border-amber-200 bg-amber-50/30 shadow-sm p-4">
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <ShoppingBag className="h-4 w-4 text-amber-600" />
-                  <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">Pickup & Delivery</h3>
+                  <h3 className="text-xs font-semibold text-text-2 uppercase tracking-wide">Pickup & Delivery</h3>
                   <div className="flex items-center gap-2 ml-auto flex-wrap">
-                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                    <span className="text-[10px] bg-sunken text-text-2 px-1.5 py-0.5 rounded font-medium">
                       {pctOfSales}% of sales
                     </span>
-                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                    <span className="text-[10px] bg-sunken text-text-2 px-1.5 py-0.5 rounded font-medium">
                       {pctOfOrders}% of orders
                     </span>
                     {pctTarget > 0 && (
@@ -953,45 +953,45 @@ export default function SalesDashboard() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-3">
-                  <div className="rounded-lg border border-gray-100 bg-white p-2.5 text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-medium mb-0.5">Revenue</p>
-                    <p className="text-sm font-bold text-gray-900">RM {totalPickupDelivery.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
+                  <div className="rounded-lg border border-line bg-surface p-2.5 text-center">
+                    <p className="text-[10px] text-text-3 uppercase font-medium mb-0.5">Revenue</p>
+                    <p className="text-sm font-bold text-text">RM {totalPickupDelivery.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
                     <span className={cn("text-[10px] font-semibold", revCh.color)}>{revCh.label}</span>
                   </div>
-                  <div className="rounded-lg border border-gray-100 bg-white p-2.5 text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-medium mb-0.5">Orders</p>
-                    <p className="text-sm font-bold text-gray-900">{pdOrders}</p>
+                  <div className="rounded-lg border border-line bg-surface p-2.5 text-center">
+                    <p className="text-[10px] text-text-3 uppercase font-medium mb-0.5">Orders</p>
+                    <p className="text-sm font-bold text-text">{pdOrders}</p>
                     <span className={cn("text-[10px] font-semibold", ordCh.color)}>{ordCh.label}</span>
                   </div>
-                  <div className="rounded-lg border border-gray-100 bg-white p-2.5 text-center">
-                    <p className="text-[10px] text-gray-400 uppercase font-medium mb-0.5">AOV</p>
-                    <p className="text-sm font-bold text-gray-900">RM {pdAov.toFixed(2)}</p>
+                  <div className="rounded-lg border border-line bg-surface p-2.5 text-center">
+                    <p className="text-[10px] text-text-3 uppercase font-medium mb-0.5">AOV</p>
+                    <p className="text-sm font-bold text-text">RM {pdAov.toFixed(2)}</p>
                     <span className={cn("text-[10px] font-semibold", aovCh.color)}>{aovCh.label}</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-amber-100 bg-white p-3">
+                  <div className="rounded-lg border border-amber-100 bg-surface p-3">
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <ShoppingBag className="h-3.5 w-3.5 text-amber-500" />
-                      <span className="text-[11px] font-semibold text-gray-600 uppercase">Takeaway</span>
+                      <span className="text-[11px] font-semibold text-text-2 uppercase">Takeaway</span>
                       <span className={cn("text-[10px] font-semibold ml-auto", taCh.color)}>{taCh.label}</span>
                     </div>
-                    <p className="text-lg font-bold text-gray-900">RM {revTakeaway.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
-                    <p className="text-[11px] text-gray-400">{totTakeaway} {totTakeaway === 1 ? 'order' : 'orders'}</p>
+                    <p className="text-lg font-bold text-text">RM {revTakeaway.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
+                    <p className="text-[11px] text-text-3">{totTakeaway} {totTakeaway === 1 ? 'order' : 'orders'}</p>
                   </div>
-                  <div className="rounded-lg border border-purple-100 bg-white p-3">
+                  <div className="rounded-lg border border-purple-100 bg-surface p-3">
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <Truck className="h-3.5 w-3.5 text-purple-500" />
-                      <span className="text-[11px] font-semibold text-gray-600 uppercase">Delivery</span>
+                      <span className="text-[11px] font-semibold text-text-2 uppercase">Delivery</span>
                       <span className={cn("text-[10px] font-semibold ml-auto", delCh.color)}>{delCh.label}</span>
                     </div>
-                    <p className="text-lg font-bold text-gray-900">RM {revDelivery.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
-                    <p className="text-[11px] text-gray-400">{totDelivery} {totDelivery === 1 ? 'order' : 'orders'}</p>
+                    <p className="text-lg font-bold text-text">RM {revDelivery.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
+                    <p className="text-[11px] text-text-3">{totDelivery} {totDelivery === 1 ? 'order' : 'orders'}</p>
                   </div>
                 </div>
                 {dt && (
-                  <div className="mt-2 text-[11px] text-gray-400 text-right">
+                  <div className="mt-2 text-[11px] text-text-3 text-right">
                     Target: RM {dt.revenue}/day &middot; {dt.orders} {dt.orders === 1 ? 'order' : 'orders'} &middot; AOV RM {dt.aov}
                   </div>
                 )}

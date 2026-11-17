@@ -62,20 +62,20 @@ export default function CategoriesPage() {
     <div className="p-3 sm:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">SOP Categories</h2>
-          <p className="mt-0.5 text-sm text-gray-500">Organize SOPs by category</p>
+          <h2 className="text-xl font-semibold text-text">SOP Categories</h2>
+          <p className="mt-0.5 text-sm text-text-2">Organize SOPs by category</p>
         </div>
-        <Button onClick={openCreate} className="bg-terracotta hover:bg-terracotta-dark">
+        <Button onClick={openCreate} className="bg-ink hover:bg-ink-hover">
           <Plus className="mr-1.5 h-4 w-4" />Add Category
         </Button>
       </div>
 
       {!categories ? (
-        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-terracotta" /></div>
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-brand-text" /></div>
       ) : categories.length === 0 ? (
         <Card><CardContent className="py-12 text-center">
-          <Tags className="mx-auto h-10 w-10 text-gray-300" />
-          <p className="mt-3 text-sm text-gray-500">No categories yet</p>
+          <Tags className="mx-auto h-10 w-10 text-text-3" />
+          <p className="mt-3 text-sm text-text-2">No categories yet</p>
           <Button onClick={openCreate} variant="outline" className="mt-4"><Plus className="mr-2 h-4 w-4" />Create first category</Button>
         </CardContent></Card>
       ) : (
@@ -85,16 +85,16 @@ export default function CategoriesPage() {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="font-medium text-gray-900">{c.name}</h3>
-                    {c.description && <p className="mt-1 text-xs text-gray-400">{c.description}</p>}
+                    <h3 className="font-medium text-text">{c.name}</h3>
+                    {c.description && <p className="mt-1 text-xs text-text-3">{c.description}</p>}
                     <div className="mt-3 flex items-center gap-2">
                       <Badge variant="secondary" className="text-xs">{c._count.sops} SOP{c._count.sops !== 1 ? "s" : ""}</Badge>
                       {!c.isActive && <Badge variant="outline" className="text-xs">Inactive</Badge>}
                     </div>
                   </div>
                   <div className="flex gap-1 ml-2">
-                    <button onClick={() => openEdit(c)} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100"><Pencil className="h-3.5 w-3.5" /></button>
-                    <button onClick={() => handleDelete(c)} className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => openEdit(c)} className="rounded-md p-1.5 text-text-3 hover:bg-sunken"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => handleDelete(c)} className="rounded-md p-1.5 text-text-3 hover:bg-red-50 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                 </div>
               </CardContent>
@@ -117,7 +117,7 @@ export default function CategoriesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving} className="bg-terracotta hover:bg-terracotta-dark">
+            <Button onClick={handleSave} disabled={saving} className="bg-ink hover:bg-ink-hover">
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editing ? "Save" : "Create"}
             </Button>
           </DialogFooter>

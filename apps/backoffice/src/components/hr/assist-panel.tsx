@@ -244,7 +244,7 @@ export function AssistPanel({
               <button
                 key={t.id}
                 onClick={() => pickTemplate(t)}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${active ? "border-terracotta bg-terracotta text-white" : "hover:bg-muted"}`}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${active ? "border-ink bg-ink text-on-ink" : "hover:bg-muted"}`}
               >
                 {t.label} <span className="opacity-70">{t.start_time}–{t.end_time}</span>
               </button>
@@ -340,7 +340,7 @@ function CandidateRow({
   void rank;
   const blocked = c.hard_blocks.length > 0;
   return (
-    <div className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 shadow-sm ${blocked ? "border-gray-200 bg-gray-50/60" : isTop ? "border-terracotta/40 bg-terracotta/5" : "bg-card"}`}>
+    <div className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 shadow-sm ${blocked ? "border-line bg-sunken/60" : isTop ? "border-ink/40 bg-brand-soft" : "bg-card"}`}>
       {/* Fit score */}
       <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-lg border bg-card">
         <span className={`text-lg font-bold tabular-nums ${blocked ? "text-muted-foreground" : "text-foreground"}`}>{c.fit_score}</span>
@@ -352,7 +352,7 @@ function CandidateRow({
         <div className="flex items-center gap-2">
           <span className="font-medium">{c.name || c.user_id.slice(0, 8) + "…"}</span>
           {isTop && !blocked && (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-terracotta/10 px-1.5 py-0.5 text-[10px] font-semibold text-terracotta">
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-brand-soft px-1.5 py-0.5 text-[10px] font-semibold text-brand-text">
               <Sparkles className="h-2.5 w-2.5" /> Top pick
             </span>
           )}
@@ -401,7 +401,7 @@ function CandidateRow({
       <button
         onClick={() => onAssign(c)}
         disabled={busy}
-        className={`ml-auto shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50 ${blocked ? "border bg-card hover:bg-muted" : "bg-terracotta text-white hover:bg-terracotta/90"}`}
+        className={`ml-auto shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50 ${blocked ? "border bg-card hover:bg-muted" : "bg-ink text-on-ink hover:bg-ink/90"}`}
       >
         {busy ? "Assigning…" : blocked ? "Assign anyway" : "Assign"}
       </button>

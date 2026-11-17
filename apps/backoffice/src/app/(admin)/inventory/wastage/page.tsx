@@ -149,7 +149,7 @@ export default function WastagePage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
@@ -158,10 +158,10 @@ export default function WastagePage() {
     <div className="p-3 sm:p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Wastage</h2>
-          <p className="mt-0.5 text-sm text-gray-500">Record and track waste across outlets</p>
+          <h2 className="text-xl font-semibold text-text">Wastage</h2>
+          <p className="mt-0.5 text-sm text-text-2">Record and track waste across outlets</p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} className="bg-terracotta hover:bg-terracotta-dark">
+        <Button onClick={() => setDialogOpen(true)} className="bg-ink hover:bg-ink-hover">
           <Plus className="mr-1.5 h-4 w-4" />
           Record Wastage
         </Button>
@@ -187,20 +187,20 @@ export default function WastagePage() {
         </Card>
 
         <div>
-          <h3 className="mb-2 text-sm font-semibold text-gray-900">Recent Wastage</h3>
+          <h3 className="mb-2 text-sm font-semibold text-text">Recent Wastage</h3>
           <div className="space-y-1.5">
             {wastage.length === 0 && (
-              <p className="py-6 text-center text-sm text-gray-400">No wastage records yet</p>
+              <p className="py-6 text-center text-sm text-text-3">No wastage records yet</p>
             )}
             {wastage.map((w) => (
               <Card key={w.id} className="px-3 py-2.5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{w.product}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm font-medium text-text">{w.product}</p>
+                    <p className="text-xs text-text-2">
                       {w.quantity} &middot; {w.reason ?? "—"} &middot; {formatDate(w.createdAt)}
                     </p>
-                    <p className="text-xs text-gray-400">by {w.adjustedBy}</p>
+                    <p className="text-xs text-text-3">by {w.adjustedBy}</p>
                   </div>
                   <div className="text-right">
                     {w.costAmount != null && (
@@ -222,7 +222,7 @@ export default function WastagePage() {
             <div>
               <label className="text-sm font-medium">Product</label>
               <div className="relative mt-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
                 <Input
                   placeholder="Search product..."
                   className="pl-9"
@@ -234,27 +234,27 @@ export default function WastagePage() {
                 />
               </div>
               {productSearch && !selectedProductId && (
-                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border bg-white shadow-sm">
+                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border bg-surface shadow-sm">
                   {filteredProducts.length === 0 && (
-                    <p className="px-3 py-2 text-xs text-gray-400">No products found</p>
+                    <p className="px-3 py-2 text-xs text-text-3">No products found</p>
                   )}
                   {filteredProducts.slice(0, 10).map((p) => (
                     <button
                       key={p.id}
-                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50"
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-sunken"
                       onClick={() => {
                         setSelectedProductId(p.id);
                         setProductSearch(p.name);
                       }}
                     >
-                      <span className="text-gray-900">{p.name}</span>
-                      <span className="text-xs text-gray-400">{p.sku}</span>
+                      <span className="text-text">{p.name}</span>
+                      <span className="text-xs text-text-3">{p.sku}</span>
                     </button>
                   ))}
                 </div>
               )}
               {selectedProduct && (
-                <p className="mt-1 text-xs text-gray-500">SKU: {selectedProduct.sku} &middot; UOM: {selectedProduct.baseUom}</p>
+                <p className="mt-1 text-xs text-text-2">SKU: {selectedProduct.sku} &middot; UOM: {selectedProduct.baseUom}</p>
               )}
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -285,7 +285,7 @@ export default function WastagePage() {
               <label className="text-sm font-medium">Reason</label>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {REASONS.map((r) => (
-                  <button key={r} onClick={() => setReason(r)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${reason === r ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-600"}`}>{r}</button>
+                  <button key={r} onClick={() => setReason(r)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${reason === r ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2"}`}>{r}</button>
                 ))}
               </div>
             </div>
@@ -299,7 +299,7 @@ export default function WastagePage() {
               />
             </div>
             <Button
-              className="w-full bg-terracotta hover:bg-terracotta-dark"
+              className="w-full bg-ink hover:bg-ink-hover"
               disabled={!selectedProductId || !quantity || !reason || submitting}
               onClick={handleSubmit}
             >

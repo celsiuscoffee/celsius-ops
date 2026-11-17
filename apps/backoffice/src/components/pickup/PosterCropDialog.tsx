@@ -102,16 +102,16 @@ export function PosterCropDialog({ source, aspect, aspectLabel, onSave, onCancel
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white">
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+      <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-surface">
+        <div className="flex items-center justify-between border-b border-line px-5 py-3">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">Position the image</h3>
-            <p className="text-[11px] text-gray-500 mt-0.5">
+            <h3 className="text-sm font-semibold text-text">Position the image</h3>
+            <p className="text-[11px] text-text-2 mt-0.5">
               Drag to pan · scroll / pinch to zoom · {aspectLabel}
             </p>
           </div>
-          <button onClick={onCancel} className="rounded-md p-1 hover:bg-gray-100">
-            <X className="h-4 w-4 text-gray-600" />
+          <button onClick={onCancel} className="rounded-md p-1 hover:bg-sunken">
+            <X className="h-4 w-4 text-text-2" />
           </button>
         </div>
 
@@ -135,7 +135,7 @@ export function PosterCropDialog({ source, aspect, aspectLabel, onSave, onCancel
               showGrid={false}
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-gray-400">
+            <div className="flex h-full items-center justify-center text-text-3">
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
           )}
@@ -144,7 +144,7 @@ export function PosterCropDialog({ source, aspect, aspectLabel, onSave, onCancel
         {/* Zoom slider — necessary on mouse-only setups where the
             scroll-wheel zoom feels too sensitive. Range 1× (fit) to 4×. */}
         <div className="flex items-center gap-3 px-5 py-3">
-          <span className="text-[11px] font-medium text-gray-500">Zoom</span>
+          <span className="text-[11px] font-medium text-text-2">Zoom</span>
           <input
             type="range"
             min={1}
@@ -154,22 +154,22 @@ export function PosterCropDialog({ source, aspect, aspectLabel, onSave, onCancel
             onChange={(e) => setZoom(Number(e.target.value))}
             className="flex-1"
           />
-          <span className="text-[11px] tabular-nums text-gray-500 w-8 text-right">
+          <span className="text-[11px] tabular-nums text-text-2 w-8 text-right">
             {zoom.toFixed(1)}×
           </span>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-5 py-3">
+        <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
           <button
             onClick={onCancel}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-text-2 hover:bg-sunken"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={!imgSrc || !pixelCrop || saving}
-            className="flex items-center gap-2 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-60"
+            className="flex items-center gap-2 rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-60"
           >
             {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Save crop

@@ -52,10 +52,10 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   open: { label: "New feedback", cls: "bg-amber-100 text-amber-800" },
   approved: { label: "Awaiting customer", cls: "bg-blue-100 text-blue-800" },
   compensated: { label: "Compensated", cls: "bg-emerald-100 text-emerald-800" },
-  resolved: { label: "Resolved", cls: "bg-neutral-200 text-neutral-700" },
-  rejected: { label: "Rejected", cls: "bg-neutral-200 text-neutral-500" },
-  expired: { label: "Expired", cls: "bg-neutral-200 text-neutral-500" },
-  dismissed: { label: "Dismissed", cls: "bg-neutral-200 text-neutral-500" },
+  resolved: { label: "Resolved", cls: "bg-line text-text-2" },
+  rejected: { label: "Rejected", cls: "bg-line text-text-2" },
+  expired: { label: "Expired", cls: "bg-line text-text-2" },
+  dismissed: { label: "Dismissed", cls: "bg-line text-text-2" },
 };
 
 function StarRow({ rating }: { rating: number }) {
@@ -64,7 +64,7 @@ function StarRow({ rating }: { rating: number }) {
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
-          className={`h-3.5 w-3.5 ${i <= rating ? "fill-amber-400 text-amber-400" : "text-neutral-300"}`}
+          className={`h-3.5 w-3.5 ${i <= rating ? "fill-amber-400 text-amber-400" : "text-text-3"}`}
         />
       ))}
     </div>
@@ -171,7 +171,7 @@ export default function FeedbackManagementPage() {
         <button
           onClick={() => load(true)}
           disabled={syncing}
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta/90 disabled:opacity-50"
+          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink/90 disabled:opacity-50"
         >
           {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           Check Google for new
@@ -186,8 +186,8 @@ export default function FeedbackManagementPage() {
             onClick={() => setFilter(f.key)}
             className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
               filter === f.key
-                ? "bg-brand-dark text-white"
-                : "border border-border bg-white text-muted-foreground hover:bg-muted"
+                ? "bg-ink text-on-ink"
+                : "border border-border bg-surface text-muted-foreground hover:bg-muted"
             }`}
           >
             {f.label} ({counts(f.key)})
@@ -202,18 +202,18 @@ export default function FeedbackManagementPage() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : visible.length === 0 ? (
-          <div className="rounded-xl border border-border bg-white p-10 text-center">
+          <div className="rounded-xl border border-border bg-surface p-10 text-center">
             <Check className="mx-auto h-10 w-10 text-muted-foreground/30" />
             <p className="mt-3 text-sm text-muted-foreground">Nothing here right now.</p>
           </div>
         ) : (
           visible.map((c) => {
-            const badge = STATUS_BADGE[c.status] ?? { label: c.status, cls: "bg-neutral-200 text-neutral-600" };
+            const badge = STATUS_BADGE[c.status] ?? { label: c.status, cls: "bg-line text-text-2" };
             const isBusy = busy[c.id];
             const draftVal = edits[c.id] ?? c.draftReply;
             const compForm = comp[c.id];
             return (
-              <div key={c.id} className="rounded-xl border border-border bg-white p-4">
+              <div key={c.id} className="rounded-xl border border-border bg-surface p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
@@ -223,7 +223,7 @@ export default function FeedbackManagementPage() {
                     <p className="mt-0.5 text-xs text-muted-foreground">{c.outletName} · {timeAgo(c.createdAt)}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
-                    <span className="rounded-full bg-neutral-100 px-2 py-1 text-[11px] font-medium text-neutral-600">{c.source === "qr" ? "QR" : "Google"}</span>
+                    <span className="rounded-full bg-sunken px-2 py-1 text-[11px] font-medium text-text-2">{c.source === "qr" ? "QR" : "Google"}</span>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${badge.cls}`}>{badge.label}</span>
                   </div>
                 </div>
@@ -240,7 +240,7 @@ export default function FeedbackManagementPage() {
                       value={draftVal}
                       onChange={(e) => setEdits((m) => ({ ...m, [c.id]: e.target.value }))}
                       rows={3}
-                      className="w-full rounded-lg border border-border bg-white p-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                      className="w-full rounded-lg border border-border bg-surface p-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
                     />
                     <p className="mt-1 text-[11px] text-muted-foreground">A recovery link is added automatically when you approve.</p>
 
@@ -252,12 +252,12 @@ export default function FeedbackManagementPage() {
                         onChange={(e) => setCtx((m) => ({ ...m, [c.id]: e.target.value }))}
                         rows={2}
                         placeholder="e.g. sink was broken so drinks went out in takeaway cups; repair booked for Friday"
-                        className="w-full rounded-lg border border-border bg-white p-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+                        className="w-full rounded-lg border border-border bg-surface p-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
                       />
                       <button
                         onClick={() => regenerate(c)}
                         disabled={regen[c.id]}
-                        className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                        className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
                       >
                         {regen[c.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                         Regenerate draft
@@ -268,7 +268,7 @@ export default function FeedbackManagementPage() {
                       <button
                         onClick={() => act(c, "approve", { reply: draftVal })}
                         disabled={isBusy || !draftVal.trim()}
-                        className="flex items-center gap-1.5 rounded-lg bg-brand-dark px-3 py-2 text-sm font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50"
+                        className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink/90 disabled:opacity-50"
                       >
                         {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                         Approve &amp; Post
@@ -276,7 +276,7 @@ export default function FeedbackManagementPage() {
                       <button
                         onClick={() => act(c, "reject")}
                         disabled={isBusy}
-                        className="flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                        className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
                       >
                         <X className="h-4 w-4" /> Reject
                       </button>
@@ -321,21 +321,21 @@ export default function FeedbackManagementPage() {
                         <button
                           onClick={() => setComp((m) => ({ ...m, [c.id]: { phone: "", name: c.reviewerName ?? "" } }))}
                           disabled={isBusy}
-                          className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                          className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-surface px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
                         >
                           <Phone className="h-4 w-4" /> Compensate manually
                         </button>
                         <button
                           onClick={() => act(c, "resolve")}
                           disabled={isBusy}
-                          className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
                         >
                           Mark resolved
                         </button>
                         <button
                           onClick={() => act(c, "expire")}
                           disabled={isBusy}
-                          className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
                         >
                           No response
                         </button>
@@ -383,7 +383,7 @@ export default function FeedbackManagementPage() {
                         <button
                           onClick={() => act(c, "dismiss")}
                           disabled={isBusy}
-                          className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
                         >
                           Dismiss
                         </button>
@@ -401,7 +401,7 @@ export default function FeedbackManagementPage() {
                     <button
                       onClick={() => act(c, "resolve")}
                       disabled={isBusy}
-                      className="rounded-lg bg-brand-dark px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50"
+                      className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ink/90 disabled:opacity-50"
                     >
                       Mark resolved
                     </button>

@@ -73,11 +73,11 @@ const KIND_META: Record<MessageRow["kind"], { label: string; emoji: string; clas
   learning: { label: "Learned", emoji: "🧠", classes: "bg-violet-50 text-violet-700" },
   logic_change: { label: "Logic change", emoji: "⚙️", classes: "bg-amber-50 text-amber-700" },
   report: { label: "Report", emoji: "📣", classes: "bg-emerald-50 text-emerald-700" },
-  note: { label: "Your note", emoji: "💬", classes: "bg-gray-100 text-gray-700" },
+  note: { label: "Your note", emoji: "💬", classes: "bg-sunken text-text-2" },
 };
 
 const MODE_META: Record<AgentMode, { label: string; classes: string; icon: React.ReactNode }> = {
-  off: { label: "Off", classes: "bg-gray-100 text-gray-600", icon: <CircleOff className="h-3.5 w-3.5" /> },
+  off: { label: "Off", classes: "bg-sunken text-text-2", icon: <CircleOff className="h-3.5 w-3.5" /> },
   shadow: { label: "Shadow", classes: "bg-amber-50 text-amber-700", icon: <Eye className="h-3.5 w-3.5" /> },
   armed: { label: "Armed", classes: "bg-emerald-50 text-emerald-700", icon: <Zap className="h-3.5 w-3.5" /> },
 };
@@ -225,10 +225,10 @@ export default function AgentsPage() {
     <div className="p-3 sm:p-6">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <h2 className="flex items-center gap-2 text-xl font-semibold text-gray-900">
-            <Bot className="h-5 w-5 text-gray-500" /> AI Agents
+          <h2 className="flex items-center gap-2 text-xl font-semibold text-text">
+            <Bot className="h-5 w-5 text-text-2" /> AI Agents
           </h2>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <p className="mt-0.5 text-sm text-text-2">
             Every autonomous actor, its mode and cost, and the plain-English record of what they tell each other.
           </p>
         </div>
@@ -238,13 +238,13 @@ export default function AgentsPage() {
               onClick={() => void connectTelegram()}
               disabled={tgBusy}
               title="Register the Telegram webhook so your replies and button taps reach the agents. Set CELSIUS_PULSE_WEBHOOK_SECRET first."
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-text-2 hover:bg-sunken disabled:opacity-50"
             >
               <Send className="h-3.5 w-3.5" /> {tgBusy ? "Connecting..." : "Connect Telegram"}
             </button>
             <button
               onClick={() => (view === "fleet" ? void load() : void loadMessages(msgKind))}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+              className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-text-2 hover:bg-sunken"
             >
               <RefreshCw className="h-3.5 w-3.5" /> Refresh
             </button>
@@ -257,10 +257,10 @@ export default function AgentsPage() {
         </div>
       </div>
 
-      <div className="mb-5 inline-flex overflow-hidden rounded-lg border border-gray-200">
+      <div className="mb-5 inline-flex overflow-hidden rounded-lg border border-line">
         <button
           onClick={() => setView("fleet")}
-          className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${view === "fleet" ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+          className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${view === "fleet" ? "bg-gray-900 text-white" : "bg-surface text-text-2 hover:bg-sunken"}`}
         >
           Fleet
         </button>
@@ -269,7 +269,7 @@ export default function AgentsPage() {
             setView("conversations");
             if (messages.length === 0) void loadMessages(msgKind);
           }}
-          className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${view === "conversations" ? "bg-gray-900 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+          className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${view === "conversations" ? "bg-gray-900 text-white" : "bg-surface text-text-2 hover:bg-sunken"}`}
         >
           Conversations
         </button>
@@ -297,7 +297,7 @@ export default function AgentsPage() {
       </div>
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <TextStat label="Est. API cost / month" value={usd(estMonthly)} sub="running agents, at current token estimates" />
-        <TextStat label="Actual API cost / 30d" value={usd(actual30d)} sub="from the action ledger" accent="text-gray-900" />
+        <TextStat label="Actual API cost / 30d" value={usd(actual30d)} sub="from the action ledger" accent="text-text" />
       </div>
 
       {error && (
@@ -305,22 +305,22 @@ export default function AgentsPage() {
           <AlertTriangle className="h-4 w-4" /> {error}
         </div>
       )}
-      {loading && <div className="py-12 text-center text-sm text-gray-400">Loading fleet…</div>}
+      {loading && <div className="py-12 text-center text-sm text-text-3">Loading fleet…</div>}
       {!loading && agents.length === 0 && !error && (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-sm text-gray-500">
+        <div className="rounded-xl border border-dashed border-line-2 bg-surface px-6 py-12 text-center text-sm text-text-2">
           Registry is empty — run the seed (see migration 080 + docs/design/agent-substrate.md).
         </div>
       )}
 
       {Object.entries(byDomain).map(([domain, rows]) => (
         <div key={domain} className="mb-6">
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-2">
             {DOMAIN_LABELS[domain] ?? domain}
           </h3>
-          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-line bg-surface">
             <table className="w-full min-w-[900px] text-sm">
               <thead>
-                <tr className="border-b border-gray-100 text-left text-xs uppercase tracking-wide text-gray-400">
+                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-text-3">
                   <th className="px-4 py-2.5 font-medium">Agent</th>
                   <th className="px-4 py-2.5 font-medium">Mode</th>
                   <th className="px-4 py-2.5 font-medium">Trigger</th>
@@ -386,7 +386,7 @@ function Conversations({
             key={f.key}
             onClick={() => onKind(f.key)}
             className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              activeKind === f.key ? "bg-gray-900 text-white" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+              activeKind === f.key ? "bg-gray-900 text-white" : "bg-surface text-text-2 border border-line hover:bg-sunken"
             }`}
           >
             {f.label}
@@ -394,9 +394,9 @@ function Conversations({
         ))}
       </div>
 
-      {loading && <div className="py-12 text-center text-sm text-gray-400">Loading conversations…</div>}
+      {loading && <div className="py-12 text-center text-sm text-text-3">Loading conversations…</div>}
       {!loading && messages.length === 0 && (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-sm text-gray-500">
+        <div className="rounded-xl border border-dashed border-line-2 bg-surface px-6 py-12 text-center text-sm text-text-2">
           No agent communications yet. They appear here (and on the pulse Telegram channel) as agents hand work
           to each other, learn from corrections, or change mode.
         </div>
@@ -406,24 +406,24 @@ function Conversations({
           {messages.map((m) => {
             const meta = KIND_META[m.kind];
             return (
-              <li key={m.id} className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+              <li key={m.id} className="rounded-xl border border-line bg-surface px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                    <span className="font-semibold text-gray-900">{m.fromLabel}</span>
+                    <span className="font-semibold text-text">{m.fromLabel}</span>
                     {m.toLabel && (
                       <>
-                        <span className="text-gray-400">→</span>
-                        <span className="font-semibold text-gray-900">{m.toLabel}</span>
+                        <span className="text-text-3">→</span>
+                        <span className="font-semibold text-text">{m.toLabel}</span>
                       </>
                     )}
                     <span className={`ml-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${meta.classes}`}>
                       {meta.emoji} {meta.label}
                     </span>
                   </div>
-                  <span className="shrink-0 text-xs text-gray-400">{timeAgo(m.at)}</span>
+                  <span className="shrink-0 text-xs text-text-3">{timeAgo(m.at)}</span>
                 </div>
-                <p className="mt-1 text-sm text-gray-700">{m.summary}</p>
-                {m.detail && <p className="mt-0.5 text-xs text-gray-400">{m.detail}</p>}
+                <p className="mt-1 text-sm text-text-2">{m.summary}</p>
+                {m.detail && <p className="mt-0.5 text-xs text-text-3">{m.detail}</p>}
               </li>
             );
           })}
@@ -435,19 +435,19 @@ function Conversations({
 
 function Stat({ label, value, accent }: { label: string; value: number; accent?: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-      <div className={`text-2xl font-semibold ${accent ?? "text-gray-900"}`}>{value}</div>
-      <div className="mt-0.5 text-xs text-gray-500">{label}</div>
+    <div className="rounded-xl border border-line bg-surface px-4 py-3">
+      <div className={`text-2xl font-semibold ${accent ?? "text-text"}`}>{value}</div>
+      <div className="mt-0.5 text-xs text-text-2">{label}</div>
     </div>
   );
 }
 
 function TextStat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className={`mt-0.5 text-2xl font-semibold ${accent ?? "text-gray-900"}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-[11px] text-gray-400">{sub}</div>}
+    <div className="rounded-xl border border-line bg-surface px-4 py-3">
+      <div className="text-xs text-text-2">{label}</div>
+      <div className={`mt-0.5 text-2xl font-semibold ${accent ?? "text-text"}`}>{value}</div>
+      {sub && <div className="mt-0.5 text-[11px] text-text-3">{sub}</div>}
     </div>
   );
 }
@@ -469,16 +469,16 @@ function AgentRowView({
 }) {
   return (
     <>
-      <tr className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
+      <tr className="border-b border-line last:border-0 hover:bg-sunken/60">
         <td className="px-4 py-3">
           <button onClick={onExpand} className="flex items-start gap-1.5 text-left">
             {expanded ? (
-              <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+              <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-text-3" />
             ) : (
-              <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+              <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-text-3" />
             )}
             <span>
-              <span className="font-medium text-gray-900">{agent.name}</span>
+              <span className="font-medium text-text">{agent.name}</span>
               {!agent.arming_criteria && agent.mode !== "off" && (
                 <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600">
                   <AlertTriangle className="h-3 w-3" /> no arming criteria
@@ -488,14 +488,14 @@ function AgentRowView({
           </button>
         </td>
         <td className="px-4 py-3">
-          <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
+          <div className="inline-flex overflow-hidden rounded-lg border border-line">
             {(["off", "shadow", "armed"] as AgentMode[]).map((m) => (
               <button
                 key={m}
                 disabled={saving}
                 onClick={() => onSetMode(m)}
                 className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-colors ${
-                  agent.mode === m ? MODE_META[m].classes : "bg-white text-gray-400 hover:text-gray-600"
+                  agent.mode === m ? MODE_META[m].classes : "bg-surface text-text-3 hover:text-text-2"
                 } ${saving ? "opacity-50" : ""}`}
               >
                 {MODE_META[m].icon} {MODE_META[m].label}
@@ -503,10 +503,10 @@ function AgentRowView({
             ))}
           </div>
         </td>
-        <td className="px-4 py-3 text-gray-600">
+        <td className="px-4 py-3 text-text-2">
           <span className="text-xs">{agent.kind}</span>
           {agent.trigger_detail && (
-            <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-500">
+            <span className="ml-1.5 rounded bg-sunken px-1.5 py-0.5 font-mono text-[11px] text-text-2">
               {agent.trigger_detail}
             </span>
           )}
@@ -517,38 +517,38 @@ function AgentRowView({
               {agent.model ?? "LLM"}
             </span>
           ) : (
-            <span className="text-xs text-gray-400">rules</span>
+            <span className="text-xs text-text-3">rules</span>
           )}
         </td>
-        <td className="px-4 py-3 text-xs text-gray-500">{timeAgo(agent.last_run_at)}</td>
-        <td className="px-4 py-3 text-xs text-gray-600">
+        <td className="px-4 py-3 text-xs text-text-2">{timeAgo(agent.last_run_at)}</td>
+        <td className="px-4 py-3 text-xs text-text-2">
           {agent.week.total}
           {agent.week.overridden > 0 && (
             <span className="ml-1.5 text-red-600">({agent.week.overridden} overridden)</span>
           )}
         </td>
-        <td className="px-4 py-3 text-xs text-gray-600">
-          {agent.uses_llm && agent.estCost.perRun > 0 ? usd(agent.estCost.perRun) : <span className="text-gray-300">-</span>}
+        <td className="px-4 py-3 text-xs text-text-2">
+          {agent.uses_llm && agent.estCost.perRun > 0 ? usd(agent.estCost.perRun) : <span className="text-text-3">-</span>}
         </td>
-        <td className="px-4 py-3 text-xs text-gray-600">
-          {agent.mode !== "off" && agent.estCost.perMonth > 0 ? usd(agent.estCost.perMonth) : <span className="text-gray-300">-</span>}
+        <td className="px-4 py-3 text-xs text-text-2">
+          {agent.mode !== "off" && agent.estCost.perMonth > 0 ? usd(agent.estCost.perMonth) : <span className="text-text-3">-</span>}
         </td>
-        <td className="px-4 py-3 text-xs text-gray-700">
-          {agent.actualCost30d > 0 ? usd(agent.actualCost30d) : <span className="text-gray-300">-</span>}
+        <td className="px-4 py-3 text-xs text-text-2">
+          {agent.actualCost30d > 0 ? usd(agent.actualCost30d) : <span className="text-text-3">-</span>}
         </td>
       </tr>
       {expanded && (
-        <tr className="border-b border-gray-50 bg-gray-50/40 last:border-0">
+        <tr className="border-b border-line bg-sunken/40 last:border-0">
           <td colSpan={9} className="px-4 py-4 sm:px-11">
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3 text-sm">
-                <p className="text-gray-700">{agent.description || "No description."}</p>
+                <p className="text-text-2">{agent.description || "No description."}</p>
                 <Detail label="Arming criteria">
                   {agent.arming_criteria ? (
                     <>
                       {agent.arming_criteria}
                       {agent.arming_review_date && (
-                        <span className="ml-1 text-gray-400">(review {agent.arming_review_date})</span>
+                        <span className="ml-1 text-text-3">(review {agent.arming_review_date})</span>
                       )}
                     </>
                   ) : (
@@ -570,23 +570,23 @@ function AgentRowView({
                 )}
               </div>
               <div>
-                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-text-3">
                   Recent actions
                 </div>
-                {!actions && <div className="text-xs text-gray-400">Loading…</div>}
+                {!actions && <div className="text-xs text-text-3">Loading…</div>}
                 {actions && actions.length === 0 && (
-                  <div className="text-xs text-gray-400">No ledger entries yet.</div>
+                  <div className="text-xs text-text-3">No ledger entries yet.</div>
                 )}
                 {actions && actions.length > 0 && (
                   <ul className="max-h-64 space-y-1.5 overflow-y-auto pr-2">
                     {actions.map((x) => (
-                      <li key={x.id} className="rounded-lg border border-gray-100 bg-white px-3 py-2 text-xs">
+                      <li key={x.id} className="rounded-lg border border-line bg-surface px-3 py-2 text-xs">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium text-gray-700">{x.kind}</span>
-                          <span className="text-gray-400">{timeAgo(x.at)}</span>
+                          <span className="font-medium text-text-2">{x.kind}</span>
+                          <span className="text-text-3">{timeAgo(x.at)}</span>
                         </div>
-                        <div className="mt-0.5 text-gray-600">{x.summary}</div>
-                        <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-gray-400">
+                        <div className="mt-0.5 text-text-2">{x.summary}</div>
+                        <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-text-3">
                           {x.outlet_id && <span>outlet {x.outlet_id.slice(0, 8)}</span>}
                           {x.confidence != null && <span>conf {Number(x.confidence).toFixed(2)}</span>}
                           {!x.autonomous && <span className="text-blue-500">human-initiated</span>}
@@ -609,8 +609,8 @@ function AgentRowView({
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</div>
-      <div className="mt-0.5 text-gray-700">{children}</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-text-3">{label}</div>
+      <div className="mt-0.5 text-text-2">{children}</div>
     </div>
   );
 }

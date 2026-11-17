@@ -190,7 +190,7 @@ export default function OutletsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
@@ -200,10 +200,10 @@ export default function OutletsPage() {
       <ConfirmDialog />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Outlets</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{outlets.filter((b) => b.status === "ACTIVE").length} active outlets</p>
+          <h2 className="text-xl font-semibold text-text">Outlets</h2>
+          <p className="mt-0.5 text-sm text-text-2">{outlets.filter((b) => b.status === "ACTIVE").length} active outlets</p>
         </div>
-        <Button onClick={openAdd} className="bg-terracotta hover:bg-terracotta-dark">
+        <Button onClick={openAdd} className="bg-ink hover:bg-ink-hover">
           <Plus className="mr-1.5 h-4 w-4" />
           Add Outlet
         </Button>
@@ -211,36 +211,36 @@ export default function OutletsPage() {
 
       <div className="mt-4 flex gap-1.5">
         {(["all", "OUTLET", "CENTRAL_KITCHEN"] as const).map((t) => (
-          <button key={t} onClick={() => setFilter(t)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${filter === t ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+          <button key={t} onClick={() => setFilter(t)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${filter === t ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:bg-sunken"}`}>
             {t === "all" ? "All" : t === "OUTLET" ? "Outlet" : "Central Kitchen"}
           </button>
         ))}
       </div>
 
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
+      <div className="mt-4 rounded-xl border border-line bg-surface overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet Code</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet Name</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Settings</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Phone</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Staff</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Products</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
+            <tr className="border-b border-line bg-sunken/50">
+              <th className="px-4 py-3 text-left font-medium text-text-2">Outlet Code</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Outlet Name</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Status</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Settings</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Phone</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Staff</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Products</th>
+              <th className="px-4 py-3 text-right font-medium text-text-2">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((outlet) => (
-              <tr key={outlet.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                <td className="px-4 py-3"><code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-terracotta">{outlet.code}</code></td>
+              <tr key={outlet.id} className="border-b border-line hover:bg-sunken/50">
+                <td className="px-4 py-3"><code className="rounded bg-sunken px-1.5 py-0.5 text-xs text-brand-text">{outlet.code}</code></td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-gray-400" />
+                    <Building2 className="h-4 w-4 text-text-3" />
                     <div>
-                      <p className="font-medium text-gray-900">{outlet.name}</p>
-                      <p className="text-xs text-gray-400">{outlet.type === "OUTLET" ? "Outlet" : "Central Kitchen"}</p>
+                      <p className="font-medium text-text">{outlet.name}</p>
+                      <p className="text-xs text-text-3">{outlet.type === "OUTLET" ? "Outlet" : "Central Kitchen"}</p>
                     </div>
                   </div>
                 </td>
@@ -257,7 +257,7 @@ export default function OutletsPage() {
                         unexpected closures. */}
                     <button
                       onClick={() => toggleIsOpen(outlet)}
-                      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${outlet.isOpen ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${outlet.isOpen ? "bg-green-50 text-green-700 hover:bg-green-100" : "bg-sunken text-text-2 hover:bg-line"}`}
                       title={outlet.isOpen ? "Click to close outlet" : "Click to open outlet"}
                     >
                       <span className={`inline-block h-1.5 w-1.5 rounded-full ${outlet.isOpen ? "bg-green-500" : "bg-gray-400"}`} />
@@ -268,7 +268,7 @@ export default function OutletsPage() {
                         ETA. */}
                     <button
                       onClick={() => toggleIsBusy(outlet)}
-                      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${outlet.isBusy ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "bg-gray-50 text-gray-400 hover:bg-gray-100"}`}
+                      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${outlet.isBusy ? "bg-amber-50 text-amber-700 hover:bg-amber-100" : "bg-sunken text-text-3 hover:bg-sunken"}`}
                       title={outlet.isBusy ? "Click to clear busy flag" : "Click to mark as busy"}
                     >
                       {outlet.isBusy ? "Busy" : "Not busy"}
@@ -298,19 +298,19 @@ export default function OutletsPage() {
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 text-xs text-gray-500">{outlet.phone}</td>
-                <td className="px-4 py-3 text-gray-600">{outlet.staffCount}</td>
-                <td className="px-4 py-3 text-gray-600">{outlet.productCount}</td>
+                <td className="px-4 py-3 text-xs text-text-2">{outlet.phone}</td>
+                <td className="px-4 py-3 text-text-2">{outlet.staffCount}</td>
+                <td className="px-4 py-3 text-text-2">{outlet.productCount}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-1">
-                    <button onClick={() => openEdit(outlet)} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Edit">
+                    <button onClick={() => openEdit(outlet)} className="rounded-md p-1.5 text-text-3 hover:bg-sunken hover:text-text-2" title="Edit">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={() => toggleStatus(outlet)} className={`rounded-md p-1.5 hover:bg-gray-100 ${outlet.status === "ACTIVE" ? "text-gray-400 hover:text-amber-600" : "text-green-500 hover:text-green-700"}`} title={outlet.status === "ACTIVE" ? "Deactivate" : "Activate"}>
+                    <button onClick={() => toggleStatus(outlet)} className={`rounded-md p-1.5 hover:bg-sunken ${outlet.status === "ACTIVE" ? "text-text-3 hover:text-amber-600" : "text-green-500 hover:text-green-700"}`} title={outlet.status === "ACTIVE" ? "Deactivate" : "Activate"}>
                       <Power className="h-3.5 w-3.5" />
                     </button>
                     {outlet.staffCount === 0 && (
-                      <button onClick={() => deleteOutlet(outlet)} className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600" title="Delete">
+                      <button onClick={() => deleteOutlet(outlet)} className="rounded-md p-1.5 text-text-3 hover:bg-red-50 hover:text-red-600" title="Delete">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     )}
@@ -326,12 +326,12 @@ export default function OutletsPage() {
         <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingId ? "Edit Outlet" : "Add Outlet"}</DialogTitle></DialogHeader>
           {/* Tab buttons */}
-          <div className="flex rounded-lg bg-gray-100 p-0.5">
+          <div className="flex rounded-lg bg-sunken p-0.5">
             {([["details", "Details"], ["settings", "Settings"]] as const).map(([value, label]) => (
               <button
                 key={value}
                 onClick={() => setActiveTab(value)}
-                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${activeTab === value ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${activeTab === value ? "bg-surface text-text shadow-sm" : "text-text-2 hover:text-text-2"}`}
               >
                 {label}
               </button>
@@ -342,30 +342,30 @@ export default function OutletsPage() {
           {activeTab === "details" && (
             <div className="grid gap-4 py-2">
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-sm font-medium text-gray-700">Outlet Name</label><Input className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-                <div><label className="text-sm font-medium text-gray-700">Outlet Code</label><Input className="mt-1" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></div>
+                <div><label className="text-sm font-medium text-text-2">Outlet Name</label><Input className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+                <div><label className="text-sm font-medium text-text-2">Outlet Code</label><Input className="mt-1" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Type</label>
-                  <select className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                  <label className="text-sm font-medium text-text-2">Type</label>
+                  <select className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
                     <option value="OUTLET">Outlet</option>
                     <option value="CENTRAL_KITCHEN">Central Kitchen</option>
                   </select>
                 </div>
-                <div><label className="text-sm font-medium text-gray-700">Phone</label><Input className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+                <div><label className="text-sm font-medium text-text-2">Phone</label><Input className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
               </div>
-              <div><label className="text-sm font-medium text-gray-700">Address</label><Input className="mt-1" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+              <div><label className="text-sm font-medium text-text-2">Address</label><Input className="mt-1" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-sm font-medium text-gray-700">City</label><Input className="mt-1" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
-                <div><label className="text-sm font-medium text-gray-700">State</label><Input className="mt-1" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} /></div>
+                <div><label className="text-sm font-medium text-text-2">City</label><Input className="mt-1" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></div>
+                <div><label className="text-sm font-medium text-text-2">State</label><Input className="mt-1" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} /></div>
               </div>
               {/* Legal identity — printed on the POS receipt header. */}
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-sm font-medium text-gray-700">Company Name</label><Input className="mt-1" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} placeholder="Celsius Coffee Sdn Bhd" /></div>
-                <div><label className="text-sm font-medium text-gray-700">SSM / Reg. No.</label><Input className="mt-1" value={form.regNo} onChange={(e) => setForm({ ...form, regNo: e.target.value })} placeholder="202101012345" /></div>
+                <div><label className="text-sm font-medium text-text-2">Company Name</label><Input className="mt-1" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} placeholder="Celsius Coffee Sdn Bhd" /></div>
+                <div><label className="text-sm font-medium text-text-2">SSM / Reg. No.</label><Input className="mt-1" value={form.regNo} onChange={(e) => setForm({ ...form, regNo: e.target.value })} placeholder="202101012345" /></div>
               </div>
-              <p className="-mt-1 text-xs text-gray-400">Printed on the POS receipt under the outlet name (leave blank to print neither).</p>
+              <p className="-mt-1 text-xs text-text-3">Printed on the POS receipt under the outlet name (leave blank to print neither).</p>
             </div>
           )}
 
@@ -373,32 +373,32 @@ export default function OutletsPage() {
             <div className="grid gap-4 py-2">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Open Time</label>
+                  <label className="text-sm font-medium text-text-2">Open Time</label>
                   <Input className="mt-1" type="time" value={form.openTime} onChange={(e) => setForm({ ...form, openTime: e.target.value })} />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Close Time</label>
+                  <label className="text-sm font-medium text-text-2">Close Time</label>
                   <Input className="mt-1" type="time" value={form.closeTime} onChange={(e) => setForm({ ...form, closeTime: e.target.value })} />
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700">Pickup Time (minutes)</label>
+                <label className="text-sm font-medium text-text-2">Pickup Time (minutes)</label>
                 <Input className="mt-1" type="number" min={1} value={form.pickupTimeMins} onChange={(e) => setForm({ ...form, pickupTimeMins: parseInt(e.target.value) || 0 })} />
-                <p className="mt-1 text-xs text-gray-400">Estimated time for order pickup</p>
+                <p className="mt-1 text-xs text-text-3">Estimated time for order pickup</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700">Pickup Store ID</label>
+                <label className="text-sm font-medium text-text-2">Pickup Store ID</label>
                 <Input className="mt-1" value={form.pickupStoreId} onChange={(e) => setForm({ ...form, pickupStoreId: e.target.value })} placeholder="e.g. shah-alam, conezion, tamarind" />
-                <p className="mt-1 text-xs text-gray-400">Links this outlet to the pickup/order app (Supabase store_id)</p>
+                <p className="mt-1 text-xs text-text-3">Links this outlet to the pickup/order app (Supabase store_id)</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700">StoreHub ID</label>
+                <label className="text-sm font-medium text-text-2">StoreHub ID</label>
                 <Input className="mt-1" value={form.storehubId} onChange={(e) => setForm({ ...form, storehubId: e.target.value })} placeholder="e.g. sh_abc123" />
-                <p className="mt-1 text-xs text-gray-400">Links this outlet to StoreHub POS</p>
+                <p className="mt-1 text-xs text-text-3">Links this outlet to StoreHub POS</p>
               </div>
             </div>
           )}
-          <Button onClick={handleSubmit} disabled={saving || !form.name || !form.code} className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
+          <Button onClick={handleSubmit} disabled={saving || !form.name || !form.code} className="w-full bg-ink hover:bg-ink-hover disabled:opacity-50">
             {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
             {editingId ? "Save Changes" : "Add Outlet"}
           </Button>

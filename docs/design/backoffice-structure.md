@@ -136,7 +136,7 @@ Peachi wordmark, Space Grotesk, Geist Mono) and approved this order:
 | 4 | HR › Roster (replaces Schedules, Attendance, Roster attendance, Overtime, Leave, Shift swaps) + staff-app shift card with Clock in | **Done 16 Nov** (A. Roster; B. staff-app shift on the Today clock card) |
 | 4½ | Declutter: menu regrouped by first principles (87 links → 36 pages), page-visit tracking (§2c) | **Done 17 Nov** |
 | 5 | Merges (list B): Perishables → Items, Pickup landing/analytics, SOP compliance, Monthly cashflow, one SMS tool | **Done 17 Nov** (§2d) |
-| 6 | Remaining sections moved to the new UI | |
+| 6 | Remaining sections moved to the new UI | **Part 1 done 17 Nov** (§2e: every page on the Celsius UI palette) |
 
 **List A, removed 12 Nov** (each old URL redirects; no feature lived only there):
 
@@ -249,6 +249,23 @@ pages) and `lib/usage.test.ts`.
 | SOP Compliance → SOP Schedules | Coverage panel on top of `/ops/schedules` (gaps first, covered on request; refreshes after each schedule change); `/ops/compliance` redirects; Schedules is now Standards › SOPs › Schedules (`ops:checklists`, which had no menu home) | Both were linked from nowhere; the gaps are fixed on Schedules |
 | Monthly cash flow | Already a tab under Money › Cash Flow (step 4½) | — |
 | One SMS tool | Customers › Members "Send SMS" hands the picked phones to Marketing › Messages (`lib/sms-handoff.ts`, sessionStorage, 30 min); the Members blast composer is gone | The Members sender skipped the PDPA opt-out filter, the credit check, the sender name and the confirm step that Messages applies |
+
+## 2e. Step 6, part 1: every page on the Celsius UI palette (17 Nov 2026)
+
+A codemod moved 176 page and component files (about 5,300 classes) off the old
+fixed palette onto the Celsius UI tokens, so every page follows light and dark
+mode and the brand rules: grey text → `text-text` / `text-text-2` /
+`text-text-3`, white and grey surfaces → `bg-surface` / `bg-sunken`, grey
+borders → `border-line` / `border-line-2`, terracotta and `#C2452D` main
+buttons → espresso `bg-ink` with `text-on-ink`, terracotta accent text →
+`text-brand-text`, faint terracotta tints → `bg-brand-soft`. Dark-only
+overrides of the old greys were dropped (the tokens already adapt). Signals
+(red, amber, green, blue) are untouched. `components/ui` (shadcn) already read
+the tokens. `lib/celsius-ui-palette.test.ts` keeps the old classes out.
+
+Still to do in step 6: page-by-page layout (title + one line, at most four key
+numbers each against a reference, one list), section by section, starting with
+the most-used pages once Office Usage has data.
 
 ## 3. Every page, sorted into its section
 

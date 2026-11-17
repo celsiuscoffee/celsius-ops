@@ -105,10 +105,10 @@ const cogsColor = (pct: number) =>
 // it (colour-coded). The ingredient/packaging breakdown stays in the expanded
 // recipe view (see CogsCell) to keep the table scannable.
 const ChannelCogs = ({ c }: { c: Cell }) => {
-  if (c.cogs <= 0) return <span className="text-gray-300">—</span>;
+  if (c.cogs <= 0) return <span className="text-text-3">—</span>;
   return (
     <div className="leading-tight">
-      <div className="font-medium text-gray-900">{formatRM(c.cogs)}</div>
+      <div className="font-medium text-text">{formatRM(c.cogs)}</div>
       {c.cogsPercent > 0 && (
         <div className={`text-xs font-medium ${cogsColor(c.cogsPercent)}`}>{c.cogsPercent.toFixed(1)}%</div>
       )}
@@ -123,9 +123,9 @@ const CogsCell = ({ c }: { c: Cell }) => {
   const pkgShare = c.cogs > 0 ? Math.round((c.pkg / c.cogs) * 100) : 0;
   return (
     <div className="leading-tight">
-      <div className="font-bold text-gray-900">
+      <div className="font-bold text-text">
         RM {c.cogs.toFixed(2)}
-        {c.cogsPercent > 0 && <span className="ml-1 text-[10px] font-normal text-gray-400">{c.cogsPercent.toFixed(0)}%</span>}
+        {c.cogsPercent > 0 && <span className="ml-1 text-[10px] font-normal text-text-3">{c.cogsPercent.toFixed(0)}%</span>}
       </div>
       {c.pkg > 0 && (
         <div className="text-[10px] font-normal text-amber-600">
@@ -358,16 +358,16 @@ export default function MenusPage() {
   const SortHeader = ({ label, sortKey: key, align = "left" }: { label: string; sortKey: SortKey; align?: "left" | "right" }) => {
     const active = sortKey === key;
     return (
-      <th className={`px-4 py-3 font-medium text-gray-500 ${align === "right" ? "text-right" : "text-left"}`}>
+      <th className={`px-4 py-3 font-medium text-text-2 ${align === "right" ? "text-right" : "text-left"}`}>
         <button
           onClick={() => toggleSort(key)}
-          className={`inline-flex items-center gap-1 transition-colors hover:text-gray-900 ${align === "right" ? "flex-row-reverse" : ""} ${active ? "text-gray-900" : ""}`}
+          className={`inline-flex items-center gap-1 transition-colors hover:text-text ${align === "right" ? "flex-row-reverse" : ""} ${active ? "text-text" : ""}`}
         >
           {label}
           {active ? (
             sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
           ) : (
-            <ChevronsUpDown className="h-3 w-3 text-gray-300" />
+            <ChevronsUpDown className="h-3 w-3 text-text-3" />
           )}
         </button>
       </th>
@@ -379,7 +379,7 @@ export default function MenusPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
@@ -388,12 +388,12 @@ export default function MenusPage() {
     <div className="p-3 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Menu & Recipes (BOM)</h2>
-          <p className="mt-0.5 text-sm text-gray-500">{menus.length} menu items · ingredient + packaging costing (dine-in / takeaway)</p>
+          <h2 className="text-xl font-semibold text-text">Menu & Recipes (BOM)</h2>
+          <p className="mt-0.5 text-sm text-text-2">{menus.length} menu items · ingredient + packaging costing (dine-in / takeaway)</p>
         </div>
         <Link
           href="/inventory/menus/cards"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:border-terracotta hover:text-terracotta"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-text-2 transition-colors hover:border-ink hover:text-brand-text"
         >
           <Printer className="h-4 w-4" /> Recipe cards
         </Link>
@@ -402,7 +402,7 @@ export default function MenusPage() {
       <div className="mt-4 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
             <Input placeholder="Search menu items..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
           </div>
           {/* Quick status filters */}
@@ -420,8 +420,8 @@ export default function MenusPage() {
                   statusFilter === f.key
                     ? f.key === "high"
                       ? "border-red-300 bg-red-50 text-red-600"
-                      : "border-terracotta bg-terracotta/5 text-terracotta-dark"
-                    : "border-gray-200 text-gray-500 hover:border-gray-300"
+                      : "border-ink bg-brand-soft text-brand-text"
+                    : "border-line text-text-2 hover:border-line-2"
                 }`}
               >
                 {f.label}
@@ -433,7 +433,7 @@ export default function MenusPage() {
         <div className="flex flex-wrap gap-1.5">
           <button
             onClick={() => setCatFilter([])}
-            className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter.length === 0 ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter.length === 0 ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}
           >
             All
           </button>
@@ -443,7 +443,7 @@ export default function MenusPage() {
               <button
                 key={c}
                 onClick={() => toggleCat(c)}
-                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}
               >
                 {c}
                 {active && <X className="h-3 w-3" />}
@@ -451,12 +451,12 @@ export default function MenusPage() {
             );
           })}
         </div>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-text-3">
           Showing {sorted.length} of {menus.length} items
           {(search || catFilter.length > 0 || statusFilter !== "all") && (
             <button
               onClick={() => { setSearch(""); setCatFilter([]); setStatusFilter("all"); }}
-              className="ml-2 text-terracotta hover:underline"
+              className="ml-2 text-brand-text hover:underline"
             >
               Clear filters
             </button>
@@ -476,43 +476,43 @@ export default function MenusPage() {
         return (
           <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">{isFiltered ? "Items in View" : "Total Menu Items"}</p>
-              <p className="text-xl font-bold text-gray-900">{sorted.length}</p>
-              <p className="text-xs text-gray-400">{mapped} with recipes</p>
+              <p className="text-xs text-text-2">{isFiltered ? "Items in View" : "Total Menu Items"}</p>
+              <p className="text-xl font-bold text-text">{sorted.length}</p>
+              <p className="text-xs text-text-3">{mapped} with recipes</p>
             </Card>
             <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">Ingredients Mapped</p>
-              <p className="text-xl font-bold text-gray-900">{sorted.reduce((a, m) => a + m.ingredientCount, 0)}</p>
-              <p className="text-xs text-gray-400">across {mapped} {mapped === 1 ? 'item' : 'items'}</p>
+              <p className="text-xs text-text-2">Ingredients Mapped</p>
+              <p className="text-xl font-bold text-text">{sorted.reduce((a, m) => a + m.ingredientCount, 0)}</p>
+              <p className="text-xs text-text-3">across {mapped} {mapped === 1 ? 'item' : 'items'}</p>
             </Card>
             <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">Avg COGS %</p>
+              <p className="text-xs text-text-2">Avg COGS %</p>
               <div className="flex items-baseline gap-4">
                 <div>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-400">Dine-in</p>
+                  <p className="text-[10px] uppercase tracking-wide text-text-3">Dine-in</p>
                   <p className={`text-xl font-bold ${cogsColor(avgDineIn)}`}>{avgDineIn > 0 ? `${avgDineIn.toFixed(1)}%` : "—"}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wide text-gray-400">Takeaway</p>
+                  <p className="text-[10px] uppercase tracking-wide text-text-3">Takeaway</p>
                   <p className={`text-xl font-bold ${cogsColor(avgTakeaway)}`}>{avgTakeaway > 0 ? `${avgTakeaway.toFixed(1)}%` : "—"}</p>
                 </div>
               </div>
-              <p className="text-xs text-gray-400">{withCogs.length} {withCogs.length === 1 ? 'item' : 'items'} costed</p>
+              <p className="text-xs text-text-3">{withCogs.length} {withCogs.length === 1 ? 'item' : 'items'} costed</p>
             </Card>
             <Card className="px-4 py-3">
-              <p className="text-xs text-gray-500">No Recipe Yet</p>
-              <p className="text-xl font-bold text-gray-900">{sorted.length - mapped}</p>
-              <p className="text-xs text-gray-400">need ingredients</p>
+              <p className="text-xs text-text-2">No Recipe Yet</p>
+              <p className="text-xl font-bold text-text">{sorted.length - mapped}</p>
+              <p className="text-xs text-text-3">need ingredients</p>
             </Card>
           </div>
         );
       })()}
 
       {/* Menu table with expandable ingredients */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
+      <div className="mt-4 rounded-xl border border-line bg-surface overflow-x-auto">
         <table className="w-full text-sm min-w-[720px]">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
+            <tr className="border-b border-line bg-sunken/50">
               <th className="w-8 px-3 py-3"></th>
               <SortHeader label="Menu Item" sortKey="name" />
               <SortHeader label="Category" sortKey="category" />
@@ -520,13 +520,13 @@ export default function MenusPage() {
               <SortHeader label="Dine-in COGS" sortKey="dineInCogs" align="right" />
               <SortHeader label="Takeaway COGS" sortKey="takeawayCogs" align="right" />
               <SortHeader label="Ingredients" sortKey="ingredientCount" />
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
+              <th className="px-4 py-3 text-right font-medium text-text-2">Actions</th>
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">
+                <td colSpan={8} className="px-4 py-10 text-center text-sm text-text-3">
                   No menu items match your filters.
                 </td>
               </tr>
@@ -536,25 +536,25 @@ export default function MenusPage() {
               const ch = channelCells(menu);
               return (
                 <Fragment key={menu.id}>
-                  <tr className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer" onClick={() => { if (!isEditing) setExpandedId(expandedId === menu.id ? null : menu.id); }}>
+                  <tr className="border-b border-line hover:bg-sunken/50 cursor-pointer" onClick={() => { if (!isEditing) setExpandedId(expandedId === menu.id ? null : menu.id); }}>
                     <td className="px-3 py-3">
-                      <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${expandedId === menu.id ? "rotate-180" : ""}`} />
+                      <ChevronDown className={`h-4 w-4 text-text-3 transition-transform ${expandedId === menu.id ? "rotate-180" : ""}`} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <Coffee className="h-4 w-4 text-gray-400" />
-                        <p className="font-medium text-gray-900">{menu.name}</p>
+                        <Coffee className="h-4 w-4 text-text-3" />
+                        <p className="font-medium text-text">{menu.name}</p>
                       </div>
                     </td>
                     <td className="px-4 py-3"><Badge variant="outline" className="text-[10px]">{menu.category}</Badge></td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-900">RM {menu.sellingPrice.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right font-medium text-text">RM {menu.sellingPrice.toFixed(2)}</td>
                     <td className="px-4 py-3 text-right"><div className="inline-flex flex-col items-end"><ChannelCogs c={ch.dineIn} /></div></td>
                     <td className="px-4 py-3 text-right"><div className="inline-flex flex-col items-end"><ChannelCogs c={ch.takeaway} /></div></td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{menu.ingredientCount} {menu.ingredientCount === 1 ? 'item' : 'items'}</td>
+                    <td className="px-4 py-3 text-xs text-text-2">{menu.ingredientCount} {menu.ingredientCount === 1 ? 'item' : 'items'}</td>
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       {isEditing ? (
                         <div className="flex items-center justify-end gap-1">
-                          <Button size="sm" variant="ghost" className="h-7 text-xs text-gray-500" onClick={cancelEditing} disabled={saving}>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-text-2" onClick={cancelEditing} disabled={saving}>
                             <X className="mr-1 h-3 w-3" />Cancel
                           </Button>
                           <Button size="sm" className="h-7 bg-green-600 hover:bg-green-700 text-xs" onClick={saveIngredients} disabled={saving}>
@@ -564,7 +564,7 @@ export default function MenusPage() {
                         </div>
                       ) : (
                         <button
-                          className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-terracotta"
+                          className="rounded-md p-1.5 text-text-3 hover:bg-sunken hover:text-brand-text"
                           onClick={() => startEditing(menu)}
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -574,15 +574,15 @@ export default function MenusPage() {
                   </tr>
                   {expandedId === menu.id && (
                     <tr>
-                      <td colSpan={8} className="bg-gray-50 px-8 py-3">
-                        <p className="mb-2 text-xs font-semibold text-gray-500 uppercase">Recipe / Bill of Materials</p>
+                      <td colSpan={8} className="bg-sunken px-8 py-3">
+                        <p className="mb-2 text-xs font-semibold text-text-2 uppercase">Recipe / Bill of Materials</p>
 
                         {isEditing ? (
                           /* ── Editing mode ── */
                           <div>
                             <table className="w-full text-xs">
                               <thead>
-                                <tr className="text-gray-400">
+                                <tr className="text-text-3">
                                   <th className="pb-1 text-left font-medium">Item</th>
                                   <th className="pb-1 text-left font-medium w-20">SKU</th>
                                   <th className="pb-1 w-32 text-right font-medium">Qty</th>
@@ -594,8 +594,8 @@ export default function MenusPage() {
                               </thead>
                               <tbody>
                                 {editRows.map((r) => (
-                                  <tr key={r.key} className="border-t border-gray-200/50">
-                                    <td className="py-1.5 text-gray-700">
+                                  <tr key={r.key} className="border-t border-line/50">
+                                    <td className="py-1.5 text-text-2">
                                       <span className="inline-flex items-center gap-1.5">
                                         {r.productName}
                                         {r.kind === "packaging" && (
@@ -605,7 +605,7 @@ export default function MenusPage() {
                                         )}
                                       </span>
                                     </td>
-                                    <td className="py-1.5"><code className="text-gray-500">{r.sku}</code></td>
+                                    <td className="py-1.5"><code className="text-text-2">{r.sku}</code></td>
                                     <td className="py-1.5 text-right">
                                       {r.split ? (
                                         <div className="flex flex-col items-end gap-1">
@@ -633,11 +633,11 @@ export default function MenusPage() {
                                           type="number" step="any" min="0"
                                           value={r.bothQty}
                                           onChange={(e) => updateRowQty(r.key, "bothQty", e.target.value)}
-                                          className="w-24 rounded border border-gray-200 px-2 py-1 text-right text-xs"
+                                          className="w-24 rounded border border-line px-2 py-1 text-right text-xs"
                                         />
                                       )}
                                     </td>
-                                    <td className="py-1.5 text-center text-xs text-gray-500">
+                                    <td className="py-1.5 text-center text-xs text-text-2">
                                       {r.uom}
                                     </td>
                                     <td className="py-1.5 text-center">
@@ -646,8 +646,8 @@ export default function MenusPage() {
                                         title={r.split ? "Use one quantity for both temperatures" : "Set different quantities for Hot and Iced"}
                                         className={`rounded border px-2 py-1 text-[10px] font-medium transition-colors ${
                                           r.split
-                                            ? "border-terracotta bg-terracotta/5 text-terracotta-dark hover:bg-terracotta/10"
-                                            : "border-gray-200 text-gray-500 hover:border-gray-300"
+                                            ? "border-ink bg-brand-soft text-brand-text hover:bg-brand-soft"
+                                            : "border-line text-text-2 hover:border-line-2"
                                         }`}
                                       >
                                         {r.split ? "Merge" : "Split"}
@@ -657,7 +657,7 @@ export default function MenusPage() {
                                       <select
                                         value={r.serviceMode}
                                         onChange={(e) => updateRowChannel(r.key, e.target.value as ServiceMode)}
-                                        className="rounded border border-gray-200 px-1.5 py-1 text-xs text-gray-600"
+                                        className="rounded border border-line px-1.5 py-1 text-xs text-text-2"
                                       >
                                         <option value="ALL">Both</option>
                                         <option value="DINE_IN">Dine-in</option>
@@ -673,7 +673,7 @@ export default function MenusPage() {
                                 ))}
                                 {editRows.length === 0 && (
                                   <tr>
-                                    <td colSpan={7} className="py-4 text-center text-gray-400">
+                                    <td colSpan={7} className="py-4 text-center text-text-3">
                                       No items yet. Search below to add ingredients or packaging.
                                     </td>
                                   </tr>
@@ -684,24 +684,24 @@ export default function MenusPage() {
                             {/* Add ingredient search */}
                             <div className="mt-3 relative">
                               <div className="relative">
-                                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-3" />
                                 <input
                                   type="text"
                                   placeholder="Search product to add..."
                                   value={addSearch}
                                   onChange={(e) => setAddSearch(e.target.value)}
-                                  className="w-full rounded border border-dashed border-gray-300 py-1.5 pl-7 pr-3 text-xs text-gray-700 placeholder:text-gray-400 focus:border-terracotta focus:outline-none"
+                                  className="w-full rounded border border-dashed border-line-2 py-1.5 pl-7 pr-3 text-xs text-text-2 placeholder:text-text-3 focus:border-ink focus:outline-none"
                                 />
                               </div>
                               {addSearchResults.length > 0 && (
-                                <div className="absolute z-10 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg">
+                                <div className="absolute z-10 mt-1 w-full rounded-md border border-line bg-surface shadow-lg">
                                   {addSearchResults.map((product) => (
                                     <button
                                       key={product.id}
                                       onClick={() => addIngredient(product)}
-                                      className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-gray-50"
+                                      className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-sunken"
                                     >
-                                      <span className="flex items-center gap-1.5 font-medium text-gray-700">
+                                      <span className="flex items-center gap-1.5 font-medium text-text-2">
                                         {product.name}
                                         {product.itemType === "PACKAGING" && (
                                           <Badge variant="outline" className="border-amber-300 bg-amber-50 text-[9px] text-amber-700">
@@ -709,7 +709,7 @@ export default function MenusPage() {
                                           </Badge>
                                         )}
                                       </span>
-                                      <span className="text-gray-400">{product.sku} &middot; {product.baseUom}</span>
+                                      <span className="text-text-3">{product.sku} &middot; {product.baseUom}</span>
                                     </button>
                                   ))}
                                 </div>
@@ -728,19 +728,19 @@ export default function MenusPage() {
                                     <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
                                       Auto-applied packaging
                                     </p>
-                                    <Link href="/inventory/packaging" className="text-[11px] font-medium text-terracotta hover:underline">
+                                    <Link href="/inventory/packaging" className="text-[11px] font-medium text-brand-text hover:underline">
                                       Manage rules →
                                     </Link>
                                   </div>
-                                  <p className="mt-0.5 text-[11px] text-gray-500">
+                                  <p className="mt-0.5 text-[11px] text-text-2">
                                     Added automatically by Packaging rules and already included in the all-in cost. Edit these on the Packaging page.
                                   </p>
                                   <ul className="mt-1.5 space-y-0.5">
                                     {rulePkg.map((ing, i) => (
-                                      <li key={i} className="flex items-center gap-1.5 text-[11px] text-gray-600">
-                                        <span className="font-medium text-gray-700">{ing.product}</span>
-                                        <span className="text-gray-400">{ing.qty} {ing.uom}</span>
-                                        <Badge variant="outline" className="border-gray-200 bg-white text-[9px] text-gray-500">
+                                      <li key={i} className="flex items-center gap-1.5 text-[11px] text-text-2">
+                                        <span className="font-medium text-text-2">{ing.product}</span>
+                                        <span className="text-text-3">{ing.qty} {ing.uom}</span>
+                                        <Badge variant="outline" className="border-line bg-surface text-[9px] text-text-2">
                                           {SERVICE_MODE_LABEL[ing.serviceMode]}
                                         </Badge>
                                         {ing.modifier && (
@@ -759,7 +759,7 @@ export default function MenusPage() {
                           /* ── Read-only mode ── */
                           <table className="w-full text-xs">
                             <thead>
-                              <tr className="text-gray-400">
+                              <tr className="text-text-3">
                                 <th className="pb-1 text-left font-medium">Item</th>
                                 <th className="pb-1 text-left font-medium">SKU</th>
                                 <th className="pb-1 text-right font-medium">Qty</th>
@@ -790,8 +790,8 @@ export default function MenusPage() {
                                   const parts = [...lines].sort((a, b) => modOrder(a.modifier) - modOrder(b.modifier));
                                   const tempSplit = parts.some((p) => p.modifier);
                                   return (
-                                    <tr key={i} className="border-t border-gray-200/50 align-top">
-                                      <td className="py-1.5 text-gray-700">
+                                    <tr key={i} className="border-t border-line/50 align-top">
+                                      <td className="py-1.5 text-text-2">
                                         <span className="inline-flex items-center gap-1.5">
                                           {f.product}
                                           {f.kind === "packaging" && (
@@ -800,14 +800,14 @@ export default function MenusPage() {
                                             </Badge>
                                           )}
                                           {f.source === "rule" && (
-                                            <Badge variant="outline" className="border-gray-200 bg-gray-50 text-[9px] text-gray-500">
+                                            <Badge variant="outline" className="border-line bg-sunken text-[9px] text-text-2">
                                               via rule
                                             </Badge>
                                           )}
                                         </span>
                                       </td>
-                                      <td className="py-1.5"><code className="text-gray-500">{f.sku}</code></td>
-                                      <td className="py-1.5 text-right text-gray-700">
+                                      <td className="py-1.5"><code className="text-text-2">{f.sku}</code></td>
+                                      <td className="py-1.5 text-right text-text-2">
                                         {tempSplit ? (
                                           <div className="flex flex-col items-end gap-0.5">
                                             {parts.map((p, j) => (
@@ -825,14 +825,14 @@ export default function MenusPage() {
                                           f.qty
                                         )}
                                       </td>
-                                      <td className="py-1.5 text-gray-500">{f.uom}</td>
-                                      <td className="py-1.5 text-center text-gray-500">
+                                      <td className="py-1.5 text-text-2">{f.uom}</td>
+                                      <td className="py-1.5 text-center text-text-2">
                                         {f.kind === "packaging" ? SERVICE_MODE_LABEL[f.serviceMode] : "—"}
                                       </td>
-                                      <td className="py-1.5 text-right text-gray-500">
+                                      <td className="py-1.5 text-right text-text-2">
                                         {f.unitCost > 0 ? `RM ${f.unitCost.toFixed(4)}` : "—"}
                                       </td>
-                                      <td className="py-1.5 text-right font-medium text-gray-700">
+                                      <td className="py-1.5 text-right font-medium text-text-2">
                                         {tempSplit ? (
                                           <div className="flex flex-col items-end gap-0.5">
                                             {parts.map((p, j) => (
@@ -849,30 +849,30 @@ export default function MenusPage() {
                               })()}
                               {menu.ingredients.length === 0 && (
                                 <tr>
-                                  <td colSpan={7} className="py-4 text-center text-gray-400">
+                                  <td colSpan={7} className="py-4 text-center text-text-3">
                                     No recipe yet. Click the pencil icon to add ingredients or packaging.
                                   </td>
                                 </tr>
                               )}
                               {menu.ingredients.length > 0 && (
                                 <>
-                                  <tr className="border-t border-gray-300">
-                                    <td colSpan={6} className="py-1.5 text-right font-medium text-gray-500">Ingredient cost</td>
-                                    <td className="py-1.5 text-right font-medium text-gray-700">RM {menu.ingredientCost.toFixed(2)}</td>
+                                  <tr className="border-t border-line-2">
+                                    <td colSpan={6} className="py-1.5 text-right font-medium text-text-2">Ingredient cost</td>
+                                    <td className="py-1.5 text-right font-medium text-text-2">RM {menu.ingredientCost.toFixed(2)}</td>
                                   </tr>
                                   {menu.packagingCount > 0 ? (
                                     <>
-                                      <tr className="border-t border-gray-200">
-                                        <td colSpan={5} className="py-1 text-right text-[10px] uppercase tracking-wide text-gray-400">All-in COGS (incl. packaging)</td>
-                                        <td className="py-1 text-right text-[10px] uppercase tracking-wide text-gray-400">Dine-in</td>
-                                        <td className="py-1 text-right text-[10px] uppercase tracking-wide text-gray-400">Takeaway</td>
+                                      <tr className="border-t border-line">
+                                        <td colSpan={5} className="py-1 text-right text-[10px] uppercase tracking-wide text-text-3">All-in COGS (incl. packaging)</td>
+                                        <td className="py-1 text-right text-[10px] uppercase tracking-wide text-text-3">Dine-in</td>
+                                        <td className="py-1 text-right text-[10px] uppercase tracking-wide text-text-3">Takeaway</td>
                                       </tr>
                                       {(menu.hasIcedHotSplit
                                         ? ([["Iced", menu.matrix.iced], ["Hot", menu.matrix.hot]] as const)
                                         : ([["", menu.matrix.iced]] as const)
                                       ).map(([label, row]) => (
                                         <tr key={label || "all"}>
-                                          <td colSpan={5} className="py-1.5 text-right align-top font-semibold text-gray-600">
+                                          <td colSpan={5} className="py-1.5 text-right align-top font-semibold text-text-2">
                                             {label ? <span className={label === "Iced" ? "text-sky-600" : "text-orange-600"}>{label} drink</span> : "Total"}
                                           </td>
                                           <td className="py-1.5 text-right align-top"><CogsCell c={row.dineIn} /></td>
@@ -881,8 +881,8 @@ export default function MenusPage() {
                                       ))}
                                     </>
                                   ) : (
-                                    <tr className="border-t border-gray-200">
-                                      <td colSpan={6} className="py-1.5 text-right align-top font-semibold text-gray-600">Total COGS</td>
+                                    <tr className="border-t border-line">
+                                      <td colSpan={6} className="py-1.5 text-right align-top font-semibold text-text-2">Total COGS</td>
                                       <td className="py-1.5 text-right align-top"><CogsCell c={menu.matrix.iced.takeaway} /></td>
                                     </tr>
                                   )}

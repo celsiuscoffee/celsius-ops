@@ -97,7 +97,7 @@ export default function RemindersPanel({ onChange }: { onChange: () => void }) {
   return (
     <Card className="h-[calc(100vh-15rem)] overflow-y-auto p-4">
       <div className="mb-3 flex items-center gap-2">
-        <BellRing className="h-4 w-4 text-terracotta" />
+        <BellRing className="h-4 w-4 text-brand-text" />
         <span className="text-sm font-medium">Reminders</span>
       </div>
 
@@ -140,7 +140,7 @@ export default function RemindersPanel({ onChange }: { onChange: () => void }) {
           <Button
             onClick={create}
             disabled={saving || !title.trim()}
-            className="gap-1 bg-terracotta hover:bg-terracotta-dark"
+            className="gap-1 bg-ink hover:bg-ink-hover"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add
           </Button>
@@ -208,7 +208,7 @@ export default function RemindersPanel({ onChange }: { onChange: () => void }) {
                           size="sm"
                           disabled={busy === r.id}
                           onClick={() => act(r.id, "done")}
-                          className="h-7 gap-1 bg-terracotta px-2 text-xs hover:bg-terracotta-dark"
+                          className="h-7 gap-1 bg-ink px-2 text-xs hover:bg-ink-hover"
                         >
                           {busy === r.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />

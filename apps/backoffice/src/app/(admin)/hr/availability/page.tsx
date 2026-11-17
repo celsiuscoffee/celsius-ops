@@ -130,18 +130,18 @@ export default function AvailabilityPage() {
               {DAYS.map((d, i) => {
                 const windows = byDay.get(i) ?? [];
                 return (
-                  <div key={i} className={`rounded-md border p-2 ${windows.length ? "border-emerald-200 bg-emerald-50/50" : "border-gray-200 bg-gray-50"}`}>
+                  <div key={i} className={`rounded-md border p-2 ${windows.length ? "border-emerald-200 bg-emerald-50/50" : "border-line bg-sunken"}`}>
                     <p className="mb-1.5 font-semibold">{d}</p>
                     {windows.length === 0 ? (
-                      <p className="text-[10px] italic text-gray-400">Not available</p>
+                      <p className="text-[10px] italic text-text-3">Not available</p>
                     ) : (
                       <div className="space-y-1">
                         {windows.map((w) => (
-                          <div key={w.id} className="flex items-center justify-between rounded bg-white px-1.5 py-1 text-[11px]">
+                          <div key={w.id} className="flex items-center justify-between rounded bg-surface px-1.5 py-1 text-[11px]">
                             <span className="font-mono">{w.available_from.slice(0,5)}–{w.available_until.slice(0,5)}</span>
                             <div className="flex items-center gap-0.5">
                               {w.is_preferred && <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />}
-                              <button onClick={() => remove(w.id)} className="rounded p-0.5 text-gray-400 hover:bg-red-50 hover:text-red-600">
+                              <button onClick={() => remove(w.id)} className="rounded p-0.5 text-text-3 hover:bg-red-50 hover:text-red-600">
                                 <Trash2 className="h-2.5 w-2.5" />
                               </button>
                             </div>
@@ -192,7 +192,7 @@ export default function AvailabilityPage() {
             </div>
             <div className="mt-3 flex items-center justify-end gap-2">
               {err && <span className="text-xs text-red-600">{err}</span>}
-              <button onClick={add} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50">
+              <button onClick={add} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Add Window
               </button>
