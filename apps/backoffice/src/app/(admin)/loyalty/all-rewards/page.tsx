@@ -30,7 +30,7 @@ const TRIGGER_META: Record<TriggerType, { label: string; icon: typeof Coins; cla
   birthday:      { label: "Birthday",      icon: Cake,      className: "bg-pink-50   text-pink-700   border-pink-200" },
   tier_upgrade:  { label: "Tier Upgrade",  icon: Crown,     className: "bg-orange-50 text-orange-700 border-orange-200" },
   admin_push:    { label: "Admin Push",    icon: Megaphone, className: "bg-rose-50   text-rose-700   border-rose-200" },
-  manual_grant:  { label: "Manual",        icon: Hand,      className: "bg-slate-50  text-slate-600  border-slate-200" },
+  manual_grant:  { label: "Manual",        icon: Hand,      className: "bg-sunken  text-text-2  border-line" },
 };
 
 const DISCOUNT_META: Record<string, { label: string; className: string }> = {
@@ -41,7 +41,7 @@ const DISCOUNT_META: Record<string, { label: string; className: string }> = {
   combo:             { label: "Combo",               className: "bg-yellow-50  text-yellow-700  border-yellow-200" },
   override_price:    { label: "Override price",      className: "bg-rose-50    text-rose-700    border-rose-200" },
   beans_multiplier:  { label: "Points ×",             className: "bg-purple-50  text-purple-700  border-purple-200" },
-  none:              { label: "—",                   className: "bg-slate-50   text-slate-600   border-slate-200" },
+  none:              { label: "—",                   className: "bg-sunken   text-text-2   border-line" },
 };
 
 const TRIGGER_ORDER: TriggerType[] = [
@@ -253,23 +253,23 @@ export default function AllRewardsPage() {
   // ─── Row renderer (shared across flat + grouped views) ───────
   function renderRow(r: RewardRow) {
     const Icon = pickRewardIcon(r);
-    const dtMeta = DISCOUNT_META[r.discount_type ?? ""] ?? { label: r.discount_type ?? "—", className: "bg-slate-50 text-slate-600 border-slate-200" };
+    const dtMeta = DISCOUNT_META[r.discount_type ?? ""] ?? { label: r.discount_type ?? "—", className: "bg-sunken text-text-2 border-line" };
     const redemptionPct = r.issued_30d > 0 ? Math.round((r.used_30d / r.issued_30d) * 100) : 0;
     const rowKey = `${r.origin}:${r.id}`;
     return (
-      <tr key={rowKey} className={`border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition cursor-pointer ${!r.is_active ? "opacity-55" : ""}`} onClick={() => onRowClick(r)}>
+      <tr key={rowKey} className={`border-b border-line last:border-b-0 hover:bg-sunken transition cursor-pointer ${!r.is_active ? "opacity-55" : ""}`} onClick={() => onRowClick(r)}>
         <td className="px-4 py-3">
           <span className={`inline-block w-2 h-2 rounded-full ${r.is_active ? "bg-emerald-500" : "bg-slate-400"}`} title={r.is_active ? "Active" : "Paused"} />
         </td>
         <td className="px-4 py-3">
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-              <Icon className="w-4 h-4 text-slate-600" />
+            <div className="w-9 h-9 rounded-lg bg-sunken flex items-center justify-center flex-shrink-0">
+              <Icon className="w-4 h-4 text-text-2" />
             </div>
             <div className="min-w-0">
-              <div className="font-semibold text-slate-900 text-sm leading-tight">{r.title}</div>
+              <div className="font-semibold text-text text-sm leading-tight">{r.title}</div>
               {r.description && (
-                <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">{r.description}</div>
+                <div className="text-xs text-text-2 mt-0.5 line-clamp-1">{r.description}</div>
               )}
             </div>
           </div>
@@ -282,7 +282,7 @@ export default function AllRewardsPage() {
         <td className="px-4 py-3">
           <div className="flex gap-1 flex-wrap">
             {r.triggers.length === 0 ? (
-              <span className="text-xs text-slate-400 italic">No active trigger</span>
+              <span className="text-xs text-text-3 italic">No active trigger</span>
             ) : r.triggers.map((t, i) => {
               const meta = TRIGGER_META[t.type];
               const TIcon = meta.icon;
@@ -295,31 +295,31 @@ export default function AllRewardsPage() {
             })}
           </div>
         </td>
-        <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-600">
+        <td className="px-4 py-3 hidden lg:table-cell text-xs text-text-2">
           {formatEligibility(r)}
         </td>
         <td className="px-4 py-3 hidden md:table-cell">
-          <div className="tabular-nums text-sm font-semibold text-slate-900">{r.issued_30d} · {r.used_30d}</div>
-          <div className="text-[11px] text-slate-500">{r.issued_30d > 0 ? `${redemptionPct}% redeemed` : "Never issued"}</div>
+          <div className="tabular-nums text-sm font-semibold text-text">{r.issued_30d} · {r.used_30d}</div>
+          <div className="text-[11px] text-text-2">{r.issued_30d > 0 ? `${redemptionPct}% redeemed` : "Never issued"}</div>
           {r.issued_30d > 0 && (
-            <div className="mt-1 h-1 rounded-full bg-slate-100 overflow-hidden">
+            <div className="mt-1 h-1 rounded-full bg-sunken overflow-hidden">
               <div className="h-full bg-emerald-500" style={{ width: `${redemptionPct}%` }} />
             </div>
           )}
         </td>
-        <td className="px-4 py-3 hidden lg:table-cell text-xs text-slate-600">
+        <td className="px-4 py-3 hidden lg:table-cell text-xs text-text-2">
           {r.expires_days != null ? `${r.expires_days} days` : "—"}
         </td>
         <td className="px-2 py-3 relative" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={(e) => { e.stopPropagation(); setActionsOpen(actionsOpen === rowKey ? null : rowKey); }}
             disabled={busyId === r.id}
-            className="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700 disabled:opacity-50"
+            className="p-1.5 hover:bg-sunken rounded text-text-3 hover:text-text-2 disabled:opacity-50"
           >
             <MoreHorizontal className="w-4 h-4" />
           </button>
           {actionsOpen === rowKey && (
-            <div className="absolute right-2 top-10 z-20 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]" onClick={(e) => e.stopPropagation()}>
+            <div className="absolute right-2 top-10 z-20 bg-surface border border-line rounded-lg shadow-lg py-1 min-w-[160px]" onClick={(e) => e.stopPropagation()}>
               <ActionItem icon={Pencil} label="Edit" onClick={() => { setActionsOpen(null); onRowClick(r); }} disabled={r.origin === "catalog"} />
               <ActionItem icon={Copy}   label="Duplicate" onClick={() => duplicate(r)} disabled={r.origin === "catalog"} />
               {r.is_active ? (
@@ -327,7 +327,7 @@ export default function AllRewardsPage() {
               ) : (
                 <ActionItem icon={PlayCircle} label="Resume" onClick={() => togglePause(r)} />
               )}
-              <div className="my-1 border-t border-slate-100" />
+              <div className="my-1 border-t border-line" />
               <ActionItem icon={Trash2} label="Archive" onClick={() => archive(r)} danger />
             </div>
           )}
@@ -339,15 +339,15 @@ export default function AllRewardsPage() {
   // ─── Common table header (used in both views) ────────────────
   function tableHead() {
     return (
-      <thead className="bg-slate-50 border-b border-slate-200">
+      <thead className="bg-sunken border-b border-line">
         <tr>
-          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 w-8"></th>
-          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Reward</th>
-          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Discount</th>
-          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5">Triggers</th>
-          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Eligible</th>
-          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Issued · Used (30d)</th>
-          <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Expires</th>
+          <th className="text-left text-xs font-semibold text-text-2 uppercase tracking-wider px-4 py-2.5 w-8"></th>
+          <th className="text-left text-xs font-semibold text-text-2 uppercase tracking-wider px-4 py-2.5">Reward</th>
+          <th className="text-left text-xs font-semibold text-text-2 uppercase tracking-wider px-4 py-2.5">Discount</th>
+          <th className="text-left text-xs font-semibold text-text-2 uppercase tracking-wider px-4 py-2.5">Triggers</th>
+          <th className="text-left text-xs font-semibold text-text-2 uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Eligible</th>
+          <th className="text-left text-xs font-semibold text-text-2 uppercase tracking-wider px-4 py-2.5 hidden md:table-cell">Issued · Used (30d)</th>
+          <th className="text-left text-xs font-semibold text-text-2 uppercase tracking-wider px-4 py-2.5 hidden lg:table-cell">Expires</th>
           <th className="w-8"></th>
         </tr>
       </thead>
@@ -453,18 +453,18 @@ export default function AllRewardsPage() {
   }
 
   return (
-    <div className="px-6 py-6 max-w-[1400px] mx-auto">
+    <div className="max-w-[1400px] mx-auto px-4 pt-6 pb-10 md:px-8">
 
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Rewards</h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Rewards</h1>
+          <p className="text-sm text-text-2 mt-1">
             Every reward template across every channel. One template, many triggers.
           </p>
         </div>
         <div className="flex gap-2">
-          <button className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50">
+          <button className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-text-2 bg-surface border border-line rounded-lg hover:bg-sunken">
             <Download className="w-4 h-4" /> Export
           </button>
           <Link href="/loyalty/all-rewards/new" className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800">
@@ -489,27 +489,27 @@ export default function AllRewardsPage() {
       </div>
 
       {/* Filter bar */}
-      <div className="bg-white border border-slate-200 rounded-xl p-3 my-4 space-y-3">
+      <div className="bg-surface border border-line rounded-xl p-3 my-4 space-y-3">
         <div className="flex gap-2 items-stretch">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-3" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, description, or reward ID"
-              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:border-slate-400"
+              className="w-full pl-9 pr-3 py-2 text-sm border border-line rounded-lg bg-sunken focus:bg-surface focus:outline-none focus:border-line-2"
             />
           </div>
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as SortKey)}
-            className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white"
+            className="px-3 py-2 text-sm border border-line rounded-lg bg-surface"
           >
             {SORT_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
           {(search || triggerFilter.size > 0 || dtFilter.size > 0 || statusFilter.size > 0) && (
-            <button onClick={clearAll} className="px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900">
+            <button onClick={clearAll} className="px-3 py-2 text-xs font-medium text-text-2 hover:text-text">
               Clear filters
             </button>
           )}
@@ -544,7 +544,7 @@ export default function AllRewardsPage() {
             key: s.key,
             label: s.label,
             count: counts.status[s.key] ?? 0,
-            iconClass: "bg-slate-50 text-slate-700 border-slate-200",
+            iconClass: "bg-sunken text-text-2 border-line",
           }))}
           active={statusFilter}
           onToggle={(k) => toggleStatus(k as StatusKey)}
@@ -553,18 +553,18 @@ export default function AllRewardsPage() {
 
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-2 px-1">
-        <div className="text-sm text-slate-500">
-          Showing <strong className="text-slate-900">{visible.length}</strong> of {rows.length} · last 30d data
+        <div className="text-sm text-text-2">
+          Showing <strong className="text-text">{visible.length}</strong> of {rows.length} · last 30d data
         </div>
-        <div className="inline-flex bg-slate-100 rounded-full p-1 gap-1">
-          <button onClick={() => setView("table")} className={`px-3 py-1 text-xs font-semibold rounded-full transition ${view === "table" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}>Table</button>
-          <button onClick={() => setView("grouped")} className={`px-3 py-1 text-xs font-semibold rounded-full transition ${view === "grouped" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}>By Trigger</button>
+        <div className="inline-flex bg-sunken rounded-full p-1 gap-1">
+          <button onClick={() => setView("table")} className={`px-3 py-1 text-xs font-semibold rounded-full transition ${view === "table" ? "bg-surface text-text shadow-sm" : "text-text-2"}`}>Table</button>
+          <button onClick={() => setView("grouped")} className={`px-3 py-1 text-xs font-semibold rounded-full transition ${view === "grouped" ? "bg-surface text-text shadow-sm" : "text-text-2"}`}>By Trigger</button>
         </div>
       </div>
 
       {/* Table */}
       {loading ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500">
+        <div className="bg-surface border border-line rounded-xl p-12 text-center text-text-2">
           Loading rewards…
         </div>
       ) : error ? (
@@ -576,15 +576,15 @@ export default function AllRewardsPage() {
           </div>
         </div>
       ) : visible.length === 0 ? (
-        <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
-          <Filter className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-          <div className="text-slate-700 font-medium">No rewards match these filters</div>
+        <div className="bg-surface border border-line rounded-xl p-12 text-center">
+          <Filter className="w-8 h-8 text-text-3 mx-auto mb-2" />
+          <div className="text-text-2 font-medium">No rewards match these filters</div>
           <button onClick={clearAll} className="mt-3 text-sm text-indigo-600 font-medium hover:underline">
             Clear filters
           </button>
         </div>
       ) : view === "table" ? (
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="bg-surface border border-line rounded-xl overflow-hidden">
           <table className="w-full">
             {tableHead()}
             <tbody>
@@ -596,7 +596,7 @@ export default function AllRewardsPage() {
         <div className="space-y-5">
           {grouped.map((g) => {
             const meta = g.type === "none"
-              ? { label: g.label, icon: Filter, className: "bg-slate-50 text-slate-600 border-slate-200" }
+              ? { label: g.label, icon: Filter, className: "bg-sunken text-text-2 border-line" }
               : TRIGGER_META[g.type];
             const TIcon = meta.icon;
             return (
@@ -608,7 +608,7 @@ export default function AllRewardsPage() {
                     <span className="text-[11px] opacity-60 ml-0.5">{g.rows.length}</span>
                   </span>
                 </div>
-                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                <div className="bg-surface border border-line rounded-xl overflow-hidden">
                   <table className="w-full">
                     {tableHead()}
                     <tbody>
@@ -635,10 +635,10 @@ function ActionItem({ icon: Icon, label, onClick, disabled = false, danger = fal
       disabled={disabled}
       className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-left transition ${
         disabled
-          ? "text-slate-300 cursor-not-allowed"
+          ? "text-text-3 cursor-not-allowed"
           : danger
             ? "text-rose-600 hover:bg-rose-50"
-            : "text-slate-700 hover:bg-slate-50"
+            : "text-text-2 hover:bg-sunken"
       }`}
     >
       <Icon className="w-3.5 h-3.5" />
@@ -649,9 +649,9 @@ function ActionItem({ icon: Icon, label, onClick, disabled = false, danger = fal
 
 function Stat({ n, label, dim = false }: { n: number | string; label: string; dim?: boolean }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-3.5">
-      <div className={`text-2xl font-bold tabular-nums ${dim ? "text-slate-400" : "text-slate-900"}`}>{n}</div>
-      <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mt-0.5">{label}</div>
+    <div className="bg-surface border border-line rounded-xl p-3.5">
+      <div className={`text-2xl font-bold tabular-nums ${dim ? "text-text-3" : "text-text"}`}>{n}</div>
+      <div className="text-[11px] font-semibold text-text-2 uppercase tracking-wider mt-0.5">{label}</div>
     </div>
   );
 }
@@ -661,7 +661,7 @@ type PillOpt = { key: string; label: string; count: number; iconClass: string; I
 function PillGroup({ label, options, active, onToggle }: { label: string; options: PillOpt[]; active: Set<string>; onToggle: (k: string) => void }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1.5 self-center">{label}</span>
+      <span className="text-[11px] font-semibold text-text-3 uppercase tracking-wider mr-1.5 self-center">{label}</span>
       {options.map((o) => {
         const on = active.has(o.key);
         return (
@@ -672,7 +672,7 @@ function PillGroup({ label, options, active, onToggle }: { label: string; option
           >
             {o.Icon && <o.Icon className="w-3 h-3" />}
             {o.label}
-            <span className={`text-[10px] px-1 rounded ${on ? "bg-black/20" : "bg-white/40"}`}>{o.count}</span>
+            <span className={`text-[10px] px-1 rounded ${on ? "bg-black/20" : "bg-surface/40"}`}>{o.count}</span>
           </button>
         );
       })}

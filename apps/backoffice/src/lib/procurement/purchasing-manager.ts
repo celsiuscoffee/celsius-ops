@@ -336,6 +336,6 @@ export function formatDigest(findings: Finding[]): string {
     if (f.kind !== lastKind) { lines.push(`\n<b>${heading[f.kind]}</b>`); lastKind = f.kind; }
     lines.push(`${icon[f.severity]} ${f.detail}`);
   }
-  lines.push(`\nReview: backoffice.celsiuscoffee.com/finance/inbox`);
+  lines.push(`\nReview: backoffice.celsiuscoffee.com/finance`);
   return lines.join("\n");
 }

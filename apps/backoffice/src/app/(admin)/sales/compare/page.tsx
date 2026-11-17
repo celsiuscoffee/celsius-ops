@@ -92,20 +92,20 @@ type CompareResponse = {
 // ─── Constants ───────────────────────────────────────────────────────────
 
 const PERIOD_COLORS = [
-  "#C2452D", "#3B82F6", "#10B981", "#F59E0B",
-  "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16",
+  "var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)",
+  "var(--color-chart-5)", "var(--color-info)", "var(--color-ok)", "var(--color-warn)",
 ];
 const PERIOD_BG = [
-  "bg-red-50", "bg-blue-50", "bg-emerald-50", "bg-amber-50",
-  "bg-violet-50", "bg-pink-50", "bg-cyan-50", "bg-lime-50",
+  "bg-danger-soft", "bg-info-soft", "bg-ok-soft", "bg-warn-soft",
+  "bg-info-soft", "bg-danger-soft", "bg-info-soft", "bg-ok-soft",
 ];
 const PERIOD_BORDER = [
-  "border-red-200", "border-blue-200", "border-emerald-200", "border-amber-200",
-  "border-violet-200", "border-pink-200", "border-cyan-200", "border-lime-200",
+  "border-line", "border-line", "border-line", "border-line",
+  "border-line", "border-line", "border-line", "border-line",
 ];
 const PERIOD_TEXT = [
-  "text-red-700", "text-blue-700", "text-emerald-700", "text-amber-700",
-  "text-violet-700", "text-pink-700", "text-cyan-700", "text-lime-700",
+  "text-danger-text", "text-info-text", "text-ok-text", "text-warn-text",
+  "text-info-text", "text-danger-text", "text-info-text", "text-ok-text",
 ];
 
 const MAX_SLOTS = 8;
@@ -154,11 +154,11 @@ function fmtRM(v: number): string {
 }
 
 function pctChange(current: number, previous: number): { label: string; color: string } {
-  if (previous === 0) return { label: current > 0 ? "New" : "—", color: "text-gray-400" };
+  if (previous === 0) return { label: current > 0 ? "New" : "—", color: "text-text-3" };
   const pct = ((current - previous) / previous) * 100;
-  if (pct > 0) return { label: `+${pct.toFixed(1)}%`, color: "text-green-600" };
-  if (pct < 0) return { label: `${pct.toFixed(1)}%`, color: "text-red-500" };
-  return { label: "0%", color: "text-gray-400" };
+  if (pct > 0) return { label: `+${pct.toFixed(1)}%`, color: "text-ok-text" };
+  if (pct < 0) return { label: `${pct.toFixed(1)}%`, color: "text-danger-text" };
+  return { label: "0%", color: "text-text-3" };
 }
 
 function formatSlotLabel(from: string, to: string): string {
@@ -363,14 +363,14 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
 
   return [
     {
-      label: "Today vs Same Day Last Week",
+      label: "Today vs same day last week",
       slots: [
         { id: pid(), from: today, to: today },
         { id: pid(), from: addDays(today, -7), to: addDays(today, -7) },
       ],
     },
     {
-      label: "Last 7 Days (daily)",
+      label: "Last 7 days, by day",
       slots: Array.from({ length: 7 }, (_, i) => ({
         id: pid(),
         from: addDays(today, -6 + i),
@@ -378,35 +378,35 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
       })),
     },
     {
-      label: "This Week vs Last Week",
+      label: "This week vs last week",
       slots: [
         { id: pid(), from: thisMonday, to: getSunday(thisMonday) },
         { id: pid(), from: addDays(thisMonday, -7), to: addDays(thisMonday, -1) },
       ],
     },
     {
-      label: "Last 4 Weeks",
+      label: "Last 4 weeks",
       slots: Array.from({ length: 4 }, (_, i) => {
         const mon = addDays(thisMonday, -7 * i);
         return { id: pid(), from: mon, to: getSunday(mon) };
       }),
     },
     {
-      label: "Last 8 Weeks",
+      label: "Last 8 weeks",
       slots: Array.from({ length: 8 }, (_, i) => {
         const mon = addDays(thisMonday, -7 * i);
         return { id: pid(), from: mon, to: getSunday(mon) };
       }),
     },
     {
-      label: "This Month vs Last Month",
+      label: "This month vs last month",
       slots: [
         { id: pid(), from: thisMonthStart, to: getMonthEnd(today) },
         { id: pid(), from: lastMonthStart, to: lastMonthEnd },
       ],
     },
     {
-      label: "Last 3 Months",
+      label: "Last 3 months",
       slots: Array.from({ length: 3 }, (_, i) => {
         const mStart = getMonthStart(subtractMonths(today, i));
         const mEnd = i === 0 ? getMonthEnd(today) : getMonthEnd(mStart);
@@ -414,7 +414,7 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
       }),
     },
     {
-      label: "Last 6 Months",
+      label: "Last 6 months",
       slots: Array.from({ length: 6 }, (_, i) => {
         const mStart = getMonthStart(subtractMonths(today, i));
         const mEnd = i === 0 ? getMonthEnd(today) : getMonthEnd(mStart);
@@ -535,7 +535,7 @@ export default function SalesComparePage() {
 
     const initialSlots = urlSlots.length > 0
       ? urlSlots
-      : getPresets().find((p) => p.label === "This Month vs Last Month")?.slots ?? [];
+      : getPresets().find((p) => p.label === "This month vs last month")?.slots ?? [];
     setSlots(initialSlots);
     setOutletIds(urlOutlets);
     fetchData(initialSlots, urlOutlets);
@@ -596,7 +596,7 @@ export default function SalesComparePage() {
 
   const outletButtonLabel =
     outletIds.length === 0
-      ? "All Outlets"
+      ? "All outlets"
       : outletIds.length === 1
         ? (outlets.find((o) => o.id === outletIds[0])?.name ?? "1 outlet")
         : `${outletIds.length} outlets`;
@@ -644,15 +644,15 @@ export default function SalesComparePage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#f5f3f0] p-4 sm:p-6 space-y-4">
+    <div className="min-h-screen space-y-4 px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-[#C2452D]/10 shrink-0">
-          <ArrowLeftRight className="w-5 h-5 text-[#C2452D]" />
+        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-brand-soft shrink-0">
+          <ArrowLeftRight className="w-5 h-5 text-brand-text" />
         </div>
         <div className="min-w-0">
-          <h1 className="text-xl font-bold text-gray-900">Sales Compare</h1>
-          <p className="text-sm text-gray-500">Compare sales across different periods</p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Compare</h1>
+          <p className="mt-0.5 text-sm text-text-2">Put two or more periods, outlets or channels side by side to see what changed.</p>
         </div>
       </div>
 
@@ -667,8 +667,8 @@ export default function SalesComparePage() {
                 onClick={() => applyPreset(p)}
                 className={`px-2.5 py-1.5 text-xs rounded-full border whitespace-nowrap shrink-0 transition-colors ${
                   isActive
-                    ? "bg-[#C2452D] border-[#C2452D] text-white"
-                    : "bg-white border-gray-200 text-gray-600 hover:border-[#C2452D]/50 hover:text-[#C2452D]"
+                    ? "bg-ink border-ink text-on-ink"
+                    : "bg-surface border-line text-text-2 hover:border-ink/50 hover:text-brand-text"
                 }`}
               >
                 {p.label}
@@ -700,7 +700,7 @@ export default function SalesComparePage() {
                         onClick={() => removeSlot(slot.id)}
                         className="p-0.5 rounded hover:bg-black/10 shrink-0"
                       >
-                        <X className="w-3 h-3 text-gray-400" />
+                        <X className="w-3 h-3 text-text-3" />
                       </button>
                     </div>
                   );
@@ -709,7 +709,7 @@ export default function SalesComparePage() {
             </div>
             <button
               onClick={clearAll}
-              className="text-xs text-gray-400 hover:text-red-500 whitespace-nowrap shrink-0"
+              className="text-xs text-text-3 hover:text-danger-text whitespace-nowrap shrink-0"
             >
               Clear all
             </button>
@@ -722,16 +722,16 @@ export default function SalesComparePage() {
             <div className="relative" ref={pickerRef}>
               <button
                 onClick={() => setShowPicker(!showPicker)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-gray-300 text-sm text-gray-500 hover:border-[#C2452D] hover:text-[#C2452D] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-line-2 text-sm text-text-2 hover:border-ink hover:text-brand-text transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                Add Period
+                Add period
               </button>
 
               {showPicker && (
-                <div className="absolute top-full left-0 mt-2 z-50 bg-white rounded-xl shadow-xl border border-gray-200 w-80">
+                <div className="absolute top-full left-0 mt-2 z-50 bg-surface rounded-xl shadow-xl border border-line w-80">
                   {/* Tabs */}
-                  <div className="flex border-b border-gray-100">
+                  <div className="flex border-b border-line">
                     {([
                       { key: "day" as const, label: "Day" },
                       { key: "week" as const, label: "Week" },
@@ -743,8 +743,8 @@ export default function SalesComparePage() {
                         onClick={() => setPickerTab(tab.key)}
                         className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
                           pickerTab === tab.key
-                            ? "text-[#C2452D] border-b-2 border-[#C2452D]"
-                            : "text-gray-400 hover:text-gray-600"
+                            ? "text-brand-text border-b-2 border-ink"
+                            : "text-text-3 hover:text-text-2"
                         }`}
                       >
                         {tab.label}
@@ -761,24 +761,24 @@ export default function SalesComparePage() {
                             <button
                               key={d.date}
                               onClick={() => addSlot(d.date, d.date)}
-                              className="px-2 py-2 text-xs rounded-md bg-gray-50 hover:bg-[#C2452D]/10 hover:text-[#C2452D] text-gray-700 transition-colors text-left truncate"
+                              className="px-2 py-2 text-xs rounded-md bg-sunken hover:bg-brand-soft hover:text-brand-text text-text-2 transition-colors text-left truncate"
                             >
                               {d.label}
                             </button>
                           ))}
                         </div>
-                        <div className="border-t border-gray-100 pt-2">
-                          <p className="text-[10px] text-gray-400 mb-1">Or pick a specific date</p>
+                        <div className="border-t border-line pt-2">
+                          <p className="text-[10px] text-text-3 mb-1">Or pick a specific date</p>
                           <div className="flex gap-2">
                             <input
                               type="date"
                               value={pickerDate}
                               onChange={(e) => setPickerDate(e.target.value)}
-                              className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1.5"
+                              className="flex-1 text-xs border border-line rounded-md px-2 py-1.5"
                             />
                             <button
                               onClick={() => addSlot(pickerDate, pickerDate)}
-                              className="px-3 py-1.5 text-xs font-medium rounded-md bg-[#C2452D] text-white hover:bg-[#A33822] transition-colors"
+                              className="px-3 py-1.5 text-xs font-medium rounded-md bg-ink text-on-ink hover:bg-ink-hover transition-colors"
                             >
                               Add
                             </button>
@@ -794,7 +794,7 @@ export default function SalesComparePage() {
                           <button
                             key={w.monday}
                             onClick={() => addSlot(w.monday, getSunday(w.monday))}
-                            className="px-2 py-2 text-xs rounded-md bg-gray-50 hover:bg-[#C2452D]/10 hover:text-[#C2452D] text-gray-700 transition-colors text-left truncate"
+                            className="px-2 py-2 text-xs rounded-md bg-sunken hover:bg-brand-soft hover:text-brand-text text-text-2 transition-colors text-left truncate"
                           >
                             {w.label}
                           </button>
@@ -809,7 +809,7 @@ export default function SalesComparePage() {
                           <button
                             key={mo.from}
                             onClick={() => addSlot(mo.from, mo.to)}
-                            className="px-2 py-2 text-xs rounded-md bg-gray-50 hover:bg-[#C2452D]/10 hover:text-[#C2452D] text-gray-700 transition-colors text-left truncate"
+                            className="px-2 py-2 text-xs rounded-md bg-sunken hover:bg-brand-soft hover:text-brand-text text-text-2 transition-colors text-left truncate"
                           >
                             {mo.label}
                           </button>
@@ -825,19 +825,19 @@ export default function SalesComparePage() {
                             type="date"
                             value={pickerFrom}
                             onChange={(e) => setPickerFrom(e.target.value)}
-                            className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1.5"
+                            className="flex-1 text-xs border border-line rounded-md px-2 py-1.5"
                           />
-                          <span className="text-gray-400 text-xs">to</span>
+                          <span className="text-text-3 text-xs">to</span>
                           <input
                             type="date"
                             value={pickerTo}
                             onChange={(e) => setPickerTo(e.target.value)}
-                            className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1.5"
+                            className="flex-1 text-xs border border-line rounded-md px-2 py-1.5"
                           />
                         </div>
                         <button
                           onClick={() => addSlot(pickerFrom, pickerTo)}
-                          className="w-full py-2 text-xs font-medium rounded-md bg-[#C2452D] text-white hover:bg-[#A33822] transition-colors"
+                          className="w-full py-2 text-xs font-medium rounded-md bg-ink text-on-ink hover:bg-ink-hover transition-colors"
                         >
                           Add Range
                         </button>
@@ -853,45 +853,45 @@ export default function SalesComparePage() {
           <div className="relative ml-auto" ref={outletPickerRef}>
             <button
               onClick={() => setShowOutletPicker(!showOutletPicker)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border bg-white transition-colors ${
-                outletIds.length > 0 ? "border-[#C2452D] text-[#C2452D]" : "border-gray-200 text-gray-700"
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border bg-surface transition-colors ${
+                outletIds.length > 0 ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2"
               }`}
             >
               {outletButtonLabel}
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
             {showOutletPicker && (
-              <div className="absolute top-full right-0 mt-2 z-50 bg-white rounded-xl shadow-xl border border-gray-200 w-60 p-2">
+              <div className="absolute top-full right-0 mt-2 z-50 bg-surface rounded-xl shadow-xl border border-line w-60 p-2">
                 <button
                   onClick={selectAllOutlets}
                   className={`w-full text-left px-2.5 py-2 text-xs rounded-md transition-colors ${
                     outletIds.length === 0
-                      ? "bg-[#C2452D]/10 text-[#C2452D] font-medium"
-                      : "text-gray-700 hover:bg-gray-50"
+                      ? "bg-brand-soft text-brand-text font-medium"
+                      : "text-text-2 hover:bg-sunken"
                   }`}
                 >
                   All Outlets
                 </button>
-                <div className="my-1 border-t border-gray-100" />
+                <div className="my-1 border-t border-line" />
                 {outlets.map((o) => {
                   const checked = outletIds.includes(o.id);
                   return (
                     <label
                       key={o.id}
-                      className="flex items-center gap-2 px-2.5 py-2 text-xs rounded-md text-gray-700 hover:bg-gray-50 cursor-pointer"
+                      className="flex items-center gap-2 px-2.5 py-2 text-xs rounded-md text-text-2 hover:bg-sunken cursor-pointer"
                     >
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleOutlet(o.id)}
-                        className="w-3.5 h-3.5 rounded border-gray-300 accent-[#C2452D]"
+                        className="w-3.5 h-3.5 rounded border-line-2 accent-ink"
                       />
-                      <span className={checked ? "font-medium text-gray-900" : ""}>{o.name}</span>
+                      <span className={checked ? "font-medium text-text" : ""}>{o.name}</span>
                     </label>
                   );
                 })}
                 {outletIds.length > 0 && (
-                  <p className="px-2.5 pt-1.5 pb-0.5 text-[10px] text-gray-400 border-t border-gray-100 mt-1">
+                  <p className="px-2.5 pt-1.5 pb-0.5 text-[10px] text-text-3 border-t border-line mt-1">
                     Comparing {outletIds.length === 1 ? "1 outlet" : `${outletIds.length} outlets combined`}
                   </p>
                 )}
@@ -905,29 +905,29 @@ export default function SalesComparePage() {
           results visible (dimmed) so the page never blanks and flashes */}
       {loading && !data && (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 animate-spin text-[#C2452D]" />
-          <span className="ml-2 text-sm text-gray-500">Fetching sales data...</span>
+          <Loader2 className="w-6 h-6 animate-spin text-brand-text" />
+          <span className="ml-2 text-sm text-text-2">Fetching sales data...</span>
         </div>
       )}
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+        <div className="bg-danger-soft border border-line rounded-xl p-4 text-sm text-danger-text">
           {error}
         </div>
       )}
 
       {/* Empty State */}
       {!loading && !error && slots.length === 0 && booted && (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <Calendar className="w-10 h-10 mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-500 text-sm">Select a preset above or add periods to compare</p>
+        <div className="bg-surface rounded-xl border border-line p-12 text-center">
+          <Calendar className="w-10 h-10 mx-auto text-text-3 mb-3" />
+          <p className="text-text-2 text-sm">Select a preset above or add periods to compare</p>
         </div>
       )}
 
       {/* Warnings */}
       {data?.warnings && data.warnings.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+        <div className="bg-warn-soft border border-line rounded-xl p-3 text-xs text-warn-text">
           {data.warnings.map((w, i) => (
             <p key={i}>{w}</p>
           ))}
@@ -939,19 +939,19 @@ export default function SalesComparePage() {
         <div className={`space-y-4 transition-opacity ${loading ? "opacity-40 pointer-events-none" : ""}`}>
           {/* Metric Toggle + context (which outlets these numbers cover) */}
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex gap-1 bg-white rounded-lg border border-gray-200 p-1 w-fit">
+            <div className="flex gap-1 bg-surface rounded-lg border border-line p-1 w-fit">
               {([
                 { key: "revenue" as const, label: "Revenue", icon: DollarSign },
                 { key: "orders" as const, label: "Orders", icon: ShoppingCart },
-                { key: "aov" as const, label: "AOV", icon: TrendingUp },
+                { key: "aov" as const, label: "Average order", icon: TrendingUp },
               ]).map((m) => (
                 <button
                   key={m.key}
                   onClick={() => setMetric(m.key)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     metric === m.key
-                      ? "bg-[#C2452D] text-white"
-                      : "text-gray-500 hover:text-gray-700"
+                      ? "bg-ink text-on-ink"
+                      : "text-text-2 hover:text-text-2"
                   }`}
                 >
                   <m.icon className="w-3.5 h-3.5" />
@@ -959,9 +959,9 @@ export default function SalesComparePage() {
                 </button>
               ))}
             </div>
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-text-3">
               {outletContextLabel}
-              {loading && <Loader2 className="inline w-3.5 h-3.5 ml-2 animate-spin text-[#C2452D]" />}
+              {loading && <Loader2 className="inline w-3.5 h-3.5 ml-2 animate-spin text-brand-text" />}
             </span>
           </div>
 
@@ -1020,20 +1020,20 @@ export default function SalesComparePage() {
               }
             }
             return (
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
+              <div className="bg-surface rounded-xl border border-line p-4">
                 <div className="mb-3">
-                  <h2 className="text-sm font-semibold text-gray-900">
+                  <h2 className="text-sm font-semibold text-text">
                     Accumulative {chartMetric === "revenue" ? "Revenue" : "Orders"}
-                    {chartMetric === "revenue" && <span className="font-normal text-gray-400"> (RM)</span>}
+                    {chartMetric === "revenue" && <span className="font-normal text-text-3"> (RM)</span>}
                   </h2>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-0.5 text-xs text-text-2">
                     Running total by {xMode === "hour" ? "hour" : "day"}
                     {metric === "aov" && " · AOV isn't cumulative — showing revenue"}
                   </p>
                 </div>
                 <ResponsiveContainer width="100%" height={320}>
                   <LineChart data={chartData} margin={{ top: 5, right: 12, left: -8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={8} />
                     <YAxis
                       tick={{ fontSize: 11 }}
@@ -1050,9 +1050,9 @@ export default function SalesComparePage() {
                     {nowLabel && (
                       <ReferenceLine
                         x={nowLabel}
-                        stroke="#9ca3af"
+                        stroke="var(--color-text-3)"
                         strokeDasharray="4 3"
-                        label={{ value: "now", position: "top", fontSize: 10, fill: "#9ca3af" }}
+                        label={{ value: "now", position: "top", fontSize: 10, fill: "var(--color-text-3)" }}
                       />
                     )}
                     <Tooltip
@@ -1060,7 +1060,7 @@ export default function SalesComparePage() {
                         value == null ? "—" : chartMetric === "revenue" ? fmtRM(value as number) : value,
                         name,
                       ]}
-                      contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }}
+                      contentStyle={{ borderRadius: 10, border: "1px solid var(--color-line)", background: "var(--color-raised)", color: "var(--color-text)", fontSize: 12 }}
                     />
                     <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
                     {data.periods.map((p, i) => (
@@ -1107,40 +1107,40 @@ export default function SalesComparePage() {
                 return (
                   <div
                     key={i}
-                    className={`bg-white rounded-xl border p-3 ${PERIOD_BORDER[ci]} ${data.periods.length > 4 ? "min-w-[160px] shrink-0" : ""}`}
+                    className={`bg-surface rounded-xl border p-3 ${PERIOD_BORDER[ci]} ${data.periods.length > 4 ? "min-w-[160px] shrink-0" : ""}`}
                   >
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <span className="text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center shrink-0 text-white" style={{ backgroundColor: PERIOD_COLORS[ci] }}>{i + 1}</span>
-                      <span className="text-[11px] font-medium text-gray-500 truncate">{p.label}</span>
-                      {isLatest && <span className="text-[9px] bg-gray-100 text-gray-500 px-1 py-0.5 rounded shrink-0">Latest</span>}
+                      <span className="text-[11px] font-medium text-text-2 truncate">{p.label}</span>
+                      {isLatest && <span className="text-[9px] bg-sunken text-text-2 px-1 py-0.5 rounded shrink-0">Latest</span>}
                     </div>
-                    <div className="text-lg font-bold text-gray-900 tabular-nums">
+                    <div className="text-lg font-bold text-text tabular-nums">
                       {metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500">
+                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-text-2">
                       <span>{p.summary.orders.toLocaleString()} orders</span>
                       {change && prev && (
                         <span>
                           <span className={`font-medium ${change.color}`}>{change.label}</span>
-                          <span className="text-[9px] text-gray-400 ml-1">vs {prev.label}</span>
+                          <span className="text-[9px] text-text-3 ml-1">vs {prev.label}</span>
                         </span>
                       )}
                     </div>
                     {prev && prevVal !== null && (
-                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[10px] text-gray-400">
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[10px] text-text-3">
                         {(() => {
                           const revDiff = p.summary.revenue - prev.summary.revenue;
                           const ordDiff = p.summary.orders - prev.summary.orders;
                           const aovDiff = p.summary.aov - prev.summary.aov;
                           return (
                             <>
-                              <span className={revDiff >= 0 ? "text-green-600" : "text-red-500"}>
+                              <span className={revDiff >= 0 ? "text-ok-text" : "text-danger-text"}>
                                 {revDiff >= 0 ? "+" : ""}RM {revDiff.toLocaleString("en-MY", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                               </span>
-                              <span className={ordDiff >= 0 ? "text-green-600" : "text-red-500"}>
+                              <span className={ordDiff >= 0 ? "text-ok-text" : "text-danger-text"}>
                                 {ordDiff >= 0 ? "+" : ""}{ordDiff} orders
                               </span>
-                              <span className={aovDiff >= 0 ? "text-green-600" : "text-red-500"}>
+                              <span className={aovDiff >= 0 ? "text-ok-text" : "text-danger-text"}>
                                 {aovDiff >= 0 ? "+" : ""}RM {aovDiff.toFixed(2)} AOV
                               </span>
                             </>
@@ -1156,11 +1156,11 @@ export default function SalesComparePage() {
                       const change = pctChange(cur, base);
                       const fmt = (v: number) => (metric === "orders" ? Math.round(v).toLocaleString() : fmtRM(Math.round(v * 100) / 100));
                       return (
-                        <div className="mt-1.5 pt-1.5 border-t border-gray-100">
-                          <div className="text-[10px] text-gray-400">
+                        <div className="mt-1.5 pt-1.5 border-t border-line">
+                          <div className="text-[10px] text-text-3">
                             Pace · first {pace.days}d vs {prev.label}
                           </div>
-                          <div className="text-[11px] text-gray-600 tabular-nums">
+                          <div className="text-[11px] text-text-2 tabular-nums">
                             {fmt(cur)} vs {fmt(base)}{" "}
                             <span className={`font-medium ${change.color}`}>{change.label}</span>
                           </div>
@@ -1168,11 +1168,11 @@ export default function SalesComparePage() {
                       );
                     })()}
                     {proj && projVal !== null && metric !== "aov" && (
-                      <div className="mt-1.5 pt-1.5 border-t border-gray-100">
-                        <div className="text-[10px] text-gray-400">
+                      <div className="mt-1.5 pt-1.5 border-t border-line">
+                        <div className="text-[10px] text-text-3">
                           Projected (day {proj.daysElapsed}/{proj.totalDays} · {proj.method})
                         </div>
-                        <div className="text-sm font-semibold text-gray-600 tabular-nums">
+                        <div className="text-sm font-semibold text-text-2 tabular-nums">
                           {metric === "revenue" ? fmtRM(projVal) : `${projVal} orders`}
                         </div>
                       </div>
@@ -1184,22 +1184,22 @@ export default function SalesComparePage() {
           </div>
 
           {/* By Time Round */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden">
+          <div className="bg-surface rounded-xl border border-line p-4 overflow-hidden">
             <button
               onClick={() => setShowRounds(!showRounds)}
               className="flex items-center justify-between w-full mb-3"
             >
-              <h2 className="text-sm font-semibold text-gray-900">
+              <h2 className="text-sm font-semibold text-text">
                 {metric === "revenue" ? "Revenue" : metric === "orders" ? "Orders" : "AOV"} by Time Round
               </h2>
-              {showRounds ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+              {showRounds ? <ChevronUp className="w-4 h-4 text-text-3" /> : <ChevronDown className="w-4 h-4 text-text-3" />}
             </button>
             {showRounds && (
               <div className="overflow-x-auto -mx-4 px-4">
                 <table className="w-full text-xs" style={{ minWidth: Math.max(500, data.periods.length * 130 + 120) }}>
                   <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 pr-3 font-medium text-gray-500 sticky left-0 bg-white z-10 whitespace-nowrap">Round</th>
+                    <tr className="border-b border-line">
+                      <th className="text-left py-2 pr-3 font-medium text-text-2 sticky left-0 bg-surface z-10 whitespace-nowrap">Round</th>
                       {data.periods.map((p, i) => (
                         <th key={i} className="text-right py-2 px-2 font-medium whitespace-nowrap" style={{ color: PERIOD_COLORS[i % PERIOD_COLORS.length] }}>
                           {p.label}
@@ -1209,13 +1209,13 @@ export default function SalesComparePage() {
                   </thead>
                   <tbody>
                     {data.periods[0].rounds.map((r, ri) => (
-                      <tr key={r.key} className="border-b border-gray-50">
-                        <td className="py-2 pr-3 font-medium text-gray-700 sticky left-0 bg-white z-10 whitespace-nowrap">{r.label}</td>
+                      <tr key={r.key} className="border-b border-line">
+                        <td className="py-2 pr-3 font-medium text-text-2 sticky left-0 bg-surface z-10 whitespace-nowrap">{r.label}</td>
                         {data.periods.map((p, pi) => {
                           const pr = p.rounds[ri];
                           const val = metric === "revenue" ? pr.revenue : metric === "orders" ? pr.orders : pr.aov;
                           return (
-                            <td key={pi} className="text-right py-2 px-2 text-gray-700 tabular-nums whitespace-nowrap">
+                            <td key={pi} className="text-right py-2 px-2 text-text-2 tabular-nums whitespace-nowrap">
                               {metric === "revenue" || metric === "aov" ? fmtRM(val) : val}
                             </td>
                           );
@@ -1232,12 +1232,12 @@ export default function SalesComparePage() {
                       });
                       if (!others.some((o) => Math.abs(o.rev) >= 0.01 || o.ord !== 0)) return null;
                       return (
-                        <tr className="border-b border-gray-50">
-                          <td className="py-2 pr-3 text-gray-400 sticky left-0 bg-white z-10 whitespace-nowrap">Other hours (11pm-8am)</td>
+                        <tr className="border-b border-line">
+                          <td className="py-2 pr-3 text-text-3 sticky left-0 bg-surface z-10 whitespace-nowrap">Other hours (11pm-8am)</td>
                           {others.map((o, pi) => {
                             const val = metric === "revenue" ? o.rev : metric === "orders" ? o.ord : o.ord > 0 ? Math.round((o.rev / o.ord) * 100) / 100 : 0;
                             return (
-                              <td key={pi} className="text-right py-2 px-2 text-gray-400 tabular-nums whitespace-nowrap">
+                              <td key={pi} className="text-right py-2 px-2 text-text-3 tabular-nums whitespace-nowrap">
                                 {metric === "revenue" || metric === "aov" ? fmtRM(val) : val}
                               </td>
                             );
@@ -1246,12 +1246,12 @@ export default function SalesComparePage() {
                       );
                     })()}
                     {/* Totals row */}
-                    <tr className="border-t-2 border-gray-200 font-semibold">
-                      <td className="py-2 pr-3 text-gray-900 sticky left-0 bg-white z-10">Total</td>
+                    <tr className="border-t-2 border-line font-semibold">
+                      <td className="py-2 pr-3 text-text sticky left-0 bg-surface z-10">Total</td>
                       {data.periods.map((p, pi) => {
                         const val = metric === "revenue" ? p.summary.revenue : metric === "orders" ? p.summary.orders : p.summary.aov;
                         return (
-                          <td key={pi} className="text-right py-2 px-2 text-gray-900 tabular-nums whitespace-nowrap">
+                          <td key={pi} className="text-right py-2 px-2 text-text tabular-nums whitespace-nowrap">
                             {metric === "revenue" || metric === "aov" ? fmtRM(val) : val}
                           </td>
                         );
@@ -1264,22 +1264,22 @@ export default function SalesComparePage() {
           </div>
 
           {/* Day-of-Week Averages */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden">
+          <div className="bg-surface rounded-xl border border-line p-4 overflow-hidden">
             <button
               onClick={() => setShowDow(!showDow)}
               className="flex items-center justify-between w-full mb-3"
             >
-              <h2 className="text-sm font-semibold text-gray-900">
+              <h2 className="text-sm font-semibold text-text">
                 Day-of-Week Averages ({metric === "revenue" ? "Revenue" : metric === "orders" ? "Orders" : "AOV"})
               </h2>
-              {showDow ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+              {showDow ? <ChevronUp className="w-4 h-4 text-text-3" /> : <ChevronDown className="w-4 h-4 text-text-3" />}
             </button>
             {showDow && (
               <div className="overflow-x-auto -mx-4 px-4">
                 <table className="w-full text-xs" style={{ minWidth: Math.max(500, data.periods.length * 100 + 80) }}>
                   <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 pr-3 font-medium text-gray-500 sticky left-0 bg-white z-10 whitespace-nowrap">Day</th>
+                    <tr className="border-b border-line">
+                      <th className="text-left py-2 pr-3 font-medium text-text-2 sticky left-0 bg-surface z-10 whitespace-nowrap">Day</th>
                       {data.periods.map((p, i) => (
                         <th key={i} className="text-right py-2 px-2 font-medium whitespace-nowrap" style={{ color: PERIOD_COLORS[i % PERIOD_COLORS.length] }}>
                           {p.label}
@@ -1294,16 +1294,16 @@ export default function SalesComparePage() {
                       const vals = allDow.map((d) => metric === "revenue" ? d.avgRevenue : d.avgOrders);
                       const maxVal = Math.max(...vals);
                       return (
-                        <tr key={dow} className={`border-b border-gray-50 ${di >= 5 ? "bg-amber-50/30" : ""}`}>
-                          <td className={`py-2 pr-3 font-medium text-gray-700 sticky left-0 z-10 whitespace-nowrap ${di >= 5 ? "bg-amber-50/30" : "bg-white"}`}>
-                            {dow} {di >= 5 && <span className="text-[9px] text-amber-500 ml-1">wknd</span>}
+                        <tr key={dow} className={`border-b border-line ${di >= 5 ? "bg-warn-soft" : ""}`}>
+                          <td className={`py-2 pr-3 font-medium text-text-2 sticky left-0 z-10 whitespace-nowrap ${di >= 5 ? "bg-warn-soft" : "bg-surface"}`}>
+                            {dow} {di >= 5 && <span className="text-[9px] text-warn-text ml-1">wknd</span>}
                           </td>
                           {allDow.map((d, pi) => {
                             const val = metric === "revenue" ? d.avgRevenue : metric === "orders" ? d.avgOrders : (d.avgOrders > 0 ? Math.round((d.avgRevenue / d.avgOrders) * 100) / 100 : 0);
                             const isBest = val === maxVal && maxVal > 0 && data.periods.length > 1;
                             return (
-                              <td key={pi} className={`text-right py-2 px-2 tabular-nums whitespace-nowrap ${isBest ? "font-semibold text-green-700" : "text-gray-700"}`}>
-                                {d.count === 0 ? <span className="text-gray-300">—</span> : metric === "revenue" || metric === "aov" ? fmtRM(val) : val}
+                              <td key={pi} className={`text-right py-2 px-2 tabular-nums whitespace-nowrap ${isBest ? "font-semibold text-ok-text" : "text-text-2"}`}>
+                                {d.count === 0 ? <span className="text-text-3">—</span> : metric === "revenue" || metric === "aov" ? fmtRM(val) : val}
                               </td>
                             );
                           })}
@@ -1311,8 +1311,8 @@ export default function SalesComparePage() {
                       );
                     })}
                     {/* Weekly average row */}
-                    <tr className="border-t-2 border-gray-200 font-semibold">
-                      <td className="py-2 pr-3 text-gray-900 sticky left-0 bg-white z-10">Avg/day</td>
+                    <tr className="border-t-2 border-line font-semibold">
+                      <td className="py-2 pr-3 text-text sticky left-0 bg-surface z-10">Avg/day</td>
                       {data.periods.map((p, pi) => {
                         const today = getMYTToday();
                         const completedDays = p.dailyTotals.filter((d) => d.date < today && (d.revenue > 0 || d.orders > 0));
@@ -1325,7 +1325,7 @@ export default function SalesComparePage() {
                           ? (daysCount > 0 ? Math.round(completedOrders / daysCount) : 0)
                           : (completedOrders > 0 ? Math.round((completedRevenue / completedOrders) * 100) / 100 : 0);
                         return (
-                          <td key={pi} className="text-right py-2 px-2 text-gray-900 tabular-nums whitespace-nowrap">
+                          <td key={pi} className="text-right py-2 px-2 text-text tabular-nums whitespace-nowrap">
                             {metric === "revenue" || metric === "aov" ? fmtRM(val) : val}
                           </td>
                         );
@@ -1352,23 +1352,23 @@ export default function SalesComparePage() {
               );
             if (activeKeys.length === 0) return null;
             return (
-              <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden">
+              <div className="bg-surface rounded-xl border border-line p-4 overflow-hidden">
                 <button
                   onClick={() => setShowSources(!showSources)}
                   className="flex items-center justify-between w-full mb-3"
                 >
                   <div className="text-left">
-                    <h2 className="text-sm font-semibold text-gray-900">Sales Channel Breakdown</h2>
-                    <p className="text-[11px] text-gray-400">Till · QR table · pickup app · GrabFood · Beep (retired) · consignment</p>
+                    <h2 className="text-sm font-semibold text-text">Sales Channel Breakdown</h2>
+                    <p className="text-[11px] text-text-3">Till · QR table · pickup app · GrabFood · Beep (retired) · consignment</p>
                   </div>
-                  {showSources ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                  {showSources ? <ChevronUp className="w-4 h-4 text-text-3" /> : <ChevronDown className="w-4 h-4 text-text-3" />}
                 </button>
                 {showSources && (
                   <div className="overflow-x-auto -mx-4 px-4">
                     <table className="w-full text-xs" style={{ minWidth: Math.max(500, data.periods.length * 130 + 120) }}>
                       <thead>
-                        <tr className="border-b border-gray-100">
-                          <th className="text-left py-2 pr-3 font-medium text-gray-500 sticky left-0 bg-white z-10 whitespace-nowrap">Channel</th>
+                        <tr className="border-b border-line">
+                          <th className="text-left py-2 pr-3 font-medium text-text-2 sticky left-0 bg-surface z-10 whitespace-nowrap">Channel</th>
                           {data.periods.map((p, i) => (
                             <th key={i} className="text-right py-2 px-2 font-medium whitespace-nowrap" style={{ color: PERIOD_COLORS[i % PERIOD_COLORS.length] }}>
                               {p.label}
@@ -1380,11 +1380,11 @@ export default function SalesComparePage() {
                         {activeKeys.map((key) => {
                           const label = template.find((s) => s.key === key)?.label ?? key;
                           return (
-                            <tr key={key} className="border-b border-gray-50">
-                              <td className="py-2 pr-3 font-medium text-gray-700 sticky left-0 bg-white z-10 whitespace-nowrap">{label}</td>
+                            <tr key={key} className="border-b border-line">
+                              <td className="py-2 pr-3 font-medium text-text-2 sticky left-0 bg-surface z-10 whitespace-nowrap">{label}</td>
                               {data.periods.map((p, pi) => {
                                 const src = p.sources?.find((s) => s.key === key);
-                                if (!src) return <td key={pi} className="text-right py-2 px-2 text-gray-300">—</td>;
+                                if (!src) return <td key={pi} className="text-right py-2 px-2 text-text-3">—</td>;
                                 const val = metric === "revenue" ? src.revenue : metric === "orders" ? src.orders : src.aov;
                                 const totalForShare = metric === "orders" ? p.summary.orders : p.summary.revenue;
                                 const shareBase = metric === "orders" ? src.orders : src.revenue;
@@ -1395,12 +1395,12 @@ export default function SalesComparePage() {
                                 const change = nextVal !== null && nextVal !== undefined ? pctChange(val, nextVal) : null;
                                 return (
                                   <td key={pi} className="text-right py-2 px-2 tabular-nums whitespace-nowrap">
-                                    <span className="text-gray-700">
-                                      {val === 0 ? <span className="text-gray-300">—</span> : metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
+                                    <span className="text-text-2">
+                                      {val === 0 ? <span className="text-text-3">—</span> : metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
                                     </span>
                                     {(share !== null && val !== 0) || change ? (
                                       <span className="ml-1.5 text-[10px]">
-                                        {share !== null && val !== 0 && <span className="text-gray-400">{share.toFixed(0)}%</span>}
+                                        {share !== null && val !== 0 && <span className="text-text-3">{share.toFixed(0)}%</span>}
                                         {change && val !== 0 && <span className={`ml-1 ${change.color}`}>{change.label}</span>}
                                       </span>
                                     ) : null}
@@ -1438,25 +1438,25 @@ export default function SalesComparePage() {
               return rb - ra;
             });
             return (
-              <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden">
+              <div className="bg-surface rounded-xl border border-line p-4 overflow-hidden">
                 <button
                   onClick={() => setShowPayments(!showPayments)}
                   className="flex items-center justify-between w-full mb-3"
                 >
                   <div className="text-left">
-                    <h2 className="text-sm font-semibold text-gray-900">Payment Method</h2>
-                    <p className="text-[11px] text-gray-400">
+                    <h2 className="text-sm font-semibold text-text">Payment Method</h2>
+                    <p className="text-[11px] text-text-3">
                       POS-native + pickup sales only — StoreHub-era history has no payment splits
                     </p>
                   </div>
-                  {showPayments ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                  {showPayments ? <ChevronUp className="w-4 h-4 text-text-3" /> : <ChevronDown className="w-4 h-4 text-text-3" />}
                 </button>
                 {showPayments && (
                   <div className="overflow-x-auto -mx-4 px-4">
                     <table className="w-full text-xs" style={{ minWidth: Math.max(500, data.periods.length * 130 + 120) }}>
                       <thead>
-                        <tr className="border-b border-gray-100">
-                          <th className="text-left py-2 pr-3 font-medium text-gray-500 sticky left-0 bg-white z-10 whitespace-nowrap">Method</th>
+                        <tr className="border-b border-line">
+                          <th className="text-left py-2 pr-3 font-medium text-text-2 sticky left-0 bg-surface z-10 whitespace-nowrap">Method</th>
                           {data.periods.map((p, i) => (
                             <th key={i} className="text-right py-2 px-2 font-medium whitespace-nowrap" style={{ color: PERIOD_COLORS[i % PERIOD_COLORS.length] }}>
                               {p.label}
@@ -1468,12 +1468,12 @@ export default function SalesComparePage() {
                         {sortedKeys.map((key) => {
                           const label = template.find((m) => m.key === key)?.label ?? key;
                           return (
-                            <tr key={key} className="border-b border-gray-50">
-                              <td className="py-2 pr-3 font-medium text-gray-700 sticky left-0 bg-white z-10 whitespace-nowrap">{label}</td>
+                            <tr key={key} className="border-b border-line">
+                              <td className="py-2 pr-3 font-medium text-text-2 sticky left-0 bg-surface z-10 whitespace-nowrap">{label}</td>
                               {data.periods.map((p, pi) => {
                                 const pm = p.payments?.methods.find((m) => m.key === key);
                                 if (!pm || (pm.revenue === 0 && pm.orders === 0)) {
-                                  return <td key={pi} className="text-right py-2 px-2 text-gray-300">—</td>;
+                                  return <td key={pi} className="text-right py-2 px-2 text-text-3">—</td>;
                                 }
                                 const val = metric === "revenue" ? pm.revenue : metric === "orders" ? pm.orders : pm.aov;
                                 // Share of the TENDERED total, not all revenue —
@@ -1486,11 +1486,11 @@ export default function SalesComparePage() {
                                 const change = nextVal !== null && nextVal !== undefined && nextVal !== 0 ? pctChange(val, nextVal) : null;
                                 return (
                                   <td key={pi} className="text-right py-2 px-2 tabular-nums whitespace-nowrap">
-                                    <span className="text-gray-700">
+                                    <span className="text-text-2">
                                       {metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
                                     </span>
                                     <span className="ml-1.5 text-[10px]">
-                                      {share !== null && <span className="text-gray-400">{share.toFixed(0)}%</span>}
+                                      {share !== null && <span className="text-text-3">{share.toFixed(0)}%</span>}
                                       {change && <span className={`ml-1 ${change.color}`}>{change.label}</span>}
                                     </span>
                                   </td>
@@ -1500,21 +1500,21 @@ export default function SalesComparePage() {
                           );
                         })}
                         {/* Tendered total + how much of the period it covers */}
-                        <tr className="border-t-2 border-gray-200 font-semibold">
-                          <td className="py-2 pr-3 text-gray-900 sticky left-0 bg-white z-10 whitespace-nowrap">Tendered total</td>
+                        <tr className="border-t-2 border-line font-semibold">
+                          <td className="py-2 pr-3 text-text sticky left-0 bg-surface z-10 whitespace-nowrap">Tendered total</td>
                           {data.periods.map((p, pi) => {
                             const covered = p.payments;
                             if (!covered || covered.coveredOrders === 0) {
-                              return <td key={pi} className="text-right py-2 px-2 text-gray-300">—</td>;
+                              return <td key={pi} className="text-right py-2 px-2 text-text-3">—</td>;
                             }
                             const val = metric === "orders" ? covered.coveredOrders : covered.coveredRevenue;
                             const full = metric === "orders" ? p.summary.orders : p.summary.revenue;
                             const covPct = full > 0 ? Math.round(((metric === "orders" ? covered.coveredOrders : covered.coveredRevenue) / full) * 100) : 0;
                             return (
-                              <td key={pi} className="text-right py-2 px-2 text-gray-900 tabular-nums whitespace-nowrap">
+                              <td key={pi} className="text-right py-2 px-2 text-text tabular-nums whitespace-nowrap">
                                 {metric === "orders" ? val.toLocaleString() : fmtRM(val)}
                                 {covPct < 100 && metric !== "aov" && (
-                                  <span className="ml-1.5 text-[10px] font-normal text-gray-400">{covPct}% of sales</span>
+                                  <span className="ml-1.5 text-[10px] font-normal text-text-3">{covPct}% of sales</span>
                                 )}
                               </td>
                             );
@@ -1529,13 +1529,13 @@ export default function SalesComparePage() {
           })()}
 
           {/* Order Type Mix (dine-in / takeaway / delivery) */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden">
+          <div className="bg-surface rounded-xl border border-line p-4 overflow-hidden">
             <button
               onClick={() => setShowChannels(!showChannels)}
               className="flex items-center justify-between w-full mb-3"
             >
-              <h2 className="text-sm font-semibold text-gray-900">Order Type Breakdown</h2>
-              {showChannels ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+              <h2 className="text-sm font-semibold text-text">Order Type Breakdown</h2>
+              {showChannels ? <ChevronUp className="w-4 h-4 text-text-3" /> : <ChevronDown className="w-4 h-4 text-text-3" />}
             </button>
             {showChannels && (
               <div className="overflow-x-auto -mx-4 px-4">
@@ -1543,8 +1543,8 @@ export default function SalesComparePage() {
                     columns = periods */}
                 <table className="w-full text-xs" style={{ minWidth: Math.max(450, data.periods.length * 130 + 120) }}>
                   <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 pr-3 font-medium text-gray-500 sticky left-0 bg-white z-10 whitespace-nowrap">Order Type</th>
+                    <tr className="border-b border-line">
+                      <th className="text-left py-2 pr-3 font-medium text-text-2 sticky left-0 bg-surface z-10 whitespace-nowrap">Order Type</th>
                       {data.periods.map((p, i) => (
                         <th key={i} className="text-right py-2 px-2 font-medium whitespace-nowrap" style={{ color: PERIOD_COLORS[i % PERIOD_COLORS.length] }}>
                           {p.label}
@@ -1554,12 +1554,12 @@ export default function SalesComparePage() {
                   </thead>
                   <tbody>
                     {([
-                      { key: "dineIn" as const, label: "Dine In", cls: "text-blue-600" },
-                      { key: "takeaway" as const, label: "Takeaway", cls: "text-amber-600" },
-                      { key: "delivery" as const, label: "Delivery", cls: "text-purple-600" },
+                      { key: "dineIn" as const, label: "Dine-in", cls: "text-info-text" },
+                      { key: "takeaway" as const, label: "Takeaway", cls: "text-warn-text" },
+                      { key: "delivery" as const, label: "Delivery", cls: "text-info-text" },
                     ]).map((ch) => (
-                      <tr key={ch.key} className="border-b border-gray-50">
-                        <td className={`py-2 pr-3 font-medium sticky left-0 bg-white z-10 whitespace-nowrap ${ch.cls}`}>{ch.label}</td>
+                      <tr key={ch.key} className="border-b border-line">
+                        <td className={`py-2 pr-3 font-medium sticky left-0 bg-surface z-10 whitespace-nowrap ${ch.cls}`}>{ch.label}</td>
                         {data.periods.map((p, pi) => {
                           const c = p.channels[ch.key];
                           const val = metric === "revenue" ? c.revenue : metric === "orders" ? c.orders : c.orders > 0 ? Math.round((c.revenue / c.orders) * 100) / 100 : 0;
@@ -1567,13 +1567,13 @@ export default function SalesComparePage() {
                           const shareBase = metric === "orders" ? c.orders : c.revenue;
                           const share = metric !== "aov" && totalForShare > 0 ? (shareBase / totalForShare) * 100 : null;
                           return (
-                            <td key={pi} className="text-right py-2 px-2 text-gray-700 tabular-nums whitespace-nowrap">
+                            <td key={pi} className="text-right py-2 px-2 text-text-2 tabular-nums whitespace-nowrap">
                               {val === 0 ? (
-                                <span className="text-gray-300">—</span>
+                                <span className="text-text-3">—</span>
                               ) : (
                                 <>
                                   {metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
-                                  {share !== null && <span className="ml-1.5 text-[10px] text-gray-400">{share.toFixed(0)}%</span>}
+                                  {share !== null && <span className="ml-1.5 text-[10px] text-text-3">{share.toFixed(0)}%</span>}
                                 </>
                               )}
                             </td>
@@ -1582,12 +1582,12 @@ export default function SalesComparePage() {
                       </tr>
                     ))}
                     {/* Totals row */}
-                    <tr className="border-t-2 border-gray-200 font-semibold">
-                      <td className="py-2 pr-3 text-gray-900 sticky left-0 bg-white z-10">Total</td>
+                    <tr className="border-t-2 border-line font-semibold">
+                      <td className="py-2 pr-3 text-text sticky left-0 bg-surface z-10">Total</td>
                       {data.periods.map((p, pi) => {
                         const val = metric === "revenue" ? p.summary.revenue : metric === "orders" ? p.summary.orders : p.summary.aov;
                         return (
-                          <td key={pi} className="text-right py-2 px-2 text-gray-900 tabular-nums whitespace-nowrap">
+                          <td key={pi} className="text-right py-2 px-2 text-text tabular-nums whitespace-nowrap">
                             {metric === "revenue" || metric === "aov" ? fmtRM(val) : val.toLocaleString()}
                           </td>
                         );
@@ -1601,15 +1601,15 @@ export default function SalesComparePage() {
 
           {/* Daily Breakdown with 7-day MA by Round */}
           {data.periods.some((p) => p.dailyTotals.length > 1) && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4 overflow-hidden">
+            <div className="bg-surface rounded-xl border border-line p-4 overflow-hidden">
               <button
                 onClick={() => setShowDaily(!showDaily)}
                 className="flex items-center justify-between w-full mb-3"
               >
-                <h2 className="text-sm font-semibold text-gray-900">
+                <h2 className="text-sm font-semibold text-text">
                   Daily Breakdown with 7-day MA
                 </h2>
-                {showDaily ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                {showDaily ? <ChevronUp className="w-4 h-4 text-text-3" /> : <ChevronDown className="w-4 h-4 text-text-3" />}
               </button>
               {showDaily && (
                 <div className="space-y-4">
@@ -1627,12 +1627,12 @@ export default function SalesComparePage() {
                         <div className="overflow-x-auto -mx-4 px-4">
                           <table className="w-full text-xs" style={{ minWidth: 600 + roundLabels.length * 80 }}>
                             <thead>
-                              <tr className="border-b border-gray-100">
-                                <th className="text-left py-1.5 pr-3 font-medium text-gray-500 sticky left-0 bg-white z-10">Date</th>
-                                <th className="text-right py-1.5 px-2 font-medium text-gray-700">Total</th>
-                                <th className="text-right py-1.5 px-2 font-medium text-blue-500">7d MA</th>
+                              <tr className="border-b border-line">
+                                <th className="text-left py-1.5 pr-3 font-medium text-text-2 sticky left-0 bg-surface z-10">Date</th>
+                                <th className="text-right py-1.5 px-2 font-medium text-text-2">Total</th>
+                                <th className="text-right py-1.5 px-2 font-medium text-info-text">7d MA</th>
                                 {roundLabels.map((rl) => (
-                                  <th key={rl} className="text-right py-1.5 px-1.5 font-medium text-gray-400 whitespace-nowrap">{rl}</th>
+                                  <th key={rl} className="text-right py-1.5 px-1.5 font-medium text-text-3 whitespace-nowrap">{rl}</th>
                                 ))}
                               </tr>
                             </thead>
@@ -1642,16 +1642,16 @@ export default function SalesComparePage() {
                                 const ma = metric === "revenue" ? d.maRevenue : d.maOrders;
                                 const vsMa = ma !== null && ma > 0 ? pctChange(val, ma) : null;
                                 return (
-                                  <tr key={d.date} className="border-b border-gray-50">
-                                    <td className="py-1.5 pr-3 font-medium text-gray-700 sticky left-0 bg-white z-10 whitespace-nowrap">
+                                  <tr key={d.date} className="border-b border-line">
+                                    <td className="py-1.5 pr-3 font-medium text-text-2 sticky left-0 bg-surface z-10 whitespace-nowrap">
                                       {d.label}
                                       {vsMa && <span className={`ml-1.5 text-[10px] ${vsMa.color}`}>{vsMa.label}</span>}
                                     </td>
-                                    <td className="text-right py-1.5 px-2 text-gray-700 tabular-nums font-medium">
+                                    <td className="text-right py-1.5 px-2 text-text-2 tabular-nums font-medium">
                                       {metric === "revenue" ? fmtRM(val) : val}
                                     </td>
-                                    <td className="text-right py-1.5 px-2 text-blue-600 tabular-nums">
-                                      {ma !== null ? (metric === "revenue" ? fmtRM(ma) : Math.round(ma as number)) : <span className="text-gray-300">—</span>}
+                                    <td className="text-right py-1.5 px-2 text-info-text tabular-nums">
+                                      {ma !== null ? (metric === "revenue" ? fmtRM(ma) : Math.round(ma as number)) : <span className="text-text-3">—</span>}
                                     </td>
                                     {d.roundMAs.map((rm) => {
                                       const rv = metric === "revenue" ? rm.value : 0;
@@ -1659,7 +1659,7 @@ export default function SalesComparePage() {
                                       const aboveMA = rma !== null && rma > 0 && rv > rma;
                                       const belowMA = rma !== null && rma > 0 && rv < rma * 0.85;
                                       return (
-                                        <td key={rm.key} className={`text-right py-1.5 px-1.5 tabular-nums whitespace-nowrap ${belowMA ? "text-red-500" : aboveMA ? "text-green-600" : "text-gray-500"}`}>
+                                        <td key={rm.key} className={`text-right py-1.5 px-1.5 tabular-nums whitespace-nowrap ${belowMA ? "text-danger-text" : aboveMA ? "text-ok-text" : "text-text-2"}`}>
                                           {metric === "revenue" ? fmtRM(rv) : rm.value}
                                         </td>
                                       );

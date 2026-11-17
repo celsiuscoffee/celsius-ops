@@ -99,9 +99,9 @@ export default function LeavePoliciesPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <div>
-        <h1 className="text-2xl font-bold">HR Settings</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">HR Settings</h1>
         <p className="text-sm text-muted-foreground">Configure how leave, payroll, and scheduling work for your team</p>
       </div>
       <SettingsNav />
@@ -109,12 +109,12 @@ export default function LeavePoliciesPage() {
       <div className="rounded-xl border bg-card p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 font-semibold">
-            <Briefcase className="h-5 w-5 text-terracotta" />
+            <Briefcase className="h-5 w-5 text-brand-text" />
             Leave Policies ({policies.length})
           </h2>
           <button
             onClick={startNew}
-            className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark"
+            className="flex items-center gap-1 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover"
           >
             <Plus className="h-4 w-4" />
             New Policy
@@ -123,18 +123,18 @@ export default function LeavePoliciesPage() {
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {policies.map((p) => (
-            <div key={p.id} className="rounded-lg border bg-white p-4">
+            <div key={p.id} className="rounded-lg border bg-surface p-4">
               <div className="mb-2 flex items-start justify-between">
                 <div>
                   <h3 className="font-semibold">{p.display_name}</h3>
                   <p className="text-xs font-mono text-muted-foreground">{p.leave_type}</p>
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => setEditing(p)} className="rounded p-1.5 hover:bg-gray-100 text-xs">Edit</button>
+                  <button onClick={() => setEditing(p)} className="rounded p-1.5 hover:bg-sunken text-xs">Edit</button>
                   <button
                     onClick={() => remove(p.id)}
                     disabled={deleting === p.id}
-                    className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                    className="rounded p-1.5 text-text-3 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                   >
                     {deleting === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                   </button>
@@ -148,7 +148,7 @@ export default function LeavePoliciesPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Half-day:</span><span>{p.half_day_allowed ? "Yes" : "No"}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Attachment:</span><span>{p.mandatory_attachment ? "Required" : "Optional"}</span></div>
               </div>
-              {!p.is_active && <span className="mt-2 inline-block rounded bg-gray-100 px-2 py-0.5 text-[10px]">INACTIVE</span>}
+              {!p.is_active && <span className="mt-2 inline-block rounded bg-sunken px-2 py-0.5 text-[10px]">INACTIVE</span>}
             </div>
           ))}
 
@@ -162,10 +162,10 @@ export default function LeavePoliciesPage() {
 
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={close}>
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold">{editing.id ? "Edit Leave Policy" : "New Leave Policy"}</h3>
-              <button onClick={close} className="rounded p-1 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+              <button onClick={close} className="rounded p-1 hover:bg-sunken"><X className="h-4 w-4" /></button>
             </div>
 
             <div className="space-y-4">
@@ -291,7 +291,7 @@ export default function LeavePoliciesPage() {
                           if (on) cur.delete(t.v); else cur.add(t.v);
                           setEditing({ ...editing, applies_to_employment_types: Array.from(cur) });
                         }}
-                        className={"rounded-full px-3 py-1 text-xs " + (on ? "bg-terracotta text-white" : "bg-gray-100 text-gray-600")}
+                        className={"rounded-full px-3 py-1 text-xs " + (on ? "bg-ink text-on-ink" : "bg-sunken text-text-2")}
                       >
                         {t.l}
                       </button>
@@ -309,7 +309,7 @@ export default function LeavePoliciesPage() {
                 <button
                   onClick={save}
                   disabled={saving || !editing.leave_type || !editing.display_name}
-                  className="flex items-center gap-1 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                  className="flex items-center gap-1 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   Save
@@ -326,7 +326,7 @@ export default function LeavePoliciesPage() {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}{hint && <span className="ml-1 text-gray-400">· {hint}</span>}</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}{hint && <span className="ml-1 text-text-3">· {hint}</span>}</span>
       {children}
     </label>
   );

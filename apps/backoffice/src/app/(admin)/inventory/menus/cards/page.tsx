@@ -116,13 +116,13 @@ function buildPackaging(packaging: Ingredient[]): PkgRow[] {
 function StepRow({ n, step }: { n: number; step: Step }) {
   return (
     <li className="flex items-baseline gap-2 py-[3px]">
-      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#160800]/5 text-[9px] font-bold text-[#160800]/60">
+      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-ink/5 text-[9px] font-bold text-text/60">
         {n}
       </span>
-      <span className="min-w-0 flex-1 truncate text-gray-800">{step.name}</span>
-      <span className="shrink-0 whitespace-nowrap tabular-nums font-semibold text-gray-900">
+      <span className="min-w-0 flex-1 truncate text-text">{step.name}</span>
+      <span className="shrink-0 whitespace-nowrap tabular-nums font-semibold text-text">
         {step.qty}
-        <span className="ml-0.5 text-[10px] font-normal text-gray-400">{step.uom}</span>
+        <span className="ml-0.5 text-[10px] font-normal text-text-3">{step.uom}</span>
       </span>
     </li>
   );
@@ -142,15 +142,15 @@ function BuildColumn({
   return (
     <div className="min-w-0">
       {title && (
-        <p className={`mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${accent ?? "text-gray-400"}`}>
+        <p className={`mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${accent ?? "text-text-3"}`}>
           {icon}
           {title}
         </p>
       )}
       {steps.length === 0 ? (
-        <p className="py-1 text-[11px] text-gray-400">No items</p>
+        <p className="py-1 text-[11px] text-text-3">No items</p>
       ) : (
-        <ol className="divide-y divide-gray-100">
+        <ol className="divide-y divide-line">
           {steps.map((s, i) => (
             <StepRow key={i} n={i + 1} step={s} />
           ))}
@@ -205,7 +205,7 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
   };
 
   return (
-    <div className="recipe-card flex break-inside-avoid flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+    <div className="recipe-card flex break-inside-avoid flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-sm">
       {/* Hero reference photo (plating expectation) — pulled from the customer
           catalogue by name; graceful placeholder when there's no match. */}
       {menu.imageUrl ? (
@@ -216,14 +216,14 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
           className="aspect-[4/3] w-full bg-[#F5F1EA] object-cover"
         />
       ) : (
-        <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 bg-[#F5F1EA] text-[#160800]/25">
+        <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 bg-[#F5F1EA] text-text/25">
           <Coffee className="h-7 w-7" />
           <span className="text-[10px] font-medium uppercase tracking-wide print:hidden">No reference photo</span>
         </div>
       )}
 
       {/* Header band — espresso fill, cream text */}
-      <div className="rc-head flex items-start justify-between gap-3 bg-[#160800] px-4 py-3 text-[#F5F1EA]">
+      <div className="rc-head flex items-start justify-between gap-3 bg-ink px-4 py-3 text-[#F5F1EA]">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#D2965C]">
             {menu.category || "Uncategorised"}
@@ -239,19 +239,19 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
       {/* Build */}
       <div className="flex-1 px-4 py-3 text-xs">
         {empty ? (
-          <p className="py-3 text-center text-gray-400">No recipe yet</p>
+          <p className="py-3 text-center text-text-3">No recipe yet</p>
         ) : hasTempSplit ? (
-          <div className="grid grid-cols-2 gap-x-4 divide-x divide-gray-100">
+          <div className="grid grid-cols-2 gap-x-4 divide-x divide-line">
             <BuildColumn
               title="Hot recipe"
-              accent="text-orange-600"
+              accent="text-warn-text"
               icon={<Flame className="h-3 w-3" />}
               steps={hotSteps}
             />
             <div className="pl-4">
               <BuildColumn
                 title="Iced recipe"
-                accent="text-sky-600"
+                accent="text-info-text"
                 icon={<Snowflake className="h-3 w-3" />}
                 steps={icedSteps}
               />
@@ -264,14 +264,14 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
 
       {/* Serve in (packaging) */}
       {pkgRows.length > 0 && (
-        <div className="border-t border-gray-100 px-4 py-2 text-[11px]">
-          <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600">Serve in</p>
+        <div className="border-t border-line px-4 py-2 text-[11px]">
+          <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wide text-warn-text">Serve in</p>
           <ul className="space-y-0.5">
             {pkgRows.map((p, i) => (
               <li key={i} className="flex items-baseline justify-between gap-2">
-                <span className="truncate text-gray-700">{p.name}</span>
+                <span className="truncate text-text-2">{p.name}</span>
                 {p.serviceMode !== "ALL" && (
-                  <span className="shrink-0 text-[10px] text-gray-400">{SERVICE_MODE_LABEL[p.serviceMode]}</span>
+                  <span className="shrink-0 text-[10px] text-text-3">{SERVICE_MODE_LABEL[p.serviceMode]}</span>
                 )}
               </li>
             ))}
@@ -280,13 +280,13 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
       )}
 
       {/* Plating expectation — editable; only prints when a note is set. */}
-      <div className={`border-t border-gray-100 px-4 py-2 text-[11px] ${trimmedNote && !editing ? "" : "print:hidden"}`}>
+      <div className={`border-t border-line px-4 py-2 text-[11px] ${trimmedNote && !editing ? "" : "print:hidden"}`}>
         <div className="mb-0.5 flex items-center justify-between">
-          <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+          <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-ok-text">
             <Utensils className="h-3 w-3" /> Plating
           </p>
           {!editing && trimmedNote && (
-            <button onClick={() => setEditing(true)} title="Edit plating note" className="text-gray-400 hover:text-terracotta print:hidden">
+            <button onClick={() => setEditing(true)} title="Edit plating note" className="text-text-3 hover:text-brand-text print:hidden">
               <Pencil className="h-3 w-3" />
             </button>
           )}
@@ -298,21 +298,21 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
               onChange={(e) => setNote(e.target.value)}
               rows={3}
               placeholder="How it should look / be served — e.g. foam art, dust cocoa, wooden board + napkin"
-              className="w-full resize-y rounded border border-gray-200 p-2 text-[11px] text-gray-700 focus:border-terracotta focus:outline-none"
+              className="w-full resize-y rounded border border-line p-2 text-[11px] text-text-2 focus:border-ink focus:outline-none"
             />
             <div className="mt-1 flex items-center justify-end gap-1">
-              <button onClick={() => { setNote(menu.platingNote ?? ""); setEditing(false); }} disabled={saving} className="rounded px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-100">
+              <button onClick={() => { setNote(menu.platingNote ?? ""); setEditing(false); }} disabled={saving} className="rounded px-2 py-1 text-[10px] text-text-2 hover:bg-sunken">
                 Cancel
               </button>
-              <button onClick={saveNote} disabled={saving} className="flex items-center gap-1 rounded bg-green-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-green-700">
+              <button onClick={saveNote} disabled={saving} className="flex items-center gap-1 rounded bg-ok px-2 py-1 text-[10px] font-medium text-white hover:bg-ok">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
               </button>
             </div>
           </div>
         ) : trimmedNote ? (
-          <p className="whitespace-pre-line text-gray-700">{trimmedNote}</p>
+          <p className="whitespace-pre-line text-text-2">{trimmedNote}</p>
         ) : (
-          <button onClick={() => setEditing(true)} className="text-gray-400 hover:text-terracotta print:hidden">
+          <button onClick={() => setEditing(true)} className="text-text-3 hover:text-brand-text print:hidden">
             + Add plating note
           </button>
         )}
@@ -320,18 +320,18 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
 
       {/* Cost summary (off by default — toggle on for costing) */}
       {showCosts && (menu.ingredientCost > 0 || menu.cogs > 0) && (
-        <div className="border-t border-gray-100 bg-gray-50/70 px-4 py-2 text-[11px]">
+        <div className="border-t border-line bg-sunken/70 px-4 py-2 text-[11px]">
           <div className="flex items-center justify-between">
-            <span className="text-gray-500">Ingredient cost</span>
-            <span className="font-medium tabular-nums text-gray-700">{formatRM(menu.ingredientCost)}</span>
+            <span className="text-text-2">Ingredient cost</span>
+            <span className="font-medium tabular-nums text-text-2">{formatRM(menu.ingredientCost)}</span>
           </div>
           {menu.cogs > 0 && (
             <div className="mt-0.5 flex items-center justify-between">
-              <span className="text-gray-500">All-in COGS{menu.packagingCount > 0 ? " (incl. packaging)" : ""}</span>
+              <span className="text-text-2">All-in COGS{menu.packagingCount > 0 ? " (incl. packaging)" : ""}</span>
               <span className="tabular-nums">
-                <span className="font-semibold text-gray-900">{formatRM(menu.cogs)}</span>
+                <span className="font-semibold text-text">{formatRM(menu.cogs)}</span>
                 {menu.cogsPercent > 0 && (
-                  <span className={`ml-1 font-medium ${menu.cogsPercent > 40 ? "text-red-600" : menu.cogsPercent > 30 ? "text-amber-600" : "text-green-600"}`}>
+                  <span className={`ml-1 font-medium ${menu.cogsPercent > 40 ? "text-danger-text" : menu.cogsPercent > 30 ? "text-warn-text" : "text-ok-text"}`}>
                     {menu.cogsPercent.toFixed(0)}%
                   </span>
                 )}
@@ -339,7 +339,7 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
             </div>
           )}
           {menu.hasIcedHotSplit && (
-            <p className="mt-0.5 text-[9px] text-gray-400">Worst case across Hot/Iced × dine-in/takeaway — full breakdown on Menu &amp; BOM.</p>
+            <p className="mt-0.5 text-[9px] text-text-3">Worst case across Hot/Iced × dine-in/takeaway — full breakdown on Menu &amp; BOM.</p>
           )}
         </div>
       )}
@@ -374,13 +374,13 @@ export default function RecipeCardsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-6 print:p-0">
+    <div className="print:p-0 px-4 pt-6 pb-10 md:px-8">
       {/* Print rules: A4 portrait, 2-up cards, espresso header forced to print. */}
       <style
         dangerouslySetInnerHTML={{
@@ -398,34 +398,34 @@ export default function RecipeCardsPage() {
       {/* Header + controls (hidden when printing) */}
       <div className="print:hidden">
         <div className="flex items-center gap-2">
-          <Link href="/inventory/menus" className="text-gray-400 hover:text-terracotta">
+          <Link href="/inventory/menus" className="text-text-3 hover:text-brand-text">
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <h2 className="text-xl font-semibold text-gray-900">Recipe Cards</h2>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Recipe cards</h1>
         </div>
-        <p className="mt-0.5 text-sm text-gray-500">
-          Barista recipe cards from the Bill of Materials — reference photo, Hot &amp; Iced recipes, and plating notes. {filtered.length} of {menus.length} shown.
+        <p className="mt-0.5 text-sm text-text-2">
+          Printable cards for the bar: the photo, the hot and iced recipe, and how to serve it. {filtered.length} of {menus.length} shown.
         </p>
 
         <div className="mt-4 flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-[200px] max-w-md flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
               <Input placeholder="Search menu items..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
             </div>
 
-            <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-gray-600">
-              <input type="checkbox" checked={onlyWithRecipe} onChange={(e) => setOnlyWithRecipe(e.target.checked)} className="accent-terracotta" />
+            <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-text-2">
+              <input type="checkbox" checked={onlyWithRecipe} onChange={(e) => setOnlyWithRecipe(e.target.checked)} className="accent-ink" />
               Only items with a recipe
             </label>
-            <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-gray-600">
-              <input type="checkbox" checked={showCosts} onChange={(e) => setShowCosts(e.target.checked)} className="accent-terracotta" />
+            <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-text-2">
+              <input type="checkbox" checked={showCosts} onChange={(e) => setShowCosts(e.target.checked)} className="accent-ink" />
               Show costs
             </label>
 
             <button
               onClick={() => window.print()}
-              className="ml-auto flex items-center gap-2 rounded-xl bg-[#160800] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#2d1100]"
+              className="ml-auto flex items-center gap-2 rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-on-ink transition-colors hover:bg-ink-hover"
             >
               <Printer className="h-4 w-4" /> Print all
             </button>
@@ -435,7 +435,7 @@ export default function RecipeCardsPage() {
           <div className="flex flex-wrap gap-1.5">
             <button
               onClick={() => setCatFilter([])}
-              className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter.length === 0 ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter.length === 0 ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:border-line-2"}`}
             >
               All
             </button>
@@ -445,7 +445,7 @@ export default function RecipeCardsPage() {
                 <button
                   key={c}
                   onClick={() => toggleCat(c)}
-                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}
+                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:border-line-2"}`}
                 >
                   {c}
                   {active && <X className="h-3 w-3" />}
@@ -458,7 +458,7 @@ export default function RecipeCardsPage() {
 
       {/* Card grid */}
       {filtered.length === 0 ? (
-        <div className="mt-10 flex flex-col items-center gap-2 text-gray-400">
+        <div className="mt-10 flex flex-col items-center gap-2 text-text-3">
           <Coffee className="h-8 w-8" />
           <p className="text-sm">No menu items match your filters.</p>
         </div>

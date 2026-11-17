@@ -30,9 +30,9 @@ const KIND_LABEL: Record<Kind, string> = {
   instruction: "Instruction", audit: "Audit", reply: "Reply", manual: "Manual", supplier: "Supplier", other: "Other",
 };
 const KIND_CLASS: Record<Kind, string> = {
-  pulse: "bg-red-100 text-red-700", nudge: "bg-amber-100 text-amber-700", scoreboard: "bg-violet-100 text-violet-700",
-  reminder: "bg-blue-100 text-blue-700", instruction: "bg-teal-100 text-teal-700", audit: "bg-indigo-100 text-indigo-700",
-  reply: "bg-green-100 text-green-700", manual: "bg-slate-100 text-slate-600", supplier: "bg-orange-100 text-orange-700", other: "bg-slate-100 text-slate-600",
+  pulse: "bg-danger-soft text-danger-text", nudge: "bg-warn-soft text-warn-text", scoreboard: "bg-info-soft text-info-text",
+  reminder: "bg-info-soft text-info-text", instruction: "bg-ok-soft text-ok-text", audit: "bg-info-soft text-info-text",
+  reply: "bg-ok-soft text-ok-text", manual: "bg-sunken text-text-2", supplier: "bg-warn-soft text-warn-text", other: "bg-sunken text-text-2",
 };
 
 const FILTER_KINDS: { key: string; label: string }[] = [
@@ -47,7 +47,7 @@ const FILTER_KINDS: { key: string; label: string }[] = [
 ];
 
 function fmt(iso: string): string {
-  return new Date(iso).toLocaleString("en-MY", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }
 function fmtPhone(p: string): string {
   return /^60\d+$/.test(p) ? "+" + p : p;
@@ -80,16 +80,16 @@ export default function MessagesPanel() {
     <Card className="flex h-[calc(100vh-15rem)] flex-col p-4">
       {/* Header + summary */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Activity className="h-4 w-4 text-terracotta" />
+        <Activity className="h-4 w-4 text-brand-text" />
         <span className="text-sm font-medium">Message monitor</span>
         {s && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-text-3">
             {s.sent} sent · {s.inbound} replies
-            {s.failed > 0 && <span className="text-red-600"> · {s.failed} failed</span>}
-            <span className="text-muted-foreground"> · last {days}d</span>
+            {s.failed > 0 && <span className="text-danger-text"> · {s.failed} failed</span>}
+            <span className="text-text-3"> · last {days}d</span>
           </span>
         )}
-        <button onClick={() => mutate()} className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+        <button onClick={() => mutate()} className="ml-auto flex items-center gap-1 text-xs text-text-3 hover:text-text">
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </button>
       </div>
@@ -105,24 +105,24 @@ export default function MessagesPanel() {
               onClick={() => setKind(k.key)}
               className={
                 "rounded-md border px-2 py-1 text-xs transition " +
-                (active ? "border-terracotta bg-terracotta/10 text-terracotta" : "text-muted-foreground hover:text-foreground")
+                (active ? "border-text bg-raised font-semibold text-text" : "text-text-3 hover:text-text")
               }
             >
               {k.label}{n ? ` ${n}` : ""}
             </button>
           );
         })}
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-7 rounded-md border bg-background px-1.5 text-xs">
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-7 rounded-md border bg-bg px-1.5 text-xs">
           <option value="all">Any status</option>
           <option value="sent">Sent</option>
           <option value="failed">Failed</option>
         </select>
-        <select value={days} onChange={(e) => setDays(e.target.value)} className="h-7 rounded-md border bg-background px-1.5 text-xs">
+        <select value={days} onChange={(e) => setDays(e.target.value)} className="h-7 rounded-md border bg-bg px-1.5 text-xs">
           <option value="1">Today</option>
           <option value="7">7 days</option>
           <option value="30">30 days</option>
         </select>
-        <label className="flex items-center gap-1 text-xs text-muted-foreground">
+        <label className="flex items-center gap-1 text-xs text-text-3">
           <input type="checkbox" checked={supplier} onChange={(e) => setSupplier(e.target.checked)} /> incl. supplier
         </label>
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name / phone / text…" className="h-7 w-44 text-xs" />
@@ -131,9 +131,9 @@ export default function MessagesPanel() {
       {/* Feed */}
       <div className="flex-1 overflow-y-auto">
         {isLoading && !data ? (
-          <div className="p-6 text-center text-muted-foreground"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
+          <div className="p-6 text-center text-text-3"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
         ) : messages.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No messages match these filters.</div>
+          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-text-3">No messages match these filters.</div>
         ) : (
           <ul className="space-y-1.5">
             {messages.map((m, i) => {
@@ -146,21 +146,21 @@ export default function MessagesPanel() {
                     <ChatDateDivider label={chatDayLabel(m.at)} />
                   </li>
                 )}
-                <li className={"rounded-lg border p-2.5 " + (failed ? "border-red-200 bg-red-50/40" : "bg-card")}>
+                <li className={"rounded-lg border p-2.5 " + (failed ? "border-danger/30 bg-danger-soft" : "bg-card")}>
                   <div className="flex items-center gap-1.5">
                     {m.direction === "out" ? (
-                      <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-text-3" />
                     ) : (
-                      <ArrowDownLeft className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                      <ArrowDownLeft className="h-3.5 w-3.5 shrink-0 text-ok-text" />
                     )}
                     <Badge className={"text-[10px] " + KIND_CLASS[m.kind]}>{KIND_LABEL[m.kind]}</Badge>
-                    <span className="truncate text-xs font-medium text-foreground">{m.name || fmtPhone(m.phone)}</span>
+                    <span className="truncate text-xs font-medium text-text">{m.name || fmtPhone(m.phone)}</span>
                     {failed && (
-                      <span className="flex items-center gap-0.5 text-[10px] text-red-600"><AlertTriangle className="h-3 w-3" /> failed</span>
+                      <span className="flex items-center gap-0.5 text-[10px] text-danger-text"><AlertTriangle className="h-3 w-3" /> failed</span>
                     )}
-                    <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{fmt(m.at)}</span>
+                    <span className="ml-auto shrink-0 text-[10px] text-text-3">{fmt(m.at)}</span>
                   </div>
-                  <div className="mt-1 whitespace-pre-wrap break-words pl-5 text-xs text-muted-foreground line-clamp-4">{m.body || `<${m.type}>`}</div>
+                  <div className="mt-1 whitespace-pre-wrap break-words pl-5 text-xs text-text-3 line-clamp-4">{m.body || `<${m.type}>`}</div>
                 </li>
                 </Fragment>
               );

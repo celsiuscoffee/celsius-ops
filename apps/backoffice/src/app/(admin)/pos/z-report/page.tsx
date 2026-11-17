@@ -159,43 +159,43 @@ export default function ZReportPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-7xl">
+    <div className="space-y-5 max-w-7xl px-4 pt-6 pb-10 md:px-8">
       <ReportsTabs />
       <div>
-        <h1 className="text-2xl font-bold text-[#160800]">Daily Report (Shift Close)</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Daily Report (Shift Close)</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           Per-shift sales totals. Click any row to view detail and print the daily slip.
         </p>
       </div>
 
       {/* Filters */}
-      <div className="rounded-2xl bg-white p-4 border border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="rounded-2xl bg-surface p-4 border border-line grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">From</label>
+          <label className="text-xs text-text-2 mb-1 block">From</label>
           <input
             type="date"
             value={from}
             onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
             max={to}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-[#A2492C]"
+            className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-[#A2492C]"
           />
         </div>
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">To</label>
+          <label className="text-xs text-text-2 mb-1 block">To</label>
           <input
             type="date"
             value={to}
             onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
             min={from}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-[#A2492C]"
+            className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-[#A2492C]"
           />
         </div>
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">Outlet</label>
+          <label className="text-xs text-text-2 mb-1 block">Outlet</label>
           <select
             value={outletFilter}
             onChange={(e) => setOutletFilter(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-[#A2492C] bg-white"
+            className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-[#A2492C] bg-surface"
           >
             <option value="">All outlets</option>
             {outletOptions.map((o) => (
@@ -207,16 +207,16 @@ export default function ZReportPage() {
 
       {loadingList && (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-text-3" />
         </div>
       )}
 
       {!loadingList && (
-        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+        <div className="overflow-hidden rounded-2xl border border-line bg-surface">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px]">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-left text-xs font-medium text-gray-700">
+                <tr className="border-b border-line bg-sunken text-left text-xs font-medium text-text-2">
                   <th className="px-4 py-3">Outlet</th>
                   <th className="px-4 py-3">Register</th>
                   <th className="px-4 py-3">Cashier</th>
@@ -230,10 +230,10 @@ export default function ZReportPage() {
                   <th className="px-4 py-3 text-right">E-wallet</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-line">
                 {shifts.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="px-4 py-10 text-center text-sm text-gray-500">
+                    <td colSpan={11} className="px-4 py-10 text-center text-sm text-text-2">
                       No shifts in this range.
                     </td>
                   </tr>
@@ -244,13 +244,13 @@ export default function ZReportPage() {
                       onClick={() => setSelectedShiftId(s.id)}
                       className="hover:bg-[#FBEBE8]/40 cursor-pointer"
                     >
-                      <td className="px-4 py-3 text-sm text-[#160800]">{s.outlet_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{s.register_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{s.opened_by_name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{klDateTime(s.opened_at)}</td>
+                      <td className="px-4 py-3 text-sm text-text">{s.outlet_name}</td>
+                      <td className="px-4 py-3 text-sm text-text-2">{s.register_name}</td>
+                      <td className="px-4 py-3 text-sm text-text-2">{s.opened_by_name}</td>
+                      <td className="px-4 py-3 text-sm text-text-2">{klDateTime(s.opened_at)}</td>
                       <td className="px-4 py-3 text-sm">
                         {s.closed_at ? (
-                          <span className="text-gray-600">{klDateTime(s.closed_at)}</span>
+                          <span className="text-text-2">{klDateTime(s.closed_at)}</span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#A2492C]">
                             <span className="h-1.5 w-1.5 rounded-full bg-[#A2492C] animate-pulse" />
@@ -260,8 +260,8 @@ export default function ZReportPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-right">{formatRM(s.gross_sales)}</td>
                       <td className="px-4 py-3 text-sm text-right font-medium">{formatRM(s.net_sales)}</td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-500">{formatRM(s.discounts)}</td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-500">{formatRM(s.tax)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-text-2">{formatRM(s.discounts)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-text-2">{formatRM(s.tax)}</td>
                       <td className="px-4 py-3 text-sm text-right">{formatRM(s.tendered_card)}</td>
                       <td className="px-4 py-3 text-sm text-right">{formatRM(s.tendered_ewallet)}</td>
                     </tr>
@@ -306,7 +306,7 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-text-3" />
       </div>
     );
   }
@@ -316,7 +316,7 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
         <button onClick={onBack} className="text-sm text-[#A2492C] hover:underline">
           ← Back
         </button>
-        <p className="mt-3 text-sm text-gray-600">Shift not found.</p>
+        <p className="mt-3 text-sm text-text-2">Shift not found.</p>
       </div>
     );
   }
@@ -329,13 +329,13 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
         <div className="flex items-center gap-2">
           <button
             onClick={onBack}
-            className="rounded-lg p-2 hover:bg-gray-100"
+            className="rounded-lg p-2 hover:bg-sunken"
             aria-label="Back"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-[#160800]">Daily Report</h1>
+            <h1 className="text-2xl font-bold text-text">Daily Report</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
               {shift.outlet_name} · {shift.register_name} · Shift {shift.id.slice(0, 8)}
             </p>
@@ -343,7 +343,7 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
         </div>
         <button
           onClick={() => printZReport(detail)}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#160800] px-3 py-2 text-sm font-medium text-white hover:bg-black"
+          className="inline-flex items-center gap-2 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-black"
         >
           <Printer className="h-4 w-4" />
           Print Daily Report
@@ -354,7 +354,7 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
       <Section title="Shift">
         <Grid cols={4}>
           <Field label="Status">
-            <span className={`text-sm font-medium ${shift.status === "open" ? "text-[#A2492C]" : "text-[#160800]"}`}>
+            <span className={`text-sm font-medium ${shift.status === "open" ? "text-[#A2492C]" : "text-text"}`}>
               {shift.status === "open" ? "Open" : "Closed"}
             </span>
           </Field>
@@ -382,21 +382,21 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
       {/* Payment-method breakdown */}
       <Section title="Payment Methods">
         {payments.length === 0 ? (
-          <p className="text-sm text-gray-500">No payments recorded.</p>
+          <p className="text-sm text-text-2">No payments recorded.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-gray-100">
+          <div className="overflow-hidden rounded-xl border border-line">
             <table className="w-full">
               <thead>
-                <tr className="bg-gray-50 text-left text-xs font-medium text-gray-700 border-b border-gray-100">
+                <tr className="bg-sunken text-left text-xs font-medium text-text-2 border-b border-line">
                   <th className="px-3 py-2">Method</th>
                   <th className="px-3 py-2 text-right">Transactions</th>
                   <th className="px-3 py-2 text-right">Total</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-line">
                 {payments.map((p) => (
                   <tr key={p.method}>
-                    <td className="px-3 py-2 text-sm text-[#160800]">{p.method}</td>
+                    <td className="px-3 py-2 text-sm text-text">{p.method}</td>
                     <td className="px-3 py-2 text-sm text-right">{p.count}</td>
                     <td className="px-3 py-2 text-sm text-right font-medium">{formatRM(p.total)}</td>
                   </tr>
@@ -412,21 +412,21 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
       {/* Sales by category */}
       <Section title="By Category">
         {categories.length === 0 ? (
-          <p className="text-sm text-gray-500">No items recorded.</p>
+          <p className="text-sm text-text-2">No items recorded.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-gray-100">
+          <div className="overflow-hidden rounded-xl border border-line">
             <table className="w-full">
               <thead>
-                <tr className="bg-gray-50 text-left text-xs font-medium text-gray-700 border-b border-gray-100">
+                <tr className="bg-sunken text-left text-xs font-medium text-text-2 border-b border-line">
                   <th className="px-3 py-2">Category</th>
                   <th className="px-3 py-2 text-right">Qty</th>
                   <th className="px-3 py-2 text-right">Revenue</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-line">
                 {categories.map((c) => (
                   <tr key={c.category}>
-                    <td className="px-3 py-2 text-sm text-[#160800]">{c.category}</td>
+                    <td className="px-3 py-2 text-sm text-text">{c.category}</td>
                     <td className="px-3 py-2 text-sm text-right">{c.qty}</td>
                     <td className="px-3 py-2 text-sm text-right font-medium">{formatRM(c.revenue)}</td>
                   </tr>
@@ -440,21 +440,21 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
       {/* Top 5 products */}
       <Section title="Top 5 Products">
         {top_products.length === 0 ? (
-          <p className="text-sm text-gray-500">No products recorded.</p>
+          <p className="text-sm text-text-2">No products recorded.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-gray-100">
+          <div className="overflow-hidden rounded-xl border border-line">
             <table className="w-full">
               <thead>
-                <tr className="bg-gray-50 text-left text-xs font-medium text-gray-700 border-b border-gray-100">
+                <tr className="bg-sunken text-left text-xs font-medium text-text-2 border-b border-line">
                   <th className="px-3 py-2">Product</th>
                   <th className="px-3 py-2 text-right">Qty</th>
                   <th className="px-3 py-2 text-right">Revenue</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-line">
                 {top_products.map((p) => (
                   <tr key={p.name}>
-                    <td className="px-3 py-2 text-sm text-[#160800]">{p.name}</td>
+                    <td className="px-3 py-2 text-sm text-text">{p.name}</td>
                     <td className="px-3 py-2 text-sm text-right">{p.qty}</td>
                     <td className="px-3 py-2 text-sm text-right font-medium">{formatRM(p.revenue)}</td>
                   </tr>
@@ -473,8 +473,8 @@ function ShiftDetailView({ shiftId, onBack }: { shiftId: string; onBack: () => v
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500">{title}</h2>
-      <div className="rounded-2xl bg-white p-4 border border-gray-100">{children}</div>
+      <h2 className="text-xs font-bold uppercase tracking-wider text-text-2">{title}</h2>
+      <div className="rounded-2xl bg-surface p-4 border border-line">{children}</div>
     </div>
   );
 }
@@ -490,8 +490,8 @@ function Grid({ cols, children }: { cols: 3 | 4; children: React.ReactNode }) {
 function Field({ label, children, bold }: { label: string; children: React.ReactNode; bold?: boolean }) {
   return (
     <div>
-      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{label}</p>
-      <p className={`mt-0.5 text-sm text-[#160800] ${bold ? "font-bold" : ""}`}>{children}</p>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-text-2">{label}</p>
+      <p className={`mt-0.5 text-sm text-text ${bold ? "font-bold" : ""}`}>{children}</p>
     </div>
   );
 }
@@ -499,8 +499,8 @@ function Field({ label, children, bold }: { label: string; children: React.React
 function Line({ label, value, bold, tone }: { label: string; value: string; bold?: boolean; tone?: "warn" }) {
   return (
     <div className="flex items-baseline justify-between">
-      <span className={`text-sm ${bold ? "font-bold text-[#160800]" : "text-gray-600"}`}>{label}</span>
-      <span className={`text-sm tabular-nums ${bold ? "font-bold" : ""} ${tone === "warn" ? "text-red-600" : "text-[#160800]"}`}>
+      <span className={`text-sm ${bold ? "font-bold text-text" : "text-text-2"}`}>{label}</span>
+      <span className={`text-sm tabular-nums ${bold ? "font-bold" : ""} ${tone === "warn" ? "text-red-600" : "text-text"}`}>
         {value}
       </span>
     </div>

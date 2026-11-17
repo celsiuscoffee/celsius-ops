@@ -69,8 +69,8 @@ function round2(v: number): number {
   return Math.round(v * 100) / 100;
 }
 
-const CUR_COLOR = "#F97316"; // orange — current period
-const PREV_COLOR = "#3B82F6"; // blue — previous period
+const CUR_COLOR = "var(--color-brand)"; // current period
+const PREV_COLOR = "var(--color-text-3)"; // previous period
 
 // Day view starts at 7am — outlets open ~7am, so 00:00–06:00 is a flat dead
 // zone. Cumulative totals still accumulate from midnight; we just don't plot
@@ -216,21 +216,21 @@ export function AccumulativeChart({
   const toggle = (active: boolean) =>
     cn(
       "px-2.5 py-1 rounded-md text-xs font-medium capitalize transition-colors",
-      active ? "bg-[#C2452D] text-white" : "text-gray-500 hover:text-gray-700",
+      active ? "bg-ink text-on-ink" : "text-text-2 hover:text-text-2",
     );
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-4 sm:p-5">
+    <div className="rounded-xl border border-line bg-surface shadow-sm p-4 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-gray-900">
+          <h2 className="text-sm font-semibold text-text">
             Total Accumulative {metric === "revenue" ? "Sales" : "Orders"}
-            {metric === "revenue" && <span className="font-normal text-gray-400"> (RM)</span>}
+            {metric === "revenue" && <span className="font-normal text-text-3"> (RM)</span>}
           </h2>
-          <p className="mt-0.5 text-xs text-gray-500">{meta.cur} vs {meta.prev} · running total</p>
+          <p className="mt-0.5 text-xs text-text-2">{meta.cur} vs {meta.prev} · running total</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
+          <div className="flex gap-1 rounded-lg border border-line bg-sunken p-1">
             {(["revenue", "orders"] as Metric[]).map((mt) => (
               <button key={mt} onClick={() => setMetric(mt)} className={toggle(metric === mt)}>{mt}</button>
             ))}
@@ -240,14 +240,14 @@ export function AccumulativeChart({
 
       {loading ? (
         <div className="flex items-center justify-center" style={{ height: 300 }}>
-          <Loader2 className="h-6 w-6 animate-spin text-[#C2452D]" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       ) : error ? (
-        <div className="flex items-center justify-center text-sm text-red-500" style={{ height: 300 }}>{error}</div>
+        <div className="flex items-center justify-center text-sm text-danger-text" style={{ height: 300 }}>{error}</div>
       ) : (
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={chartData} margin={{ top: 5, right: 12, left: -8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
             <XAxis
               dataKey="label"
               tick={{ fontSize: 11 }}
@@ -265,11 +265,11 @@ export function AccumulativeChart({
             />
             <Tooltip
               formatter={(value, name) => [value == null ? "—" : metric === "revenue" ? fmtRM(value as number) : value, name]}
-              contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }}
+              contentStyle={{ borderRadius: 10, border: "1px solid var(--color-line)", background: "var(--color-raised)", color: "var(--color-text)", fontSize: 12 }}
             />
             <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-            <Line type="monotone" dataKey="previous" name={meta.prev} stroke={PREV_COLOR} strokeWidth={2} dot={{ r: 3, strokeWidth: 1.5, fill: "#fff", stroke: PREV_COLOR }} connectNulls={false} />
-            <Line type="monotone" dataKey="current" name={meta.cur} stroke={CUR_COLOR} strokeWidth={2.5} dot={{ r: 3, strokeWidth: 1.5, fill: "#fff", stroke: CUR_COLOR }} connectNulls={false} />
+            <Line type="monotone" dataKey="previous" name={meta.prev} stroke={PREV_COLOR} strokeWidth={2} dot={{ r: 3, strokeWidth: 1.5, fill: "var(--color-surface)", stroke: PREV_COLOR }} connectNulls={false} />
+            <Line type="monotone" dataKey="current" name={meta.cur} stroke={CUR_COLOR} strokeWidth={2.5} dot={{ r: 3, strokeWidth: 1.5, fill: "var(--color-surface)", stroke: CUR_COLOR }} connectNulls={false} />
           </LineChart>
         </ResponsiveContainer>
       )}

@@ -1,0 +1,118 @@
+/* Celsius UI tokens · v1 (2026-11-12)
+ *
+ * Gosamē UI's token NAMES and rules (paper and espresso, colour only for
+ * meaning, one main action), with Celsius brand VALUES: off-white paper,
+ * espresso ink, terracotta brand. Approved by the owner on 11 Nov 2026
+ * (docs/design/backoffice-structure.md §2b): light rail, espresso main
+ * buttons, terracotta only for the logo, the active dot and one highlight.
+ *
+ * Components use these variables only, never a hex value. Dark mode follows
+ * the app's `.dark` class (components/theme-provider.tsx: System, Light, Dark).
+ * Contrast checked: terracotta on white 5.0:1, espresso on paper 17.7:1,
+ * --text-3 on --bg 5.3:1 (light) and 6.8:1 (dark).
+ */
+
+:root {
+  /* Neutrals: paper → card → raised; sunken for wells and table heads */
+  --bg: #F5F3F0;
+  --surface: #FBFAF8;
+  --raised: #FFFEFC;
+  --sunken: #ECE8E2;
+  --line: #E5E0D9;
+  --line-2: #D3CCC2;
+  --line-ctl: #8C8178;
+  --text: #160800;
+  --text-2: #5A4E46;
+  --text-3: #6E6259;
+
+  /* Ink: Office main action, hero blocks, toasts */
+  --ink: #160800;
+  --on-ink: #F7F3EE;
+  --ink-hover: #33241B;
+  --hero: #160800;
+  --on-hero: #F7F3EE;
+  --brand-glow: #E9A08F;
+
+  /* Brand: Celsius terracotta */
+  --brand: #C2452D;
+  --on-brand: #FFFFFF;
+  --brand-soft: #F6E2DC;
+  --brand-text: #A33822;
+
+  /* Signals: each means one thing, always with an icon, sign or word */
+  --danger: #B4442A;   --danger-soft: #F5DFD6; --danger-text: #9E3A22;
+  --warn: #B8862B;     --warn-soft: #F3E6C6;   --warn-text: #7A5813;
+  --ok: #5F7F4E;       --ok-soft: #E1E8D5;     --ok-text: #46653A;
+  --info: #4A688A;     --info-soft: #DEE4EA;   --info-text: #3B5878;
+
+  /* Rail: paper, one step darker than the page; never dark in light mode */
+  --rail: #ECE8E2;
+  --rail-2: #FFFEFC;
+  --rail-line: #DAD3C9;
+  --rail-text: #160800;
+  --rail-text-2: #5A4E46;
+
+  /* Charts: series identity only (--c1 is the focus series) */
+  --c1: #C2452D; --c2: #41629F; --c3: #299A8B; --c4: #B5841D; --c5: #965582; --c6: #6C853B;
+  --other: #B9AFA4;
+  --grid: #E7E2DA;
+
+  /* Chrome */
+  --sel: #F7E9E4;
+  --tab: #FBFAF8;
+  --scrim: rgba(22, 8, 0, 0.45);
+
+  /* Shape */
+  --r-card: 16px;
+  --r-ctl: 8px;
+  --shadow-1: 0 1px 2px rgba(22, 8, 0, 0.06);
+  --shadow-2: 0 8px 24px rgba(22, 8, 0, 0.12);
+}
+
+.dark {
+  --bg: #120B08;
+  --surface: #1B1411;
+  --raised: #251C18;
+  --raised-2: #2C221D;
+  --sunken: #0D0806;
+  --line: #2E2420;
+  --line-2: #3D312C;
+  --line-ctl: #7A6E66;
+  --text: #F3ECE4;
+  --text-2: #C4B8AC;
+  --text-3: #A39689;
+
+  --ink: #F3ECE4;
+  --on-ink: #160800;
+  --ink-hover: #DCD2C6;
+  --hero: #2A1E19;
+  --on-hero: #F3ECE4;
+  --brand-glow: #E58A73;
+
+  --brand: #B8452D;
+  --on-brand: #FFFFFF;
+  --brand-soft: #3A1E17;
+  --brand-text: #E58A73;
+
+  --danger: #E07A5F;   --danger-soft: #3A221B; --danger-text: #F0A28E;
+  --warn: #D9AE55;     --warn-soft: #352A17;   --warn-text: #E6C27A;
+  --ok: #9DBB86;       --ok-soft: #232C1D;     --ok-text: #B4CC9F;
+  --info: #8FAACB;     --info-soft: #1E2632;   --info-text: #AFC3DB;
+
+  --rail: #0D0806;
+  --rail-2: #211813;
+  --rail-line: #2A201B;
+  --rail-text: #EFE7DD;
+  --rail-text-2: #A3968A;
+
+  --c1: #E07A62; --c2: #5073B5; --c3: #36A996; --c4: #B78A2C; --c5: #A76090; --c6: #647C32;
+  --other: #5E544D;
+  --grid: #2A201B;
+
+  --sel: #2A1C17;
+  --tab: #1B1411;
+  --scrim: rgba(0, 0, 0, 0.6);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.6);
+}

@@ -10,11 +10,11 @@ import { storeLabel } from "@/lib/pickup/store-label";
 import type { OrderRow, OrderItemRow } from "@/lib/pickup/types";
 
 const STATUS_COLOUR: Record<string, string> = {
-  pending:   "bg-gray-100 text-gray-600",
+  pending:   "bg-sunken text-text-2",
   paid:      "bg-blue-100 text-blue-600",
   preparing: "bg-amber-100 text-amber-700",
   ready:     "bg-green-100 text-green-700",
-  completed: "bg-gray-100 text-gray-500",
+  completed: "bg-sunken text-text-2",
   failed:    "bg-red-100 text-red-600",
 };
 
@@ -90,24 +90,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   if (!order) {
     return (
-      <div className="p-6">
+      <div className="px-4 pt-6 pb-10 md:px-8">
         <p className="text-muted-foreground">Order not found.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-2xl">
+    <div className="space-y-5 max-w-2xl px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => router.back()}
-          className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-muted/50 transition-colors"
+          className="w-8 h-8 rounded-full bg-surface flex items-center justify-center hover:bg-muted/50 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-[#160800]">#{order.order_number}</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">#{order.order_number}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {new Date(order.created_at).toLocaleString("en-MY", {
               weekday: "short", day: "numeric", month: "short",
@@ -160,7 +160,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {/* Outlet + pickup */}
-      <div className="bg-white rounded-2xl p-4 space-y-2">
+      <div className="bg-surface rounded-2xl p-4 space-y-2">
         <h2 className="font-bold text-sm mb-3">Pickup Details</h2>
         <Row label="Outlet"  value={storeLabel(order.store_id)} />
         {order.order_type === "dine_in" ? (
@@ -175,7 +175,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </div>
 
       {/* Customer */}
-      <div className="bg-white rounded-2xl p-4 space-y-2">
+      <div className="bg-surface rounded-2xl p-4 space-y-2">
         <h2 className="font-bold text-sm mb-3">Customer</h2>
         <Row label="Name"  value={order.customer_name  ?? "—"} />
         <Row label="Phone" value={order.customer_phone ?? "—"} />
@@ -183,12 +183,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </div>
 
       {/* Items */}
-      <div className="bg-white rounded-2xl p-4">
+      <div className="bg-surface rounded-2xl p-4">
         <h2 className="font-bold text-sm mb-3">Order Items</h2>
         <div className="space-y-3">
           {order.order_items.map((item) => (
             <div key={item.id} className="flex items-start gap-3">
-              <span className="w-5 h-5 rounded-full bg-[#160800] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+              <span className="w-5 h-5 rounded-full bg-ink text-on-ink text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                 {item.quantity}
               </span>
               <div className="flex-1">
@@ -214,7 +214,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </div>
 
       {/* Totals */}
-      <div className="bg-white rounded-2xl p-4 space-y-2">
+      <div className="bg-surface rounded-2xl p-4 space-y-2">
         <Row label="Subtotal" value={`${formatRM((order.subtotal / 100))}`} />
         {order.discount_amount > 0 && (
           <Row

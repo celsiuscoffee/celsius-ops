@@ -6,6 +6,8 @@ import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { toast } from "@celsius/ui";
 import { useLatestRequest } from "@/lib/use-latest-request";
 import { ReportsTabs } from "../_ReportsTabs";
+import { KeyNumber } from "@/components/ui/key-number";
+import { DateRangePicker } from "@/components/date-range-picker";
 
 /**
  * Sales Reports — StoreHub-style "Reports 2.0" on our own data (POS-native +
@@ -36,10 +38,10 @@ type ReportData = {
 
 const REPORTS = [
   { id: "over-time", label: "Sales over time" },
-  { id: "channel", label: "By Channel" },
-  { id: "product", label: "By Product" },
-  { id: "category", label: "By Category" },
-  { id: "payment", label: "By Payment" },
+  { id: "channel", label: "By channel" },
+  { id: "product", label: "By product" },
+  { id: "category", label: "By category" },
+  { id: "payment", label: "By payment" },
   { id: "promotion", label: "Promotions" },
   { id: "shift", label: "Shifts" },
 ] as const;
@@ -219,37 +221,40 @@ export default function SalesReportsPage() {
     URL.revokeObjectURL(url);
   };
 
+  // Key numbers: the period's totals for the first money and count columns of
+  // whichever report is open (the API's total row; no new maths).
+  const kpiCols = columns.filter((c) => c.kind !== "text").slice(0, 4);
+  const rangeLabel = (d: string) => new Date(`${d}T12:00:00+08:00`).toLocaleDateString("en-MY", { day: "numeric", month: "short" });
+
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-6xl">
+    <div className="max-w-[1100px] space-y-5 px-4 pt-6 pb-10 md:px-8">
       <ReportsTabs />
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[#160800]">Sales Reports</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {data?.outletName ?? "All outlets"}
-            {data?.generatedAt && (
-              <> · Data as of {new Date(data.generatedAt).toLocaleString("en-MY", { dateStyle: "medium", timeStyle: "short" })}</>
-            )}
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Sales reports</h1>
+          <p className="mt-0.5 text-sm text-text-2">
+            What sold, through which channel and payment, for any outlet and dates.
+            {data?.generatedAt && <span className="text-text-3"> Data as of {new Date(data.generatedAt).toLocaleString("en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kuala_Lumpur" })}.</span>}
           </p>
         </div>
         <button
           onClick={downloadCsv}
           disabled={!data || loading}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-[#160800] hover:bg-gray-50 disabled:opacity-50"
+          className="inline-flex h-10 items-center gap-2 self-start rounded-ctl border border-line bg-surface px-4 text-sm font-medium text-text hover:bg-sunken disabled:opacity-50"
         >
           <Download className="h-4 w-4" /> Download CSV
         </button>
       </div>
 
       {/* Report selector */}
-      <div className="flex flex-wrap gap-1 bg-white rounded-xl p-1 w-fit border border-border/40">
+      <div className="flex gap-5 overflow-x-auto border-b border-line">
         {REPORTS.map((r) => (
           <button
             key={r.id}
             onClick={() => setReport(r.id)}
-            className={`px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
-              report === r.id ? "bg-[#160800] text-white shadow-sm" : "text-muted-foreground hover:text-[#160800]"
+            className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-2.5 text-sm transition-colors ${
+              report === r.id ? "border-text font-semibold text-text" : "border-transparent text-text-2 hover:text-text"
             }`}
           >
             {r.label}
@@ -259,11 +264,7 @@ export default function SalesReportsPage() {
 
       {/* Toolbar: date range + presets + outlet + group-by */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2 py-1.5">
-          <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className="bg-transparent text-sm text-[#160800] outline-none" />
-          <span className="text-gray-400">→</span>
-          <input type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} className="bg-transparent text-sm text-[#160800] outline-none" />
-        </div>
+        <DateRangePicker start={from} end={to} onChange={(a, b) => { setFrom(a); setTo(b > today ? today : b); }} />
 
         <div className="flex gap-1">
           {([
@@ -276,8 +277,8 @@ export default function SalesReportsPage() {
             <button
               key={p.id}
               onClick={() => setPreset(p.id)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                presetActive(p.id) ? "bg-[#FBEBE8] text-[#A2492C]" : "text-muted-foreground hover:bg-gray-100"
+              className={`h-9 rounded-full border px-3 text-[13px] transition-colors ${
+                presetActive(p.id) ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"
               }`}
             >
               {p.label}
@@ -286,7 +287,7 @@ export default function SalesReportsPage() {
         </div>
 
         {data?.availableOutlets && (
-          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-[#160800] outline-none">
+          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text outline-none">
             <option value="all">All outlets</option>
             {data.availableOutlets.map((o) => (
               <option key={o.id} value={o.id}>{o.name}</option>
@@ -295,13 +296,13 @@ export default function SalesReportsPage() {
         )}
 
         {report === "over-time" && (
-          <div className="flex gap-1 rounded-lg border border-gray-200 bg-white p-1">
+          <div className="flex gap-1 rounded-lg border border-line bg-surface p-1">
             {GROUPS.map((g) => (
               <button
                 key={g.id}
                 onClick={() => setGroupBy(g.id)}
-                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                  groupBy === g.id ? "bg-[#160800] text-white" : "text-muted-foreground hover:text-[#160800]"
+                className={`h-8 rounded-ctl px-3 text-[13px] font-medium transition-colors ${
+                  groupBy === g.id ? "bg-ink text-on-ink" : "text-text-2 hover:text-text"
                 }`}
               >
                 {g.label}
@@ -313,13 +314,13 @@ export default function SalesReportsPage() {
 
       {/* Filters: search + category */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 min-w-[220px]">
-          <Search className="h-4 w-4 text-gray-400" />
+        <div className="flex h-10 w-full items-center gap-2 rounded-ctl border border-line bg-surface px-3 sm:w-auto sm:min-w-[220px]">
+          <Search className="h-4 w-4 text-text-3" />
           <input
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search…"
-            className="bg-transparent text-sm text-[#160800] outline-none w-full"
+            className="bg-transparent text-sm text-text outline-none w-full"
           />
         </div>
         {hasCategory && categoryOptions.length > 0 && (
@@ -331,14 +332,14 @@ export default function SalesReportsPage() {
           />
         )}
         {isFiltered && (
-          <button onClick={() => { setSearch(""); setCategories([]); setPage(1); }} className="text-xs text-[#A2492C] hover:underline">
+          <button onClick={() => { setSearch(""); setCategories([]); setPage(1); }} className="text-[13px] text-brand-text hover:underline">
             Clear filters
           </button>
         )}
       </div>
 
       {data?.note && (
-        <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+        <div className="flex items-start gap-2 rounded-card bg-warn-soft px-3 py-2 text-[13px] text-warn-text">
           <Info className="h-4 w-4 shrink-0 mt-0.5" />
           <span>{data.note}</span>
         </div>
@@ -346,29 +347,37 @@ export default function SalesReportsPage() {
 
       {loading && (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-text-3" />
         </div>
       )}
 
       {!loading && data && (
         <>
+          {totalRow && kpiCols.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {kpiCols.map((c) => (
+                <KeyNumber key={c.key} label={c.label} value={totalRow[c.key] === "" ? "–" : fmtCell(totalRow[c.key], c.kind)}
+                  note={<>{isFiltered ? "rows shown, " : ""}{rangeLabel(from)} – {rangeLabel(to)}</>} />
+              ))}
+            </div>
+          )}
           {data.chart && data.chart.length > 0 && !isFiltered && <Chart data={data.chart} />}
 
-          <div className="rounded-2xl border border-gray-200 bg-white overflow-auto max-h-[68vh]">
+          <div className="max-h-[68vh] overflow-auto rounded-card border border-line bg-surface">
             <table className="w-full border-separate border-spacing-0">
               <thead className="sticky top-0 z-10">
-                <tr className="bg-gray-50 text-left text-xs font-medium text-gray-700">
+                <tr className="bg-sunken text-left text-xs font-medium text-text-2">
                   {columns.map((c, i) => (
                     <th
                       key={c.key}
                       onClick={() => toggleSort(c.key)}
-                      className={`cursor-pointer select-none px-3 py-2.5 border-b border-gray-200 hover:text-[#160800] ${i === 0 ? "min-w-[150px]" : "whitespace-nowrap text-right"}`}
+                      className={`cursor-pointer select-none px-3 py-2.5 border-b border-line hover:text-text ${i === 0 ? "min-w-[150px]" : "whitespace-nowrap text-right"}`}
                     >
                       <span className={`inline-flex items-center gap-1 ${i === 0 ? "" : "justify-end"}`}>
                         {c.label}
                         {c.tip && (
                           <span title={c.tip} aria-label={c.tip} className="cursor-help">
-                            <Info className="h-3 w-3 text-gray-300" />
+                            <Info className="h-3 w-3 text-text-3" />
                           </span>
                         )}
                         <SortIcon active={sort?.key === c.key} dir={sort?.dir} />
@@ -380,17 +389,17 @@ export default function SalesReportsPage() {
               <tbody>
                 {pagedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-gray-500">
+                    <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-text-2">
                       {isFiltered ? "No rows match your filters." : "No data in this period."}
                     </td>
                   </tr>
                 ) : (
                   pagedRows.map((r, ri) => (
-                    <tr key={ri} className="hover:bg-gray-50">
+                    <tr key={ri} className="hover:bg-sunken">
                       {columns.map((c, ci) => (
                         <td
                           key={c.key}
-                          className={`px-3 py-2.5 text-sm border-b border-gray-100 ${ci === 0 ? "text-[#160800] font-medium" : "whitespace-nowrap text-right text-[#160800]"}`}
+                          className={`px-3 py-2.5 text-sm border-b border-line ${ci === 0 ? "text-text font-medium" : "whitespace-nowrap text-right text-text"}`}
                         >
                           {fmtCell(r[c.key], c.kind)}
                         </td>
@@ -401,9 +410,9 @@ export default function SalesReportsPage() {
               </tbody>
               {totalRow && pagedRows.length > 0 && (
                 <tfoot className="sticky bottom-0">
-                  <tr className="bg-gray-100 font-semibold">
+                  <tr className="bg-sunken font-semibold">
                     {columns.map((c, ci) => (
-                      <td key={c.key} className={`px-3 py-2.5 text-sm text-[#160800] border-t-2 border-gray-300 ${ci === 0 ? "" : "whitespace-nowrap text-right"}`}>
+                      <td key={c.key} className={`px-3 py-2.5 text-sm text-text border-t-2 border-line-2 ${ci === 0 ? "" : "whitespace-nowrap text-right"}`}>
                         {totalRow[c.key] === "" ? "" : fmtCell(totalRow[c.key], c.kind)}
                       </td>
                     ))}
@@ -414,7 +423,7 @@ export default function SalesReportsPage() {
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between text-xs text-gray-500">
+          <div className="flex items-center justify-between text-xs text-text-2">
             <span>
               {filteredRows.length === 0
                 ? "0 rows"
@@ -423,11 +432,11 @@ export default function SalesReportsPage() {
             </span>
             {pageCount > 1 && (
               <div className="flex items-center gap-2">
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1} className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 disabled:opacity-40 hover:bg-gray-50">
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1} className="inline-flex h-9 items-center gap-1 rounded-ctl border border-line px-3 disabled:opacity-40 hover:bg-sunken">
                   <ChevronLeft className="h-3.5 w-3.5" /> Prev
                 </button>
                 <span>Page {safePage} / {pageCount}</span>
-                <button onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={safePage >= pageCount} className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 disabled:opacity-40 hover:bg-gray-50">
+                <button onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={safePage >= pageCount} className="inline-flex h-9 items-center gap-1 rounded-ctl border border-line px-3 disabled:opacity-40 hover:bg-sunken">
                   Next <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -440,8 +449,8 @@ export default function SalesReportsPage() {
 }
 
 function SortIcon({ active, dir }: { active?: boolean; dir?: "asc" | "desc" }) {
-  if (!active) return <ArrowUpDown className="h-3 w-3 text-gray-300" />;
-  return dir === "asc" ? <ArrowUp className="h-3 w-3 text-[#A2492C]" /> : <ArrowDown className="h-3 w-3 text-[#A2492C]" />;
+  if (!active) return <ArrowUpDown className="h-3 w-3 text-text-3" />;
+  return dir === "asc" ? <ArrowUp className="h-3 w-3 text-brand-text" /> : <ArrowDown className="h-3 w-3 text-brand-text" />;
 }
 
 function MultiSelect({
@@ -474,26 +483,26 @@ function MultiSelect({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className={`inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm outline-none ${
-          selected.length ? "border-[#A2492C] text-[#A2492C]" : "border-gray-200 text-[#160800]"
+        className={`inline-flex h-10 items-center gap-2 rounded-ctl border bg-surface px-3 text-sm outline-none ${
+          selected.length ? "border-text font-semibold text-text" : "border-line text-text"
         }`}
       >
         {summary}
-        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`h-4 w-4 text-text-3 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="absolute z-20 mt-1 max-h-72 w-60 overflow-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg">
-          <div className="flex items-center justify-between px-2 py-1.5 text-xs text-gray-500">
-            <button onClick={() => onChange(options)} className="hover:text-[#A2492C]">Select all</button>
-            <button onClick={() => onChange([])} className="hover:text-[#A2492C]">Clear</button>
+        <div className="absolute z-20 mt-1 max-h-72 w-60 overflow-auto rounded-lg border border-line bg-surface p-1 shadow-lg">
+          <div className="flex items-center justify-between px-2 py-1.5 text-xs text-text-2">
+            <button onClick={() => onChange(options)} className="hover:text-brand-text">Select all</button>
+            <button onClick={() => onChange([])} className="hover:text-brand-text">Clear</button>
           </div>
           {options.map((o) => (
-            <label key={o} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[#160800] hover:bg-gray-50">
+            <label key={o} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-text hover:bg-sunken">
               <input
                 type="checkbox"
                 checked={selected.includes(o)}
                 onChange={() => toggle(o)}
-                className="h-3.5 w-3.5 accent-[#A2492C]"
+                className="h-3.5 w-3.5 accent-ink"
               />
               <span className="truncate">{o}</span>
             </label>
@@ -508,16 +517,16 @@ function Chart({ data }: { data: { label: string; value: number }[] }) {
   const bars = data.slice(0, 31);
   const max = Math.max(...bars.map((d) => d.value), 1);
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4">
+    <div className="rounded-card border border-line bg-surface p-4">
       {/* Plot: each column is full-height so the bar's % height resolves. */}
       <div className="flex h-48 items-end gap-2">
         {bars.map((d, i) => (
           <div key={i} className="group relative flex h-full min-w-0 flex-1 flex-col justify-end">
-            <span className="pointer-events-none absolute inset-x-0 bottom-full mb-1 whitespace-nowrap text-center text-[10px] font-medium text-[#160800] opacity-0 group-hover:opacity-100">
+            <span className="pointer-events-none absolute inset-x-0 bottom-full mb-1 whitespace-nowrap text-center text-[10px] font-medium text-text opacity-0 group-hover:opacity-100">
               {fmtRM(d.value)}
             </span>
             <div
-              className="mx-auto w-full max-w-[40px] rounded-t bg-[#A2492C] transition-colors hover:bg-[#7f3a1f]"
+              className="mx-auto w-full max-w-[40px] rounded-t bg-brand transition-opacity hover:opacity-80"
               style={{ height: `${Math.max((d.value / max) * 100, 2)}%` }}
               title={`${d.label}: ${fmtRM(d.value)}`}
             />
@@ -527,7 +536,7 @@ function Chart({ data }: { data: { label: string; value: number }[] }) {
       {/* Labels aligned under each bar via the same flex columns. */}
       <div className="mt-2 flex gap-2">
         {bars.map((d, i) => (
-          <div key={i} className="min-w-0 flex-1 truncate text-center text-[10px] text-gray-500" title={d.label}>
+          <div key={i} className="min-w-0 flex-1 truncate text-center text-[10px] text-text-2" title={d.label}>
             {d.label}
           </div>
         ))}

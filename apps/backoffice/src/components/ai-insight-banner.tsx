@@ -175,50 +175,50 @@ export function AIInsightBanner({
       {/* Banner header — always visible */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface/50 transition-colors"
       >
         <div className="flex items-center gap-2">
           <Sparkles className={`h-4 w-4 ${iconColor}`} />
-          <span className="text-sm font-medium text-gray-900">AI Suggestions</span>
-          <span className="text-xs text-gray-500">{summaryText}</span>
+          <span className="text-sm font-medium text-text">AI Suggestions</span>
+          <span className="text-xs text-text-2">{summaryText}</span>
         </div>
         <div className="flex items-center gap-2">
           {type === "purchaseOrders" && !expanded && data.purchaseOrders.length > 1 && (
             <span
               onClick={(e) => { e.stopPropagation(); executeAllPOs(); }}
-              className="px-2.5 py-1 bg-terracotta text-white text-[11px] font-medium rounded-md hover:bg-terracotta-dark cursor-pointer"
+              className="px-2.5 py-1 bg-ink text-on-ink text-[11px] font-medium rounded-md hover:bg-ink-hover cursor-pointer"
             >
               {executing === "all_pos" ? "Creating..." : results.all_pos || `Create All ${data.purchaseOrders.length} POs`}
             </span>
           )}
-          {expanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+          {expanded ? <ChevronUp className="h-4 w-4 text-text-3" /> : <ChevronDown className="h-4 w-4 text-text-3" />}
         </div>
       </button>
 
       {/* Expanded content */}
       {expanded && (
-        <div className="border-t border-gray-200/60 bg-white/60">
+        <div className="border-t border-line/60 bg-surface/60">
           {/* Purchase Orders */}
           {type === "purchaseOrders" && data.purchaseOrders.map((po) => {
             const key = `po_${po.outletId}_${po.supplierId}`;
             const isDone = executed.has(key);
             const u = URGENCY_STYLE[po.urgency];
             return (
-              <div key={key} className={`border-b border-gray-100 last:border-0 ${isDone ? "opacity-50" : ""}`}>
+              <div key={key} className={`border-b border-line last:border-0 ${isDone ? "opacity-50" : ""}`}>
                 <div className="px-4 py-2.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${u.cls}`}>{u.label}</span>
-                    <span className="text-sm font-medium text-gray-900">{po.supplierName}</span>
-                    <span className="text-xs text-gray-400">&rarr; {po.outletName}</span>
-                    <span className="text-xs text-gray-400">{po.items.length} {po.items.length === 1 ? 'item' : 'items'}</span>
+                    <span className="text-sm font-medium text-text">{po.supplierName}</span>
+                    <span className="text-xs text-text-3">&rarr; {po.outletName}</span>
+                    <span className="text-xs text-text-3">{po.items.length} {po.items.length === 1 ? 'item' : 'items'}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-gray-900">RM {po.totalAmount.toLocaleString()}</span>
+                    <span className="text-sm font-semibold text-text">RM {po.totalAmount.toLocaleString()}</span>
                     {isDone ? (
                       <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle2 className="h-3.5 w-3.5" />{results[key]}</span>
                     ) : (
                       <button onClick={() => executePO(po)} disabled={!!executing}
-                        className="px-2.5 py-1 bg-terracotta text-white text-[11px] font-medium rounded-md hover:bg-terracotta-dark disabled:opacity-40">
+                        className="px-2.5 py-1 bg-ink text-on-ink text-[11px] font-medium rounded-md hover:bg-ink-hover disabled:opacity-40">
                         {executing === key ? <Loader2 className="h-3 w-3 animate-spin" /> : "Create PO"}
                       </button>
                     )}
@@ -226,15 +226,15 @@ export function AIInsightBanner({
                 </div>
                 {/* Items detail */}
                 <div className="px-4 pb-2.5">
-                  <table className="w-full text-xs text-gray-500">
+                  <table className="w-full text-xs text-text-2">
                     <tbody>
                       {po.items.map((item) => (
-                        <tr key={item.productId} className="border-t border-gray-50">
-                          <td className="py-1 text-gray-700">{item.productName} {item.packageName && <span className="text-gray-400">({item.packageName})</span>}</td>
+                        <tr key={item.productId} className="border-t border-line">
+                          <td className="py-1 text-text-2">{item.productName} {item.packageName && <span className="text-text-3">({item.packageName})</span>}</td>
                           <td className="py-1 text-right">Stock: <span className={item.currentQty <= 0 ? "text-red-600 font-medium" : ""}>{item.currentQty}</span></td>
                           <td className="py-1 text-right">Par: {item.parLevel}</td>
                           <td className="py-1 text-right">{item.daysUntilStockout == null ? "cover n/a" : `${item.daysUntilStockout}d left`}</td>
-                          <td className="py-1 text-right font-medium text-gray-700">Order: {item.orderQty}</td>
+                          <td className="py-1 text-right font-medium text-text-2">Order: {item.orderQty}</td>
                           <td className="py-1 text-right">RM {item.totalPrice.toFixed(2)}</td>
                         </tr>
                       ))}
@@ -250,13 +250,13 @@ export function AIInsightBanner({
             const key = `transfer_${idx}`;
             const isDone = executed.has(key);
             return (
-              <div key={key} className={`px-4 py-3 border-b border-gray-100 last:border-0 ${isDone ? "opacity-50" : ""}`}>
+              <div key={key} className={`px-4 py-3 border-b border-line last:border-0 ${isDone ? "opacity-50" : ""}`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-sm font-medium text-gray-900">{t.fromOutletName}</span>
-                    <span className="text-xs text-gray-400 mx-2">&rarr;</span>
-                    <span className="text-sm text-gray-700">{t.toOutletName}</span>
-                    <span className="text-xs text-gray-400 ml-2">{t.items.length} {t.items.length === 1 ? 'item' : 'items'} · {t.reason}</span>
+                    <span className="text-sm font-medium text-text">{t.fromOutletName}</span>
+                    <span className="text-xs text-text-3 mx-2">&rarr;</span>
+                    <span className="text-sm text-text-2">{t.toOutletName}</span>
+                    <span className="text-xs text-text-3 ml-2">{t.items.length} {t.items.length === 1 ? 'item' : 'items'} · {t.reason}</span>
                   </div>
                   {isDone ? (
                     <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle2 className="h-3.5 w-3.5" />{results[key]}</span>
@@ -269,7 +269,7 @@ export function AIInsightBanner({
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-2">
                   {t.items.map((i) => (
-                    <span key={i.productId} className="text-[11px] bg-gray-100 rounded px-2 py-0.5 text-gray-600">
+                    <span key={i.productId} className="text-[11px] bg-sunken rounded px-2 py-0.5 text-text-2">
                       {i.productName}: {i.transferQty} {i.packageName || i.baseUom || "units"}
                     </span>
                   ))}
@@ -280,16 +280,16 @@ export function AIInsightBanner({
 
           {/* Wastage Alerts */}
           {type === "wastageAlerts" && data.wastageAlerts.map((w, idx) => (
-            <div key={idx} className="px-4 py-3 border-b border-gray-100 last:border-0">
+            <div key={idx} className="px-4 py-3 border-b border-line last:border-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                  <span className="text-sm font-medium text-gray-900">{w.productName}</span>
-                  <span className="text-xs text-gray-400">{w.outletName}</span>
+                  <span className="text-sm font-medium text-text">{w.productName}</span>
+                  <span className="text-xs text-text-3">{w.outletName}</span>
                 </div>
                 <span className="text-xs font-medium text-red-600">-RM {w.wasteCost.toFixed(2)} ({w.totalWasted} wasted)</span>
               </div>
-              <p className="text-xs text-gray-500 mt-1 ml-5.5">{w.suggestion}</p>
+              <p className="text-xs text-text-2 mt-1 ml-5.5">{w.suggestion}</p>
             </div>
           ))}
         </div>

@@ -67,10 +67,10 @@ export default function PtHoursPage() {
   const cleanIds = pts.flatMap((p) => p.logs.filter((l) => l.state === "pending" && l.ai_flags.length === 0).map((l) => l.id));
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Confirm PT Hours</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Confirm PT Hours</h1>
           <p className="text-sm text-muted-foreground">
             Sign off every part-timer&apos;s clocked shifts for the week — payroll can&apos;t generate the payment
             file until everything here is confirmed. Rates: weekday / weekend / public-holiday 2×.
@@ -97,7 +97,7 @@ export default function PtHoursPage() {
           <button
             onClick={() => confirmIds(cleanIds)}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-on-ink hover:opacity-90 disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
             Confirm all clean ({cleanIds.length})

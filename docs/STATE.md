@@ -11,6 +11,125 @@ current month.
 
 ## Verified facts
 
+- 2026-11-17 — **Owner approved the pay, Money and Payment requests redesign** (layout and
+  words only) for merge. Outlet labels that said "Cyberjaya" for Tamarind now say "Tamarind"
+  (Cash flow incoming panel, Reports entity label, cash-in recon agent, the three fallback
+  shift template labels; ids unchanged). "Cyberjaya" stays where it is the city: ad and
+  geogrid targeting (`OUTLET_CITIES`, geogrid keywords), review-reply area names, and the AI
+  prompts that tell agents staff call the outlet "Cyberjaya".
+
+- 2026-11-17 — **Money, pay pages and Payment requests on the page pattern, layout and words
+  only** (PR celsiuscoffee/celsius-ops#1278). Built by two forks in separate git worktrees (no
+  clashes this time). Checked the diff: no calculation, API, approval or payment change. Owner
+  approved thresholds and "Listed price"; pay/Money/Payment requests still need the owner's OK
+  before merge. Open question: Cash flow's IncomingPanel labels the celsiustamarind entity
+  "Cyberjaya". Review page: claude.ai/artifact/6f68jduMc67wtzfeuR4vJs (75 screens).
+
+- 2026-11-17 — **Step 6 done for every non-pay page** (PR celsiuscoffee/celsius-ops#1278,
+  `backoffice-structure.md` §2e). Built by 4 parallel forks; one ran `git stash` mid-run and
+  everyone's edits were restored by hand (local stash@{0} kept as backup in that container).
+  Lesson: never let parallel agents in one working tree run git stash/checkout; give each its
+  own worktree. Not yet seen on live data. Pay pages, Payment requests and Money untouched.
+  Next: owner review of all screens, then shared components and nav label case.
+
+- 2026-11-17 — **Menu › Items on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
+  key numbers, Celsius tokens, same editor (reorder, on/off, best sellers). Next: Recipes,
+  Menu Status.
+
+- 2026-11-17 — **Celsius has no central kitchen** (owner). Do not design for one: no CK
+  section, no CK outlet type in Settings › Outlets (picker and filter removed; the
+  `OutletType.CENTRAL_KITCHEN` enum value stays in the schema, unused). Transfers are
+  outlet to outlet.
+
+- 2026-11-17 — **Stock › Transfers on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
+  4 key numbers from `lib/inventory/transfer-summary.ts` (late = in transit > 2 days), list,
+  detail as a full page. New/Smart transfer are full pages too. Next: Menu.
+
+- 2026-11-17 — **Stock › Stock Count on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
+  4 key numbers from `lib/inventory/count-summary.ts`, list instead of table, shared
+  `components/ui/key-number.tsx` (Overview + Wastage moved onto it). Review is a full page
+  (was a modal). Next: Transfers, Menu.
+
+- 2026-11-17 — **Stock › Wastage on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
+  4 key numbers from `lib/inventory/waste-summary.ts`, one list. Preview mocks must answer
+  `/api/inventory/ai-decisions` (AIInsightBanner crashes on `[]`). Next: Stock Count, Transfers, Menu.
+
+- 2026-11-17 — **Step 6 part 1: every backoffice page on the Celsius UI palette** (PR
+  celsiuscoffee/celsius-ops#1278, `docs/design/backoffice-structure.md` §2e). Codemod over 176
+  files; main buttons are espresso `bg-ink text-on-ink` (white text on ink was unreadable in
+  dark mode until the second pass). `lib/celsius-ui-palette.test.ts` blocks the old classes.
+  `/ops/audit` and `/loyalty/loops` crash on an empty `[]` mock before and after (mock shape,
+  not this change). Next: page-by-page layouts, most-used first (read Office Usage).
+
+- 2026-11-17 — **Restructure step 5 (list B merges) built**, PR celsiuscoffee/celsius-ops#1278,
+  `docs/design/backoffice-structure.md` §2d: Perishables shares the Ingredients editor (fixes the
+  old copy dropping suppliers on edit), `/pickup` → Pickup App under Sales › Reports, SOP
+  Compliance → Coverage panel on SOP Schedules (Standards › SOPs › Schedules), one SMS tool
+  (Members hands picked phones to Messages, which applies the PDPA opt-out filter the Members
+  sender skipped). Rail/Inbox counts read `counts?.` defensively. Not yet tried on live data.
+
+- 2026-11-17 — **Backoffice declutter built** (PR celsiuscoffee/celsius-ops#1278,
+  `docs/design/backoffice-structure.md` §2c): menu regrouped by first principles, 87 links →
+  36 pages (sections Sales · Customers · Marketing · Menu · Stock · Procurement · Team · Money ·
+  Standards · Agents; HR/Finance/Ops renamed, URLs and moduleKeys unchanged). Page-visit
+  tracking added: `ActivityLog` module `usage`, Settings › System › Office Usage. **Around
+  17 Dec: read Office Usage and remove what nobody opened.** Checked "redundant" claims before
+  deleting: Cashier Performance, Area Scorecard, Perishables and the ops-reminders job are NOT
+  duplicates and were kept (nested). CI: GitHub runners came back 16 Nov; backoffice `next
+  build` and `tsc` OOM at the runner's default ~2 GB heap — main's #1279 gives both steps a
+  6 GB heap (this branch's 4 GB workflow-wide setting was dropped in the merge).
+
+- 2026-11-16 — **Restructure step 4 built** (PR celsiuscoffee/celsius-ops#1278): `/hr/roster`
+  (backoffice, existing APIs only; leave and swaps decided in place, overtime and clock-ins
+  link to their payroll-aware pages) and the staff-native Today clock card shows today's shift
+  (`lib/hr/shift-card.ts`, tested). **Merging this PR now OTAs staff-native to manager phones**
+  (JS-only, runtime unchanged 1.0.0) — follow the ota-release post-merge check. The six old HR
+  pages still exist; redirect them only after the owner checks Roster on real data.
+
+- 2026-11-12 — **Backoffice restructure step 3 done (Inbox v1, read only)**, PR
+  celsiuscoffee/celsius-ops#1278. `GET /api/inbox` aggregates 14 existing queues via
+  `apps/backoffice/src/lib/inbox/sources.ts` (gated by `canAccess`, managers scoped with
+  `lib/hr/scope.ts`; inventory/review list routes do NOT scope managers server-side, so the
+  Inbox applies `getAccessibleOutletIds` itself). Not wired against live data in this session
+  (no Celsius DB access here) — first real load should be checked on the Vercel preview or
+  prod; a failing source shows as "Couldn't check …" on the page. `fin_agent_decisions` has
+  no handled state (always applied=false) — needs a dismissed column before it can join.
+
+- 2026-11-12 — **Backoffice restructure step 2 done (Celsius UI foundation)**, same PR
+  celsiuscoffee/celsius-ops#1278. Tokens in `apps/backoffice/src/styles/celsius-ui/tokens.css`
+  (Gosamē UI names, Celsius values); shadcn vars map onto them; shell in
+  `components/office-shell.tsx` (rail nests the open section's pages; phone top bar + tab bar
+  Today · Sales · Procurement · More). Checked at 1440 and iPhone 13, light and dark, collapsed
+  rail. Gotchas: Next dev serves stale globals.css after edits — restart `next dev` with a clean
+  `.next` before judging CSS; `/dashboard` crashes on an empty `{}` API mock (needs
+  `company`/`outlets`), so preview it with realistic mock data. Next: step 3 (Today + Inbox).
+
+- 2026-11-12 — **Backoffice restructure step 1 done** (PR celsiuscoffee/celsius-ops#1278,
+  branch `claude/hopeful-heisenberg-9eub5y`): 6 duplicate pages now redirect
+  (`/inventory/categories`, `/ops/dashboard`, `/settings` hub, `/pos`,
+  `/inventory/ai-decisions`, `/loyalty/insights`), their only-caller APIs deleted
+  (`api/inventory/categories`, `api/loyalty/admin/ai-insights`), dead links fixed
+  (`/finance/inbox` in the purchasing-manager digest → `/finance`; `/pickup` → `/inventory`).
+  Owner approved 45 mockups (Gosamē UI rules + Celsius brand) and the 6-step order in
+  `docs/design/backoffice-structure.md` §2b; owner wants **phone view checked on every
+  change**. Next: step 2, Celsius UI foundation. Mock sources (HTML generator) live only in
+  the session scratchpad, not the repo. GitHub Actions runs no jobs on this repo since
+  ~2 Nov (runner_id 0, billing/settings) — CI cannot verify PRs until the owner fixes it.
+  Server `redirect()` under the client `(admin)` layout answers 200 and redirects in the
+  browser — test redirects with a browser, not curl.
+
+- 2026-11-11 — **Back-office structure audit** (`docs/design/backoffice-structure.md`,
+  proposal only). 175 routes; nav.tsx registers 103 (86 visible, 17 hidden); ~60 pages
+  are not registered, and 26 of them sit under no registered prefix, so the client route
+  gate in `(admin)/layout.tsx` doesn't check them. No page-view data exists (ActivityLog
+  only logs actions), so start with Step 0a (view logging) before retiring anything.
+  Owner questions (CK transfers, which score stays, Growth vs Marketing, Inbox for
+  managers) are open in section 6 of that doc.
+  **Step 1 built (same PR):** sidebar = 10 sections + Settings gear; pages as tabs
+  (`components/section-tabs.tsx`, driven by nav.tsx subgroups). Follow-up: regroup the
+  Staff & Access grant cards (`lib/modules.ts`) to the new section names. Local tsc of
+  backoffice needs NODE_OPTIONS=--max-old-space-size=8192 (OOMs at the default).
+
 - 2026-11-16 — **EA export: prior-year arrears now go to B.2.** An allowance
   line with `relates_to_year < form year` (new, set via the run page's ad-hoc
   adjustment form for ARREARS codes, validated in `/api/hr/payroll/adjustments`)

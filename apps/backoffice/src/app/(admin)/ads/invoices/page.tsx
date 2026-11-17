@@ -89,8 +89,8 @@ function isReimbursed(p: Payment | null): boolean {
 }
 
 function StatusPill({ p }: { p: Payment | null }) {
-  if (isReimbursed(p)) return <span className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-700"><CheckCircle2 className="h-3 w-3" />Reimbursed</span>;
-  return <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-neutral-500">Outstanding</span>;
+  if (isReimbursed(p)) return <span className="inline-flex items-center gap-1 rounded bg-ok-soft px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ok-text"><CheckCircle2 className="h-3 w-3" />Reimbursed</span>;
+  return <span className="rounded bg-sunken px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-text-2">Outstanding</span>;
 }
 
 export default function StatementsPage() {
@@ -209,21 +209,21 @@ export default function StatementsPage() {
   }
 
   if (isLoading || !data) {
-    return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-neutral-400" /></div>;
+    return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-text-3" /></div>;
   }
 
   return (
-    <div className="space-y-4 p-3 sm:p-4 lg:p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
         <div>
-          <h1 className="text-lg sm:text-xl font-semibold">Ads Claims</h1>
-          <p className="text-xs text-neutral-500">Pay-and-claim tracking per outlet per month (8% SST on digital services)</p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Ad invoices</h1>
+          <p className="mt-0.5 text-sm text-text-2">Ad bills paid by each outlet each month, and whether they have been claimed back (8% SST on digital services).</p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           <select
             value={outletId}
             onChange={(e) => { setOutletId(e.target.value); setCampaignId("all"); }}
-            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm"
+            className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
           >
             <option value="all">All outlets</option>
             <option value="unlinked">Unlinked</option>
@@ -234,7 +234,7 @@ export default function StatementsPage() {
           <select
             value={campaignId}
             onChange={(e) => setCampaignId(e.target.value)}
-            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm"
+            className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
           >
             <option value="all">All campaigns</option>
             {campaignOptions.map((c) => (
@@ -244,7 +244,7 @@ export default function StatementsPage() {
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(Number(e.target.value))}
-            className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm"
+            className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
           >
             {[currentYear, currentYear - 1, currentYear - 2].map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -252,7 +252,7 @@ export default function StatementsPage() {
           </select>
           <button
             onClick={() => downloadCsv(data)}
-            className="flex items-center justify-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm hover:bg-neutral-50"
+            className="flex items-center justify-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-sm hover:bg-sunken"
           >
             <Download className="h-3.5 w-3.5" />
             Export CSV
@@ -264,35 +264,35 @@ export default function StatementsPage() {
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <button
           onClick={() => setStatusFilter("all")}
-          className={`min-w-0 rounded-lg border p-2.5 sm:p-4 text-left transition-colors ${statusFilter === "all" ? "border-neutral-900 bg-white" : "border-neutral-200 bg-white hover:border-neutral-400"}`}
+          className={`min-w-0 rounded-lg border p-2.5 sm:p-4 text-left transition-colors ${statusFilter === "all" ? "border-neutral-900 bg-surface" : "border-line bg-surface hover:border-line-2"}`}
         >
-          <div className="truncate text-[10px] sm:text-xs text-neutral-500">Total {selectedYear}<span className="hidden sm:inline"> (incl. SST)</span></div>
+          <div className="truncate text-[10px] sm:text-xs text-text-2">Total {selectedYear}<span className="hidden sm:inline"> (incl. SST)</span></div>
           <div className="mt-1 truncate text-sm font-semibold tabular-nums sm:text-xl">{fmtMYR(data.summary.totalMYR)}</div>
         </button>
         <button
           onClick={() => setStatusFilter(statusFilter === "reimbursed" ? "all" : "reimbursed")}
-          className={`min-w-0 rounded-lg border p-2.5 sm:p-4 text-left transition-colors ${statusFilter === "reimbursed" ? "border-emerald-500 bg-emerald-50" : "border-neutral-200 bg-white hover:border-emerald-300"}`}
+          className={`min-w-0 rounded-lg border p-2.5 sm:p-4 text-left transition-colors ${statusFilter === "reimbursed" ? "border-ok bg-ok-soft" : "border-line bg-surface hover:border-ok/30"}`}
         >
-          <div className="truncate text-[10px] sm:text-xs text-emerald-600">Reimbursed</div>
-          <div className="mt-1 truncate text-sm font-semibold tabular-nums text-emerald-700 sm:text-xl">{fmtMYR(data.summary.paidMYR)}</div>
+          <div className="truncate text-[10px] sm:text-xs text-ok-text">Reimbursed</div>
+          <div className="mt-1 truncate text-sm font-semibold tabular-nums text-ok-text sm:text-xl">{fmtMYR(data.summary.paidMYR)}</div>
         </button>
         <button
           onClick={() => setStatusFilter(statusFilter === "outstanding" ? "all" : "outstanding")}
-          className={`min-w-0 rounded-lg border p-2.5 sm:p-4 text-left transition-colors ${statusFilter === "outstanding" ? "border-neutral-900 bg-neutral-100" : "border-neutral-200 bg-white hover:border-neutral-400"}`}
+          className={`min-w-0 rounded-lg border p-2.5 sm:p-4 text-left transition-colors ${statusFilter === "outstanding" ? "border-neutral-900 bg-sunken" : "border-line bg-surface hover:border-line-2"}`}
         >
-          <div className="truncate text-[10px] sm:text-xs text-neutral-500">Outstanding</div>
+          <div className="truncate text-[10px] sm:text-xs text-text-2">Outstanding</div>
           <div className="mt-1 truncate text-sm font-semibold tabular-nums sm:text-xl">{fmtMYR(data.summary.outstandingMYR + data.summary.claimedMYR)}</div>
         </button>
       </div>
 
       <Card className="overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-neutral-100 px-4 py-2 text-[11px] text-neutral-500">
+        <div className="flex items-center gap-2 border-b border-line px-4 py-2 text-[11px] text-text-2">
           <ShieldCheck className="h-3.5 w-3.5" />
           Each outlet × month is a separate claim. File claim → mark reimbursed → attach POP. Retain CSV for 7 years per LHDN.
         </div>
 
         {data.statements.length === 0 ? (
-          <p className="p-8 text-center text-sm text-neutral-500">No spend data for {selectedYear}.</p>
+          <p className="p-8 text-center text-sm text-text-2">No spend data for {selectedYear}.</p>
         ) : (
           <div>
             {data.statements.map((m) => {
@@ -308,28 +308,28 @@ export default function StatementsPage() {
               const filteredTax = filteredOutlets.reduce((s, o) => s + o.taxMYR, 0);
               const filteredTotal = filteredOutlets.reduce((s, o) => s + o.totalMYR, 0);
               return (
-                <div key={monthKey} className="border-b border-neutral-100 last:border-0">
+                <div key={monthKey} className="border-b border-line last:border-0">
                   <button
                     onClick={() => toggle(monthKey)}
-                    className="flex w-full items-center justify-between gap-2 px-3 py-3 text-left hover:bg-neutral-50 sm:px-4"
+                    className="flex w-full items-center justify-between gap-2 px-3 py-3 text-left hover:bg-sunken sm:px-4"
                   >
                     <div className="flex min-w-0 items-center gap-2">
-                      {isMonthOpen ? <ChevronDown className="h-4 w-4 shrink-0 text-neutral-400" /> : <ChevronRight className="h-4 w-4 shrink-0 text-neutral-400" />}
+                      {isMonthOpen ? <ChevronDown className="h-4 w-4 shrink-0 text-text-3" /> : <ChevronRight className="h-4 w-4 shrink-0 text-text-3" />}
                       <span className="truncate text-sm font-medium sm:text-base">{fmtMonth(m.yearMonth)}</span>
-                      <span className="hidden text-xs text-neutral-400 sm:inline">({filteredOutlets.length} {filteredOutlets.length === 1 ? "outlet" : "outlets"})</span>
-                      <span className="text-xs text-neutral-400 sm:hidden">({filteredOutlets.length})</span>
+                      <span className="hidden text-xs text-text-3 sm:inline">({filteredOutlets.length} {filteredOutlets.length === 1 ? "outlet" : "outlets"})</span>
+                      <span className="text-xs text-text-3 sm:hidden">({filteredOutlets.length})</span>
                     </div>
                     <div className="flex shrink-0 items-center gap-2 text-sm tabular-nums sm:gap-6">
-                      <span className="hidden text-neutral-500 sm:inline">{fmtMYR(filteredSubtotal)}</span>
-                      <span className="hidden text-neutral-500 sm:inline">+{fmtMYR(filteredTax)} SST</span>
+                      <span className="hidden text-text-2 sm:inline">{fmtMYR(filteredSubtotal)}</span>
+                      <span className="hidden text-text-2 sm:inline">+{fmtMYR(filteredTax)} SST</span>
                       <span className="min-w-[90px] text-right font-semibold sm:min-w-[100px]">{fmtMYR(filteredTotal)}</span>
                     </div>
                   </button>
                   {isMonthOpen && (
-                    <div className="overflow-x-auto bg-neutral-50/40">
+                    <div className="overflow-x-auto bg-sunken/40">
                       <table className="w-full min-w-[640px] text-sm">
                         <thead>
-                          <tr className="text-xs text-neutral-500">
+                          <tr className="text-xs text-text-2">
                             <th className="px-4 py-2 text-left font-normal">Outlet</th>
                             <th className="px-4 py-2 text-left font-normal">Status</th>
                             <th className="px-4 py-2 text-right font-normal">Subtotal</th>
@@ -343,10 +343,10 @@ export default function StatementsPage() {
                           {filteredOutlets.map((o) => {
                             const busyKey = `${m.yearMonth}|${o.outletId ?? "unlinked"}`;
                             return (
-                              <tr key={busyKey} className="border-t border-neutral-100 bg-white">
+                              <tr key={busyKey} className="border-t border-line bg-surface">
                                 <td className="px-4 py-2">
                                   <div>{o.outletName}</div>
-                                  <div className="text-[11px] text-neutral-400">{o.campaigns.length} campaign{o.campaigns.length === 1 ? "" : "s"}: {o.campaigns.map((c) => c.campaignName).join(", ")}</div>
+                                  <div className="text-[11px] text-text-3">{o.campaigns.length} campaign{o.campaigns.length === 1 ? "" : "s"}: {o.campaigns.map((c) => c.campaignName).join(", ")}</div>
                                 </td>
                                 <td className="px-4 py-2"><StatusPill p={o.payment} /></td>
                                 <td className="px-4 py-2 text-right tabular-nums">{fmtMYR(o.subtotalMYR)}</td>
@@ -358,19 +358,19 @@ export default function StatementsPage() {
                                       <button
                                         key={path}
                                         onClick={() => viewPop(o.payment!.id, path)}
-                                        className="inline-flex items-center gap-0.5 rounded border border-neutral-200 px-1.5 py-0.5 text-[11px] hover:bg-neutral-50"
+                                        className="inline-flex items-center gap-0.5 rounded border border-line px-1.5 py-0.5 text-[11px] hover:bg-sunken"
                                       >
                                         <FileText className="h-3 w-3" />#{idx + 1}
                                       </button>
                                     ))}
                                     <label
-                                      className="inline-flex cursor-pointer items-center gap-0.5 rounded border border-dashed border-neutral-300 px-1.5 py-0.5 text-[11px] hover:border-terracotta hover:bg-terracotta/5"
-                                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add("border-terracotta", "bg-terracotta/10"); }}
-                                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove("border-terracotta", "bg-terracotta/10"); }}
+                                      className="inline-flex cursor-pointer items-center gap-0.5 rounded border border-dashed border-line-2 px-1.5 py-0.5 text-[11px] hover:border-ink hover:bg-brand-soft"
+                                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add("border-ink", "bg-brand-soft"); }}
+                                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove("border-ink", "bg-brand-soft"); }}
                                       onDrop={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
-                                        e.currentTarget.classList.remove("border-terracotta", "bg-terracotta/10");
+                                        e.currentTarget.classList.remove("border-ink", "bg-brand-soft");
                                         const f = e.dataTransfer.files?.[0];
                                         if (f) uploadPop(m.yearMonth, o, f);
                                       }}
@@ -392,7 +392,7 @@ export default function StatementsPage() {
                                 <td className="px-4 py-2 text-right">
                                   <button
                                     onClick={() => openDialog(m.yearMonth, o)}
-                                    className="rounded-md border border-neutral-200 bg-white px-2.5 py-1 text-xs hover:bg-neutral-50"
+                                    className="rounded-md border border-line bg-surface px-2.5 py-1 text-xs hover:bg-sunken"
                                   >
                                     {isReimbursed(o.payment) ? "Edit" : "Mark Reimbursed"}
                                   </button>
@@ -417,25 +417,25 @@ export default function StatementsPage() {
           <DialogHeader>
             <DialogTitle>
               {dlg && isReimbursed(dlg.row.payment) ? "Edit Reimbursement" : "Mark as Reimbursed"}
-              {dlg && <span className="block text-xs font-normal text-neutral-500">{dlg.row.outletName} · {fmtMonth(dlg.yearMonth)} · {fmtMYR(dlg.row.totalMYR)}</span>}
+              {dlg && <span className="block text-xs font-normal text-text-2">{dlg.row.outletName} · {fmtMonth(dlg.yearMonth)} · {fmtMYR(dlg.row.totalMYR)}</span>}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="mb-1 block text-xs text-neutral-500">Reimbursed on</label>
+              <label className="mb-1 block text-xs text-text-2">Reimbursed on</label>
               <input
                 type="date"
                 value={dlgPaidAt}
                 onChange={(e) => setDlgPaidAt(e.target.value)}
-                className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-neutral-500">Paid via</label>
+              <label className="mb-1 block text-xs text-text-2">Paid via</label>
               <select
                 value={dlgMethod}
                 onChange={(e) => setDlgMethod(e.target.value)}
-                className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm"
               >
                 <option value="PERSONAL_CARD">Personal card (I paid Google)</option>
                 <option value="COMPANY_CARD">Company card (direct expense)</option>
@@ -445,28 +445,28 @@ export default function StatementsPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs text-neutral-500">Reference</label>
+              <label className="mb-1 block text-xs text-text-2">Reference</label>
               <input
                 type="text"
                 value={dlgRef}
                 onChange={(e) => setDlgRef(e.target.value)}
                 placeholder="Google receipt ID / bank ref"
-                className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-neutral-500">Notes</label>
+              <label className="mb-1 block text-xs text-text-2">Notes</label>
               <textarea
                 value={dlgNotes}
                 onChange={(e) => setDlgNotes(e.target.value)}
                 rows={2}
-                className="w-full rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm"
               />
             </div>
             <button
               onClick={saveClaim}
               disabled={saving}
-              className="flex w-full items-center justify-center gap-2 rounded-md bg-terracotta py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-md bg-ink py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Save

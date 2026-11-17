@@ -161,7 +161,7 @@ export default function ReviewSettingsPage() {
         <Link href="/reviews" className="rounded-lg p-1.5 hover:bg-muted transition-colors">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="font-heading text-xl font-bold">Review settings</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Review settings</h1>
       </div>
 
       {/* Outlet selector */}
@@ -170,7 +170,7 @@ export default function ReviewSettingsPage() {
           <select
             value={selectedOutletId}
             onChange={(e) => setOutletId(e.target.value)}
-            className="rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/50"
           >
             {outlets.map((o) => (
               <option key={o.id} value={o.id}>{o.name}</option>
@@ -222,7 +222,7 @@ export default function ReviewSettingsPage() {
           {activeTab === "general" && (
             <div className="space-y-6">
               {/* Google Review URL */}
-              <div className="rounded-xl border border-border bg-white p-5">
+              <div className="rounded-xl border border-border bg-surface p-5">
                 <h3 className="font-semibold text-sm">Google Review URL</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Paste your Google Maps review link. Customers with high ratings will be redirected here.
@@ -236,7 +236,7 @@ export default function ReviewSettingsPage() {
               </div>
 
               {/* GBP API (optional advanced) */}
-              <div className="rounded-xl border border-border bg-white p-5">
+              <div className="rounded-xl border border-border bg-surface p-5">
                 <h3 className="font-semibold text-sm">GBP API Connection (Advanced)</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Connect to Google Business Profile API to fetch reviews and reply directly.
@@ -258,7 +258,7 @@ export default function ReviewSettingsPage() {
               </div>
 
               {/* Rating threshold */}
-              <div className="rounded-xl border border-border bg-white p-5">
+              <div className="rounded-xl border border-border bg-surface p-5">
                 <h3 className="font-semibold text-sm">Rating Threshold</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Customers who rate this number of stars or higher will be redirected to Google Reviews.
@@ -271,11 +271,11 @@ export default function ReviewSettingsPage() {
                       onClick={() => setRatingThreshold(n)}
                       className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium border transition-colors ${
                         ratingThreshold === n
-                          ? "border-terracotta bg-terracotta/10 text-terracotta"
-                          : "border-border bg-white text-muted-foreground hover:bg-muted"
+                          ? "border-text bg-raised font-semibold text-text"
+                          : "border-border bg-surface text-muted-foreground hover:bg-muted"
                       }`}
                     >
-                      <Star className={`h-4 w-4 ${ratingThreshold === n ? "fill-terracotta text-terracotta" : ""}`} />
+                      <Star className={`h-4 w-4 ${ratingThreshold === n ? "fill-terracotta text-brand-text" : ""}`} />
                       {n}+ stars
                     </button>
                   ))}
@@ -283,7 +283,7 @@ export default function ReviewSettingsPage() {
               </div>
 
               {/* Review page branding */}
-              <div className="rounded-xl border border-border bg-white p-5">
+              <div className="rounded-xl border border-border bg-surface p-5">
                 <h3 className="font-semibold text-sm">Review Page Branding</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Customize the page customers see when they scan the QR code.
@@ -315,7 +315,7 @@ export default function ReviewSettingsPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 rounded-lg bg-brand-dark px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50 transition-colors"
+                className="flex items-center gap-2 rounded-lg bg-ink px-6 py-2.5 text-sm font-medium text-on-ink hover:bg-ink/90 disabled:opacity-50 transition-colors"
               >
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -330,7 +330,7 @@ export default function ReviewSettingsPage() {
           {/* QR Code & Link */}
           {activeTab === "qr" && (
             <div className="space-y-6">
-              <div className="rounded-xl border border-border bg-white p-6">
+              <div className="rounded-xl border border-border bg-surface p-6">
                 <h3 className="font-semibold text-sm">Your Review QR Code</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Print this QR code and place it at your outlet. Customers scan it, rate their experience,
@@ -340,7 +340,7 @@ export default function ReviewSettingsPage() {
                 {qrData?.url && (
                   <div className="mt-5 flex flex-col items-center">
                     {/* QR Code image — locally generated data URL */}
-                    <div className="rounded-xl border border-border p-4 bg-white">
+                    <div className="rounded-xl border border-border p-4 bg-surface">
                       {qrDataUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={qrDataUrl} alt="Review QR Code" className="h-[200px] w-[200px]" />
@@ -371,7 +371,7 @@ export default function ReviewSettingsPage() {
 
                     <button
                       onClick={downloadQr}
-                      className="mt-3 flex items-center gap-1.5 rounded-lg bg-brand-dark px-4 py-2 text-xs font-medium text-white hover:bg-brand-dark/90 transition-colors"
+                      className="mt-3 flex items-center gap-1.5 rounded-lg bg-ink px-4 py-2 text-xs font-medium text-on-ink hover:bg-ink/90 transition-colors"
                     >
                       <Download className="h-3.5 w-3.5" />
                       Download QR
@@ -381,7 +381,7 @@ export default function ReviewSettingsPage() {
               </div>
 
               {/* How it works */}
-              <div className="rounded-xl border border-border bg-white p-5">
+              <div className="rounded-xl border border-border bg-surface p-5">
                 <h3 className="font-semibold text-sm">How the QR flow works</h3>
                 <div className="mt-3 space-y-3">
                   <div className="flex items-start gap-3">
@@ -430,7 +430,7 @@ export default function ReviewSettingsPage() {
           {/* Feedback Form Builder */}
           {activeTab === "feedback" && (
             <div className="space-y-6">
-              <div className="rounded-xl border border-border bg-white p-5">
+              <div className="rounded-xl border border-border bg-surface p-5">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold text-sm">Feedback form</h3>
@@ -445,7 +445,7 @@ export default function ReviewSettingsPage() {
                         { question: "New question", type: "short_text", required: false, active: true },
                       ]);
                     }}
-                    className="rounded-lg bg-brand-dark px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-dark/90 transition-colors"
+                    className="rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink/90 transition-colors"
                   >
                     Add question
                   </button>
@@ -500,7 +500,7 @@ export default function ReviewSettingsPage() {
                                 setFeedbackFields(updated);
                               }}
                               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                                field.required ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                                field.required ? "bg-green-100 text-green-700" : "bg-sunken text-text-2"
                               }`}
                             >
                               {field.required ? "On" : "Off"}
@@ -514,7 +514,7 @@ export default function ReviewSettingsPage() {
                                 setFeedbackFields(updated);
                               }}
                               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                                field.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                                field.active ? "bg-green-100 text-green-700" : "bg-sunken text-text-2"
                               }`}
                             >
                               {field.active ? "Active" : "Inactive"}
@@ -541,7 +541,7 @@ export default function ReviewSettingsPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 rounded-lg bg-brand-dark px-6 py-2.5 text-sm font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50 transition-colors"
+                className="flex items-center gap-2 rounded-lg bg-ink px-6 py-2.5 text-sm font-medium text-on-ink hover:bg-ink/90 disabled:opacity-50 transition-colors"
               >
                 {saving ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

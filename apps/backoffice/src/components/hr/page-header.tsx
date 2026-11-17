@@ -29,17 +29,17 @@ export function HrPageHeader({
         {showBack && (
           <Link
             href="/hr"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline"
+            className="inline-flex items-center gap-1 text-[13px] text-text-2 hover:text-text"
           >
-            <ArrowLeft className="h-3 w-3" /> HR
+            <ArrowLeft className="h-3.5 w-3.5" /> Team
           </Link>
         )}
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
+        <h1 className="mt-1 flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           {icon}
           {title}
         </h1>
         {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <p className="mt-0.5 text-sm text-text-2">{description}</p>
         )}
       </div>
       {action && <div className="flex items-center gap-2">{action}</div>}

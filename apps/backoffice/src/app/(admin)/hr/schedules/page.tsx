@@ -106,7 +106,7 @@ const COLOR_MAP: Record<string, string> = {
   indigo: "bg-indigo-50 border-indigo-300 text-indigo-900 hover:bg-indigo-100",
   blue: "bg-blue-50 border-blue-300 text-blue-900 hover:bg-blue-100",
   purple: "bg-purple-50 border-purple-300 text-purple-900 hover:bg-purple-100",
-  gray: "bg-gray-50 border-gray-300 text-gray-900 hover:bg-gray-100",
+  gray: "bg-sunken border-line-2 text-text hover:bg-sunken",
 };
 
 function getNextMonday(): string {
@@ -842,7 +842,7 @@ export default function SchedulesPage() {
   }, 0);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 p-4 sm:p-6 lg:p-8">
+    <div className="flex h-full min-h-0 flex-col gap-4 px-4 pt-6 pb-10 md:px-8">
       <HrPageHeader
         title="Schedules"
         description="Click a cell to assign a shift"
@@ -954,7 +954,7 @@ export default function SchedulesPage() {
             <button
               key={v}
               onClick={() => setView(v)}
-              className={`px-3 py-1.5 font-medium capitalize ${view === v ? "bg-terracotta text-white" : "hover:bg-muted"}`}
+              className={`px-3 py-1.5 font-medium capitalize ${view === v ? "bg-ink text-on-ink" : "hover:bg-muted"}`}
             >
               {v}
             </button>
@@ -1086,7 +1086,7 @@ export default function SchedulesPage() {
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => mutateOpenSlots()}
-                className="rounded-lg border border-sky-200 bg-white p-1.5 text-sky-600 hover:bg-sky-100"
+                className="rounded-lg border border-sky-200 bg-surface p-1.5 text-sky-600 hover:bg-sky-100"
                 title="Refresh — requests from the staff apps appear here"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -1094,7 +1094,7 @@ export default function SchedulesPage() {
               {!postSlotForm && (
                 <button
                   onClick={() => { setSlotsPanelOpen(true); setPostSlotForm({ date: grid?.days?.[0] ?? weekStart, templateId: grid?.templates?.[0]?.id ?? "", station: "barista" }); }}
-                  className="flex items-center gap-1 rounded-lg border border-sky-300 bg-white px-2.5 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-100"
+                  className="flex items-center gap-1 rounded-lg border border-sky-300 bg-surface px-2.5 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-100"
                 >
                   <Plus className="h-3.5 w-3.5" /> Post slot
                 </button>
@@ -1108,11 +1108,11 @@ export default function SchedulesPage() {
                 const daySlots = slotsByDay.get(d)!;
                 const isPast = d < todayMyt;
                 return (
-                  <div key={d} className={`rounded-lg border border-sky-100 bg-white p-2.5 ${isPast ? "opacity-60" : ""}`}>
+                  <div key={d} className={`rounded-lg border border-sky-100 bg-surface p-2.5 ${isPast ? "opacity-60" : ""}`}>
                     <div className="mb-1.5 flex items-center justify-between">
-                      <span className="text-sm font-semibold text-gray-700">
+                      <span className="text-sm font-semibold text-text-2">
                         {new Date(d + "T00:00:00Z").toLocaleDateString("en-MY", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" })}
-                        {isPast && <span className="ml-1.5 text-[10px] font-medium uppercase text-gray-400">past</span>}
+                        {isPast && <span className="ml-1.5 text-[10px] font-medium uppercase text-text-3">past</span>}
                       </span>
                       {!isPast && (
                         <button
@@ -1132,16 +1132,16 @@ export default function SchedulesPage() {
                           <div
                             key={s.id}
                             className={`flex items-center gap-2.5 rounded-lg border px-2.5 py-2 ${
-                              claimed ? "border-green-200 bg-green-50" : "border-gray-150 bg-white"
+                              claimed ? "border-green-200 bg-green-50" : "border-line bg-surface"
                             }`}
                           >
                             <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${s.station === "kitchen" ? "bg-amber-50 text-amber-600" : "bg-sky-50 text-sky-600"}`}>
                               {s.station === "kitchen" ? <ChefHat className="h-4 w-4" /> : <Coffee className="h-4 w-4" />}
                             </span>
                             <div className="min-w-0 flex-1">
-                              <div className="text-sm font-semibold text-gray-800">
+                              <div className="text-sm font-semibold text-text">
                                 {s.start_time}–{s.end_time}
-                                <span className="ml-1 font-normal text-gray-400">({h}h)</span>
+                                <span className="ml-1 font-normal text-text-3">({h}h)</span>
                               </div>
                               <div className="truncate text-[11px] text-muted-foreground">
                                 {s.station === "kitchen" ? "Kitchen" : "Barista"}
@@ -1159,7 +1159,7 @@ export default function SchedulesPage() {
                               <button
                                 onClick={() => cancelOpenSlot(s.id)}
                                 disabled={slotBusy === s.id}
-                                className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                                className="shrink-0 rounded-md border border-line px-2 py-1 text-xs font-medium text-text-2 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                                 title="Take this slot down — staff can no longer request it (pending requests are declined)"
                               >
                                 {slotBusy === s.id ? "…" : "Cancel"}
@@ -1179,7 +1179,7 @@ export default function SchedulesPage() {
                           <div className="space-y-1">
                             {s.requests.map((r) => (
                               <div key={r.id} className="flex items-center justify-between gap-2">
-                                <span className="text-xs text-gray-700">
+                                <span className="text-xs text-text-2">
                                   {r.name}
                                   <span className="ml-1 text-[10px] text-muted-foreground">
                                     {r.week_hours}h · {r.week_days}d this week
@@ -1206,8 +1206,8 @@ export default function SchedulesPage() {
 
           {/* Post form — all taps, no dropdowns */}
           {postSlotForm && grid && (
-            <div className="mt-3 space-y-2.5 rounded-lg border border-sky-200 bg-white p-3">
-              <div className="text-sm font-semibold text-gray-700">Post a slot for part-timers to request</div>
+            <div className="mt-3 space-y-2.5 rounded-lg border border-sky-200 bg-surface p-3">
+              <div className="text-sm font-semibold text-text-2">Post a slot for part-timers to request</div>
               <div className="flex flex-wrap gap-1.5">
                 {(grid.days || []).map((d) => {
                   const active = postSlotForm.date === d;
@@ -1218,7 +1218,7 @@ export default function SchedulesPage() {
                       onClick={() => !past && setPostSlotForm({ ...postSlotForm, date: d })}
                       disabled={past}
                       className={`rounded-lg px-2.5 py-1.5 text-sm font-medium ${
-                        active ? "bg-sky-600 text-white" : past ? "bg-gray-50 text-gray-300" : "bg-gray-50 text-gray-600 hover:bg-sky-50"
+                        active ? "bg-sky-600 text-white" : past ? "bg-sunken text-text-3" : "bg-sunken text-text-2 hover:bg-sky-50"
                       }`}
                     >
                       {new Date(d + "T00:00:00Z").toLocaleDateString("en-MY", { weekday: "short", day: "numeric", timeZone: "UTC" })}
@@ -1233,7 +1233,7 @@ export default function SchedulesPage() {
                     <button
                       key={t.id}
                       onClick={() => setPostSlotForm({ ...postSlotForm, templateId: t.id })}
-                      className={`rounded-lg px-2.5 py-1.5 text-sm font-medium ${active ? "bg-sky-600 text-white" : "bg-gray-50 text-gray-600 hover:bg-sky-50"}`}
+                      className={`rounded-lg px-2.5 py-1.5 text-sm font-medium ${active ? "bg-sky-600 text-white" : "bg-sunken text-text-2 hover:bg-sky-50"}`}
                     >
                       {t.label} {t.start_time}–{t.end_time}
                     </button>
@@ -1241,13 +1241,13 @@ export default function SchedulesPage() {
                 })}
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex overflow-hidden rounded-lg border border-gray-200">
+                <div className="flex overflow-hidden rounded-lg border border-line">
                   {(["barista", "kitchen"] as const).map((st) => (
                     <button
                       key={st}
                       onClick={() => setPostSlotForm({ ...postSlotForm, station: st })}
                       className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium ${
-                        postSlotForm.station === st ? "bg-sky-600 text-white" : "bg-white text-gray-600 hover:bg-sky-50"
+                        postSlotForm.station === st ? "bg-sky-600 text-white" : "bg-surface text-text-2 hover:bg-sky-50"
                       }`}
                     >
                       {st === "kitchen" ? <ChefHat className="h-3.5 w-3.5" /> : <Coffee className="h-3.5 w-3.5" />}
@@ -1312,7 +1312,7 @@ export default function SchedulesPage() {
                       <div className="text-xs text-muted-foreground">{DAY_NAMES[i]}</div>
                       <div className="text-base">{formatDay(d)}</div>
                       {hol && <div className="text-[9px] text-red-600 truncate" title={hol.name}>PH: {hol.name}</div>}
-                      <div className="mt-1 text-[10px] font-semibold tabular-nums text-gray-600">{dayLabel} total</div>
+                      <div className="mt-1 text-[10px] font-semibold tabular-nums text-text-2">{dayLabel} total</div>
                       {(() => {
                         // Open-slot badge: this day still has bookable slots out
                         // in the staff apps — the manager sees it at the column,
@@ -1362,7 +1362,7 @@ export default function SchedulesPage() {
                         return (
                           <>
                             <div className="fixed inset-0 z-40" onClick={() => setWhyDate(null)} />
-                            <div className={`absolute z-50 mt-1 w-72 ${align} rounded-lg border bg-white p-3 text-left text-[11px] font-normal shadow-lg`}>
+                            <div className={`absolute z-50 mt-1 w-72 ${align} rounded-lg border bg-surface p-3 text-left text-[11px] font-normal shadow-lg`}>
                               <div className="mb-1.5 font-semibold">Why this staffing?</div>
                               <ul className="space-y-1 text-muted-foreground">
                                 {cov?.items ? (
@@ -1403,7 +1403,7 @@ export default function SchedulesPage() {
                         const fc = cov.forecast;
                         const rm = fc >= 1000 ? `RM${(fc / 1000).toFixed(1)}k` : `RM${fc}`;
                         const pctColor =
-                          cov.pct == null ? "text-gray-400"
+                          cov.pct == null ? "text-text-3"
                             : cov.pct <= g.targetPct ? "text-green-600"
                               : cov.pct <= g.ceilingPct ? "text-amber-600"
                                 : "text-red-600";
@@ -1575,7 +1575,7 @@ export default function SchedulesPage() {
                                       {isPtSuggestion ? "PT? " : ""}
                                       {shift.role_type || "Shift"}
                                     </span>
-                                    <span className="shrink-0 rounded bg-white/60 px-1 text-[9px] font-semibold tabular-nums">{hoursLabel}</span>
+                                    <span className="shrink-0 rounded bg-surface/60 px-1 text-[9px] font-semibold tabular-nums">{hoursLabel}</span>
                                   </div>
                                   <div className="text-[10px]">
                                     {shift.start_time.slice(0, 5)} - {shift.end_time.slice(0, 5)}
@@ -1599,7 +1599,7 @@ export default function SchedulesPage() {
                           ) : (
                             <button
                               onClick={(e) => openPicker(u.id, d, e)}
-                              className="w-full rounded-lg border border-dashed border-gray-300 p-2 text-center text-xs text-gray-400 hover:bg-gray-50 disabled:cursor-default"
+                              className="w-full rounded-lg border border-dashed border-line-2 p-2 text-center text-xs text-text-3 hover:bg-sunken disabled:cursor-default"
                               disabled={isPublished}
                             >
                               + Add
@@ -1614,7 +1614,7 @@ export default function SchedulesPage() {
                                 onClick={() => setPickerOpen(null)}
                               />
                               <div
-                                className="fixed z-50 w-56 rounded-lg border bg-white p-1 shadow-lg max-h-[70vh] overflow-y-auto"
+                                className="fixed z-50 w-56 rounded-lg border bg-surface p-1 shadow-lg max-h-[70vh] overflow-y-auto"
                                 style={{ top: pickerOpen!.top, left: pickerOpen!.left }}
                               >
                                 {/* Demand suggestion — the windows this day is short on
@@ -1674,7 +1674,7 @@ export default function SchedulesPage() {
                                 <button
                                   onClick={() => setCell(u.id, d, "rest_day")}
                                   disabled={saving}
-                                  className="w-full rounded px-3 py-2 text-left text-xs hover:bg-gray-100"
+                                  className="w-full rounded px-3 py-2 text-left text-xs hover:bg-sunken"
                                 >
                                   <span className="font-medium">Rest Day</span>
                                 </button>
@@ -1684,7 +1684,7 @@ export default function SchedulesPage() {
                                     key={t.id}
                                     onClick={() => setCell(u.id, d, t.id)}
                                     disabled={saving}
-                                    className="w-full rounded px-3 py-2 text-left text-xs hover:bg-gray-100"
+                                    className="w-full rounded px-3 py-2 text-left text-xs hover:bg-sunken"
                                   >
                                     <div className="font-medium">{t.label}</div>
                                     <div className="text-[10px] text-muted-foreground">
@@ -1719,10 +1719,10 @@ export default function SchedulesPage() {
                                   </button>
                                 ) : (
                                   <div className="space-y-1.5 px-2 py-2">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Custom Shift</p>
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-text-2">Custom Shift</p>
                                     <div className="grid grid-cols-2 gap-1.5">
                                       <label className="block">
-                                        <span className="block text-[9px] text-gray-500">From</span>
+                                        <span className="block text-[9px] text-text-2">From</span>
                                         <input
                                           type="time"
                                           value={customForm.start}
@@ -1731,7 +1731,7 @@ export default function SchedulesPage() {
                                         />
                                       </label>
                                       <label className="block">
-                                        <span className="block text-[9px] text-gray-500">Until</span>
+                                        <span className="block text-[9px] text-text-2">Until</span>
                                         <input
                                           type="time"
                                           value={customForm.end}
@@ -1741,7 +1741,7 @@ export default function SchedulesPage() {
                                       </label>
                                     </div>
                                     <label className="block">
-                                      <span className="block text-[9px] text-gray-500">Break (min)</span>
+                                      <span className="block text-[9px] text-text-2">Break (min)</span>
                                       <input
                                         type="number"
                                         min="0"
@@ -1761,7 +1761,7 @@ export default function SchedulesPage() {
                                       <button
                                         onClick={() => setCustomForm(null)}
                                         disabled={saving}
-                                        className="flex-1 rounded border px-2 py-1 text-[11px] hover:bg-gray-50"
+                                        className="flex-1 rounded border px-2 py-1 text-[11px] hover:bg-sunken"
                                       >
                                         Cancel
                                       </button>
@@ -1804,7 +1804,7 @@ export default function SchedulesPage() {
                 </Fragment>
               ))}
             </tbody>
-            <tfoot className="border-t-2 border-gray-200">
+            <tfoot className="border-t-2 border-line">
               {/* Coverage gap footer — for each day shows how each coverage rule is satisfied */}
               {grid.coverageRules && grid.coverageRules.length > 0 && (
                 <tr className="bg-amber-50/30">
@@ -1815,7 +1815,7 @@ export default function SchedulesPage() {
                     const dow = dowFromIso(d);
                     const rules = coverageByDow.get(dow) || [];
                     if (rules.length === 0) {
-                      return <td key={d} className="p-1 text-center text-[10px] text-gray-300">—</td>;
+                      return <td key={d} className="p-1 text-center text-[10px] text-text-3">—</td>;
                     }
                     return (
                       <td key={d} className="p-1 align-top">
@@ -1850,7 +1850,7 @@ export default function SchedulesPage() {
         </div>
       ) : selectedOutlet && grid && grid.users.length === 0 ? (
         <div className="rounded-xl border bg-card py-16 text-center">
-          <CalendarDays className="mx-auto mb-3 h-12 w-12 text-gray-300" />
+          <CalendarDays className="mx-auto mb-3 h-12 w-12 text-text-3" />
           <p className="text-lg font-semibold">No staff at this outlet</p>
           <p className="text-sm text-muted-foreground">Assign staff to this outlet in Settings → Staff</p>
         </div>
@@ -1867,7 +1867,7 @@ export default function SchedulesPage() {
 
       {pendingCheck && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setPendingCheck(null)}>
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-xl bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center gap-2">
               <div className={
                 "flex h-9 w-9 items-center justify-center rounded-full " +
@@ -1883,10 +1883,10 @@ export default function SchedulesPage() {
                  "Approaching weekly limit"}
               </h3>
             </div>
-            <p className="mb-4 text-sm text-gray-700">{pendingCheck.message}</p>
-            <div className="mb-4 rounded-lg bg-gray-50 p-3 text-xs text-gray-600">
+            <p className="mb-4 text-sm text-text-2">{pendingCheck.message}</p>
+            <div className="mb-4 rounded-lg bg-sunken p-3 text-xs text-text-2">
               Proposed weekly total: <strong>{pendingCheck.proposed.toFixed(1)}h</strong> · Regular cap: <strong>{pendingCheck.limit}h</strong>
-              <p className="mt-1 text-[11px] text-gray-500">
+              <p className="mt-1 text-[11px] text-text-2">
                 Sum across all outlets this staff works at this week (user-scoped, multi-outlet aware).
               </p>
             </div>
@@ -1895,7 +1895,7 @@ export default function SchedulesPage() {
               {pendingCheck.status === "overtime" && (
                 <Link
                   href="/hr/overtime"
-                  className="rounded-lg border border-terracotta px-4 py-2 text-sm text-terracotta hover:bg-terracotta/5"
+                  className="rounded-lg border border-ink px-4 py-2 text-sm text-brand-text hover:bg-brand-soft"
                   onClick={() => setPendingCheck(null)}
                 >
                   Request OT approval
@@ -1905,7 +1905,7 @@ export default function SchedulesPage() {
                 <button
                   onClick={() => setCell(pendingCheck.userId, pendingCheck.date, pendingCheck.templateId, true)}
                   disabled={saving}
-                  className="rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                  className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
                 >
                   {pendingCheck.status === "overtime" ? "Save as overtime" : "Confirm"}
                 </button>
@@ -1923,7 +1923,7 @@ export default function SchedulesPage() {
           <div className="w-full max-w-3xl rounded-2xl bg-background p-4 shadow-xl sm:p-6" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-base font-semibold">
-                <Sparkles className="h-4 w-4 text-terracotta" />
+                <Sparkles className="h-4 w-4 text-brand-text" />
                 Assist · {new Date(assistDate + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "2-digit", month: "short" })}
               </h2>
               <button onClick={() => setAssistDate(null)} className="rounded-lg p-1.5 hover:bg-muted" aria-label="Close assist">
@@ -2020,7 +2020,7 @@ function DayView({
             key={d}
             onClick={() => setDayIdx(i)}
             className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${
-              d === date ? "border-terracotta bg-terracotta text-white" : "hover:bg-muted"
+              d === date ? "border-ink bg-ink text-on-ink" : "hover:bg-muted"
             }`}
           >
             {DAY_NAMES[i]} {formatDay(d)}
@@ -2041,7 +2041,7 @@ function DayView({
         {cov?.forecast != null && (
           <span
             className={`${cov.neededHours > 0 ? "" : "ml-auto "}rounded-lg border px-3 py-1.5 text-sm font-medium ${
-              cov.pct == null ? "border-gray-200 bg-gray-50 text-gray-600"
+              cov.pct == null ? "border-line bg-sunken text-text-2"
                 : gate && cov.pct <= gate.targetPct ? "border-green-200 bg-green-50 text-green-700"
                   : gate && cov.pct <= gate.ceilingPct ? "border-amber-300 bg-amber-50 text-amber-700"
                     : "border-red-300 bg-red-50 text-red-700"
@@ -2079,8 +2079,8 @@ function DayView({
             </thead>
             <tbody>
               {[
-                { title: "Front of house", list: fohRows, fill: "bg-terracotta/80", count: "text-terracotta" },
-                { title: "Back of house", list: bohRows, fill: "bg-slate-500/80", count: "text-slate-600" },
+                { title: "Front of house", list: fohRows, fill: "bg-ink/80", count: "text-brand-text" },
+                { title: "Back of house", list: bohRows, fill: "bg-slate-500/80", count: "text-text-2" },
                 { title: "Management (not man-hours)", list: mgmtRows, fill: "bg-violet-400/70", count: "text-violet-600" },
               ]
                 .filter((sec) => sec.list.length > 0)

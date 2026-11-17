@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-import { Search, MoreHorizontal, X, Download, Eye, Pencil, Trash2, Store, AlertTriangle, Filter, ChevronDown, ChevronLeft, ChevronRight, Plus, Tag, Save, Bookmark, MessageSquare, Send, Phone, Loader2, Coins, Crown } from "lucide-react";
+import { Search, MoreHorizontal, X, Download, Eye, Pencil, Trash2, Store, AlertTriangle, Filter, ChevronDown, ChevronLeft, ChevronRight, Plus, Tag, Save, Bookmark, MessageSquare, Phone, Loader2, Coins, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { KeyNumber } from "@/components/ui/key-number";
 import { fetchMembers, fetchMembersPage, fetchRewards } from "@/lib/loyalty/api";
 import type { MemberWithBrand, Reward } from "@/lib/loyalty/types";
 import {
@@ -13,6 +14,8 @@ import {
 } from "@/lib/loyalty/utils";
 import { exportToCSV } from "@/lib/loyalty/export";
 import { toast } from "@celsius/ui";
+import { useRouter } from "next/navigation";
+import { savePickedPhones } from "@/lib/sms-handoff";
 
 // ─── Segment helpers ────────────────────────────────────
 type Segment = "all" | "returning" | "new" | "eligible";
@@ -86,12 +89,12 @@ const SAVED_SEGMENTS_KEY = "celsius-saved-segments";
 
 // Tier metadata — ids match the `tiers` table. cls = badge colours.
 const TIER_OPTIONS: { id: string; label: string; cls: string }[] = [
-  { id: "tier-celsius-bronze", label: "Member", cls: "bg-gray-100 text-gray-600 dark:bg-neutral-700 dark:text-neutral-300" },
-  { id: "tier-celsius-silver", label: "Silver", cls: "bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-100" },
-  { id: "tier-celsius-gold", label: "Gold", cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300" },
-  { id: "tier-celsius-elite", label: "Platinum", cls: "bg-neutral-800 text-white dark:bg-neutral-200 dark:text-neutral-900" },
-  { id: "tier-celsius-arba-staff", label: "Staff", cls: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" },
-  { id: "tier-celsius-black-card", label: "Black Card", cls: "bg-neutral-900 text-amber-300 dark:bg-black dark:text-amber-300" },
+  { id: "tier-celsius-bronze", label: "Member", cls: "bg-sunken text-text-2" },
+  { id: "tier-celsius-silver", label: "Silver", cls: "bg-line text-text-2" },
+  { id: "tier-celsius-gold", label: "Gold", cls: "bg-warn-soft text-warn-text" },
+  { id: "tier-celsius-elite", label: "Platinum", cls: "bg-ink text-on-ink" },
+  { id: "tier-celsius-arba-staff", label: "Staff", cls: "bg-warn-soft text-warn-text" },
+  { id: "tier-celsius-black-card", label: "Black Card", cls: "bg-neutral-900 text-warn-text" },
 ];
 // A null tier = effectively Member (the engine defaults null → bronze).
 const tierMeta = (id: string | null) => TIER_OPTIONS.find((t) => t.id === (id ?? "tier-celsius-bronze")) ?? TIER_OPTIONS[0];
@@ -129,20 +132,20 @@ type DetailData = {
 
 function DetailStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-gray-50 dark:bg-neutral-700/50 px-2 py-2 text-center">
-      <p className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-neutral-500">{label}</p>
-      <p className="text-sm font-bold text-gray-900 dark:text-white">{value}</p>
+    <div className="rounded-lg bg-sunken px-2 py-2 text-center">
+      <p className="text-[10px] uppercase tracking-wide text-text-3">{label}</p>
+      <p className="text-sm font-bold text-text">{value}</p>
     </div>
   );
 }
 function DetailRow({ left, sub, right, rightCls, time }: { left: string; sub?: string; right: string; rightCls?: string; time: string }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-lg border border-gray-100 dark:border-neutral-700/60 px-3 py-2">
+    <div className="flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2">
       <div className="min-w-0">
-        <p className="truncate text-sm text-gray-800 dark:text-neutral-200">{left}</p>
-        <p className="text-[11px] text-gray-400 dark:text-neutral-500">{sub ? `${sub} · ` : ""}{time}</p>
+        <p className="truncate text-sm text-text">{left}</p>
+        <p className="text-[11px] text-text-3">{sub ? `${sub} · ` : ""}{time}</p>
       </div>
-      <span className={`shrink-0 text-sm font-medium tabular-nums ${rightCls || "text-gray-700 dark:text-neutral-300"}`}>{right}</span>
+      <span className={`shrink-0 text-sm font-medium tabular-nums ${rightCls || "text-text-2"}`}>{right}</span>
     </div>
   );
 }
@@ -175,6 +178,7 @@ function mapMember(m: MemberWithBrand): MappedMember {
 }
 
 export default function MembersPage() {
+  const router = useRouter();
   // Server-side paginated data (fast default view)
   const [serverMembers, setServerMembers] = useState<MappedMember[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
@@ -250,10 +254,6 @@ export default function MembersPage() {
   const [pageSize, setPageSize] = useState(50);
 
   // Bulk SMS
-  const [showSmsModal, setShowSmsModal] = useState(false);
-  const [smsMessage, setSmsMessage] = useState("");
-  const [smsSending, setSmsSending] = useState(false);
-  const [smsResult, setSmsResult] = useState<{ sent: number; failed: number } | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [showBulkTagModal, setShowBulkTagModal] = useState(false);
@@ -735,31 +735,14 @@ export default function MembersPage() {
     setEditingMember(null);
   }
 
-  // ─── Bulk SMS handler ──────────────────────────────
-  async function handleBulkSms() {
-    if (!smsMessage.trim() || selectedRows.size === 0) return;
-    setSmsSending(true);
-    setSmsResult(null);
+  // ─── Send SMS: hand the picked members to Marketing › Messages ───────
+  // One SMS tool (step 5): Messages applies the PDPA opt-out filter, credit
+  // check, sender name and confirm step (lib/sms-handoff.ts).
+  function handleSendSms() {
+    if (selectedRows.size === 0) return;
     const source = allLoaded ? allMembers : serverMembers;
-    const phones = source
-      .filter((m) => selectedRows.has(m.id))
-      .map((m) => m.phone);
-    try {
-      const res = await fetch("/api/loyalty/sms/blast", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brand_id: "brand-celsius", phones, message: smsMessage }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSmsResult({ sent: data.sent, failed: data.failed });
-      } else {
-        toast.error(data.error || "Failed to send SMS");
-      }
-    } catch {
-      toast.error("Failed to send SMS. Please try again.");
-    }
-    setSmsSending(false);
+    savePickedPhones(source.filter((m) => selectedRows.has(m.id)).map((m) => m.phone));
+    router.push("/loyalty/engage?tab=sms&audience=picked");
   }
 
   // ─── Bulk delete handler ──────────────────────────
@@ -971,32 +954,52 @@ export default function MembersPage() {
 
   if (loading) {
     return (
-      <div className="p-6 space-y-0 pb-20 md:pb-0">
+      <div className="px-4 pt-6 pb-24 md:px-8 md:pb-10">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Members</h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">
-            Manage your rewards program members
-          </p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Members</h1>
+          <p className="mt-0.5 text-sm text-text-2">Who is in the rewards programme, who comes back, and who can redeem now.</p>
         </div>
-        <div className="flex items-center justify-center py-20 text-gray-400 dark:text-neutral-500">
-          Loading...
+        <div className="flex items-center justify-center py-20 text-text-3">
+          Loading…
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-6 space-y-0 pb-20 md:pb-0">
+    <div className="px-4 pt-6 pb-24 md:px-8 md:pb-10">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Members</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-neutral-400">
-          Manage your rewards program members
-        </p>
+      <div className="mb-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Members</h1>
+            <p className="mt-0.5 text-sm text-text-2">Who is in the rewards programme, who comes back, and who can redeem now.</p>
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KeyNumber label="Members" value={loading && !serverTotal ? null : serverTotal.toLocaleString()}
+            note="phone numbers in the programme" />
+          {(() => {
+            const countNow = allLoaded
+              ? null
+              : <button type="button" onClick={ensureAllLoaded} disabled={allLoading} className="font-medium text-brand-text hover:underline disabled:opacity-50">{allLoading ? "Counting…" : "Count now"}</button>;
+            const share = (n: number) => segmentCounts.all ? `${Math.round((n / segmentCounts.all) * 100)}% of members` : "";
+            return (
+              <>
+                <KeyNumber label="Returning" value={allLoaded ? segmentCounts.returning.toLocaleString() : "–"}
+                  note={countNow ?? share(segmentCounts.returning)} />
+                <KeyNumber label="New, one visit" value={allLoaded ? segmentCounts.new.toLocaleString() : "–"}
+                  note={countNow ?? share(segmentCounts.new)} />
+                <KeyNumber label="Can redeem now" value={allLoaded ? segmentCounts.eligible.toLocaleString() : "–"}
+                  note={countNow ?? "enough points for a reward"} />
+              </>
+            );
+          })()}
+        </div>
       </div>
 
       {/* Segment Tabs */}
-      <div className="border-b border-gray-200 dark:border-neutral-700">
+      <div className="border-b border-line">
         <nav className="-mb-px flex gap-0 overflow-x-auto" aria-label="Segments">
           {tabs.map((tab) => (
             <button
@@ -1004,16 +1007,16 @@ export default function MembersPage() {
               onClick={() => { if (tab.key !== "all") ensureAllLoaded(); setSegment(tab.key); setActiveCustomSegment(null); setFilters([]); setTagFilter(""); }}
               className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
                 segment === tab.key && !activeCustomSegment
-                  ? "border-gray-900 dark:border-white text-gray-900 dark:text-white"
-                  : "border-transparent text-gray-500 dark:text-neutral-400 hover:border-gray-300 dark:hover:border-neutral-600 hover:text-gray-700 dark:hover:text-neutral-200"
+                  ? "border-gray-900 text-text"
+                  : "border-transparent text-text-2 hover:border-line-2 hover:text-text-2"
               }`}
             >
               {tab.label}{" "}
               <span
                 className={`ml-1 rounded-full px-1.5 py-0.5 text-xs ${
                   segment === tab.key && !activeCustomSegment
-                    ? "bg-gray-900 dark:bg-white text-white dark:text-neutral-900"
-                    : "bg-gray-100 dark:bg-neutral-700 text-gray-500 dark:text-neutral-400"
+                    ? "bg-ink text-on-ink"
+                    : "bg-sunken text-text-2"
                 }`}
               >
                 {tab.count.toLocaleString()}
@@ -1027,8 +1030,8 @@ export default function MembersPage() {
                 onClick={() => loadSegment(seg)}
                 className={`whitespace-nowrap border-b-2 pl-4 pr-1 py-3 text-sm font-medium transition-colors flex items-center gap-1.5 ${
                   activeCustomSegment === seg.id
-                    ? "border-[#C2452D] text-[#C2452D]"
-                    : "border-transparent text-gray-500 dark:text-neutral-400 hover:border-gray-300 dark:hover:border-neutral-600 hover:text-gray-700 dark:hover:text-neutral-200"
+                    ? "border-text bg-raised font-semibold text-text"
+                    : "border-transparent text-text-2 hover:border-line-2 hover:text-text-2"
                 }`}
               >
                 <Bookmark className="h-3 w-3" />
@@ -1036,8 +1039,8 @@ export default function MembersPage() {
                 <span
                   className={`ml-0.5 rounded-full px-1.5 py-0.5 text-xs ${
                     activeCustomSegment === seg.id
-                      ? "bg-[#C2452D]/10 text-[#C2452D]"
-                      : "bg-gray-100 dark:bg-neutral-700 text-gray-500 dark:text-neutral-400"
+                      ? "bg-brand-soft text-brand-text"
+                      : "bg-sunken text-text-2"
                   }`}
                 >
                   {savedSegmentCounts[seg.id] ?? 0}
@@ -1045,7 +1048,7 @@ export default function MembersPage() {
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); setDeleteSegmentConfirm(deleteSegmentConfirm === seg.id ? null : seg.id); }}
-                className="mr-2 rounded-full p-0.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                className="mr-2 rounded-full p-0.5 text-text-3 hover:text-danger-text hover:bg-danger-soft"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -1054,11 +1057,11 @@ export default function MembersPage() {
           {/* Delete segment confirmation */}
           {deleteSegmentConfirm && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setDeleteSegmentConfirm(null)}>
-              <div className="w-64 rounded-xl border border-red-200 dark:border-red-900 bg-white dark:bg-neutral-800 shadow-lg p-4" onClick={(e) => e.stopPropagation()}>
-                <p className="text-sm text-gray-700 dark:text-neutral-300 mb-3">Delete this segment?</p>
+              <div className="w-64 rounded-xl border border-danger/30 bg-surface shadow-lg p-4" onClick={(e) => e.stopPropagation()}>
+                <p className="text-sm text-text-2 mb-3">Delete this segment?</p>
                 <div className="flex gap-2">
-                  <button onClick={() => setDeleteSegmentConfirm(null)} className="flex-1 rounded-lg bg-gray-100 dark:bg-neutral-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-neutral-300">Cancel</button>
-                  <button onClick={() => deleteSegment(deleteSegmentConfirm)} className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white">Delete</button>
+                  <button onClick={() => setDeleteSegmentConfirm(null)} className="flex-1 rounded-lg bg-sunken px-3 py-1.5 text-xs font-medium text-text-2">Cancel</button>
+                  <button onClick={() => deleteSegment(deleteSegmentConfirm)} className="flex-1 rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-on-ink">Delete</button>
                 </div>
               </div>
             </div>
@@ -1075,8 +1078,8 @@ export default function MembersPage() {
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
               filters.length > 0
-                ? "border-[#C2452D] bg-[#C2452D]/5 text-[#C2452D]"
-                : "border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-600 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                ? "border-text bg-raised font-semibold text-text"
+                : "border-line bg-surface text-text-2 hover:bg-sunken"
             )}
           >
             <Filter className="h-3 w-3" />
@@ -1091,8 +1094,8 @@ export default function MembersPage() {
                 className={cn(
                   "appearance-none rounded-full border pl-7 pr-6 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                   tagFilter
-                    ? "border-[#C2452D] bg-[#C2452D]/5 text-[#C2452D]"
-                    : "border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-600 dark:text-neutral-300"
+                    ? "border-text bg-raised font-semibold text-text"
+                    : "border-line bg-surface text-text-2"
                 )}
               >
                 <option value="">All tags</option>
@@ -1100,13 +1103,13 @@ export default function MembersPage() {
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
-              <Tag className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Tag className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-text-3 pointer-events-none" />
             </div>
           )}
           {tagFilter && (
             <button
               onClick={() => setTagFilter("")}
-              className="inline-flex items-center gap-1 rounded-full border border-[#C2452D]/30 bg-[#C2452D]/5 px-2.5 py-1.5 text-xs font-medium text-[#C2452D]"
+              className="inline-flex items-center gap-1 rounded-full border border-ink/30 bg-brand-soft px-2.5 py-1.5 text-xs font-medium text-brand-text"
             >
               Tag: {tagFilter}
               <X className="h-3 w-3" />
@@ -1121,8 +1124,8 @@ export default function MembersPage() {
                 className={cn(
                   "appearance-none rounded-full border pl-7 pr-6 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                   outletFilter
-                    ? "border-[#C2452D] bg-[#C2452D]/5 text-[#C2452D]"
-                    : "border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-600 dark:text-neutral-300"
+                    ? "border-text bg-raised font-semibold text-text"
+                    : "border-line bg-surface text-text-2"
                 )}
               >
                 <option value="">All outlets</option>
@@ -1130,13 +1133,13 @@ export default function MembersPage() {
                   <option key={o.id} value={o.id}>{o.name}</option>
                 ))}
               </select>
-              <Store className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Store className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-text-3 pointer-events-none" />
             </div>
           )}
           {outletFilter && (
             <button
               onClick={() => setOutletFilter("")}
-              className="inline-flex items-center gap-1 rounded-full border border-[#C2452D]/30 bg-[#C2452D]/5 px-2.5 py-1.5 text-xs font-medium text-[#C2452D]"
+              className="inline-flex items-center gap-1 rounded-full border border-ink/30 bg-brand-soft px-2.5 py-1.5 text-xs font-medium text-brand-text"
             >
               Outlet: {outlets.find((o) => o.id === outletFilter)?.name || outletFilter}
               <X className="h-3 w-3" />
@@ -1150,8 +1153,8 @@ export default function MembersPage() {
               className={cn(
                 "appearance-none rounded-full border pl-7 pr-6 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                 tierFilter
-                  ? "border-[#C2452D] bg-[#C2452D]/5 text-[#C2452D]"
-                  : "border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-gray-600 dark:text-neutral-300"
+                  ? "border-text bg-raised font-semibold text-text"
+                  : "border-line bg-surface text-text-2"
               )}
             >
               <option value="">All tiers</option>
@@ -1159,12 +1162,12 @@ export default function MembersPage() {
                 <option key={t.id} value={t.id}>{t.label}</option>
               ))}
             </select>
-            <Crown className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <Crown className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-text-3 pointer-events-none" />
           </div>
           {tierFilter && (
             <button
               onClick={() => setTierFilter("")}
-              className="inline-flex items-center gap-1 rounded-full border border-[#C2452D]/30 bg-[#C2452D]/5 px-2.5 py-1.5 text-xs font-medium text-[#C2452D]"
+              className="inline-flex items-center gap-1 rounded-full border border-ink/30 bg-brand-soft px-2.5 py-1.5 text-xs font-medium text-brand-text"
             >
               Tier: {TIER_OPTIONS.find((t) => t.id === tierFilter)?.label || tierFilter}
               <X className="h-3 w-3" />
@@ -1173,13 +1176,13 @@ export default function MembersPage() {
           {/* Quick preset chips */}
           {filters.length === 0 && (
             <>
-              <button onClick={() => applyPreset("high_spender")} className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700">
+              <button onClick={() => applyPreset("high_spender")} className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-sunken">
                 High spender
               </button>
-              <button onClick={() => applyPreset("inactive_30")} className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700">
+              <button onClick={() => applyPreset("inactive_30")} className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-sunken">
                 Inactive 30d
               </button>
-              <button onClick={() => applyPreset("high_points")} className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700">
+              <button onClick={() => applyPreset("high_points")} className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-sunken">
                 High points
               </button>
             </>
@@ -1188,18 +1191,18 @@ export default function MembersPage() {
           {filters.map((f, i) => (
             <span
               key={i}
-              className="inline-flex items-center gap-1 rounded-full border border-[#C2452D]/30 bg-[#C2452D]/5 px-3 py-1.5 text-xs font-medium text-[#C2452D]"
+              className="inline-flex items-center gap-1 rounded-full border border-ink/30 bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-text"
             >
               {f.field === "purchased_product_count"
                 ? `Bought "${purchasedProducts.find((p) => p.id === f.productId)?.name || f.productId || "—"}" ${f.op} ${f.value || "?"}× units`
                 : <>{filterFieldLabels[f.field]} {f.op === "!=" && (f.field === "purchased_product" || f.field === "order_channel") ? "not" : f.op} {f.field === "tag" ? `"${f.value}"` : f.field === "sms_received" ? `"${(smsMessages.find((s) => s.message === f.value)?.display || f.value).slice(0, 30)}..."` : f.field === "purchased_product" ? `"${purchasedProducts.find((p) => p.id === f.value)?.name || f.value}"` : f.field === "order_channel" ? `"${channelLabel(f.value)}"` : f.value}</>}
-              <button onClick={() => removeFilter(i)} className="ml-0.5 hover:text-red-700"><X className="h-3 w-3" /></button>
+              <button onClick={() => removeFilter(i)} className="ml-0.5 hover:text-danger-text"><X className="h-3 w-3" /></button>
             </span>
           ))}
           {filters.length > 0 && (
             <button
               onClick={() => { setFilters([]); setShowFilterPanel(false); }}
-              className="text-xs text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-200 underline"
+              className="text-xs text-text-2 hover:text-text-2 underline"
             >
               Clear all
             </button>
@@ -1210,7 +1213,7 @@ export default function MembersPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => { setShowAddModal(true); setAddPhone(""); setAddName(""); }}
-            className="rounded-lg bg-[#C2452D] px-3 py-2 text-sm font-medium text-white hover:bg-[#A33822] inline-flex items-center gap-1.5"
+            className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover inline-flex items-center gap-1.5"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Add customer</span>
@@ -1241,14 +1244,14 @@ export default function MembersPage() {
                 { key: "tags", label: "Tags" },
               ], `celsius-members-${today}`);
             }}
-            className="rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 py-2 text-sm text-gray-600 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700 inline-flex items-center gap-1.5"
+            className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-text-2 hover:bg-sunken inline-flex items-center gap-1.5"
           >
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Export</span>
           </button>
           {searchOpen ? (
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-neutral-500" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
               <input
                 autoFocus
                 type="text"
@@ -1258,14 +1261,14 @@ export default function MembersPage() {
                 onBlur={() => {
                   if (!search) setSearchOpen(false);
                 }}
-                className="w-56 rounded-lg border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 py-2 pl-9 pr-8 text-sm text-gray-900 dark:text-neutral-200 placeholder:text-gray-400 dark:placeholder:text-neutral-500 focus:border-gray-400 dark:focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-gray-400 dark:focus:ring-neutral-500"
+                className="w-56 rounded-lg border border-line bg-surface py-2 pl-9 pr-8 text-sm text-text placeholder:text-text-3 focus:border-line-2 focus:outline-none focus:ring-1 focus:ring-line-2"
               />
               <button
                 onClick={() => {
                   setSearch("");
                   setSearchOpen(false);
                 }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-neutral-500 hover:text-gray-600 dark:hover:text-neutral-300"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-3 hover:text-text-2"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -1273,7 +1276,7 @@ export default function MembersPage() {
           ) : (
             <button
               onClick={() => setSearchOpen(true)}
-              className="rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 p-2 text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700 hover:text-gray-700 dark:hover:text-neutral-200"
+              className="rounded-lg border border-line bg-surface p-2 text-text-2 hover:bg-sunken hover:text-text-2"
             >
               <Search className="h-4 w-4" />
             </button>
@@ -1283,14 +1286,14 @@ export default function MembersPage() {
 
       {/* Advanced Filter Panel */}
       {showFilterPanel && (
-        <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-sm p-4">
+        <div className="rounded-xl border border-line bg-surface shadow-sm p-4">
           <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-neutral-300">
+            <div className="flex items-center gap-2 text-sm font-medium text-text-2">
               <Filter className="h-4 w-4" />
               Custom filters
-              <span className="text-xs text-gray-400 dark:text-neutral-500">(all conditions must match)</span>
+              <span className="text-xs text-text-3">(all conditions must match)</span>
             </div>
-            <button onClick={() => setShowFilterPanel(false)} className="text-gray-400 hover:text-gray-600 dark:text-neutral-500 dark:hover:text-neutral-300">
+            <button onClick={() => setShowFilterPanel(false)} className="text-text-3 hover:text-text-2">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -1301,7 +1304,7 @@ export default function MembersPage() {
                 <select
                   value={filter.field}
                   onChange={(e) => updateFilter(idx, "field", e.target.value)}
-                  className="rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                  className="rounded-lg border border-line-2 bg-surface px-2 py-1.5 text-sm"
                 >
                   {Object.entries(filterFieldLabels).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
@@ -1310,7 +1313,7 @@ export default function MembersPage() {
                 <select
                   value={filter.op}
                   onChange={(e) => updateFilter(idx, "op", e.target.value)}
-                  className="rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200 w-20"
+                  className="rounded-lg border border-line-2 bg-surface px-2 py-1.5 text-sm w-20"
                 >
                   {filter.field === "sms_received" || filter.field === "purchased_product" || filter.field === "order_channel" ? (
                     <>
@@ -1329,7 +1332,7 @@ export default function MembersPage() {
                   <select
                     value={filter.value}
                     onChange={(e) => updateFilter(idx, "value", e.target.value)}
-                    className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                    className="flex-1 rounded-lg border border-line-2 bg-surface px-2 py-1.5 text-sm"
                   >
                     <option value="">Select SMS message</option>
                     {smsMessages.map((s) => (
@@ -1343,13 +1346,13 @@ export default function MembersPage() {
                     type="date"
                     value={filter.value}
                     onChange={(e) => updateFilter(idx, "value", e.target.value)}
-                    className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                    className="flex-1 rounded-lg border border-line-2 bg-surface px-2 py-1.5 text-sm"
                   />
                 ) : filter.field === "tag" ? (
                   <select
                     value={filter.value}
                     onChange={(e) => updateFilter(idx, "value", e.target.value)}
-                    className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                    className="flex-1 rounded-lg border border-line-2 bg-surface px-2 py-1.5 text-sm"
                   >
                     <option value="">Select tag</option>
                     {allTags.map((t) => (
@@ -1363,7 +1366,7 @@ export default function MembersPage() {
                   <select
                     value={filter.value}
                     onChange={(e) => updateFilter(idx, "value", e.target.value)}
-                    className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                    className="flex-1 rounded-lg border border-line-2 bg-surface px-2 py-1.5 text-sm"
                   >
                     <option value="">Select product</option>
                     {purchasedProducts.map((p) => (
@@ -1376,7 +1379,7 @@ export default function MembersPage() {
                   <select
                     value={filter.value}
                     onChange={(e) => updateFilter(idx, "value", e.target.value)}
-                    className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                    className="flex-1 rounded-lg border border-line-2 bg-surface px-2 py-1.5 text-sm"
                   >
                     <option value="">Select channel</option>
                     {ORDER_CHANNEL_OPTIONS.map((c) => (
@@ -1388,7 +1391,7 @@ export default function MembersPage() {
                     <select
                       value={filter.productId ?? ""}
                       onChange={(e) => updateFilter(idx, "productId", e.target.value)}
-                      className="min-w-0 flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                      className="min-w-0 flex-1 rounded-lg border border-line-2 bg-surface px-2 py-1.5 text-sm"
                     >
                       <option value="">Select product</option>
                       {purchasedProducts.map((p) => (
@@ -1401,7 +1404,7 @@ export default function MembersPage() {
                       value={filter.value}
                       onChange={(e) => updateFilter(idx, "value", e.target.value)}
                       placeholder="× units"
-                      className="w-20 shrink-0 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                      className="w-20 shrink-0 rounded-lg border border-line-2 bg-surface px-2 py-1.5 text-sm"
                     />
                   </div>
                 ) : (
@@ -1410,12 +1413,12 @@ export default function MembersPage() {
                     value={filter.value}
                     onChange={(e) => updateFilter(idx, "value", e.target.value)}
                     placeholder="Value"
-                    className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-2 py-1.5 text-sm dark:text-neutral-200"
+                    className="flex-1 rounded-lg border border-line-2 bg-surface px-2 py-1.5 text-sm"
                   />
                 )}
                 <button
                   onClick={() => removeFilter(idx)}
-                  className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+                  className="rounded-lg p-1.5 text-text-3 hover:bg-danger-soft hover:text-danger-text"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -1426,7 +1429,7 @@ export default function MembersPage() {
           <div className="mt-3 flex items-center gap-2 flex-wrap">
             <button
               onClick={addFilter}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 dark:border-neutral-600 px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-neutral-400 hover:border-gray-400 dark:hover:border-neutral-500 hover:text-gray-700 dark:hover:text-neutral-200"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-line-2 px-3 py-1.5 text-xs font-medium text-text-2 hover:border-line-2 hover:text-text-2"
             >
               <Plus className="h-3 w-3" />
               Add filter
@@ -1434,7 +1437,7 @@ export default function MembersPage() {
             {filters.length > 0 && !showSaveSegmentInput && (
               <button
                 onClick={() => setShowSaveSegmentInput(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#C2452D]/30 bg-[#C2452D]/5 px-3 py-1.5 text-xs font-medium text-[#C2452D] hover:bg-[#C2452D]/10"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-ink/30 bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-text hover:bg-brand-soft"
               >
                 <Bookmark className="h-3 w-3" />
                 Save as segment
@@ -1448,18 +1451,18 @@ export default function MembersPage() {
                   onChange={(e) => setNewSegmentName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") saveCurrentAsSegment(); if (e.key === "Escape") setShowSaveSegmentInput(false); }}
                   placeholder="Segment name..."
-                  className="w-40 rounded-lg border border-[#C2452D]/30 px-2.5 py-1.5 text-xs focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D] dark:bg-neutral-700 dark:text-white"
+                  className="w-40 rounded-lg border border-ink/30 px-2.5 py-1.5 text-xs focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                 />
                 <button
                   onClick={saveCurrentAsSegment}
                   disabled={!newSegmentName.trim()}
-                  className="rounded-lg bg-[#C2452D] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#A33822] disabled:opacity-50"
+                  className="rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
                 >
                   Save
                 </button>
                 <button
                   onClick={() => { setShowSaveSegmentInput(false); setNewSegmentName(""); }}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-neutral-300"
+                  className="text-text-3 hover:text-text-2"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -1468,43 +1471,43 @@ export default function MembersPage() {
           </div>
 
           {/* Quick presets */}
-          <div className="mt-3 flex flex-wrap gap-2 border-t border-gray-100 dark:border-neutral-700 pt-3">
-            <span className="text-xs text-gray-400 dark:text-neutral-500 self-center mr-1">Presets:</span>
-            <button onClick={() => applyPreset("high_spender")} className="rounded-full bg-gray-100 dark:bg-neutral-700 px-2.5 py-1 text-xs text-gray-600 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-600">Spent ≥ RM100</button>
-            <button onClick={() => applyPreset("inactive_30")} className="rounded-full bg-gray-100 dark:bg-neutral-700 px-2.5 py-1 text-xs text-gray-600 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-600">Inactive 30d</button>
-            <button onClick={() => applyPreset("inactive_60")} className="rounded-full bg-gray-100 dark:bg-neutral-700 px-2.5 py-1 text-xs text-gray-600 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-600">Inactive 60d</button>
-            <button onClick={() => applyPreset("high_points")} className="rounded-full bg-gray-100 dark:bg-neutral-700 px-2.5 py-1 text-xs text-gray-600 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-600">Points ≥ 500</button>
-            <button onClick={() => applyPreset("frequent")} className="rounded-full bg-gray-100 dark:bg-neutral-700 px-2.5 py-1 text-xs text-gray-600 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-600">5+ visits</button>
+          <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
+            <span className="text-xs text-text-3 self-center mr-1">Presets:</span>
+            <button onClick={() => applyPreset("high_spender")} className="rounded-full bg-sunken px-2.5 py-1 text-xs text-text-2 hover:bg-line">Spent ≥ RM100</button>
+            <button onClick={() => applyPreset("inactive_30")} className="rounded-full bg-sunken px-2.5 py-1 text-xs text-text-2 hover:bg-line">Inactive 30d</button>
+            <button onClick={() => applyPreset("inactive_60")} className="rounded-full bg-sunken px-2.5 py-1 text-xs text-text-2 hover:bg-line">Inactive 60d</button>
+            <button onClick={() => applyPreset("high_points")} className="rounded-full bg-sunken px-2.5 py-1 text-xs text-text-2 hover:bg-line">Points ≥ 500</button>
+            <button onClick={() => applyPreset("frequent")} className="rounded-full bg-sunken px-2.5 py-1 text-xs text-text-2 hover:bg-line">5+ visits</button>
           </div>
         </div>
       )}
 
       {/* Bulk Action Bar */}
       {selectedRows.size > 0 && (
-        <div className="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-sm px-4 py-3 space-y-2">
+        <div className="rounded-xl border border-line bg-surface shadow-sm px-4 py-3 space-y-2">
           <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-900 dark:text-white">
+          <span className="text-sm font-medium text-text">
             {selectedRows.size} selected
           </span>
           {!allFilteredSelected && displayTotal > selectedRows.size && (
             <button
               onClick={selectAllFiltered}
-              className="text-xs text-[#C2452D] hover:text-[#A33822] underline"
+              className="text-xs text-brand-text hover:text-brand-text underline"
             >
               Select all {displayTotal.toLocaleString()} members
             </button>
           )}
-          <div className="h-4 w-px bg-gray-200 dark:bg-neutral-700" />
+          <div className="h-4 w-px bg-line" />
           <button
-            onClick={() => { setShowSmsModal(true); setSmsMessage(""); setSmsResult(null); }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#C2452D] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#A33822] transition-colors"
+            onClick={handleSendSms}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover transition-colors"
           >
             <MessageSquare className="h-3.5 w-3.5" />
             Send SMS
           </button>
           <button
             onClick={() => { setShowBulkTagModal(true); setBulkTagInput(""); }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 dark:border-neutral-600 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-sunken transition-colors"
           >
             <Tag className="h-3.5 w-3.5" />
             Tag
@@ -1514,8 +1517,8 @@ export default function MembersPage() {
             className={cn(
               "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
               bulkTierOpen
-                ? "border-[#C2452D] bg-[#C2452D]/5 text-[#C2452D]"
-                : "border-gray-200 dark:border-neutral-600 text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                ? "border-text bg-raised font-semibold text-text"
+                : "border-line text-text-2 hover:bg-sunken"
             )}
           >
             <Crown className="h-3.5 w-3.5" />
@@ -1523,21 +1526,21 @@ export default function MembersPage() {
           </button>
           <button
             onClick={() => setBulkDeleteConfirm(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 dark:border-red-900 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 px-3 py-1.5 text-xs font-medium text-danger-text hover:bg-danger-soft transition-colors"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Delete
           </button>
           <button
             onClick={() => setSelectedRows(new Set())}
-            className="ml-auto text-xs text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-200 underline"
+            className="ml-auto text-xs text-text-2 hover:text-text-2 underline"
           >
             Clear selection
           </button>
           </div>
           {bulkTierOpen && (
-            <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 dark:border-neutral-700 pt-2">
-              <span className="text-xs text-gray-500 dark:text-neutral-400">Set {selectedRows.size} to:</span>
+            <div className="flex flex-wrap items-center gap-2 border-t border-line pt-2">
+              <span className="text-xs text-text-2">Set {selectedRows.size} to:</span>
               {GRANTABLE_TIERS.map((t) => (
                 <button
                   key={t.id}
@@ -1551,70 +1554,70 @@ export default function MembersPage() {
               <button
                 disabled={bulkTierSaving}
                 onClick={() => handleBulkGrantTier(null)}
-                className="rounded-full border border-gray-200 dark:border-neutral-600 px-2.5 py-1 text-xs text-gray-500 dark:text-neutral-400 hover:bg-gray-50 dark:hover:bg-neutral-700 disabled:opacity-50"
+                className="rounded-full border border-line px-2.5 py-1 text-xs text-text-2 hover:bg-sunken disabled:opacity-50"
               >
                 Remove tier (auto)
               </button>
-              <span className="text-[11px] text-gray-400 dark:text-neutral-500">Earned tiers (Silver/Gold/Platinum) hold until quarter-end, then re-evaluate from spend.</span>
-              {bulkTierSaving && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+              <span className="text-[11px] text-text-3">Earned tiers (Silver/Gold/Platinum) hold until quarter-end, then re-evaluate from spend.</span>
+              {bulkTierSaving && <Loader2 className="h-3.5 w-3.5 animate-spin text-text-3" />}
             </div>
           )}
         </div>
       )}
 
       {/* Members Table */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-auto">
             <thead>
-              <tr className="border-b border-gray-200 dark:border-neutral-700 bg-gray-50/80 dark:bg-neutral-800">
+              <tr className="border-b border-line bg-sunken/80">
                 <th className="w-10 px-4 py-3">
                   <input
                     type="checkbox"
                     checked={pageAllSelected}
                     onChange={toggleAll}
-                    className="h-4 w-4 rounded border-gray-300 dark:border-neutral-600 text-gray-900 focus:ring-gray-500"
+                    className="h-4 w-4 rounded border-line-2 text-text focus:ring-gray-500"
                   />
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 whitespace-nowrap">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-2 whitespace-nowrap">
                   Phone number
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-2">
                   Name
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-2">
                   Status
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-2">
                   Tier
                 </th>
-                <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:table-cell">
+                <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-2 sm:table-cell">
                   Outlet
                 </th>
-                <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:table-cell">
+                <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-2 sm:table-cell">
                   Tags
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-2">
                   Progress
                 </th>
-                <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 md:table-cell">
+                <th className="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-2 md:table-cell">
                   Time
                 </th>
-                <th className="hidden px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 lg:table-cell">
+                <th className="hidden px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-2 lg:table-cell">
                   Total spend
                 </th>
-                <th className="w-12 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                <th className="w-12 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-2">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-neutral-700/50">
+            <tbody className="divide-y divide-line">
               {paginatedMembers.map((member) => {
                 const returning = isReturning(member.total_visits);
                 return (
                   <tr
                     key={member.id}
-                    className="transition-colors hover:bg-gray-50/60 dark:hover:bg-neutral-700/50"
+                    className="transition-colors hover:bg-sunken/60"
                   >
                     {/* Checkbox */}
                     <td className="px-4 py-3.5">
@@ -1622,19 +1625,19 @@ export default function MembersPage() {
                         type="checkbox"
                         checked={selectedRows.has(member.id)}
                         onChange={() => toggleRow(member.id)}
-                        className="h-4 w-4 rounded border-gray-300 dark:border-neutral-600 text-gray-900 focus:ring-gray-500"
+                        className="h-4 w-4 rounded border-line-2 text-text focus:ring-gray-500"
                       />
                     </td>
 
                     {/* Phone */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      <button onClick={() => openDetail(member)} className="font-sans text-sm text-blue-600 dark:text-blue-400 underline decoration-blue-300 dark:decoration-blue-600 underline-offset-2 hover:text-blue-800 dark:hover:text-blue-300 tabular-nums">
+                      <button onClick={() => openDetail(member)} className="font-sans text-sm text-info-text underline decoration-info-text underline-offset-2 hover:text-info-text tabular-nums">
                         {formatPhone(member.phone)}
                       </button>
                     </td>
 
                     {/* Name */}
-                    <td className="px-4 py-3.5 font-sans text-gray-900 dark:text-white">
+                    <td className="px-4 py-3.5 font-sans text-text">
                       {member.name ?? "No Name"}
                     </td>
 
@@ -1643,8 +1646,8 @@ export default function MembersPage() {
                       <span
                         className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                           returning
-                            ? "bg-orange-50 text-orange-700"
-                            : "bg-green-50 text-green-700"
+                            ? "bg-warn-soft text-warn-text"
+                            : "bg-ok-soft text-ok-text"
                         }`}
                       >
                         {returning ? "Returning" : "New"}
@@ -1660,7 +1663,7 @@ export default function MembersPage() {
 
                     {/* Outlet */}
                     <td className="hidden px-4 py-3.5 sm:table-cell">
-                      <span className="text-xs text-gray-500 dark:text-neutral-400">
+                      <span className="text-xs text-text-2">
                         {member.preferred_outlet_id
                           ? outlets.find((o) => o.id === member.preferred_outlet_id)?.name || member.preferred_outlet_id
                           : "—"}
@@ -1677,8 +1680,8 @@ export default function MembersPage() {
                             className={cn(
                               "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors cursor-pointer",
                               tagFilter === tag
-                                ? "bg-[#C2452D] text-white"
-                                : "bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-600"
+                                ? "bg-ink text-on-ink"
+                                : "bg-sunken text-text-2 hover:bg-line"
                             )}
                           >
                             {tag}
@@ -1688,17 +1691,17 @@ export default function MembersPage() {
                     </td>
 
                     {/* Progress (points) */}
-                    <td className="px-4 py-3.5 font-sans text-gray-900 dark:text-white">
+                    <td className="px-4 py-3.5 font-sans text-text">
                       {formatPoints(member.points_balance)} pts
                     </td>
 
                     {/* Time (relative) */}
-                    <td className="hidden px-4 py-3.5 font-sans text-gray-500 dark:text-neutral-400 md:table-cell">
+                    <td className="hidden px-4 py-3.5 font-sans text-text-2 md:table-cell">
                       {getTimeAgo(member.joined_at)}
                     </td>
 
                     {/* Total Spend */}
-                    <td className="hidden px-4 py-3.5 text-right font-sans text-gray-900 dark:text-white lg:table-cell">
+                    <td className="hidden px-4 py-3.5 text-right font-sans text-text lg:table-cell">
                       {formatCurrency(member.total_spent)}
                     </td>
 
@@ -1723,7 +1726,7 @@ export default function MembersPage() {
                               setDeleteConfirm(null);
                             }
                           }}
-                          className="rounded-lg p-1.5 text-gray-400 dark:text-neutral-500 hover:bg-gray-100 dark:hover:bg-neutral-700 hover:text-gray-600 dark:hover:text-neutral-300"
+                          className="rounded-lg p-1.5 text-text-3 hover:bg-sunken hover:text-text-2"
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
@@ -1737,7 +1740,7 @@ export default function MembersPage() {
                 <tr>
                   <td
                     colSpan={11}
-                    className="px-4 py-16 text-center text-gray-400 dark:text-neutral-500"
+                    className="px-4 py-16 text-center text-text-3"
                   >
                     No members found
                   </td>
@@ -1748,15 +1751,15 @@ export default function MembersPage() {
         </div>
 
         {/* ─── Pagination ─── */}
-        <div className="flex items-center justify-between border-t border-gray-100 dark:border-neutral-700 px-4 py-3">
+        <div className="flex items-center justify-between border-t border-line px-4 py-3">
           <div className="flex items-center gap-3">
-            <p className="text-xs text-gray-500 dark:text-neutral-400">
+            <p className="text-xs text-text-2">
               Showing {displayTotal > 0 ? currentPage * pageSize + 1 : 0}–{Math.min((currentPage + 1) * pageSize, displayTotal)} of {displayTotal.toLocaleString()}
             </p>
             <select
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
-              className="rounded-md border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-xs text-gray-600 dark:text-neutral-300 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+              className="rounded-md border border-line bg-surface text-xs text-text-2 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand"
             >
               <option value={50}>50 / page</option>
               <option value={100}>100 / page</option>
@@ -1768,31 +1771,31 @@ export default function MembersPage() {
               <button
                 onClick={() => setCurrentPage(0)}
                 disabled={currentPage === 0}
-                className="rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-700 disabled:opacity-30"
+                className="rounded-lg px-2 py-1 text-xs text-text-2 hover:bg-sunken disabled:opacity-30"
               >
                 First
               </button>
               <button
                 onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
                 disabled={currentPage === 0}
-                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-700 disabled:opacity-30"
+                className="rounded-lg p-1.5 text-text-2 hover:bg-sunken disabled:opacity-30"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              <span className="text-xs font-medium text-gray-600 dark:text-neutral-300 px-2">
+              <span className="text-xs font-medium text-text-2 px-2">
                 {currentPage + 1} / {totalPages}
               </span>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
                 disabled={currentPage >= totalPages - 1}
-                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-700 disabled:opacity-30"
+                className="rounded-lg p-1.5 text-text-2 hover:bg-sunken disabled:opacity-30"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
               <button
                 onClick={() => setCurrentPage(totalPages - 1)}
                 disabled={currentPage >= totalPages - 1}
-                className="rounded-lg px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-neutral-700 disabled:opacity-30"
+                className="rounded-lg px-2 py-1 text-xs text-text-2 hover:bg-sunken disabled:opacity-30"
               >
                 Last
               </button>
@@ -1806,18 +1809,18 @@ export default function MembersPage() {
         <div
           data-member-menu
           style={{ position: "fixed", top: menuPos.top, bottom: menuPos.bottom, right: menuPos.right, zIndex: 50 }}
-          className="w-40 overflow-hidden rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-lg"
+          className="w-40 overflow-hidden rounded-xl border border-line bg-surface shadow-lg"
         >
           <button
             onClick={(e) => { e.stopPropagation(); handleEditMember(openMenu!); setOpenMenu(null); setMenuPos(null); }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-2 hover:bg-sunken"
           >
             <Eye className="h-3.5 w-3.5" />
             View Details
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); handleEditMember(openMenu!); }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-2 hover:bg-sunken"
           >
             <Pencil className="h-3.5 w-3.5" />
             Edit
@@ -1837,7 +1840,7 @@ export default function MembersPage() {
               setOpenMenu(null);
               setMenuPos(null);
             }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-2 hover:bg-sunken"
           >
             <Coins className="h-3.5 w-3.5" />
             Adjust points
@@ -1858,14 +1861,14 @@ export default function MembersPage() {
               setOpenMenu(null);
               setMenuPos(null);
             }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-text-2 hover:bg-sunken"
           >
             <Crown className="h-3.5 w-3.5" />
             Grant tier
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); setDeleteConfirm(openMenu); }}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-danger-text hover:bg-danger-soft"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Delete
@@ -1885,23 +1888,23 @@ export default function MembersPage() {
           }}
         >
           <div
-            className="w-[420px] rounded-2xl bg-white dark:bg-neutral-800 p-5 shadow-xl"
+            className="w-[420px] rounded-2xl bg-surface p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center gap-2">
-              <Crown className="h-5 w-5 text-terracotta" />
-              <h3 className="text-base font-bold text-gray-900 dark:text-white">Grant invitation tier</h3>
+              <Crown className="h-5 w-5 text-brand-text" />
+              <h3 className="text-base font-bold text-text">Grant invitation tier</h3>
             </div>
-            <div className="mb-4 rounded-lg bg-gray-50 dark:bg-neutral-700 px-3 py-2.5">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
+            <div className="mb-4 rounded-lg bg-sunken px-3 py-2.5">
+              <p className="text-sm font-medium text-text">
                 {grantingMember.name || "Unnamed"}
               </p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+              <p className="text-xs text-text-2 mt-0.5">
                 {grantingMember.phone}
               </p>
             </div>
 
-            <p className="text-xs text-gray-500 dark:text-neutral-400 mb-3">
+            <p className="text-xs text-text-2 mb-3">
               Invitation tiers (Staff, Black Card) stay until you reset. Earned
               tiers (Member/Silver/Gold/Platinum) hold until the quarter ends,
               then re-evaluate from spend.
@@ -1918,8 +1921,8 @@ export default function MembersPage() {
                     key={opt.id || "reset"}
                     className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
                       selected
-                        ? "border-terracotta bg-terracotta/5"
-                        : "border-gray-200 dark:border-neutral-600 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                        ? "border-text bg-raised font-semibold text-text"
+                        : "border-line hover:bg-sunken"
                     }`}
                   >
                     <input
@@ -1931,10 +1934,10 @@ export default function MembersPage() {
                       className="mt-1"
                     />
                     <span>
-                      <span className="block text-sm font-medium text-gray-900 dark:text-white">
+                      <span className="block text-sm font-medium text-text">
                         {opt.name}
                       </span>
-                      <span className="block text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+                      <span className="block text-xs text-text-2 mt-0.5">
                         {opt.desc}
                       </span>
                     </span>
@@ -1950,7 +1953,7 @@ export default function MembersPage() {
                   setGrantTierId("");
                 }}
                 disabled={grantSaving}
-                className="flex-1 rounded-lg border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-600 disabled:opacity-50"
+                className="flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-text-2 hover:bg-sunken disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -1990,7 +1993,7 @@ export default function MembersPage() {
                     setGrantSaving(false);
                   }
                 }}
-                className="flex-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                className="flex-1 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {grantSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Apply"}
               </button>
@@ -2002,19 +2005,20 @@ export default function MembersPage() {
       {/* Manual point-adjustment dialog */}
       {/* Customer 360 drawer */}
       {detailMember && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={closeDetail}>
-          <div className="h-full w-full max-w-md overflow-y-auto bg-white dark:bg-neutral-800 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 z-10 border-b border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-5 py-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-bg">
+          <div className="mx-auto min-h-full w-full max-w-3xl bg-surface md:my-6 md:min-h-0 md:rounded-card md:border md:border-line">
+            <div className="sticky top-0 z-10 border-b border-line bg-surface px-5 py-4">
+              <button onClick={closeDetail} className="mb-2 inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text"><ChevronLeft className="h-4 w-4" /> All members</button>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="truncate text-lg font-bold text-gray-900 dark:text-white">{detailMember.name || "No Name"}</h3>
-                  <p className="font-sans text-sm tabular-nums text-gray-500 dark:text-neutral-400">{formatPhone(detailMember.phone)}</p>
+                  <h3 className="truncate text-lg font-bold text-text">{detailMember.name || "No Name"}</h3>
+                  <p className="font-sans text-sm tabular-nums text-text-2">{formatPhone(detailMember.phone)}</p>
                 </div>
-                <button onClick={closeDetail} className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-700"><X className="h-5 w-5" /></button>
+                <button onClick={closeDetail} className="shrink-0 rounded-lg p-1.5 text-text-3 hover:bg-sunken"><X className="h-5 w-5" /></button>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tierMeta(detailMember.current_tier_id).cls}`}>{tierMeta(detailMember.current_tier_id).label}</span>
-                {(detailMember.tags || []).map((t) => <span key={t} className="rounded-full bg-gray-100 dark:bg-neutral-700 px-2 py-0.5 text-[10px] text-gray-600 dark:text-neutral-300">{t}</span>)}
+                {(detailMember.tags || []).map((t) => <span key={t} className="rounded-full bg-sunken px-2 py-0.5 text-[10px] text-text-2">{t}</span>)}
               </div>
             </div>
 
@@ -2025,43 +2029,43 @@ export default function MembersPage() {
             </div>
 
             {detailLoading && (
-              <div className="px-5 py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-400" /></div>
+              <div className="px-5 py-10 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-text-3" /></div>
             )}
 
             {detailData && (
               <div className="space-y-6 px-5 pb-10">
                 <div>
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">Recent orders ({detailData.orders.length})</h4>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-2">Recent orders ({detailData.orders.length})</h4>
                   <div className="space-y-1">
                     {detailData.orders.length === 0
-                      ? <p className="text-xs text-gray-400 dark:text-neutral-500">No orders yet.</p>
+                      ? <p className="text-xs text-text-3">No orders yet.</p>
                       : detailData.orders.map((o) => (
                         <DetailRow key={o.id} left={`#${o.order_number}`} sub={`${o.source} · ${o.status}`} right={`RM ${(o.total / 100).toFixed(2)}`} time={getTimeAgo(o.created_at)} />
                       ))}
                   </div>
                 </div>
                 <div>
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-2">
                     Purchases{detailData.purchaseHistory ? ` (${detailData.purchaseHistory.totalItems} items)` : ""}
                   </h4>
                   {!detailData.purchaseHistory || detailData.purchaseHistory.totalItems === 0 ? (
-                    <p className="text-xs text-gray-400 dark:text-neutral-500">No item-level purchases recorded yet.</p>
+                    <p className="text-xs text-text-3">No item-level purchases recorded yet.</p>
                   ) : (
                     <div className="space-y-3">
                       <div>
-                        <p className="mb-1 text-[11px] font-medium text-gray-400 dark:text-neutral-500">Top products</p>
+                        <p className="mb-1 text-[11px] font-medium text-text-3">Top products</p>
                         <div className="flex flex-wrap gap-1.5">
                           {detailData.purchaseHistory.topProducts.map((p, i) => (
-                            <span key={p.product_id ?? `${p.product_name}-${i}`} className="inline-flex items-center gap-1 rounded-full bg-gray-100 dark:bg-neutral-700 px-2 py-0.5 text-[11px] text-gray-700 dark:text-neutral-300">
+                            <span key={p.product_id ?? `${p.product_name}-${i}`} className="inline-flex items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[11px] text-text-2">
                               {p.product_name}
-                              <span className="font-semibold tabular-nums text-gray-500 dark:text-neutral-400">×{p.quantity}</span>
+                              <span className="font-semibold tabular-nums text-text-2">×{p.quantity}</span>
                             </span>
                           ))}
                         </div>
                       </div>
                       {detailData.purchaseHistory.recentItems.length > 0 && (
                         <div>
-                          <p className="mb-1 text-[11px] font-medium text-gray-400 dark:text-neutral-500">Recent items</p>
+                          <p className="mb-1 text-[11px] font-medium text-text-3">Recent items</p>
                           <div className="space-y-1">
                             {detailData.purchaseHistory.recentItems.map((it, i) => (
                               <DetailRow
@@ -2079,20 +2083,20 @@ export default function MembersPage() {
                   )}
                 </div>
                 <div>
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">Points ledger</h4>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-2">Points ledger</h4>
                   <div className="space-y-1">
                     {detailData.ledger.length === 0
-                      ? <p className="text-xs text-gray-400 dark:text-neutral-500">No points activity.</p>
+                      ? <p className="text-xs text-text-3">No points activity.</p>
                       : detailData.ledger.map((l) => (
-                        <DetailRow key={l.id} left={l.description || l.type} sub={`balance ${l.balance_after}`} right={`${l.points > 0 ? "+" : ""}${l.points}`} rightCls={l.points >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"} time={getTimeAgo(l.created_at)} />
+                        <DetailRow key={l.id} left={l.description || l.type} sub={`balance ${l.balance_after}`} right={`${l.points > 0 ? "+" : ""}${l.points}`} rightCls={l.points >= 0 ? "text-ok-text" : "text-danger-text"} time={getTimeAgo(l.created_at)} />
                       ))}
                   </div>
                 </div>
                 <div>
-                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400">Redemptions ({detailData.redemptions.length})</h4>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-2">Redemptions ({detailData.redemptions.length})</h4>
                   <div className="space-y-1">
                     {detailData.redemptions.length === 0
-                      ? <p className="text-xs text-gray-400 dark:text-neutral-500">No redemptions.</p>
+                      ? <p className="text-xs text-text-3">No redemptions.</p>
                       : detailData.redemptions.map((r) => (
                         <DetailRow key={r.id} left={r.code || "Reward"} sub={r.status} right={`-${r.points_spent}`} time={getTimeAgo(r.created_at)} />
                       ))}
@@ -2107,12 +2111,12 @@ export default function MembersPage() {
       {/* Add customer modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => !addSaving && setShowAddModal(false)}>
-          <div className="w-full max-w-sm rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-lg p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-sm rounded-xl border border-line bg-surface shadow-lg p-5" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center gap-2">
-              <Plus className="h-5 w-5 text-[#C2452D]" />
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Add customer</h3>
+              <Plus className="h-5 w-5 text-brand-text" />
+              <h3 className="text-base font-semibold text-text">Add customer</h3>
             </div>
-            <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-neutral-400">Phone number</label>
+            <label className="mb-1 block text-xs font-medium text-text-2">Phone number</label>
             <input
               autoFocus
               type="tel"
@@ -2120,19 +2124,19 @@ export default function MembersPage() {
               onChange={(e) => setAddPhone(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && addPhone.trim()) handleAddCustomer(); }}
               placeholder="+60 12-345 6789"
-              className="mb-3 w-full rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm dark:text-neutral-200"
+              className="mb-3 w-full rounded-lg border border-line-2 bg-surface px-3 py-2 text-sm"
             />
-            <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-neutral-400">Name (optional)</label>
+            <label className="mb-1 block text-xs font-medium text-text-2">Name (optional)</label>
             <input
               type="text"
               value={addName}
               onChange={(e) => setAddName(e.target.value)}
               placeholder="Name"
-              className="mb-4 w-full rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm dark:text-neutral-200"
+              className="mb-4 w-full rounded-lg border border-line-2 bg-surface px-3 py-2 text-sm"
             />
             <div className="flex gap-2">
-              <button onClick={() => setShowAddModal(false)} disabled={addSaving} className="flex-1 rounded-lg bg-gray-100 dark:bg-neutral-700 px-3 py-2 text-sm font-medium text-gray-600 dark:text-neutral-300 disabled:opacity-50">Cancel</button>
-              <button onClick={handleAddCustomer} disabled={addSaving || !addPhone.trim()} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#C2452D] px-3 py-2 text-sm font-medium text-white hover:bg-[#A33822] disabled:opacity-50">
+              <button onClick={() => setShowAddModal(false)} disabled={addSaving} className="flex-1 rounded-lg bg-sunken px-3 py-2 text-sm font-medium text-text-2 disabled:opacity-50">Cancel</button>
+              <button onClick={handleAddCustomer} disabled={addSaving || !addPhone.trim()} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
                 {addSaving && <Loader2 className="h-4 w-4 animate-spin" />} Add
               </button>
             </div>
@@ -2150,23 +2154,23 @@ export default function MembersPage() {
           }}
         >
           <div
-            className="w-96 rounded-2xl bg-white dark:bg-neutral-800 p-5 shadow-xl"
+            className="w-96 rounded-2xl bg-surface p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center gap-2">
-              <Coins className="h-5 w-5 text-terracotta" />
-              <h3 className="text-base font-bold text-gray-900 dark:text-white">Adjust points</h3>
+              <Coins className="h-5 w-5 text-brand-text" />
+              <h3 className="text-base font-bold text-text">Adjust points</h3>
             </div>
-            <div className="mb-4 rounded-lg bg-gray-50 dark:bg-neutral-700 px-3 py-2.5">
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
+            <div className="mb-4 rounded-lg bg-sunken px-3 py-2.5">
+              <p className="text-sm font-medium text-text">
                 {adjustingMember.name || "Unnamed"}
               </p>
-              <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+              <p className="text-xs text-text-2 mt-0.5">
                 {adjustingMember.phone} · current balance: <span className="font-semibold">{adjustingMember.points_balance.toLocaleString()} pts</span>
               </p>
             </div>
             <label className="mb-3 block">
-              <span className="text-xs font-medium text-gray-600 dark:text-neutral-400">
+              <span className="text-xs font-medium text-text-2">
                 Adjustment (positive = credit, negative = debit)
               </span>
               <input
@@ -2175,11 +2179,11 @@ export default function MembersPage() {
                 value={adjustDelta}
                 onChange={(e) => setAdjustDelta(e.target.value)}
                 placeholder="e.g. 50 or -100"
-                className="mt-1 w-full rounded-lg border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm dark:text-white outline-none focus:ring-1 focus:ring-terracotta"
+                className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-brand"
               />
             </label>
             <label className="mb-4 block">
-              <span className="text-xs font-medium text-gray-600 dark:text-neutral-400">
+              <span className="text-xs font-medium text-text-2">
                 Reason (audit trail)
               </span>
               <input
@@ -2187,7 +2191,7 @@ export default function MembersPage() {
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
                 placeholder="e.g. Service recovery — wrong drink prepared"
-                className="mt-1 w-full rounded-lg border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm dark:text-white outline-none focus:ring-1 focus:ring-terracotta"
+                className="mt-1 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-brand"
               />
             </label>
             <div className="flex gap-2">
@@ -2198,7 +2202,7 @@ export default function MembersPage() {
                   setAdjustReason("");
                 }}
                 disabled={adjustSaving}
-                className="flex-1 rounded-lg border border-gray-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-600 disabled:opacity-50"
+                className="flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-text-2 hover:bg-sunken disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -2250,7 +2254,7 @@ export default function MembersPage() {
                     setAdjustSaving(false);
                   }
                 }}
-                className="flex-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                className="flex-1 rounded-lg bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {adjustSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Apply"}
               </button>
@@ -2260,22 +2264,22 @@ export default function MembersPage() {
       )}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => { setDeleteConfirm(null); setOpenMenu(null); setMenuPos(null); }}>
-          <div className="w-72 rounded-2xl bg-white dark:bg-neutral-800 p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-72 rounded-2xl bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-              <h3 className="text-base font-bold text-gray-900 dark:text-white">Delete member</h3>
+              <AlertTriangle className="h-5 w-5 text-danger-text" />
+              <h3 className="text-base font-bold text-text">Delete member</h3>
             </div>
-            <p className="text-sm text-gray-600 dark:text-neutral-400 mb-4">This will permanently delete this member and all their data. This cannot be undone.</p>
+            <p className="text-sm text-text-2 mb-4">This will permanently delete this member and all their data. This cannot be undone.</p>
             <div className="flex gap-2">
               <button
                 onClick={() => { setDeleteConfirm(null); setOpenMenu(null); setMenuPos(null); }}
-                className="flex-1 rounded-lg bg-gray-100 dark:bg-neutral-700 px-3 py-2 text-sm font-medium text-gray-600 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-600"
+                className="flex-1 rounded-lg bg-sunken px-3 py-2 text-sm font-medium text-text-2 hover:bg-line"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleDelete(deleteConfirm)}
-                className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700"
+                className="flex-1 rounded-lg bg-danger px-3 py-2 text-sm font-medium text-on-ink hover:bg-danger"
               >
                 Delete
               </button>
@@ -2283,102 +2287,29 @@ export default function MembersPage() {
           </div>
         </div>
       )}
-      {/* ── SMS Blast Modal ──────────────────────────── */}
-      {showSmsModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 pt-10 pb-10">
-          <div className="relative w-full max-w-md md:max-w-2xl rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl">
-            <button
-              onClick={() => setShowSmsModal(false)}
-              className="absolute right-4 top-4 rounded-lg p-1 text-gray-400 dark:text-neutral-500 hover:bg-gray-100 dark:hover:bg-neutral-700"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <div className="flex items-center gap-2 mb-4">
-              <MessageSquare className="h-5 w-5 text-[#C2452D]" />
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Send SMS</h2>
-            </div>
-
-            <p className="text-sm text-gray-500 dark:text-neutral-400 mb-4">
-              Sending to <span className="font-medium text-gray-900 dark:text-white">{selectedRows.size}</span> member{selectedRows.size > 1 ? "s" : ""}
-            </p>
-
-            {smsResult ? (
-              <div className="space-y-3">
-                <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 text-center">
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">{smsResult.sent.toLocaleString()}</p>
-                  <p className="text-sm text-green-700 dark:text-green-300">SMS sent successfully</p>
-                  {smsResult.failed > 0 && (
-                    <p className="mt-1 text-xs text-red-500">{smsResult.failed.toLocaleString()} failed</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => { setShowSmsModal(false); setSelectedRows(new Set()); }}
-                  className="w-full rounded-lg bg-gray-100 dark:bg-neutral-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-600"
-                >
-                  Done
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-neutral-300">Message</label>
-                  <textarea
-                    rows={4}
-                    value={smsMessage}
-                    onChange={(e) => setSmsMessage(e.target.value)}
-                    placeholder="Type your message here..."
-                    className="w-full rounded-lg border border-gray-300 dark:border-neutral-600 px-3 py-2 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D] dark:bg-neutral-700 dark:text-white"
-                  />
-                  <p className="mt-1 text-xs text-gray-400 dark:text-neutral-500">
-                    {smsMessage.length} characters · ~{Math.ceil(smsMessage.length / 160) || 1} SMS per recipient · {selectedRows.size * (Math.ceil(smsMessage.length / 160) || 1)} credits total
-                  </p>
-                </div>
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    onClick={() => setShowSmsModal(false)}
-                    className="rounded-lg border border-gray-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleBulkSms}
-                    disabled={smsSending || !smsMessage.trim()}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[#C2452D] px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#A33822] disabled:opacity-50"
-                  >
-                    {smsSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    {smsSending ? "Sending..." : `Send to ${selectedRows.size}`}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── Bulk Delete Confirmation ───────────────────── */}
       {bulkDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !bulkDeleting && setBulkDeleteConfirm(false)}>
-          <div className="w-80 rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-80 rounded-2xl bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Delete members</h3>
+              <AlertTriangle className="h-5 w-5 text-danger-text" />
+              <h3 className="text-lg font-bold text-text">Delete members</h3>
             </div>
-            <p className="text-sm text-gray-600 dark:text-neutral-400 mb-5">
-              Are you sure you want to delete <span className="font-medium text-gray-900 dark:text-white">{selectedRows.size}</span> member{selectedRows.size > 1 ? "s" : ""}? This action cannot be undone.
+            <p className="text-sm text-text-2 mb-5">
+              Are you sure you want to delete <span className="font-medium text-text">{selectedRows.size}</span> member{selectedRows.size > 1 ? "s" : ""}? This action cannot be undone.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setBulkDeleteConfirm(false)}
                 disabled={bulkDeleting}
-                className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700 disabled:opacity-50"
+                className="flex-1 rounded-lg border border-line-2 px-4 py-2 text-sm font-medium text-text-2 hover:bg-sunken disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleBulkDelete}
                 disabled={bulkDeleting}
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-medium text-on-ink hover:bg-danger disabled:opacity-50"
               >
                 {bulkDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {bulkDeleting ? "Deleting..." : "Delete"}
@@ -2391,10 +2322,10 @@ export default function MembersPage() {
       {/* ── Bulk Tag Modal ─────────────────────────────── */}
       {showBulkTagModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !bulkTagging && setShowBulkTagModal(false)}>
-          <div className="w-96 rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-96 rounded-2xl bg-surface p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center gap-2">
-              <Tag className="h-5 w-5 text-[#C2452D]" />
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Tag {selectedRows.size} member{selectedRows.size > 1 ? "s" : ""}</h3>
+              <Tag className="h-5 w-5 text-brand-text" />
+              <h3 className="text-lg font-bold text-text">Tag {selectedRows.size} member{selectedRows.size > 1 ? "s" : ""}</h3>
             </div>
             <div className="mb-3">
               <input
@@ -2403,7 +2334,7 @@ export default function MembersPage() {
                 value={bulkTagInput}
                 onChange={(e) => setBulkTagInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleBulkTag()}
-                className="w-full rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 px-3 py-2 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-neutral-500 focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D]"
+                className="w-full rounded-lg border border-line-2 bg-surface px-3 py-2 text-sm text-text placeholder-text-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                 autoFocus
               />
             </div>
@@ -2416,8 +2347,8 @@ export default function MembersPage() {
                     className={cn(
                       "rounded-full px-2.5 py-1 text-xs transition-colors",
                       bulkTagInput === t
-                        ? "bg-[#C2452D] text-white"
-                        : "bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-600"
+                        ? "bg-ink text-on-ink"
+                        : "bg-sunken text-text-2 hover:bg-line"
                     )}
                   >
                     {t}
@@ -2429,14 +2360,14 @@ export default function MembersPage() {
               <button
                 onClick={() => setShowBulkTagModal(false)}
                 disabled={bulkTagging}
-                className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700 disabled:opacity-50"
+                className="flex-1 rounded-lg border border-line-2 px-4 py-2 text-sm font-medium text-text-2 hover:bg-sunken disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleBulkTag}
                 disabled={bulkTagging || !bulkTagInput.trim()}
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-[#C2452D] px-4 py-2 text-sm font-medium text-white hover:bg-[#A33822] disabled:opacity-50"
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {bulkTagging ? <Loader2 className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
                 {bulkTagging ? "Tagging..." : "Apply Tag"}
@@ -2448,56 +2379,57 @@ export default function MembersPage() {
 
       {/* ── Edit Member Modal ─────────────────────────── */}
       {editingMember && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 pt-10 pb-10">
-          <div className="relative w-full max-w-md md:max-w-2xl rounded-2xl bg-white dark:bg-neutral-800 p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-bg px-4 pt-6 pb-10 md:px-8">
+          <div className="relative mx-auto w-full max-w-2xl rounded-card border border-line bg-surface p-6">
+            <button onClick={() => setEditingMember(null)} className="mb-3 inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text"><ChevronLeft className="h-4 w-4" /> All members</button>
             <button
               onClick={() => setEditingMember(null)}
-              className="absolute right-4 top-4 rounded-lg p-1 text-gray-400 dark:text-neutral-500 hover:bg-gray-100 dark:hover:bg-neutral-700"
+              className="absolute right-4 top-4 rounded-lg p-1 text-text-3 hover:bg-sunken"
             >
               <X className="h-5 w-5" />
             </button>
 
-            <h2 className="mb-5 text-lg font-bold text-gray-900 dark:text-white">Edit member</h2>
+            <h2 className="mb-5 text-lg font-bold text-text">Edit member</h2>
 
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-neutral-300">Phone</label>
+                <label className="mb-1 block text-sm font-medium text-text-2">Phone</label>
                 <input
                   value={editingMember.phone}
                   disabled
-                  className="w-full rounded-lg border border-gray-200 bg-gray-50 dark:bg-neutral-700 dark:border-neutral-600 px-3 py-2 text-sm text-gray-500 dark:text-neutral-400"
+                  className="w-full rounded-lg border border-line bg-sunken px-3 py-2 text-sm text-text-2"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-neutral-300">Name</label>
+                <label className="mb-1 block text-sm font-medium text-text-2">Name</label>
                 <input
                   value={editingMember.name}
                   onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 dark:border-neutral-600 px-3 py-2 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D] dark:bg-neutral-700 dark:text-white"
+                  className="w-full rounded-lg border border-line-2 px-3 py-2 text-sm focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-neutral-300">Email</label>
+                <label className="mb-1 block text-sm font-medium text-text-2">Email</label>
                 <input
                   type="email"
                   value={editingMember.email}
                   onChange={(e) => setEditingMember({ ...editingMember, email: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 dark:border-neutral-600 px-3 py-2 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D] dark:bg-neutral-700 dark:text-white"
+                  className="w-full rounded-lg border border-line-2 px-3 py-2 text-sm focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-neutral-300">Birthday</label>
+                <label className="mb-1 block text-sm font-medium text-text-2">Birthday</label>
                 <input
                   type="date"
                   value={editingMember.birthday}
                   onChange={(e) => setEditingMember({ ...editingMember, birthday: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 dark:border-neutral-600 px-3 py-2 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D] dark:bg-neutral-700 dark:text-white"
+                  className="w-full rounded-lg border border-line-2 px-3 py-2 text-sm focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                 />
               </div>
 
               {/* Tags */}
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-neutral-300">
+                <label className="mb-1 block text-sm font-medium text-text-2">
                   <Tag className="inline h-3.5 w-3.5 mr-1" />
                   Tags / Segments
                 </label>
@@ -2506,7 +2438,7 @@ export default function MembersPage() {
                   {editingMember.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="inline-flex items-center gap-1 rounded-full bg-[#C2452D]/10 px-2.5 py-1 text-xs font-medium text-[#C2452D]"
+                      className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand-text"
                     >
                       {tag}
                       <button
@@ -2516,14 +2448,14 @@ export default function MembersPage() {
                             tags: editingMember.tags.filter((t) => t !== tag),
                           })
                         }
-                        className="hover:text-red-700"
+                        className="hover:text-danger-text"
                       >
                         <X className="h-3 w-3" />
                       </button>
                     </span>
                   ))}
                   {editingMember.tags.length === 0 && (
-                    <span className="text-xs text-gray-400 dark:text-neutral-500 italic">No tags yet</span>
+                    <span className="text-xs text-text-3 italic">No tags yet</span>
                   )}
                 </div>
                 {/* Add tag input */}
@@ -2541,7 +2473,7 @@ export default function MembersPage() {
                       }
                     }}
                     placeholder="Type tag and press Enter..."
-                    className="flex-1 rounded-lg border border-gray-300 dark:border-neutral-600 px-3 py-1.5 text-sm focus:border-[#C2452D] focus:outline-none focus:ring-1 focus:ring-[#C2452D] dark:bg-neutral-700 dark:text-white"
+                    className="flex-1 rounded-lg border border-line-2 px-3 py-1.5 text-sm focus:border-ink focus:outline-none focus:ring-1 focus:ring-brand"
                   />
                   <button
                     onClick={() => {
@@ -2551,7 +2483,7 @@ export default function MembersPage() {
                       }
                     }}
                     disabled={!editingMember.newTag.trim()}
-                    className="rounded-lg bg-gray-100 dark:bg-neutral-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-neutral-300 hover:bg-gray-200 dark:hover:bg-neutral-600 disabled:opacity-50"
+                    className="rounded-lg bg-sunken px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-line disabled:opacity-50"
                   >
                     Add
                   </button>
@@ -2565,7 +2497,7 @@ export default function MembersPage() {
                       <button
                         key={tag}
                         onClick={() => setEditingMember({ ...editingMember, tags: [...editingMember.tags, tag] })}
-                        className="rounded-full border border-dashed border-gray-300 dark:border-neutral-600 px-2 py-0.5 text-[10px] text-gray-500 dark:text-neutral-400 hover:border-[#C2452D] hover:text-[#C2452D]"
+                        className="rounded-full border border-dashed border-line-2 px-2 py-0.5 text-[10px] text-text-2 hover:border-ink hover:text-brand-text"
                       >
                         + {tag}
                       </button>
@@ -2575,37 +2507,37 @@ export default function MembersPage() {
             </div>
 
             {/* SMS Marketing Opt-out */}
-            <div className="mt-4 flex items-center justify-between rounded-lg border border-gray-200 dark:border-neutral-600 px-3 py-2.5">
+            <div className="mt-4 flex items-center justify-between rounded-lg border border-line px-3 py-2.5">
               <div>
-                <p className="text-sm font-medium text-gray-700 dark:text-neutral-300">SMS Marketing Opt-out</p>
-                <p className="text-xs text-gray-400">Member will not receive promotional SMS</p>
+                <p className="text-sm font-medium text-text-2">SMS Marketing Opt-out</p>
+                <p className="text-xs text-text-3">Member will not receive promotional SMS</p>
               </div>
               <button
                 onClick={() => setEditingMember({ ...editingMember, sms_opt_out: !editingMember.sms_opt_out })}
                 className={cn(
                   "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
-                  editingMember.sms_opt_out ? "bg-red-500" : "bg-gray-200 dark:bg-neutral-600"
+                  editingMember.sms_opt_out ? "bg-danger" : "bg-line"
                 )}
               >
                 <span
                   className={cn(
-                    "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform",
+                    "pointer-events-none inline-block h-5 w-5 rounded-full bg-surface shadow transform transition-transform",
                     editingMember.sms_opt_out ? "translate-x-5" : "translate-x-0"
                   )}
                 />
               </button>
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-3 border-t border-gray-100 dark:border-neutral-700 pt-4">
+            <div className="mt-6 flex items-center justify-end gap-3 border-t border-line pt-4">
               <button
                 onClick={() => setEditingMember(null)}
-                className="rounded-lg border border-gray-300 dark:border-neutral-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700"
+                className="rounded-lg border border-line-2 px-4 py-2 text-sm font-medium text-text-2 hover:bg-sunken"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveMember}
-                className="rounded-lg bg-[#C2452D] px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#A33822]"
+                className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink shadow-sm transition-colors hover:bg-ink-hover"
               >
                 Save
               </button>

@@ -41,13 +41,13 @@ type Scan = {
 type Outlet = { id: string; name: string };
 
 function rankColor(rank: number | null): { bg: string; fg: string; label: string } {
-  if (rank == null) return { bg: "#9ca3af", fg: "#fff", label: "–" };
+  if (rank == null) return { bg: "var(--color-sunken)", fg: "var(--color-text-3)", label: "–" };
   const label = String(rank);
-  if (rank <= 3) return { bg: "#15803d", fg: "#fff", label };
-  if (rank <= 6) return { bg: "#65a30d", fg: "#fff", label };
-  if (rank <= 10) return { bg: "#eab308", fg: "#1a1a1a", label };
-  if (rank <= 15) return { bg: "#f97316", fg: "#fff", label };
-  return { bg: "#dc2626", fg: "#fff", label };
+  if (rank <= 3) return { bg: "var(--color-ok)", fg: "var(--color-on-ink)", label };
+  if (rank <= 6) return { bg: "var(--color-ok-soft)", fg: "var(--color-ok-text)", label };
+  if (rank <= 10) return { bg: "var(--color-warn-soft)", fg: "var(--color-warn-text)", label };
+  if (rank <= 15) return { bg: "var(--color-warn)", fg: "var(--color-on-ink)", label };
+  return { bg: "var(--color-danger)", fg: "var(--color-on-ink)", label };
 }
 
 function km(m: number | null): string {
@@ -123,22 +123,22 @@ function outerRingRivals(
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-xl border border-border bg-white p-4">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
-      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
+    <div className="rounded-xl border border-line bg-surface p-4">
+      <p className="text-xs font-medium text-text-2">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-text">{value}</p>
+      {sub && <p className="text-[11px] text-text-2">{sub}</p>}
     </div>
   );
 }
 
-const PRIORITY_DOT: Record<string, string> = { high: "bg-red-500", med: "bg-amber-500", low: "bg-emerald-500" };
+const PRIORITY_DOT: Record<string, string> = { high: "bg-danger", med: "bg-warn", low: "bg-ok" };
 
 type Band = "Already ahead" | "High" | "Moderate" | "Low";
 const BAND_STYLE: Record<Band, string> = {
-  "Already ahead": "border-emerald-200 bg-emerald-50 text-emerald-700",
-  High: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  Moderate: "border-amber-200 bg-amber-50 text-amber-700",
-  Low: "border-red-200 bg-red-50 text-red-700",
+  "Already ahead": "border-ok/30 bg-ok-soft text-ok-text",
+  High: "border-ok/30 bg-ok-soft text-ok-text",
+  Moderate: "border-warn/30 bg-warn-soft text-warn-text",
+  Low: "border-danger/30 bg-danger-soft text-danger-text",
 };
 
 // Honest, directional read on whether doing the actions out-ranks this rival at
@@ -171,12 +171,12 @@ function SuggestionList({ suggestions }: { suggestions: Suggestion[] }) {
   return (
     <ul className="space-y-1.5">
       {suggestions.map((s, i) => (
-        <li key={i} className="flex gap-2 text-xs text-foreground">
+        <li key={i} className="flex gap-2 text-xs text-text">
           <span className={`mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full ${PRIORITY_DOT[s.priority] ?? "bg-neutral-400"}`} />
           <span>
             <span className="font-medium">{s.tag}:</span> {s.text}
             {s.levers && s.levers.length > 0 && (
-              <ul className="mt-1 space-y-0.5 border-l-2 border-border pl-2.5 text-[11px] text-muted-foreground">
+              <ul className="mt-1 space-y-0.5 border-l-2 border-line pl-2.5 text-[11px] text-text-2">
                 {s.levers.map((l, j) => (
                   <li key={j} className="flex gap-1.5">
                     <span className="select-none">→</span>
@@ -248,18 +248,18 @@ function CompetitorRow({
   return (
     <li className="rounded-lg">
       <div
-        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${r.isUs ? "bg-brand-dark/10 font-semibold text-foreground" : "text-muted-foreground"}`}
+        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${r.isUs ? "bg-ink/10 font-semibold text-text" : "text-text-2"}`}
       >
-        <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-bold text-foreground ring-1 ring-border">
+        <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-surface text-[11px] font-bold text-text ring-1 ring-border">
           {rank}
         </span>
         <span className="truncate">{r.name || "Unknown"}</span>
         {r.isUs ? (
-          <span className="ml-auto rounded bg-brand-dark px-1.5 py-0.5 text-[10px] font-medium text-white">You</span>
+          <span className="ml-auto rounded bg-ink px-1.5 py-0.5 text-[10px] font-medium text-on-ink">You</span>
         ) : canCompare ? (
           <button
             onClick={toggle}
-            className="ml-auto flex items-center gap-1 whitespace-nowrap rounded-md border border-border bg-white px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-muted/50"
+            className="ml-auto flex items-center gap-1 whitespace-nowrap rounded-md border border-line bg-surface px-2 py-0.5 text-[11px] font-medium text-text hover:bg-sunken"
           >
             <Sparkles className="h-3 w-3" /> How to beat them
             <ChevronDown className={`h-3 w-3 transition ${open ? "rotate-180" : ""}`} />
@@ -268,13 +268,13 @@ function CompetitorRow({
       </div>
 
       {open && canCompare && (
-        <div className="ml-7 mr-2 mb-1.5 mt-1 rounded-lg border border-border bg-white p-3">
+        <div className="ml-7 mr-2 mb-1.5 mt-1 rounded-lg border border-line bg-surface p-3">
           {loading ? (
-            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <p className="flex items-center gap-2 text-xs text-text-2">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Comparing profiles…
             </p>
           ) : err ? (
-            <p className="text-xs text-red-600">{err}</p>
+            <p className="text-xs text-danger-text">{err}</p>
           ) : data ? (
             <>
               {(() => {
@@ -290,13 +290,13 @@ function CompetitorRow({
                   </div>
                 );
               })()}
-              <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+              <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-2">
                 <span>
-                  <span className="font-medium text-foreground">Them:</span> {data.them.reviews ?? "–"} reviews
+                  <span className="font-medium text-text">Them:</span> {data.them.reviews ?? "–"} reviews
                   {data.them.rating != null ? ` · ${data.them.rating.toFixed(1)}★` : ""}
                 </span>
                 <span>
-                  <span className="font-medium text-foreground">You:</span>{" "}
+                  <span className="font-medium text-text">You:</span>{" "}
                   {data.us ? `${data.us.reviews ?? "–"} reviews${data.us.rating != null ? ` · ${data.us.rating.toFixed(1)}★` : ""}` : "profile not linked"}
                 </span>
               </div>
@@ -386,28 +386,28 @@ function BeatTargetRow({ rank, target, scan }: { rank: number; target: BeatTarge
   };
 
   return (
-    <li className="rounded-lg border border-border">
-      <button onClick={toggle} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/40">
-        <span className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700">{rank}</span>
+    <li className="rounded-lg border border-line">
+      <button onClick={toggle} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-sunken">
+        <span className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-danger-soft text-xs font-bold text-danger-text">{rank}</span>
         <span className="min-w-0">
-          <span className="block truncate text-sm font-medium text-foreground">{target.name}</span>
-          <span className="text-[11px] text-muted-foreground">
+          <span className="block truncate text-sm font-medium text-text">{target.name}</span>
+          <span className="text-[11px] text-text-2">
             Out-ranks you at {target.beats}/{target.points} points · typically #{target.typicalRank}
           </span>
         </span>
-        <span className="ml-auto flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-foreground">
+        <span className="ml-auto flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-text">
           <Sparkles className="h-3 w-3" /> How to beat them
           <ChevronDown className={`h-3 w-3 transition ${open ? "rotate-180" : ""}`} />
         </span>
       </button>
       {open && (
-        <div className="border-t border-border p-3">
+        <div className="border-t border-line p-3">
           {loading ? (
-            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <p className="flex items-center gap-2 text-xs text-text-2">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Comparing profiles…
             </p>
           ) : err ? (
-            <p className="text-xs text-red-600">{err}</p>
+            <p className="text-xs text-danger-text">{err}</p>
           ) : data ? (
             (() => {
               const wl = aggregateWinBand(scan, data.them.location);
@@ -417,13 +417,13 @@ function BeatTargetRow({ rank, target, scan }: { rank: number; target: BeatTarge
                     <div className="text-[10px] font-semibold uppercase tracking-wide">Win likelihood if you do all this: {wl.band}</div>
                     <p className="mt-0.5 text-[11px] leading-snug">{wl.reason}</p>
                   </div>
-                  <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                  <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-2">
                     <span>
-                      <span className="font-medium text-foreground">Them:</span> {data.them.reviews ?? "–"} reviews
+                      <span className="font-medium text-text">Them:</span> {data.them.reviews ?? "–"} reviews
                       {data.them.rating != null ? ` · ${data.them.rating.toFixed(1)}★` : ""}
                     </span>
                     <span>
-                      <span className="font-medium text-foreground">You:</span>{" "}
+                      <span className="font-medium text-text">You:</span>{" "}
                       {data.us ? `${data.us.reviews ?? "–"} reviews${data.us.rating != null ? ` · ${data.us.rating.toFixed(1)}★` : ""}` : "profile not linked"}
                     </span>
                   </div>
@@ -580,44 +580,44 @@ export default function GeogridPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-      <Link href="/reviews" className="mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to Reviews
+      <Link href="/reviews" className="mb-1 flex items-center gap-1 text-xs text-text-2 hover:text-text">
+        <ArrowLeft className="h-3.5 w-3.5" /> Reviews
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="font-heading text-2xl font-bold text-foreground">Local Rank Geogrid</h1>
-        <div className="flex gap-2">
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Local rank</h1>
+        <div className="flex flex-wrap gap-2">
           <Link
             href="/reviews/geogrid/progress"
-            className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50"
+            className="inline-flex min-h-9 items-center rounded-ctl border border-line bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-sunken"
           >
             Progress →
           </Link>
           <Link
             href="/reviews/geogrid/keywords"
-            className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50"
+            className="inline-flex min-h-9 items-center rounded-ctl border border-line bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-sunken"
           >
             Keyword strategy →
           </Link>
           <Link
             href="/reviews/geogrid/paid-organic"
-            className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50"
+            className="inline-flex min-h-9 items-center rounded-ctl border border-line bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-sunken"
           >
-            Paid × Organic →
+            Paid and organic →
           </Link>
           <Link
             href="/reviews/geogrid/relevance"
-            className="rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50"
+            className="inline-flex min-h-9 items-center rounded-ctl border border-line bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-sunken"
           >
             Keyword relevance audit →
           </Link>
         </div>
       </div>
-      <p className="text-sm text-muted-foreground">
+      <p className="mt-0.5 text-sm text-text-2">
         Where you rank for a keyword across the map. Two goals: lift the rank (more green) and widen the green radius.
       </p>
 
       {!keyConfigured && (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="mt-4 rounded-xl border border-warn/30 bg-warn-soft px-4 py-3 text-sm text-warn-text">
           Scans are inactive until <span className="font-mono">GOOGLE_PLACES_API_KEY</span> is set and the Places API is enabled on project 23036. History below still works.
         </div>
       )}
@@ -625,44 +625,44 @@ export default function GeogridPage() {
       {/* Controls */}
       <div className="mt-5 flex flex-wrap items-end gap-3">
         <div>
-          <label className="block text-xs font-medium text-muted-foreground">Outlet</label>
-          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="mt-1 rounded-lg border border-border bg-white px-3 py-2 text-sm">
+          <label className="block text-xs font-medium text-text-2">Outlet</label>
+          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className="mt-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm">
             {outlets.map((o) => (
               <option key={o.id} value={o.id}>{o.name}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground">Keyword</label>
-          <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="e.g. cafe cyberjaya" className="mt-1 w-48 rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/50" />
+          <label className="block text-xs font-medium text-text-2">Keyword</label>
+          <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="e.g. cafe cyberjaya" className="mt-1 w-48 rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/50" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground">Grid</label>
-          <select value={gridSize} onChange={(e) => setGridSize(Number(e.target.value))} className="mt-1 rounded-lg border border-border bg-white px-3 py-2 text-sm">
+          <label className="block text-xs font-medium text-text-2">Grid</label>
+          <select value={gridSize} onChange={(e) => setGridSize(Number(e.target.value))} className="mt-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm">
             {[5, 7, 9, 11, 13].map((n) => (
               <option key={n} value={n}>{n}×{n}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground">Radius (km)</label>
-          <input type="number" step="0.5" min="0.5" value={radiusKm} onChange={(e) => setRadiusKm(Number(e.target.value))} className="mt-1 w-24 rounded-lg border border-border bg-white px-3 py-2 text-sm" />
+          <label className="block text-xs font-medium text-text-2">Radius (km)</label>
+          <input type="number" step="0.5" min="0.5" value={radiusKm} onChange={(e) => setRadiusKm(Number(e.target.value))} className="mt-1 w-24 rounded-lg border border-line bg-surface px-3 py-2 text-sm" />
         </div>
-        <button onClick={run} disabled={running || !outletId} className="flex items-center gap-1.5 rounded-lg bg-brand-dark px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark/90 disabled:opacity-50">
+        <button onClick={run} disabled={running || !outletId} className="flex items-center gap-1.5 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink/90 disabled:opacity-50">
           {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
           {running ? "Scanning…" : "Run scan"}
         </button>
       </div>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger-text">{error}</p>}
 
       {/* Keyword filter — narrow the grid + trend to one tracked keyword */}
       {keywordOptions.length > 1 && (
         <div className="mt-4 flex items-center gap-2">
-          <label className="text-xs font-medium text-muted-foreground">Show keyword</label>
+          <label className="text-xs font-medium text-text-2">Show keyword</label>
           <select
             value={filterKeyword}
             onChange={(e) => setFilterKeyword(e.target.value)}
-            className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm"
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm"
           >
             <option value="">All keywords ({scans.length})</option>
             {keywordOptions.map((k) => (
@@ -677,36 +677,36 @@ export default function GeogridPage() {
       {active ? (
         <>
           {/* KPI vs target — #1@1km · Top-2@5km · Top-3@10km */}
-          <div className="mt-6 rounded-xl border border-border bg-white p-4">
-            <div className="mb-3 text-sm font-medium text-foreground">KPI vs target</div>
+          <div className="mt-6 rounded-xl border border-line bg-surface p-4">
+            <div className="mb-3 text-sm font-medium text-text">KPI vs target</div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {KPIS.map((k) => {
                 const r = evalKpi(active, k.ringKm, k.target);
                 const tone = !r.measurable
-                  ? { ring: "border-border", txt: "text-muted-foreground", dot: "bg-neutral-300" }
+                  ? { ring: "border-line", txt: "text-text-2", dot: "bg-line" }
                   : r.pct >= 90
-                    ? { ring: "border-emerald-200 bg-emerald-50", txt: "text-emerald-700", dot: "bg-emerald-500" }
+                    ? { ring: "border-ok/30 bg-ok-soft", txt: "text-ok-text", dot: "bg-ok" }
                     : r.pct >= 50
-                      ? { ring: "border-amber-200 bg-amber-50", txt: "text-amber-700", dot: "bg-amber-500" }
-                      : { ring: "border-red-200 bg-red-50", txt: "text-red-700", dot: "bg-red-500" };
+                      ? { ring: "border-warn/30 bg-warn-soft", txt: "text-warn-text", dot: "bg-warn" }
+                      : { ring: "border-danger/30 bg-danger-soft", txt: "text-danger-text", dot: "bg-danger" };
                 return (
                   <div key={k.label} className={`rounded-lg border p-3 ${tone.ring}`}>
                     <div className="flex items-center gap-1.5">
                       <span className={`h-2 w-2 rounded-full ${tone.dot}`} />
-                      <span className="text-xs font-medium text-foreground">{k.label}</span>
+                      <span className="text-xs font-medium text-text">{k.label}</span>
                     </div>
                     {r.measurable ? (
                       <p className={`mt-1 text-xl font-bold ${tone.txt}`}>
-                        {r.pct}% <span className="text-[11px] font-normal text-muted-foreground">of {r.n} pts hit it</span>
+                        {r.pct}% <span className="text-[11px] font-normal text-text-2">of {r.n} pts hit it</span>
                       </p>
                     ) : (
-                      <p className="mt-1 text-xs text-muted-foreground">needs a ≥{k.ringKm} km scan</p>
+                      <p className="mt-1 text-xs text-text-2">needs a ≥{k.ringKm} km scan</p>
                     )}
                   </div>
                 );
               })}
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
+            <p className="mt-2 text-[11px] text-text-2">
               % of scanned points within each ring hitting the target rank. Run a ~10 km scan to grade all three at once.
             </p>
           </div>
@@ -720,10 +720,10 @@ export default function GeogridPage() {
           </div>
 
           {/* The grid */}
-          <div className="mt-5 rounded-xl border border-border bg-white p-4">
-            <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="mt-5 rounded-xl border border-line bg-surface p-4">
+            <div className="mb-2 flex items-center gap-2 text-sm text-text-2">
               <MapPin className="h-4 w-4" />
-              <span className="font-medium text-foreground">&ldquo;{active.keyword}&rdquo;</span> · {active.gridSize}×{active.gridSize} · ~{(active.rangeMiles * ((active.gridSize - 1) / 2) * 1.60934).toFixed(1)} km radius
+              <span className="font-medium text-text">&ldquo;{active.keyword}&rdquo;</span> · {active.gridSize}×{active.gridSize} · ~{(active.rangeMiles * ((active.gridSize - 1) / 2) * 1.60934).toFixed(1)} km radius
             </div>
             <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${active.gridSize}, minmax(0, 1fr))`, maxWidth: 520 }}>
               {grid.flat().map((p) => {
@@ -744,22 +744,22 @@ export default function GeogridPage() {
                 );
               })}
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
+            <p className="mt-2 text-[11px] text-text-2">
               The store icon marks your storefront (grid center). Rank approximated from the Places API (proxy for the Maps local pack) — use it for trend, not exact position. Click any point to see who ranks there.
             </p>
 
             {/* Per-point detail — who ranks at the clicked grid cell */}
             {selectedPoint && (
-              <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4">
+              <div className="mt-4 rounded-xl border border-line bg-sunken p-4">
                 <div className="mb-2 flex items-center justify-between">
-                  <div className="text-sm font-medium text-foreground">
+                  <div className="text-sm font-medium text-text">
                     Ranking at this point
-                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    <span className="ml-2 text-xs font-normal text-text-2">
                       ~{(distM(active.centerLat, active.centerLng, selectedPoint.lat, selectedPoint.lng) / 1000).toFixed(2)} km from storefront
                       {selectedPoint.rank != null ? ` · you rank #${selectedPoint.rank}` : " · you’re not in the top 20"}
                     </span>
                   </div>
-                  <button onClick={() => setSelectedPoint(null)} className="text-xs text-muted-foreground hover:text-foreground">
+                  <button onClick={() => setSelectedPoint(null)} className="text-xs text-text-2 hover:text-text">
                     Close
                   </button>
                 </div>
@@ -769,13 +769,13 @@ export default function GeogridPage() {
                   const rows = stored && stored.length ? stored : live;
                   if (pointLoading && !rows) {
                     return (
-                      <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <p className="flex items-center gap-2 text-xs text-text-2">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" /> Looking up who ranks here…
                       </p>
                     );
                   }
                   if (pointError) {
-                    return <p className="text-xs text-red-600">{pointError}</p>;
+                    return <p className="text-xs text-danger-text">{pointError}</p>;
                   }
                   if (rows && rows.length > 0) {
                     return (
@@ -796,7 +796,7 @@ export default function GeogridPage() {
                       </ol>
                     );
                   }
-                  return <p className="text-xs text-muted-foreground">No businesses ranked here for this keyword.</p>;
+                  return <p className="text-xs text-text-2">No businesses ranked here for this keyword.</p>;
                 })()}
               </div>
             )}
@@ -807,21 +807,21 @@ export default function GeogridPage() {
             const ring = outerRingRivals(active);
             if (ring.farPoints === 0 || ring.rivals.length === 0) return null;
             return (
-              <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <div className="text-sm font-medium text-amber-900">
+              <div className="mt-5 rounded-xl border border-warn/30 bg-warn-soft p-4">
+                <div className="text-sm font-medium text-warn-text">
                   Who out-ranks you at distance (≥{ring.thresholdKm.toFixed(1)} km)
                 </div>
-                <p className="mt-0.5 text-[11px] text-amber-800">
+                <p className="mt-0.5 text-[11px] text-warn-text">
                   Across the {ring.farPoints} outer-ring point{ring.farPoints === 1 ? "" : "s"}, these rivals rank above you most often. Out here Google leans on proximity — you climb past them with prominence (more reviews, faster).
                 </p>
                 <ul className="mt-2 space-y-1">
                   {ring.rivals.map((r, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-amber-900">
-                      <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-bold text-amber-900 ring-1 ring-amber-200">
+                    <li key={i} className="flex items-center gap-2 text-sm text-warn-text">
+                      <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-surface text-[11px] font-bold text-warn-text ring-1 ring-warn/30">
                         {i + 1}
                       </span>
                       <span className="truncate">{r.name}</span>
-                      <span className="ml-auto whitespace-nowrap text-xs text-amber-800">
+                      <span className="ml-auto whitespace-nowrap text-xs text-warn-text">
                         beats you at {r.beats} pt{r.beats === 1 ? "" : "s"} · best #{r.bestRank}
                       </span>
                     </li>
@@ -836,9 +836,9 @@ export default function GeogridPage() {
             const targets = beatTargets(active);
             if (!targets.length) return null;
             return (
-              <div className="mt-5 rounded-xl border border-border bg-white p-4">
-                <div className="text-sm font-medium text-foreground">Who to beat first</div>
-                <p className="mb-3 mt-0.5 text-[11px] text-muted-foreground">
+              <div className="mt-5 rounded-xl border border-line bg-surface p-4">
+                <div className="text-sm font-medium text-text">Who to beat first</div>
+                <p className="mb-3 mt-0.5 text-[11px] text-text-2">
                   Ranked by how much of your grid each rival out-ranks you across. Beat the top ones to reclaim the most map — expand for the actions.
                 </p>
                 <ol className="space-y-2">
@@ -852,17 +852,17 @@ export default function GeogridPage() {
 
           {/* Competitors — who out-ranks us, for reference */}
           {active.competitors && active.competitors.length > 0 && (
-            <div className="mt-5 rounded-xl border border-border bg-white p-4">
-              <div className="mb-2 text-sm font-medium text-foreground">Top competitors here (for reference)</div>
+            <div className="mt-5 rounded-xl border border-line bg-surface p-4">
+              <div className="mb-2 text-sm font-medium text-text">Top competitors here (for reference)</div>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs text-muted-foreground">
+                  <tr className="text-left text-xs text-text-2">
                     <th className="py-1">Competitor</th><th>In top-3 at</th><th>Avg rank</th>
                   </tr>
                 </thead>
                 <tbody>
                   {active.competitors.map((c, i) => (
-                    <tr key={i} className="border-t border-border">
+                    <tr key={i} className="border-t border-line">
                       <td className="py-1.5">{c.name}</td>
                       <td>{c.top3Points} / {active.totalPoints} pts</td>
                       <td>{c.avgRank.toFixed(1)}</td>
@@ -870,7 +870,7 @@ export default function GeogridPage() {
                   ))}
                 </tbody>
               </table>
-              <p className="mt-2 text-[11px] text-muted-foreground">
+              <p className="mt-2 text-[11px] text-text-2">
                 Who shows above you across the grid. You climb past them with prominence — more reviews, faster.
               </p>
             </div>
@@ -878,23 +878,23 @@ export default function GeogridPage() {
 
           {/* History / trend — the loop */}
           {visibleScans.length > 1 && (
-            <div className="mt-5 rounded-xl border border-border bg-white p-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
+            <div className="mt-5 rounded-xl border border-line bg-surface p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-text">
                 <TrendingUp className="h-4 w-4" /> Trend{filterKeyword ? ` · "${filterKeyword}"` : ""} (are the two goals moving?)
               </div>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs text-muted-foreground">
+                  <tr className="text-left text-xs text-text-2">
                     <th className="py-1">Date</th><th>Keyword</th><th>Avg rank</th><th>% top 3</th><th>Green radius</th>
                   </tr>
                 </thead>
                 <tbody>
                   {visibleScans.map((s) => (
-                    <tr key={s.id} className={`border-t border-border ${active.id === s.id ? "bg-muted/40" : ""}`}>
+                    <tr key={s.id} className={`border-t border-line ${active.id === s.id ? "bg-sunken" : ""}`}>
                       <td className="py-1.5">
-                        <button onClick={() => setActive(s)} className="text-foreground hover:underline">{new Date(s.createdAt).toLocaleDateString()}</button>
+                        <button onClick={() => setActive(s)} className="text-text hover:underline">{new Date(s.createdAt).toLocaleDateString()}</button>
                       </td>
-                      <td className="text-muted-foreground">{s.keyword}</td>
+                      <td className="text-text-2">{s.keyword}</td>
                       <td>{s.avgRank != null ? s.avgRank.toFixed(1) : "–"}</td>
                       <td>{Math.round(s.pctTop3 ?? 0)}%</td>
                       <td>{km(s.greenRadiusM)}</td>
@@ -906,9 +906,9 @@ export default function GeogridPage() {
           )}
         </>
       ) : (
-        <div className="mt-6 rounded-xl border border-border bg-white p-10 text-center">
-          <MapPin className="mx-auto h-10 w-10 text-muted-foreground/30" />
-          <p className="mt-3 text-sm text-muted-foreground">No scans yet for this outlet. Enter a keyword and run one.</p>
+        <div className="mt-6 rounded-xl border border-line bg-surface p-10 text-center">
+          <MapPin className="mx-auto h-10 w-10 text-text-2/30" />
+          <p className="mt-3 text-sm text-text-2">No scans yet for this outlet. Enter a keyword and run one.</p>
         </div>
       )}
     </div>

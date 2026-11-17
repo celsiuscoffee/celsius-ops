@@ -75,17 +75,17 @@ export default function LeaveReviewPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
       <PromptDialog />
       <HrPageHeader
-        title="Leave Requests"
-        description={`${requests.length} request${requests.length !== 1 ? "s" : ""}`}
+        title="Leave requests"
+        description={`Who wants time off, and what waits for your decision. ${requests.length} request${requests.length !== 1 ? "s" : ""} shown.`}
         action={
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="rounded-lg border bg-background px-3 py-2 text-sm"
+            className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
           >
             <option value="needs_review">Needs review</option>
             <option value="all">All</option>
@@ -101,9 +101,9 @@ export default function LeaveReviewPage() {
 
       {requests.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border bg-card py-16 text-center">
-          <CheckCircle2 className="mb-3 h-12 w-12 text-green-500" />
+          <CheckCircle2 className="mb-3 h-12 w-12 text-ok-text" />
           <p className="text-lg font-semibold">All clear</p>
-          <p className="text-sm text-muted-foreground">No leave requests need review</p>
+          <p className="text-sm text-text-3">No leave requests need review</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -114,27 +114,27 @@ export default function LeaveReviewPage() {
                   <div className="flex items-center gap-2">
                     <p className="font-semibold">{req.user_name || req.user_id.slice(0, 8) + "…"}</p>
                     {req.outlet_name && (
-                      <span className="text-xs text-muted-foreground">· {req.outlet_name}</span>
+                      <span className="text-xs text-text-3">· {req.outlet_name}</span>
                     )}
-                    <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
+                    <span className="rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-medium text-info-text">
                       {req.leave_type}
                     </span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      req.status === "ai_escalated" ? "bg-amber-100 text-amber-700" :
-                      req.status === "ai_approved" ? "bg-green-100 text-green-700" :
-                      req.status === "approved" ? "bg-green-100 text-green-700" :
-                      req.status === "rejected" ? "bg-red-100 text-red-700" :
-                      "bg-gray-100 text-gray-600"
+                      req.status === "ai_escalated" ? "bg-warn-soft text-warn-text" :
+                      req.status === "ai_approved" ? "bg-ok-soft text-ok-text" :
+                      req.status === "approved" ? "bg-ok-soft text-ok-text" :
+                      req.status === "rejected" ? "bg-danger-soft text-danger-text" :
+                      "bg-sunken text-text-2"
                     }`}>
                       {req.status.replace("_", " ")}
                     </span>
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-text-3">
                     {req.start_date} → {req.end_date} ({req.total_days} day{Number(req.total_days) !== 1 ? "s" : ""})
                   </p>
                   {req.reason && <p className="mt-1 text-sm">{req.reason}</p>}
                   {req.ai_reason && (
-                    <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                    <p className="mt-1 flex items-center gap-1 text-xs text-text-3">
                       <Bot className="h-3 w-3" /> {req.ai_reason}
                     </p>
                   )}
@@ -145,7 +145,7 @@ export default function LeaveReviewPage() {
                   <button
                     onClick={() => handleAction(req.id, "approve")}
                     disabled={actioning === req.id}
-                    className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-lg bg-ok px-3 py-1.5 text-xs font-medium text-white hover:bg-ok disabled:opacity-50"
                   >
                     {actioning === req.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                     Approve
@@ -153,14 +153,14 @@ export default function LeaveReviewPage() {
                   <button
                     onClick={() => handleAction(req.id, "reject")}
                     disabled={actioning === req.id}
-                    className="flex items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white hover:bg-danger disabled:opacity-50"
                   >
                     <XCircle className="h-3 w-3" /> Reject
                   </button>
                   <button
                     onClick={() => handleCancel(req)}
                     disabled={actioning === req.id}
-                    className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium text-text-3 hover:bg-sunken disabled:opacity-50"
                     title="Withdraw without a decision (releases the held days)"
                   >
                     <Ban className="h-3 w-3" /> Cancel
@@ -172,7 +172,7 @@ export default function LeaveReviewPage() {
                   <button
                     onClick={() => handleCancel(req)}
                     disabled={actioning === req.id}
-                    className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium text-text-3 hover:bg-sunken disabled:opacity-50"
                     title="Cancel this approved leave and return the days to the balance (owner/admin)"
                   >
                     {actioning === req.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3" />}

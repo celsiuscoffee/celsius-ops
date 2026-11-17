@@ -161,7 +161,7 @@ export function AvailabilityMatrix() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+        <Loader2 className="h-5 w-5 animate-spin text-text-3" />
       </div>
     );
   }
@@ -169,13 +169,13 @@ export function AvailabilityMatrix() {
   return (
     <div>
       <div className="mb-4">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-text-2">
           Mark items unavailable at specific outlets. Customers picking that
           outlet won&apos;t see them. Globally-disabled items (greyed) are
           managed on the Catalog tab.
         </p>
         {offCount > 0 && (
-          <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+          <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-warn-soft px-3 py-1 text-xs font-medium text-warn-text">
             <AlertTriangle className="h-3.5 w-3.5" />
             {offCount} outlet override{offCount === 1 ? "" : "s"} active
           </p>
@@ -184,49 +184,49 @@ export function AvailabilityMatrix() {
 
       <div className="mb-4 flex items-center gap-2">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search products or categories"
-            className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-gray-400 focus:outline-none"
+            className="w-full rounded-lg border border-line bg-surface py-2 pl-9 pr-3 text-sm focus:border-line-2 focus:outline-none"
           />
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 z-10 bg-gray-50">
+          <thead className="sticky top-0 z-10 bg-sunken">
             <tr>
-              <th className="px-4 py-2.5 text-left font-medium text-gray-700">
+              <th className="px-4 py-2.5 text-left font-medium text-text-2">
                 Product
               </th>
               {sortedOutlets.map((o) => (
                 <th
                   key={o.store_id}
-                  className="px-3 py-2.5 text-center font-medium text-gray-700 whitespace-nowrap"
+                  className="px-3 py-2.5 text-center font-medium text-text-2 whitespace-nowrap"
                 >
                   {OUTLET_LABELS[o.store_id] ?? o.store_id}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line">
             {filtered.map((p) => {
               const globallyOff = p.is_available === false;
               return (
-                <tr key={p.id} className={globallyOff ? "bg-gray-50" : ""}>
+                <tr key={p.id} className={globallyOff ? "bg-sunken" : ""}>
                   <td className="px-4 py-2.5">
-                    <div className={`font-medium ${globallyOff ? "text-gray-400" : "text-gray-900"}`}>
+                    <div className={`font-medium ${globallyOff ? "text-text-3" : "text-text"}`}>
                       {p.name}
                       {globallyOff && (
-                        <span className="ml-2 inline-flex items-center rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                        <span className="ml-2 inline-flex items-center rounded-full bg-line px-2 py-0.5 text-[10px] font-medium text-text-2">
                           globally off
                         </span>
                       )}
                     </div>
                     {p.category && (
-                      <div className="text-xs text-gray-500">{p.category}</div>
+                      <div className="text-xs text-text-2">{p.category}</div>
                     )}
                   </td>
                   {sortedOutlets.map((o) => {
@@ -241,7 +241,7 @@ export function AvailabilityMatrix() {
                           className={[
                             "inline-flex h-6 w-11 items-center rounded-full transition-colors",
                             globallyOff
-                              ? "bg-gray-200 cursor-not-allowed"
+                              ? "bg-line cursor-not-allowed"
                               : available
                                 ? "bg-emerald-500"
                                 : "bg-rose-500",
@@ -251,7 +251,7 @@ export function AvailabilityMatrix() {
                         >
                           <span
                             className={[
-                              "inline-block h-5 w-5 rounded-full bg-white shadow transition-transform",
+                              "inline-block h-5 w-5 rounded-full bg-surface shadow transition-transform",
                               available ? "translate-x-5" : "translate-x-0.5",
                             ].join(" ")}
                           />
@@ -264,7 +264,7 @@ export function AvailabilityMatrix() {
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={sortedOutlets.length + 1} className="px-4 py-10 text-center text-sm text-gray-500">
+                <td colSpan={sortedOutlets.length + 1} className="px-4 py-10 text-center text-sm text-text-2">
                   No products match &ldquo;{search}&rdquo;.
                 </td>
               </tr>

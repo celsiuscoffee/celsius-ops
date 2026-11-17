@@ -46,8 +46,8 @@ export default function AdsSettingsPage() {
   }
 
   return (
-    <div className="space-y-4 p-4 lg:p-6">
-      <h1 className="text-xl font-semibold">Ads Settings</h1>
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Ads Settings</h1>
 
       {toast && (
         <Card className={`flex items-center gap-2 p-3 text-sm ${
@@ -61,7 +61,7 @@ export default function AdsSettingsPage() {
       {/* Manual sync buttons */}
       <Card className="space-y-3 p-4">
         <h2 className="text-sm font-medium">Manual Sync</h2>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-text-2">
           Normally the daily cron handles this. Use these buttons after first setup, or if you need a fresh pull.
         </p>
 
@@ -69,7 +69,7 @@ export default function AdsSettingsPage() {
           <button
             onClick={() => runSync("accounts")}
             disabled={!!busy}
-            className="flex items-center justify-center gap-2 rounded-md border border-neutral-200 px-4 py-2.5 text-sm hover:bg-neutral-50 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-md border border-line px-4 py-2.5 text-sm hover:bg-sunken disabled:opacity-50"
           >
             {busy === "accounts" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Sync Accounts
@@ -77,7 +77,7 @@ export default function AdsSettingsPage() {
           <button
             onClick={() => runSync("metrics", 7)}
             disabled={!!busy}
-            className="flex items-center justify-center gap-2 rounded-md border border-neutral-200 px-4 py-2.5 text-sm hover:bg-neutral-50 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-md border border-line px-4 py-2.5 text-sm hover:bg-sunken disabled:opacity-50"
           >
             {busy === "metrics" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Sync Last 7 Days
@@ -85,7 +85,7 @@ export default function AdsSettingsPage() {
           <button
             onClick={() => runSync("metrics", 90)}
             disabled={!!busy}
-            className="flex items-center justify-center gap-2 rounded-md border border-neutral-200 px-4 py-2.5 text-sm hover:bg-neutral-50 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-md border border-line px-4 py-2.5 text-sm hover:bg-sunken disabled:opacity-50"
           >
             {busy === "metrics" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Backfill 90 Days
@@ -93,7 +93,7 @@ export default function AdsSettingsPage() {
           <button
             onClick={() => runSync("invoices")}
             disabled={!!busy}
-            className="flex items-center justify-center gap-2 rounded-md border border-neutral-200 px-4 py-2.5 text-sm hover:bg-neutral-50 disabled:opacity-50"
+            className="flex items-center justify-center gap-2 rounded-md border border-line px-4 py-2.5 text-sm hover:bg-sunken disabled:opacity-50"
           >
             {busy === "invoices" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Sync Invoices (YTD)
@@ -104,20 +104,20 @@ export default function AdsSettingsPage() {
       {/* Campaign→Outlet links */}
       <Card className="space-y-2 p-4">
         <h2 className="text-sm font-medium">Campaign → Outlet Links</h2>
-        <p className="text-xs text-neutral-500">
-          Link each campaign to an outlet on the <a href="/ads/campaigns" className="text-terracotta underline">Campaigns page</a> using the Outlet dropdown per row.
+        <p className="text-xs text-text-2">
+          Link each campaign to an outlet on the <a href="/ads/campaigns" className="text-brand-text underline">Campaigns page</a> using the Outlet dropdown per row.
         </p>
       </Card>
 
       {/* Sync log */}
       <Card className="overflow-hidden">
-        <div className="border-b border-neutral-100 px-4 py-2 text-sm font-medium">Recent Syncs</div>
+        <div className="border-b border-line px-4 py-2 text-sm font-medium">Recent Syncs</div>
         {!data?.logs || data.logs.length === 0 ? (
-          <p className="p-6 text-center text-sm text-neutral-500">No sync history yet.</p>
+          <p className="p-6 text-center text-sm text-text-2">No sync history yet.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-neutral-50 text-xs text-neutral-500">
+              <thead className="bg-sunken text-xs text-text-2">
                 <tr>
                   <th className="px-3 py-2 text-left font-normal">Kind</th>
                   <th className="px-3 py-2 text-left font-normal">Started</th>
@@ -129,9 +129,9 @@ export default function AdsSettingsPage() {
               </thead>
               <tbody>
                 {data.logs.map((log) => (
-                  <tr key={log.id} className="border-t border-neutral-100">
+                  <tr key={log.id} className="border-t border-line">
                     <td className="px-3 py-2 text-xs">{log.kind}</td>
-                    <td className="px-3 py-2 text-xs text-neutral-500">{new Date(log.startedAt).toLocaleString("en-MY")}</td>
+                    <td className="px-3 py-2 text-xs text-text-2">{new Date(log.startedAt).toLocaleString("en-MY")}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] ${
                         log.status === "OK" ? "bg-emerald-50 text-emerald-700"

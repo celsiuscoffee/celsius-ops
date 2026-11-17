@@ -68,32 +68,32 @@ export default function PrepLabourPage() {
   const short = s ? s.gapHours < 0 : false;
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex items-center gap-3">
-        <Link href="/inventory/reports" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+        <Link href="/inventory/reports" className="rounded-lg p-1.5 text-text-3 hover:bg-sunken hover:text-text-2">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Prep Manhours</h2>
-          <p className="text-sm text-gray-500">Prep hours the period demanded (sales × recipes × prep time) vs rostered hours</p>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Prep Manhours</h2>
+          <p className="text-sm text-text-2">Prep hours the period demanded (sales × recipes × prep time) vs rostered hours</p>
         </div>
       </div>
 
       {/* Filters */}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <select className="rounded-lg border border-gray-200 px-3 py-2 text-sm" value={outletId} onChange={(e) => setOutletId(e.target.value)}>
+        <select className="rounded-lg border border-line px-3 py-2 text-sm" value={outletId} onChange={(e) => setOutletId(e.target.value)}>
           <option value="">All outlets</option>
           {(data?.outlets ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
-        <label className="flex items-center gap-1.5 text-sm text-gray-500">From
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+        <label className="flex items-center gap-1.5 text-sm text-text-2">From
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-lg border border-line px-2 py-1.5 text-sm" />
         </label>
-        <label className="flex items-center gap-1.5 text-sm text-gray-500">To
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+        <label className="flex items-center gap-1.5 text-sm text-text-2">To
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-lg border border-line px-2 py-1.5 text-sm" />
         </label>
       </div>
 
-      {isLoading && <div className="flex justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-terracotta" /></div>}
+      {isLoading && <div className="flex justify-center p-12"><Loader2 className="h-6 w-6 animate-spin text-brand-text" /></div>}
 
       {s && (
         <>
@@ -107,7 +107,7 @@ export default function PrepLabourPage() {
               tone={short ? "bad" : "good"}
             />
             <Card
-              icon={<Clock className="h-4 w-4 text-gray-500" />}
+              icon={<Clock className="h-4 w-4 text-text-2" />}
               label="Prep share of roster"
               value={s.utilisationPct != null ? `${fmt(s.utilisationPct)}%` : "—"}
               sub={s.utilisationPct != null ? "of all rostered hours" : "no roster in range"}
@@ -125,8 +125,8 @@ export default function PrepLabourPage() {
           </div>
 
           {data && (data.warnings.untimedRecipes.length > 0 || data.warnings.noSales || data.warnings.noRoster) && (
-            <div className="mt-3 space-y-1.5 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600">
-              <p className="font-medium text-gray-700">Data quality — the hours needed may be understated:</p>
+            <div className="mt-3 space-y-1.5 rounded-xl border border-line bg-sunken px-4 py-3 text-xs text-text-2">
+              <p className="font-medium text-text-2">Data quality — the hours needed may be understated:</p>
               {data.warnings.untimedRecipes.length > 0 && (
                 <p>• {data.warnings.untimedRecipes.length} prepped item(s) consumed in this period have no prep time set, so they add ZERO hours to the total: {data.warnings.untimedRecipes.slice(0, 6).join(", ")}{data.warnings.untimedRecipes.length > 6 ? "…" : ""}. Set their time in Prep Recipes.</p>
               )}
@@ -163,51 +163,51 @@ const prepColumns: ReportColumn<PrepItem>[] = [
     render: (i) => (
       <>
         <div className="flex items-center gap-1.5">
-          <span className="font-medium text-gray-900">{i.productName}</span>
-          {!i.timed && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">not timed</span>}
+          <span className="font-medium text-text">{i.productName}</span>
+          {!i.timed && <span className="rounded bg-sunken px-1.5 py-0.5 text-[10px] text-text-2">not timed</span>}
         </div>
-        <code className="text-xs text-gray-400">{i.sku}</code>
+        <code className="text-xs text-text-3">{i.sku}</code>
       </>
     ),
   },
   {
     key: "unitsNeeded", header: "Units needed", align: "right", sortValue: (i) => i.unitsNeeded,
-    render: (i) => <span className="font-mono text-gray-900">{fmt(i.unitsNeeded)} <span className="text-xs text-gray-400">{i.baseUom}</span></span>,
+    render: (i) => <span className="font-mono text-text">{fmt(i.unitsNeeded)} <span className="text-xs text-text-3">{i.baseUom}</span></span>,
   },
   {
     key: "batches", header: "Batches", align: "right", sortValue: (i) => i.batches,
-    render: (i) => <span className="font-mono text-gray-700">{fmt(i.batches)}<span className="text-xs text-gray-400"> × {fmt0(i.yieldQuantity)} {i.yieldUom}</span></span>,
+    render: (i) => <span className="font-mono text-text-2">{fmt(i.batches)}<span className="text-xs text-text-3"> × {fmt0(i.yieldQuantity)} {i.yieldUom}</span></span>,
   },
   {
     key: "prepMinutes", header: "Min/batch", align: "right", sortValue: (i) => i.prepMinutes,
     render: (i) => i.prepMinutes != null
-      ? <span className="font-mono text-gray-700">{fmt0(i.prepMinutes)}</span>
-      : <span className="text-gray-300">—</span>,
+      ? <span className="font-mono text-text-2">{fmt0(i.prepMinutes)}</span>
+      : <span className="text-text-3">—</span>,
   },
   {
     key: "minutesPerUnit", header: "Min/unit", align: "right", sortValue: (i) => i.minutesPerUnit,
     render: (i) => i.minutesPerUnit != null
-      ? <span className="font-mono text-gray-500">{i.minutesPerUnit.toFixed(2)}</span>
-      : <span className="text-gray-300">—</span>,
+      ? <span className="font-mono text-text-2">{i.minutesPerUnit.toFixed(2)}</span>
+      : <span className="text-text-3">—</span>,
   },
   {
     key: "requiredMinutes", header: "Hours needed", align: "right", sortValue: (i) => i.requiredMinutes,
     render: (i) => i.requiredHours != null
-      ? <span className="font-mono font-medium text-gray-900">{fmt(i.requiredHours)} h</span>
+      ? <span className="font-mono font-medium text-text">{fmt(i.requiredHours)} h</span>
       : <span className="text-[11px] text-amber-600">set prep time</span>,
   },
 ];
 
 function Card({ icon, label, value, sub, tone }: { icon: React.ReactNode; label: string; value: string; sub?: string; tone?: "good" | "bad" }) {
-  const color = tone === "bad" ? "text-red-600" : tone === "good" ? "text-green-600" : "text-gray-900";
+  const color = tone === "bad" ? "text-red-600" : tone === "good" ? "text-green-600" : "text-text";
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-line bg-surface p-4">
       <div className="flex items-center gap-2">
-        <div className="rounded-lg bg-gray-50 p-2">{icon}</div>
-        <span className="text-sm text-gray-500">{label}</span>
+        <div className="rounded-lg bg-sunken p-2">{icon}</div>
+        <span className="text-sm text-text-2">{label}</span>
       </div>
       <p className={`mt-2 text-2xl font-bold ${color}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-gray-500">{sub}</p>}
+      {sub && <p className="mt-0.5 text-xs text-text-2">{sub}</p>}
     </div>
   );
 }

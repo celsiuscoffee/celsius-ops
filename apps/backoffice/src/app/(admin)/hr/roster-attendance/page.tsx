@@ -75,13 +75,13 @@ const STATUS: Record<Status, { label: string; cls: string; dot: string; icon: ty
   on_time: { label: "On time", cls: "text-green-700 bg-green-50 border-green-200", dot: "bg-green-500", icon: CheckCircle2 },
   late: { label: "Late", cls: "text-amber-700 bg-amber-50 border-amber-200", dot: "bg-amber-500", icon: Clock },
   absent: { label: "Absent", cls: "text-red-700 bg-red-50 border-red-200", dot: "bg-red-500", icon: UserX },
-  upcoming: { label: "Upcoming", cls: "text-slate-500 bg-slate-50 border-slate-200", dot: "bg-slate-300", icon: CalendarClock },
+  upcoming: { label: "Upcoming", cls: "text-text-2 bg-sunken border-line", dot: "bg-line", icon: CalendarClock },
   rest_day: { label: "Off day", cls: "text-indigo-500 bg-indigo-50/60 border-indigo-100", dot: "bg-indigo-300", icon: Moon },
   no_roster: { label: "Unrostered", cls: "text-sky-700 bg-sky-50 border-sky-200", dot: "bg-sky-500", icon: HelpCircle },
   // Approved leave — was rendered "Absent" before the API learned to check
   // hr_leave_requests, because leave approval leaves rostered shifts in place.
   on_leave: { label: "On leave", cls: "text-violet-700 bg-violet-50 border-violet-200", dot: "bg-violet-400", icon: CalendarClock },
-  off: { label: "Off", cls: "text-gray-400 bg-transparent border-transparent", dot: "bg-transparent", icon: HelpCircle },
+  off: { label: "Off", cls: "text-text-3 bg-transparent border-transparent", dot: "bg-transparent", icon: HelpCircle },
 };
 
 export default function RosterAttendancePage() {
@@ -109,7 +109,7 @@ export default function RosterAttendancePage() {
   const s = data?.summary;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <HrPageHeader
         title="Roster Attendance"
         description="Who's rostered vs. who actually showed up — tap any shift for the clock-in details"
@@ -120,7 +120,7 @@ export default function RosterAttendancePage() {
                 <button
                   key={m}
                   onClick={() => setMode(m)}
-                  className={`rounded-md px-3 py-1.5 font-medium capitalize ${mode === m ? "bg-terracotta text-white" : "text-gray-600 hover:bg-muted"}`}
+                  className={`rounded-md px-3 py-1.5 font-medium capitalize ${mode === m ? "bg-ink text-on-ink" : "text-text-2 hover:bg-muted"}`}
                 >
                   {m}
                 </button>
@@ -431,7 +431,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "gr
         : tone === "red"
           ? "text-red-700"
           : tone === "slate"
-            ? "text-slate-500"
+            ? "text-text-2"
             : tone === "sky"
               ? "text-sky-700"
               : "text-foreground";
