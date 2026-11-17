@@ -66,7 +66,7 @@ function periodRange(p: Period, custom: { from: string; to: string }): { from: s
 }
 
 const timeMyt = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kuala_Lumpur" });
+  new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kuala_Lumpur" });
 const dateMyt = (iso: string) => new Date(new Date(iso).getTime() + MYT_OFFSET_MS).toISOString().slice(0, 10);
 const dayLabel = (isoDay: string) =>
   new Date(`${isoDay}T00:00:00Z`).toLocaleDateString("en-MY", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
@@ -88,24 +88,24 @@ const fmtMins = (m: number) => {
 
 const CLOCK_METHOD: Record<string, { label: string; icon: typeof Smartphone; color: string }> = {
   app: { label: "GPS", icon: Smartphone, color: "text-text-2" },
-  app_nogps: { label: "No GPS", icon: WifiOff, color: "text-amber-600" },
-  app_offsite: { label: "Off-site", icon: MapPinOff, color: "text-red-600" },
-  manual: { label: "Manual", icon: Hand, color: "text-blue-600" },
+  app_nogps: { label: "No GPS", icon: WifiOff, color: "text-warn-text" },
+  app_offsite: { label: "Off-site", icon: MapPinOff, color: "text-danger-text" },
+  manual: { label: "Manual", icon: Hand, color: "text-info-text" },
   pos: { label: "POS", icon: Smartphone, color: "text-text-2" },
   system: { label: "Auto", icon: Timer, color: "text-text-2" },
 };
 
 // Every AI flag the processor writes, in the order a manager cares about.
 const FLAGS: { key: string; label: string; color: string }[] = [
-  { key: "late_arrival", label: "Late", color: "text-amber-700 bg-amber-50" },
-  { key: "late_clock_in", label: "Late clock-in", color: "text-amber-700 bg-amber-50" },
-  { key: "overtime_detected", label: "OT", color: "text-blue-700 bg-blue-50" },
-  { key: "early_clock_out", label: "Left early", color: "text-orange-700 bg-orange-50" },
-  { key: "no_clock_out", label: "No clock-out", color: "text-red-700 bg-red-50" },
+  { key: "late_arrival", label: "Late", color: "text-warn-text bg-warn-soft" },
+  { key: "late_clock_in", label: "Late clock-in", color: "text-warn-text bg-warn-soft" },
+  { key: "overtime_detected", label: "OT", color: "text-info-text bg-info-soft" },
+  { key: "early_clock_out", label: "Left early", color: "text-warn-text bg-warn-soft" },
+  { key: "no_clock_out", label: "No clock-out", color: "text-danger-text bg-danger-soft" },
   { key: "auto_closed_forgot_clockout", label: "Auto-closed", color: "text-text-2 bg-sunken" },
-  { key: "outside_geofence", label: "Outside zone", color: "text-red-700 bg-red-50" },
+  { key: "outside_geofence", label: "Outside zone", color: "text-danger-text bg-danger-soft" },
   { key: "no_gps_data", label: "No GPS", color: "text-text-2 bg-sunken" },
-  { key: "public_holiday", label: "Public holiday", color: "text-purple-700 bg-purple-50" },
+  { key: "public_holiday", label: "Public holiday", color: "text-info-text bg-info-soft" },
 ];
 const FLAG_BY_KEY = new Map(FLAGS.map((f) => [f.key, f]));
 
@@ -122,7 +122,7 @@ function GeoChip({ label, lat, lng, distance, radius }: {
     );
   }
   const outside = distance != null && radius != null && distance > radius;
-  const cls = outside ? "text-red-600 bg-red-50" : distance != null ? "text-green-700 bg-green-50" : "text-text-2 bg-sunken";
+  const cls = outside ? "text-danger-text bg-danger-soft" : distance != null ? "text-ok-text bg-ok-soft" : "text-text-2 bg-sunken";
   return (
     <a
       href={`https://maps.google.com/?q=${lat},${lng}`}
@@ -140,22 +140,22 @@ function GeoChip({ label, lat, lng, distance, radius }: {
 
 function StatusPill({ log }: { log: EnrichedLog }) {
   if (log.final_status == null) {
-    return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Needs review</span>;
+    return <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-semibold text-warn-text">Needs review</span>;
   }
   if (log.final_status === "rejected") {
-    return <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Rejected</span>;
+    return <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-semibold text-danger-text">Rejected</span>;
   }
   if (log.final_status === "adjusted") {
-    return <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">Times fixed</span>;
+    return <span className="rounded-full bg-info-soft px-2 py-0.5 text-[11px] font-semibold text-info-text">Times fixed</span>;
   }
   return (
-    <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+    <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[11px] font-semibold text-ok-text">
       {log.excused ? "Excused" : "Approved"}
     </span>
   );
 }
 
-const inputCls = "rounded-lg border bg-card px-2.5 py-1.5 text-sm text-foreground";
+const inputCls = "rounded-lg border bg-card px-2.5 py-1.5 text-sm text-text";
 
 export default function AttendanceReviewPage() {
   // ── Filters ──────────────────────────────────────────────────────────────
@@ -336,20 +336,20 @@ export default function AttendanceReviewPage() {
     return Array.from(m.entries());
   }, [logs]);
 
-  const description = summary
+  const description = "Every clock-in checked before it reaches payroll: late, missed clock-outs and overtime. " + (summary
     ? review === "pending"
       ? `${summary.pending} log${summary.pending === 1 ? "" : "s"} waiting for a decision` +
         (summary.pendingOtHours > 0 ? ` · ${summary.pendingOtHours}h OT to approve` : "") +
         (summary.suspicious > 0 ? ` · ${summary.suspicious} missed clock-out${summary.suspicious === 1 ? "" : "s"} to fix` : "")
       : `${logs.length} log${logs.length === 1 ? "" : "s"}` + (summary.pending > 0 ? ` · ${summary.pending} still need review in this period` : "")
-    : "Loading…";
+    : "Loading…");
 
   return (
     <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <PromptDialog />
       <ConfirmDialog />
       <HrPageHeader
-        title="Attendance Review"
+        title="Clock-ins"
         description={description}
         action={
           <div className="flex gap-1 rounded-lg border bg-card p-1 text-sm">
@@ -357,7 +357,7 @@ export default function AttendanceReviewPage() {
               <button
                 key={k}
                 onClick={() => { setReview(k); setSelected(new Set()); }}
-                className={`rounded-md px-3 py-1.5 font-medium ${review === k ? "bg-ink text-on-ink" : "text-text-2 hover:bg-muted"}`}
+                className={`rounded-md px-3 py-1.5 font-medium ${review === k ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"}`}
               >
                 {l}
               </button>
@@ -368,7 +368,7 @@ export default function AttendanceReviewPage() {
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3">
-        <Filter className="h-4 w-4 text-muted-foreground" />
+        <Filter className="h-4 w-4 text-text-3" />
         <select value={period} onChange={(e) => setPeriod(e.target.value as Period)} className={inputCls} title="Period">
           <option value="7d">Last 7 days</option>
           <option value="30d">Last 30 days</option>
@@ -379,7 +379,7 @@ export default function AttendanceReviewPage() {
         {period === "custom" && (
           <>
             <input type="date" value={custom.from} max={custom.to} onChange={(e) => setCustom({ ...custom, from: e.target.value })} className={inputCls} />
-            <span className="text-xs text-muted-foreground">to</span>
+            <span className="text-xs text-text-3">to</span>
             <input type="date" value={custom.to} min={custom.from} onChange={(e) => setCustom({ ...custom, to: e.target.value })} className={inputCls} />
           </>
         )}
@@ -400,18 +400,18 @@ export default function AttendanceReviewPage() {
           With OT
         </label>
         {hasFilter && (
-          <button onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm text-text-2 hover:bg-muted">
+          <button onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm text-text-2 hover:bg-sunken">
             <X className="h-3.5 w-3.5" /> Reset
           </button>
         )}
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="ml-auto text-xs text-text-3">
           {range.from} → {range.to}{logs.length >= 500 ? " · showing the newest 500, narrow the period to see the rest" : ""}
         </span>
       </div>
 
       {/* Bulk action bar */}
       {review === "pending" && selectable.length > 0 && (
-        <div className={`sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border p-2.5 shadow-sm ${selected.size > 0 ? "border-ink/40 bg-orange-50" : "bg-card"}`}>
+        <div className={`sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border p-2.5 shadow-sm ${selected.size > 0 ? "border-ink/40 bg-warn-soft" : "bg-card"}`}>
           <label className="inline-flex cursor-pointer items-center gap-2 px-1 text-sm">
             <input
               type="checkbox"
@@ -422,21 +422,21 @@ export default function AttendanceReviewPage() {
             />
             {selected.size > 0
               ? <span className="font-medium">{selected.size} selected{selectedOt > 0 ? ` · ${selectedOt}h OT` : ""}</span>
-              : <span className="text-muted-foreground">Select all {selectable.length} on this page</span>}
+              : <span className="text-text-3">Select all {selectable.length} on this page</span>}
           </label>
           {selectedSuspicious > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs text-red-700">
+            <span className="inline-flex items-center gap-1 text-xs text-danger-text">
               <AlertTriangle className="h-3.5 w-3.5" /> {selectedSuspicious} with a missed clock-out — approving pays no OT for those until the times are fixed
             </span>
           )}
           {selected.size > 0 && (
             <div className="ml-auto flex flex-wrap gap-2">
-              <button onClick={bulkApprove} className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700">
+              <button onClick={bulkApprove} className="inline-flex items-center gap-1 rounded-lg bg-ok px-3 py-1.5 text-xs font-medium text-white hover:bg-ok">
                 <CheckCircle2 className="h-3.5 w-3.5" /> {selectedOt > 0 ? `Approve + ${selectedOt}h OT` : "Approve"}
               </button>
-              <button onClick={bulkExcuse} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">Excuse</button>
-              <button onClick={bulkReject} className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">Reject</button>
-              <button onClick={() => setSelected(new Set())} className="rounded-lg border px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-muted">Clear</button>
+              <button onClick={bulkExcuse} className="rounded-lg bg-info px-3 py-1.5 text-xs font-medium text-white hover:bg-info">Excuse</button>
+              <button onClick={bulkReject} className="rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white hover:bg-danger">Reject</button>
+              <button onClick={() => setSelected(new Set())} className="rounded-lg border px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-sunken">Clear</button>
             </div>
           )}
         </div>
@@ -444,12 +444,12 @@ export default function AttendanceReviewPage() {
 
       {/* Queue */}
       {isLoading && !data ? (
-        <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
+        <div className="flex items-center justify-center py-16 text-text-3"><Loader2 className="h-5 w-5 animate-spin" /></div>
       ) : logs.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-xl border bg-card py-16 text-center">
-          <CheckCircle2 className="mb-3 h-12 w-12 text-green-500" />
+          <CheckCircle2 className="mb-3 h-12 w-12 text-ok-text" />
           <p className="text-lg font-semibold">{review === "pending" ? "All reviewed" : "Nothing here"}</p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-text-3">
             {review === "pending" ? "No attendance logs are waiting for a decision" : "No attendance logs"} in this period{hasFilter ? " with these filters" : ""}.
           </p>
         </div>
@@ -462,7 +462,7 @@ export default function AttendanceReviewPage() {
               <section key={day}>
                 <div className="mb-1.5 flex items-baseline gap-2 px-1">
                   <h2 className="text-sm font-semibold">{dayLabel(day)}</h2>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-text-3">
                     {dayLogs.length} log{dayLogs.length === 1 ? "" : "s"}
                     {dayPending.length > 0 && review !== "pending" ? ` · ${dayPending.length} to review` : ""}
                     {dayOt > 0 ? ` · ${dayOt}h OT` : ""}
@@ -475,7 +475,7 @@ export default function AttendanceReviewPage() {
                     const open = expanded.has(log.id);
                     const ot = log.ot_tail_hours ?? 0;
                     return (
-                      <div key={log.id} className={`px-3 py-2.5 ${selected.has(log.id) ? "bg-orange-50/60" : ""}`}>
+                      <div key={log.id} className={`px-3 py-2.5 ${selected.has(log.id) ? "bg-warn-soft" : ""}`}>
                         <div className="flex items-start gap-3">
                           {pending ? (
                             <input
@@ -498,7 +498,7 @@ export default function AttendanceReviewPage() {
                               onClick={() => setPreviewUrl(log.clock_in_photo_url)}
                             />
                           ) : (
-                            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-sunken text-text-3">
                               <ImageOff className="h-4 w-4" />
                             </div>
                           )}
@@ -506,7 +506,7 @@ export default function AttendanceReviewPage() {
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                               <span className="font-semibold">{log.user_nickname || log.user_name || log.user_id.slice(0, 8)}</span>
-                              {log.outlet_name && <span className="text-xs text-muted-foreground">{log.outlet_name}</span>}
+                              {log.outlet_name && <span className="text-xs text-text-3">{log.outlet_name}</span>}
                               <StatusPill log={log} />
                               {log.ai_flags.map((f) => {
                                 const info = FLAG_BY_KEY.get(f);
@@ -517,33 +517,33 @@ export default function AttendanceReviewPage() {
                                 );
                               })}
                             </div>
-                            <p className="mt-0.5 text-sm text-muted-foreground">
+                            <p className="mt-0.5 text-sm text-text-3">
                               {log.scheduled_start && (
                                 <span>Rostered {fmtSched(log.scheduled_start)}{log.scheduled_end ? `–${fmtSched(log.scheduled_end)}` : ""} · </span>
                               )}
-                              <span className="text-foreground">{timeMyt(log.clock_in)}{log.clock_out ? ` → ${timeMyt(log.clock_out)}` : " → (open)"}</span>
-                              {log.clock_out && dateMyt(log.clock_out) !== dateMyt(log.clock_in) && <span className="text-red-600"> next day</span>}
+                              <span className="text-text">{timeMyt(log.clock_in)}{log.clock_out ? ` → ${timeMyt(log.clock_out)}` : " → (open)"}</span>
+                              {log.clock_out && dateMyt(log.clock_out) !== dateMyt(log.clock_in) && <span className="text-danger-text"> next day</span>}
                               {log.total_hours != null && <span> · {log.total_hours}h</span>}
                               {log.scheduled_start && (
                                 log.late_minutes > 2
-                                  ? <span className="font-medium text-amber-600"> · {fmtMins(log.late_minutes)} late</span>
+                                  ? <span className="font-medium text-warn-text"> · {fmtMins(log.late_minutes)} late</span>
                                   : log.late_minutes < -2
-                                    ? <span className="text-green-700"> · {fmtMins(log.late_minutes)} early</span>
-                                    : <span className="text-green-700"> · on time</span>
+                                    ? <span className="text-ok-text"> · {fmtMins(log.late_minutes)} early</span>
+                                    : <span className="text-ok-text"> · on time</span>
                               )}
                             </p>
                             {/* OT line — the thing approval decides */}
                             {log.ot_tail_suspicious ? (
-                              <p className="mt-0.5 inline-flex items-center gap-1 text-sm font-medium text-red-700">
+                              <p className="mt-0.5 inline-flex items-center gap-1 text-sm font-medium text-danger-text">
                                 <AlertTriangle className="h-3.5 w-3.5" /> Clock-out looks wrong (a whole day past the roster) — fix the times before approving, or no OT is paid
                               </p>
                             ) : ot >= 0.5 && pending ? (
-                              <p className="mt-0.5 text-sm font-medium text-blue-700">+{ot}h OT beyond roster — approving pays it</p>
+                              <p className="mt-0.5 text-sm font-medium text-info-text">+{ot}h OT beyond roster — approving pays it</p>
                             ) : (log.overtime_hours ?? 0) > 0 && log.ot_approval_id ? (
-                              <p className="mt-0.5 text-xs text-green-700">{log.overtime_hours}h OT approved · in payroll</p>
+                              <p className="mt-0.5 text-xs text-ok-text">{log.overtime_hours}h OT approved · in payroll</p>
                             ) : null}
                             {log.excused && log.excused_reason && (
-                              <p className="mt-0.5 text-xs text-muted-foreground">Excused: {log.excused_reason}</p>
+                              <p className="mt-0.5 text-xs text-text-3">Excused: {log.excused_reason}</p>
                             )}
                           </div>
 
@@ -555,7 +555,7 @@ export default function AttendanceReviewPage() {
                                   onClick={() => reviewOne(log, "acknowledge")}
                                   disabled={busy}
                                   title={ot >= 0.5 ? `Approve the day AND its ${ot}h OT for payroll. Lateness penalty still applies as calculated.` : "Approve the day — lateness penalty applies as calculated"}
-                                  className="inline-flex items-center gap-1 rounded-lg bg-green-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                                  className="inline-flex items-center gap-1 rounded-lg bg-ok px-2.5 py-1.5 text-xs font-medium text-white hover:bg-ok disabled:opacity-50"
                                 >
                                   {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                                   {ot >= 0.5 && !log.ot_tail_suspicious ? `Approve + ${ot}h OT` : "Approve"}
@@ -564,7 +564,7 @@ export default function AttendanceReviewPage() {
                                   onClick={async () => { const r = await askExcuse(); if (r !== null) reviewOne(log, "excuse", r || undefined); }}
                                   disabled={busy}
                                   title="Waive the lateness penalty — legitimate reason"
-                                  className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                                  className="rounded-lg bg-info px-2.5 py-1.5 text-xs font-medium text-white hover:bg-info disabled:opacity-50"
                                 >
                                   Excuse
                                 </button>
@@ -572,7 +572,7 @@ export default function AttendanceReviewPage() {
                                   onClick={() => reviewOne(log, "reject")}
                                   disabled={busy}
                                   title="Discard this log (bogus entry) — the day is not paid"
-                                  className="rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                                  className="rounded-lg bg-danger px-2.5 py-1.5 text-xs font-medium text-white hover:bg-danger disabled:opacity-50"
                                 >
                                   Reject
                                 </button>
@@ -582,13 +582,13 @@ export default function AttendanceReviewPage() {
                               onClick={() => (editing?.id === log.id ? setEditing(null) : openEditor(log))}
                               disabled={busy}
                               title={log.clock_out ? "Correct the clock in / out times" : "Manually clock this staffer out"}
-                              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 ${log.ot_tail_suspicious || !log.clock_out ? "border-red-300 text-red-700" : "border-line-2 text-text-2"}`}
+                              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-sunken disabled:opacity-50 ${log.ot_tail_suspicious || !log.clock_out ? "border-danger/30 text-danger-text" : "border-line-2 text-text-2"}`}
                             >
                               <PencilLine className="h-3 w-3" /> {log.clock_out ? "Fix times" : "Clock out"}
                             </button>
                             <button
                               onClick={() => toggleExpanded(log.id)}
-                              className="rounded-lg p-1.5 text-text-2 hover:bg-muted"
+                              className="rounded-lg p-1.5 text-text-2 hover:bg-sunken"
                               title={open ? "Hide details" : "Show location, method and photos"}
                               aria-label="Toggle details"
                             >
@@ -624,21 +624,21 @@ export default function AttendanceReviewPage() {
                                   title="Clock-out selfie"
                                 />
                               )}
-                              {log.review_notes && <span className="text-[11px] text-muted-foreground">Note: {log.review_notes}</span>}
+                              {log.review_notes && <span className="text-[11px] text-text-3">Note: {log.review_notes}</span>}
                             </div>
 
                             {/* Fix-times editor: manual clock-out for an open log, or a time
                                 correction. Hours recompute server-side via the shared engine. */}
                             {editing?.id === log.id && (
-                              <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
+                              <div className="space-y-2 rounded-lg border bg-sunken p-3">
                                 <div className="flex flex-col gap-2 sm:flex-row">
-                                  <label className="flex-1 text-xs font-medium text-muted-foreground">
+                                  <label className="flex-1 text-xs font-medium text-text-3">
                                     Clock in (MYT)
-                                    <input type="datetime-local" value={editing.ci} onChange={(e) => setEditing({ ...editing, ci: e.target.value })} className="mt-1 w-full rounded-md border bg-card px-2 py-1 text-sm text-foreground" />
+                                    <input type="datetime-local" value={editing.ci} onChange={(e) => setEditing({ ...editing, ci: e.target.value })} className="mt-1 w-full rounded-md border bg-card px-2 py-1 text-sm text-text" />
                                   </label>
-                                  <label className="flex-1 text-xs font-medium text-muted-foreground">
+                                  <label className="flex-1 text-xs font-medium text-text-3">
                                     Clock out (MYT)
-                                    <input type="datetime-local" value={editing.co} onChange={(e) => setEditing({ ...editing, co: e.target.value })} className="mt-1 w-full rounded-md border bg-card px-2 py-1 text-sm text-foreground" />
+                                    <input type="datetime-local" value={editing.co} onChange={(e) => setEditing({ ...editing, co: e.target.value })} className="mt-1 w-full rounded-md border bg-card px-2 py-1 text-sm text-text" />
                                   </label>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -650,10 +650,10 @@ export default function AttendanceReviewPage() {
                                     {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                                     Save times
                                   </button>
-                                  <button onClick={() => setEditing(null)} disabled={busy} className="rounded-lg border border-line-2 bg-surface px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-muted disabled:opacity-50">
+                                  <button onClick={() => setEditing(null)} disabled={busy} className="rounded-lg border border-line-2 bg-surface px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-sunken disabled:opacity-50">
                                     Cancel
                                   </button>
-                                  <span className="text-[11px] text-muted-foreground">Hours recompute automatically. Any OT in the new times is approved. Times are Malaysia time.</span>
+                                  <span className="text-[11px] text-text-3">Hours recompute automatically. Any OT in the new times is approved. Times are Malaysia time.</span>
                                 </div>
                               </div>
                             )}

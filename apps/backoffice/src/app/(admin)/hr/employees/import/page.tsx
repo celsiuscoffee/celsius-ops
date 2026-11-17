@@ -168,15 +168,15 @@ export default function LoeImportPage() {
   };
 
   const confidenceColor = (c: ParsedRecord["confidence"]) =>
-    c === "high" ? "bg-emerald-100 text-emerald-700"
-    : c === "medium" ? "bg-amber-100 text-amber-700"
-    : "bg-red-100 text-red-700";
+    c === "high" ? "bg-ok-soft text-ok-text"
+    : c === "medium" ? "bg-warn-soft text-warn-text"
+    : "bg-danger-soft text-danger-text";
 
   const allCreated = results.length > 0 && results.every((r) => r.status === "created");
 
   return (
     <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
-      <Link href="/hr/employees" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+      <Link href="/hr/employees" className="inline-flex items-center gap-2 text-sm text-text-3 hover:text-text">
         <ArrowLeft className="h-4 w-4" /> Back to employees
       </Link>
 
@@ -184,7 +184,7 @@ export default function LoeImportPage() {
         <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           <Sparkles className="h-6 w-6 text-brand-text" /> Import Employees from LoE
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-text-3">
           Drop Letters of Employment (PDF) — we&apos;ll parse each one, let you review, then create
           the User + profile + attach the LoE as a document in one go.
         </p>
@@ -214,7 +214,7 @@ export default function LoeImportPage() {
           {parsing ? (
             <Loader2 className="mx-auto h-8 w-8 animate-spin text-brand-text" />
           ) : (
-            <Upload className={"mx-auto h-8 w-8 " + (dragOver ? "text-brand-text" : "text-muted-foreground")} />
+            <Upload className={"mx-auto h-8 w-8 " + (dragOver ? "text-brand-text" : "text-text-3")} />
           )}
           <p className="mt-3 text-sm font-medium">
             {parsing ? "Parsing with AI…" : dragOver ? "Drop to parse" : "Drop LoE PDFs here, or"}
@@ -230,7 +230,7 @@ export default function LoeImportPage() {
             />
           </label>
           {files.length > 0 && (
-            <div className="mt-4 space-y-1 text-xs text-muted-foreground">
+            <div className="mt-4 space-y-1 text-xs text-text-3">
               <div>{files.length} file{files.length === 1 ? "" : "s"} selected</div>
               <ul className="mt-1 list-disc text-left pl-6">
                 {files.slice(0, 8).map((f) => <li key={f.name}>{f.name}</li>)}
@@ -253,13 +253,13 @@ export default function LoeImportPage() {
       {records.length > 0 && results.length === 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-text-3">
               Review the parsed data. Uncheck Skip to exclude a row, or edit fields inline.
               Click Create when ready.
             </p>
             <button
               onClick={() => { setFiles([]); setRecords([]); setResults([]); }}
-              className="text-xs text-muted-foreground hover:underline"
+              className="text-xs text-text-3 hover:underline"
             >
               Start over
             </button>
@@ -267,7 +267,7 @@ export default function LoeImportPage() {
 
           <div className="overflow-x-auto rounded-xl border bg-card">
             <table className="w-full text-xs">
-              <thead className="bg-muted/40 uppercase tracking-wide">
+              <thead className="bg-sunken uppercase tracking-wide">
                 <tr>
                   <th className="px-2 py-2 text-left">File / Conf.</th>
                   <th className="px-2 py-2 text-left">Name</th>
@@ -286,45 +286,45 @@ export default function LoeImportPage() {
               </thead>
               <tbody>
                 {records.map((r, i) => (
-                  <tr key={i} className={`border-t ${r.skip ? "bg-muted/20 opacity-60" : ""}`}>
+                  <tr key={i} className={`border-t ${r.skip ? "bg-sunken opacity-60" : ""}`}>
                     <td className="px-2 py-2 max-w-[180px]">
                       <div className="truncate font-medium">{r.fileName}</div>
                       <span className={`mt-0.5 inline-block rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase ${confidenceColor(r.confidence)}`}>
                         {r.confidence}
                       </span>
-                      {r.error && <div className="mt-1 text-[10px] text-red-600">{r.error}</div>}
+                      {r.error && <div className="mt-1 text-[10px] text-danger-text">{r.error}</div>}
                     </td>
-                    <td className="px-2 py-2"><input className="w-32 rounded border bg-background px-2 py-1" value={r.name} onChange={(e) => updateField(i, "name", e.target.value)} /></td>
-                    <td className="px-2 py-2"><input className="w-48 rounded border bg-background px-2 py-1" value={r.fullName ?? ""} onChange={(e) => updateField(i, "fullName", e.target.value || null)} /></td>
+                    <td className="px-2 py-2"><input className="w-32 rounded border bg-bg px-2 py-1" value={r.name} onChange={(e) => updateField(i, "name", e.target.value)} /></td>
+                    <td className="px-2 py-2"><input className="w-48 rounded border bg-bg px-2 py-1" value={r.fullName ?? ""} onChange={(e) => updateField(i, "fullName", e.target.value || null)} /></td>
                     <td className="px-2 py-2">
-                      <select className="rounded border bg-background px-1 py-1" value={r.role} onChange={(e) => updateField(i, "role", e.target.value as EditableRecord["role"])}>
+                      <select className="rounded border bg-bg px-1 py-1" value={r.role} onChange={(e) => updateField(i, "role", e.target.value as EditableRecord["role"])}>
                         <option>STAFF</option><option>MANAGER</option><option>ADMIN</option><option>OWNER</option>
                       </select>
                     </td>
                     <td className="px-2 py-2">
-                      <select className="rounded border bg-background px-1 py-1" value={r.employmentType} onChange={(e) => updateField(i, "employmentType", e.target.value as EditableRecord["employmentType"])}>
+                      <select className="rounded border bg-bg px-1 py-1" value={r.employmentType} onChange={(e) => updateField(i, "employmentType", e.target.value as EditableRecord["employmentType"])}>
                         <option value="full_time">Full-time</option>
                         <option value="part_time">Part-time</option>
                         <option value="contract">Contract</option>
                         <option value="intern">Intern</option>
                       </select>
                     </td>
-                    <td className="px-2 py-2"><input className="w-28 rounded border bg-background px-2 py-1" value={r.position ?? ""} onChange={(e) => updateField(i, "position", e.target.value || null)} /></td>
+                    <td className="px-2 py-2"><input className="w-28 rounded border bg-bg px-2 py-1" value={r.position ?? ""} onChange={(e) => updateField(i, "position", e.target.value || null)} /></td>
                     <td className="px-2 py-2">
-                      <select className="rounded border bg-background px-1 py-1" value={r.outletId ?? ""} onChange={(e) => updateField(i, "outletId", e.target.value || null)}>
+                      <select className="rounded border bg-bg px-1 py-1" value={r.outletId ?? ""} onChange={(e) => updateField(i, "outletId", e.target.value || null)}>
                         <option value="">(none)</option>
                         {outlets?.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                       </select>
                       {r.outletName && !r.outletId && (
-                        <div className="mt-0.5 text-[9px] text-amber-700">AI guess: {r.outletName}</div>
+                        <div className="mt-0.5 text-[9px] text-warn-text">AI guess: {r.outletName}</div>
                       )}
                     </td>
-                    <td className="px-2 py-2"><input type="date" className="rounded border bg-background px-2 py-1" value={r.joinDate ?? ""} onChange={(e) => updateField(i, "joinDate", e.target.value || null)} /></td>
-                    <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-20 rounded border bg-background px-1 py-1 text-right" value={r.basicSalary ?? ""} onChange={(e) => updateField(i, "basicSalary", e.target.value ? Number(e.target.value) : null)} /></td>
-                    <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-16 rounded border bg-background px-1 py-1 text-right" value={r.hourlyRate ?? ""} onChange={(e) => updateField(i, "hourlyRate", e.target.value ? Number(e.target.value) : null)} /></td>
-                    <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-16 rounded border bg-background px-1 py-1 text-right" value={r.performanceAllowance ?? ""} onChange={(e) => updateField(i, "performanceAllowance", e.target.value ? Number(e.target.value) : null)} /></td>
+                    <td className="px-2 py-2"><input type="date" className="rounded border bg-bg px-2 py-1" value={r.joinDate ?? ""} onChange={(e) => updateField(i, "joinDate", e.target.value || null)} /></td>
+                    <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-20 rounded border bg-bg px-1 py-1 text-right" value={r.basicSalary ?? ""} onChange={(e) => updateField(i, "basicSalary", e.target.value ? Number(e.target.value) : null)} /></td>
+                    <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-16 rounded border bg-bg px-1 py-1 text-right" value={r.hourlyRate ?? ""} onChange={(e) => updateField(i, "hourlyRate", e.target.value ? Number(e.target.value) : null)} /></td>
+                    <td className="px-2 py-2 text-right"><input type="number" step="0.01" className="w-16 rounded border bg-bg px-1 py-1 text-right" value={r.performanceAllowance ?? ""} onChange={(e) => updateField(i, "performanceAllowance", e.target.value ? Number(e.target.value) : null)} /></td>
                     <td className="px-2 py-2"><input type="checkbox" checked={r.skip} onChange={(e) => updateField(i, "skip", e.target.checked)} /></td>
-                    <td className="px-2 py-2"><button onClick={() => removeRow(i)} className="rounded p-1 text-red-600 hover:bg-red-50"><Trash2 className="h-3 w-3" /></button></td>
+                    <td className="px-2 py-2"><button onClick={() => removeRow(i)} className="rounded p-1 text-danger-text hover:bg-danger-soft"><Trash2 className="h-3 w-3" /></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -335,7 +335,7 @@ export default function LoeImportPage() {
             <button
               onClick={commitAll}
               disabled={committing}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg bg-ok px-5 py-2 text-sm font-semibold text-white hover:bg-ok disabled:opacity-50"
             >
               {committing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Create {records.filter((r) => !r.skip).length} employee{records.filter((r) => !r.skip).length === 1 ? "" : "s"}
@@ -347,9 +347,9 @@ export default function LoeImportPage() {
       {/* Step 3 — Results */}
       {results.length > 0 && (
         <div className="space-y-3">
-          <div className={`rounded-xl border p-4 ${allCreated ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+          <div className={`rounded-xl border p-4 ${allCreated ? "border-ok/30 bg-ok-soft" : "border-warn/30 bg-warn-soft"}`}>
             <div className="flex items-center gap-2 font-semibold">
-              {allCreated ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <AlertTriangle className="h-5 w-5 text-amber-600" />}
+              {allCreated ? <CheckCircle2 className="h-5 w-5 text-ok-text" /> : <AlertTriangle className="h-5 w-5 text-warn-text" />}
               {results.filter((r) => r.status === "created").length} created ·
               {" "}{results.filter((r) => r.status === "skipped").length} skipped ·
               {" "}{results.filter((r) => r.status === "error").length} errored
@@ -362,16 +362,16 @@ export default function LoeImportPage() {
                 <span
                   className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${
                     r.status === "created"
-                      ? "bg-emerald-100 text-emerald-700"
+                      ? "bg-ok-soft text-ok-text"
                       : r.status === "skipped"
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-red-100 text-red-700"
+                        ? "bg-warn-soft text-warn-text"
+                        : "bg-danger-soft text-danger-text"
                   }`}
                 >
                   {r.status}
                 </span>
                 <span className="font-medium">{r.fileName}</span>
-                {r.error && <span className="text-xs text-muted-foreground">— {r.error}</span>}
+                {r.error && <span className="text-xs text-text-3">— {r.error}</span>}
                 {r.userId && (
                   <Link href={`/hr/employees/${r.userId}`} className="ml-auto text-xs text-brand-text hover:underline">
                     Open profile →
@@ -384,7 +384,7 @@ export default function LoeImportPage() {
           <div className="flex justify-end gap-2">
             <button
               onClick={() => { setFiles([]); setRecords([]); setResults([]); }}
-              className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
+              className="rounded-lg border px-4 py-2 text-sm hover:bg-sunken"
             >
               Import more
             </button>

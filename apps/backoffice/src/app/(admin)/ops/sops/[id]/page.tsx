@@ -38,8 +38,8 @@ type SopDetail = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  PUBLISHED: "bg-green-100 text-green-700 border-green-200",
+  DRAFT: "bg-warn-soft text-warn-text border-warn/30",
+  PUBLISHED: "bg-ok-soft text-ok-text border-ok/30",
   ARCHIVED: "bg-sunken text-text-2 border-line",
 };
 
@@ -202,17 +202,17 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{sop.title}</h2>
-              <Badge className={`text-xs ${STATUS_COLORS[sop.status]}`}>{sop.status}</Badge>
+              <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{sop.title}</h1>
+              <Badge className={`text-xs ${STATUS_COLORS[sop.status]}`}>{sop.status === "PUBLISHED" ? "In use" : sop.status === "DRAFT" ? "Draft" : "Archived"}</Badge>
             </div>
             <p className="mt-1 text-sm text-text-2">
-              {sop.category.name} · v{sop.version} · by {sop.createdBy.name} · {new Date(sop.createdAt).toLocaleDateString()}
+              {sop.category.name} · v{sop.version} · by {sop.createdBy.name} · {new Date(sop.createdAt).toLocaleDateString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short", year: "numeric" })}
             </p>
-            {saveMsg && <p className="mt-1.5 inline-flex items-center gap-1 text-sm text-green-600"><CheckCircle2 className="h-3.5 w-3.5" />{saveMsg}</p>}
+            {saveMsg && <p className="mt-1.5 inline-flex items-center gap-1 text-sm text-ok-text"><CheckCircle2 className="h-3.5 w-3.5" />{saveMsg}</p>}
           </div>
           <div className="flex gap-2">
             {sop.status === "DRAFT" && (
-              <Button onClick={() => changeStatus("PUBLISHED")} disabled={saving} size="sm" className="bg-green-600 hover:bg-green-700">
+              <Button onClick={() => changeStatus("PUBLISHED")} disabled={saving} size="sm" className="bg-ok hover:bg-ok">
                 <Send className="mr-1.5 h-3.5 w-3.5" />Publish
               </Button>
             )}
@@ -224,7 +224,7 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
             {sop.status === "ARCHIVED" && (
               <Button onClick={() => changeStatus("DRAFT")} disabled={saving} size="sm" variant="outline">Revert to Draft</Button>
             )}
-            <Button onClick={handleDelete} size="sm" variant="outline" className="text-red-500 hover:bg-red-50 border-red-200">
+            <Button onClick={handleDelete} size="sm" variant="outline" className="text-danger-text hover:bg-danger-soft border-danger/30">
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -341,7 +341,7 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                           <span className="text-[10px] text-text-2">Photo required</span>
                         </label>
                       </div>
-                      <button onClick={() => removeStep(i)} className="self-start rounded p-1 text-text-3 hover:bg-red-50 hover:text-red-500">
+                      <button onClick={() => removeStep(i)} className="self-start rounded p-1 text-text-3 hover:bg-danger-soft hover:text-danger-text">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -357,7 +357,7 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                         {step.description && <p className="text-xs text-text-3 mt-0.5">{step.description}</p>}
                       </div>
                       {step.photoRequired && (
-                        <span className="flex items-center gap-1 shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] text-blue-600">
+                        <span className="flex items-center gap-1 shrink-0 rounded-full bg-info-soft px-2 py-0.5 text-[10px] text-info-text">
                           <Camera className="h-3 w-3" />Photo
                         </span>
                       )}
@@ -404,12 +404,12 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                 </div>
                 <div className="flex justify-between">
                   <span className="text-text-2">Created</span>
-                  <span className="text-text-2">{new Date(sop.createdAt).toLocaleDateString()}</span>
+                  <span className="text-text-2">{new Date(sop.createdAt).toLocaleDateString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short", year: "numeric" })}</span>
                 </div>
                 {sop.publishedAt && (
                   <div className="flex justify-between">
                     <span className="text-text-2">Published</span>
-                    <span className="text-text-2">{new Date(sop.publishedAt).toLocaleDateString()}</span>
+                    <span className="text-text-2">{new Date(sop.publishedAt).toLocaleDateString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short", year: "numeric" })}</span>
                   </div>
                 )}
                 <div className="border-t border-line pt-3 mt-3">
@@ -444,7 +444,7 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                           <div className="flex flex-wrap gap-1">
                             {expectedTimes.map((t) => (
                               <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[10px] text-brand-text">
-                                {t}<button onClick={() => removeExpectedTime(t)} className="hover:text-red-500">×</button>
+                                {t}<button onClick={() => removeExpectedTime(t)} className="hover:text-danger-text">×</button>
                               </span>
                             ))}
                           </div>
@@ -533,7 +533,7 @@ export default function SopDetailPage({ params }: { params: Promise<{ id: string
                 <div className="space-y-1.5">
                   {sop.sopOutlets.map((a) => (
                     <div key={a.id} className="flex items-center gap-2 rounded-md bg-sunken px-2.5 py-1.5">
-                      <div className="h-2 w-2 rounded-full bg-green-400" />
+                      <div className="h-2 w-2 rounded-full bg-ok" />
                       <span className="text-sm text-text-2">{a.outlet.name}</span>
                       <span className="text-[10px] text-text-3 ml-auto">{a.outlet.code}</span>
                     </div>

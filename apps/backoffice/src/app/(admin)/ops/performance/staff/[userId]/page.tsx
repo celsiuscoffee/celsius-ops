@@ -55,9 +55,9 @@ export default function StaffPerformancePage({ params }: { params: Promise<{ use
         <Link href="/ops/performance" className="inline-flex items-center gap-1 text-sm text-text-2 hover:text-text-2 mb-3">
           <ArrowLeft className="h-4 w-4" />Back to Performance
         </Link>
-        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
-          {staff?.name ?? "Staff"} — Performance
-        </h2>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
+          {staff?.name ?? "Staff"}: checklists
+        </h1>
         {staff && (
           <p className="mt-0.5 text-sm text-text-2">{staff.role}</p>
         )}
@@ -82,9 +82,9 @@ export default function StaffPerformancePage({ params }: { params: Promise<{ use
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
             {[
               { label: "Checklists", value: `${staff.completed}/${staff.total}`, icon: ClipboardCheck, color: "text-brand-text", bg: "bg-brand-soft" },
-              { label: "Completion Rate", value: `${staff.completionRate}%`, icon: TrendingUp, color: staff.completionRate >= 80 ? "text-green-600" : "text-yellow-600", bg: staff.completionRate >= 80 ? "bg-green-100" : "bg-yellow-100" },
-              { label: "Items Completed", value: `${staff.completedItems}/${staff.items}`, icon: CheckCircle2, color: "text-blue-600", bg: "bg-blue-100" },
-              { label: "Photo Compliance", value: `${staff.photoRate}%`, icon: Camera, color: "text-purple-600", bg: "bg-purple-100" },
+              { label: "Completion Rate", value: `${staff.completionRate}%`, icon: TrendingUp, color: staff.completionRate >= 80 ? "text-ok-text" : "text-warn-text", bg: staff.completionRate >= 80 ? "bg-ok-soft" : "bg-warn-soft" },
+              { label: "Items Completed", value: `${staff.completedItems}/${staff.items}`, icon: CheckCircle2, color: "text-info-text", bg: "bg-info-soft" },
+              { label: "Photo Compliance", value: `${staff.photoRate}%`, icon: Camera, color: "text-info-text", bg: "bg-info-soft" },
             ].map((stat) => (
               <Card key={stat.label}>
                 <CardContent className="flex items-center gap-4 p-5">
@@ -113,12 +113,12 @@ export default function StaffPerformancePage({ params }: { params: Promise<{ use
                         <span className="text-[9px] text-text-3">{d.completed}/{d.total}</span>
                         <div className="w-full bg-sunken rounded-t relative" style={{ height: "80px" }}>
                           <div
-                            className={`absolute bottom-0 w-full rounded-t transition-all ${rate === 100 ? "bg-green-500" : "bg-ink"}`}
+                            className={`absolute bottom-0 w-full rounded-t transition-all ${rate === 100 ? "bg-ok" : "bg-ink"}`}
                             style={{ height: `${rate}%` }}
                           />
                         </div>
                         <span className="text-[9px] text-text-3">
-                          {new Date(d.date).toLocaleDateString("en", { weekday: "short" })}
+                          {new Date(d.date + "T00:00:00Z").toLocaleDateString("en-GB", { timeZone: "UTC", weekday: "short" })}
                         </span>
                       </div>
                     );
@@ -133,19 +133,19 @@ export default function StaffPerformancePage({ params }: { params: Promise<{ use
             <Card>
               <CardContent className="p-5">
                 <h3 className="text-sm font-semibold text-text mb-4 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-yellow-500" />Incomplete Checklists
+                  <AlertCircle className="h-4 w-4 text-warn-text" />Incomplete Checklists
                 </h3>
                 <div className="space-y-2">
                   {data.incomplete.map((item) => (
                     <div key={item.id} className="flex items-center gap-3 rounded-lg border border-line p-3">
-                      <Clock className="h-4 w-4 text-yellow-500 shrink-0" />
+                      <Clock className="h-4 w-4 text-warn-text shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-text">{item.sopTitle}</p>
                         <p className="text-[10px] text-text-3">
-                          {item.outlet} · {item.shift} · {new Date(item.date).toLocaleDateString()}
+                          {item.outlet} · {item.shift} · {new Date(item.date).toLocaleDateString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short" })}
                         </p>
                       </div>
-                      <Badge variant="outline" className="text-[10px] text-yellow-600 border-yellow-300">
+                      <Badge variant="outline" className="text-[10px] text-warn-text border-warn/30">
                         {item.itemsCompleted}/{item.totalItems}
                       </Badge>
                     </div>

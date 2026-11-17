@@ -38,9 +38,9 @@ const RECURRENCE_LABELS: Record<string, string> = {
 };
 
 const SEVERITY_CONFIG = {
-  critical: { icon: XCircle, color: "text-red-500", bg: "bg-red-50", border: "border-l-red-400", badge: "bg-red-100 text-red-700" },
-  warning: { icon: AlertTriangle, color: "text-amber-500", bg: "bg-amber-50", border: "border-l-amber-400", badge: "bg-amber-100 text-amber-700" },
-  ok: { icon: CheckCircle2, color: "text-green-500", bg: "bg-green-50", border: "border-l-green-400", badge: "bg-green-100 text-green-700" },
+  critical: { icon: XCircle, color: "text-danger-text", bg: "bg-danger-soft", border: "border-l-danger/30", badge: "bg-danger-soft text-danger-text" },
+  warning: { icon: AlertTriangle, color: "text-warn-text", bg: "bg-warn-soft", border: "border-l-warn/30", badge: "bg-warn-soft text-warn-text" },
+  ok: { icon: CheckCircle2, color: "text-ok-text", bg: "bg-ok-soft", border: "border-l-ok/30", badge: "bg-ok-soft text-ok-text" },
 };
 
 /**
@@ -58,11 +58,11 @@ export function SopCoverage() {
     <section className="mb-8">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-foreground">Coverage</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">Is every SOP scheduled at every outlet it applies to?</p>
+          <h2 className="text-base font-semibold text-text">Coverage</h2>
+          <p className="mt-0.5 text-sm text-text-3">Is every SOP scheduled at every outlet it applies to?</p>
         </div>
         {data && data.summary.coveredSops > 0 && (
-          <button type="button" onClick={() => setShowCovered((v) => !v)} className="text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground">
+          <button type="button" onClick={() => setShowCovered((v) => !v)} className="text-xs font-medium text-text-3 underline underline-offset-2 hover:text-text">
             {showCovered ? "Show gaps only" : `Show covered SOPs too (${data.summary.coveredSops})`}
           </button>
         )}
@@ -82,19 +82,19 @@ export function SopCoverage() {
                 <p className="text-xs text-text-2">Coverage</p></div>
             </CardContent></Card>
             <Card><CardContent className="flex items-center gap-3 p-4">
-              <div className="rounded-lg bg-green-100 p-2"><CheckCircle2 className="h-5 w-5 text-green-500" /></div>
+              <div className="rounded-lg bg-ok-soft p-2"><CheckCircle2 className="h-5 w-5 text-ok-text" /></div>
               <div><p className="text-2xl font-bold text-text">{data.summary.coveredSops}/{data.summary.totalSops}</p>
                 <p className="text-xs text-text-2">SOPs Covered</p></div>
             </CardContent></Card>
             <Card><CardContent className="flex items-center gap-3 p-4">
-              <div className={`rounded-lg p-2 ${data.summary.criticalGaps > 0 ? "bg-red-100" : "bg-sunken"}`}>
-                <XCircle className={`h-5 w-5 ${data.summary.criticalGaps > 0 ? "text-red-500" : "text-text-3"}`} /></div>
+              <div className={`rounded-lg p-2 ${data.summary.criticalGaps > 0 ? "bg-danger-soft" : "bg-sunken"}`}>
+                <XCircle className={`h-5 w-5 ${data.summary.criticalGaps > 0 ? "text-danger-text" : "text-text-3"}`} /></div>
               <div><p className="text-2xl font-bold text-text">{data.summary.criticalGaps}</p>
                 <p className="text-xs text-text-2">Critical Gaps</p></div>
             </CardContent></Card>
             <Card><CardContent className="flex items-center gap-3 p-4">
-              <div className={`rounded-lg p-2 ${data.summary.warningGaps > 0 ? "bg-amber-100" : "bg-sunken"}`}>
-                <AlertTriangle className={`h-5 w-5 ${data.summary.warningGaps > 0 ? "text-amber-500" : "text-text-3"}`} /></div>
+              <div className={`rounded-lg p-2 ${data.summary.warningGaps > 0 ? "bg-warn-soft" : "bg-sunken"}`}>
+                <AlertTriangle className={`h-5 w-5 ${data.summary.warningGaps > 0 ? "text-warn-text" : "text-text-3"}`} /></div>
               <div><p className="text-2xl font-bold text-text">{data.summary.warningGaps}</p>
                 <p className="text-xs text-text-2">Warnings</p></div>
             </CardContent></Card>
@@ -102,7 +102,7 @@ export function SopCoverage() {
 
           {/* SOP list: gaps first, covered on request */}
           {shown.length === 0 && (
-            <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">Every SOP is scheduled where it applies.</p>
+            <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-text-3">Every SOP is scheduled where it applies.</p>
           )}
           <div className="space-y-3">
             {shown.map((sop) => {
@@ -141,9 +141,9 @@ export function SopCoverage() {
                     <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
                       {sop.outlets.map((o) => (
                         <div key={o.outletId} className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs ${
-                          o.status === "ok" ? "bg-green-50 text-green-700" :
-                          o.status === "warning" ? "bg-amber-50 text-amber-700" :
-                          "bg-red-50 text-red-700"
+                          o.status === "ok" ? "bg-ok-soft text-ok-text" :
+                          o.status === "warning" ? "bg-warn-soft text-warn-text" :
+                          "bg-danger-soft text-danger-text"
                         }`}>
                           {o.status === "ok" ? <CheckCircle2 className="h-3 w-3 shrink-0" /> :
                            o.status === "warning" ? <AlertTriangle className="h-3 w-3 shrink-0" /> :

@@ -74,7 +74,8 @@ export default function NewSopPage() {
         <Link href="/ops/sops" className="inline-flex items-center gap-1 text-sm text-text-2 hover:text-text-2 mb-3">
           <ArrowLeft className="h-4 w-4" />Back to SOPs
         </Link>
-        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Create SOP</h2>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Create SOP</h1>
+        <p className="mt-0.5 text-sm text-text-2">Write the steps once; staff tick them off in the Staff app at each outlet you pick.</p>
       </div>
 
       <div className="max-w-3xl space-y-6">
@@ -133,7 +134,7 @@ export default function NewSopPage() {
                       <span className="text-[10px] text-text-2">Photo required</span>
                     </label>
                   </div>
-                  <button onClick={() => removeStep(i)} className="self-start rounded-md p-1.5 text-text-3 hover:bg-red-50 hover:text-red-500">
+                  <button onClick={() => removeStep(i)} className="self-start rounded-md p-1.5 text-text-3 hover:bg-danger-soft hover:text-danger-text">
                     <Trash2 className="h-3.5 w-3.5" /></button>
                 </div>
               ))}
@@ -141,7 +142,7 @@ export default function NewSopPage() {
           )}
         </CardContent></Card>
 
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        {error && <p className="text-sm text-danger-text">{error}</p>}
         <div className="flex gap-3 pb-8">
           <Button variant="outline" onClick={() => handleSubmit("DRAFT")} disabled={saving}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}<Save className="mr-2 h-4 w-4" />Save as Draft</Button>

@@ -26,12 +26,7 @@ type Payload = { reminders: Reminder[]; assignees: Assignee[]; memos: Memo[] };
 
 function fmtTime(iso: string | null): string {
   if (!iso) return "";
-  return new Date(iso).toLocaleString("en-MY", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }
 
 export default function RemindersPanel({ onChange }: { onChange: () => void }) {
@@ -102,7 +97,7 @@ export default function RemindersPanel({ onChange }: { onChange: () => void }) {
       </div>
 
       {/* New reminder */}
-      <div className="mb-4 rounded-lg border bg-muted/30 p-3">
+      <div className="mb-4 rounded-lg border bg-sunken p-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Input
             value={title}
@@ -121,13 +116,13 @@ export default function RemindersPanel({ onChange }: { onChange: () => void }) {
             type="datetime-local"
             value={due}
             onChange={(e) => setDue(e.target.value)}
-            className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+            className="h-9 rounded-md border bg-bg px-2 text-sm text-text"
             disabled={saving}
           />
           <select
             value={assignee}
             onChange={(e) => setAssignee(e.target.value)}
-            className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+            className="h-9 rounded-md border bg-bg px-2 text-sm text-text"
             disabled={saving}
           >
             <option value="">Unassigned (me)</option>
@@ -148,13 +143,13 @@ export default function RemindersPanel({ onChange }: { onChange: () => void }) {
       </div>
 
       {isLoading ? (
-        <div className="p-6 text-center text-muted-foreground">
+        <div className="p-6 text-center text-text-3">
           <Loader2 className="mx-auto h-5 w-5 animate-spin" />
         </div>
       ) : (
         <>
           {reminders.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-text-3">
               No open reminders. Add one above.
             </div>
           ) : (
@@ -166,20 +161,20 @@ export default function RemindersPanel({ onChange }: { onChange: () => void }) {
                     key={r.id}
                     className={
                       "rounded-lg border p-3 " +
-                      (r.overdue ? "border-red-200 bg-red-50/40" : snoozed ? "bg-muted/30" : "bg-card")
+                      (r.overdue ? "border-danger/30 bg-danger-soft" : snoozed ? "bg-sunken" : "bg-card")
                     }
                   >
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-foreground">{r.title}</div>
-                        {r.notes && <div className="mt-0.5 text-xs text-muted-foreground">{r.notes}</div>}
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <div className="text-sm font-medium text-text">{r.title}</div>
+                        {r.notes && <div className="mt-0.5 text-xs text-text-3">{r.notes}</div>}
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-text-3">
                           {r.dueAt && (
-                            <span className={"flex items-center gap-1 " + (r.overdue ? "text-red-600" : "")}>
+                            <span className={"flex items-center gap-1 " + (r.overdue ? "text-danger-text" : "")}>
                               <Clock className="h-3 w-3" /> {fmtTime(r.dueAt)}
                             </span>
                           )}
-                          {r.overdue && <Badge className="bg-red-600 text-[10px] text-white">Overdue</Badge>}
+                          {r.overdue && <Badge className="bg-danger text-[10px] text-white">Overdue</Badge>}
                           {snoozed && (
                             <Badge variant="secondary" className="text-[10px]">
                               Snoozed → {fmtTime(r.snoozedUntil)}
@@ -187,7 +182,7 @@ export default function RemindersPanel({ onChange }: { onChange: () => void }) {
                           )}
                           {r.assigneeName && <span>→ {r.assigneeName}</span>}
                           {r.assigneeName && r.notified && (
-                            <span className="flex items-center gap-0.5 text-green-700" title="Pinged on WhatsApp">
+                            <span className="flex items-center gap-0.5 text-ok-text" title="Pinged on WhatsApp">
                               <Send className="h-3 w-3" /> WhatsApp&apos;d
                             </span>
                           )}
@@ -221,7 +216,7 @@ export default function RemindersPanel({ onChange }: { onChange: () => void }) {
                           onClick={() => act(r.id, "cancel")}
                           disabled={busy === r.id}
                           title="Cancel"
-                          className="text-muted-foreground hover:text-red-600"
+                          className="text-text-3 hover:text-danger-text"
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -236,22 +231,22 @@ export default function RemindersPanel({ onChange }: { onChange: () => void }) {
           {/* HR reminder memos — read-only mirror */}
           {memos.length > 0 && (
             <div className="mt-5">
-              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-text-3">
                 <FileText className="h-3.5 w-3.5" /> HR reminder memos
               </div>
               <ul className="space-y-2">
                 {memos.map((m) => (
                   <li key={m.id} className="rounded-lg border border-dashed p-3">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium text-foreground">{m.title}</span>
+                      <span className="text-sm font-medium text-text">{m.title}</span>
                       {m.severity && m.severity !== "info" && (
-                        <Badge className="bg-amber-100 text-[10px] text-amber-700">{m.severity}</Badge>
+                        <Badge className="bg-warn-soft text-[10px] text-warn-text">{m.severity}</Badge>
                       )}
-                      <span className="ml-auto text-[10px] text-muted-foreground">{fmtTime(m.issuedAt)}</span>
+                      <span className="ml-auto text-[10px] text-text-3">{fmtTime(m.issuedAt)}</span>
                     </div>
-                    {m.body && <div className="mt-0.5 text-xs text-muted-foreground">{m.body}</div>}
+                    {m.body && <div className="mt-0.5 text-xs text-text-3">{m.body}</div>}
                     {m.recipients.length > 0 && (
-                      <div className="mt-1 text-[11px] text-muted-foreground">→ {m.recipients.join(", ")}</div>
+                      <div className="mt-1 text-[11px] text-text-3">→ {m.recipients.join(", ")}</div>
                     )}
                   </li>
                 ))}

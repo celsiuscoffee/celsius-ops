@@ -115,8 +115,8 @@ function fmtRM(v: number): string {
 }
 
 const STATUS_STYLE: Record<KpiStatus, { pill: string; text: string; Icon: React.ElementType }> = {
-  hit: { pill: "bg-emerald-50 border-emerald-200", text: "text-emerald-700", Icon: CheckCircle2 },
-  miss: { pill: "bg-red-50 border-red-200", text: "text-red-700", Icon: XCircle },
+  hit: { pill: "bg-ok-soft border-ok/30", text: "text-ok-text", Icon: CheckCircle2 },
+  miss: { pill: "bg-danger-soft border-danger/30", text: "text-danger-text", Icon: XCircle },
   nodata: { pill: "bg-sunken border-line", text: "text-text-3", Icon: MinusCircle },
 };
 
@@ -140,10 +140,10 @@ function SummaryTile({
   return (
     <div className="rounded-xl border border-line bg-surface p-4 shadow-sm">
       <div className="flex items-center gap-2 mb-2">
-        <Icon className={cn("h-4 w-4", tone === "good" ? "text-emerald-500" : "text-text-3")} />
+        <Icon className={cn("h-4 w-4", tone === "good" ? "text-ok-text" : "text-text-3")} />
         <span className="text-xs font-medium text-text-2">{label}</span>
       </div>
-      <div className={cn("text-2xl font-bold", tone === "good" ? "text-emerald-600" : "text-text")}>
+      <div className={cn("text-2xl font-bold", tone === "good" ? "text-ok-text" : "text-text")}>
         {value}
       </div>
       {sub && <div className="mt-0.5 text-xs text-text-3">{sub}</div>}
@@ -216,9 +216,9 @@ export default function AreaScorecardPage() {
       {/* Header */}
       <div className="mb-5 flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Area Scorecard</h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Which outlets are hitting KPI — live from the POS &amp; apps
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Area scorecard</h1>
+          <p className="mt-0.5 text-sm text-text-3">
+            Which outlets are hitting their targets, live from the tills and the apps.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -246,7 +246,7 @@ export default function AreaScorecardPage() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
+        <div className="mb-4 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-xs text-danger-text">{error}</div>
       )}
 
       {/* Loading */}
@@ -297,7 +297,7 @@ export default function AreaScorecardPage() {
                   key={o.id}
                   className={cn(
                     "rounded-xl border bg-surface p-4 shadow-sm",
-                    allHit ? "border-emerald-200" : "border-line",
+                    allHit ? "border-ok/30" : "border-line",
                   )}
                 >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -307,7 +307,7 @@ export default function AreaScorecardPage() {
                         className={cn(
                           "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold",
                           i === 0 && o.measurable > 0
-                            ? "bg-amber-100 text-amber-700"
+                            ? "bg-warn-soft text-warn-text"
                             : "bg-sunken text-text-2",
                         )}
                       >
@@ -320,7 +320,7 @@ export default function AreaScorecardPage() {
                         </div>
                         <div className="mt-0.5 flex items-center gap-2 text-[11px] text-text-3">
                           <span>{fmtRM(o.revenue)}</span>
-                          {!o.onPos && <span className="text-amber-500">· not on POS</span>}
+                          {!o.onPos && <span className="text-warn-text">· not on POS</span>}
                         </div>
                       </div>
                     </div>
@@ -331,10 +331,10 @@ export default function AreaScorecardPage() {
                         className={cn(
                           "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
                           allHit
-                            ? "bg-emerald-100 text-emerald-700"
+                            ? "bg-ok-soft text-ok-text"
                             : o.measurable === 0
                               ? "bg-sunken text-text-3"
-                              : "bg-amber-100 text-amber-700",
+                              : "bg-warn-soft text-warn-text",
                         )}
                       >
                         <Trophy className="h-3.5 w-3.5" />

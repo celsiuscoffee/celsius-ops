@@ -1,8 +1,9 @@
 "use client";
 
 import { useFetch } from "@/lib/use-fetch";
+import { KeyNumber } from "@/components/ui/key-number";
 import { useState, useEffect } from "react";
-import { ChevronRight, CheckCircle2, AlertCircle, Search, Plus, Loader2, X, Download, Sparkles, FileText, MessageSquare } from "lucide-react";
+import { ArrowLeft, ChevronRight, CheckCircle2, AlertCircle, Search, Plus, Loader2, X, Download, Sparkles, FileText, MessageSquare } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { EmployeeProfile } from "@/lib/hr/types";
@@ -224,6 +225,7 @@ export default function EmployeesPage() {
     e.hrProfile?.employment_type === "full_time" && !e.hrProfile?.confirmed_at;
   const probationCount = activeEmployees.filter(isOnProbation).length;
   const resignedCount = resignedEmployees.length;
+  const onboardingOpen = activeEmployees.filter((e) => e.onboarding && e.onboarding.total > 0 && e.onboarding.done < e.onboarding.total).length;
 
   const roleOptions = Array.from(new Set(allEmployees.map((e) => e.role))).sort();
   const outletOptions = Array.from(
@@ -251,8 +253,6 @@ export default function EmployeesPage() {
     return matchesSearch && matchesEmployment && matchesRole && matchesOutlet;
   });
 
-  const configured = employees.filter((e) => e.hrProfile).length;
-  const total = employees.length;
   const clearAll = () => {
     setSearch("");
     setFilter("all");
@@ -362,13 +362,12 @@ export default function EmployeesPage() {
   };
 
   return (
-    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
-      <div className="flex items-start justify-between gap-4">
+    <div className="max-w-[1100px] space-y-5 px-4 pt-6 pb-10 md:px-8">
+      {!showCreate && !bulkMemoOpen && (<>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Employees</h1>
-          <p className="text-sm text-muted-foreground">
-            {configured}/{total} profiles configured
-          </p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">People</h1>
+          <p className="mt-0.5 text-sm text-text-2">Who works here, at which outlet, and whose profile, probation or onboarding needs you.</p>
           {scope === "direct-reports" && (
             <p className="mt-1 text-xs text-brand-text">Showing your direct reports only.</p>
           )}
@@ -377,52 +376,57 @@ export default function EmployeesPage() {
           <div className="flex items-center gap-2">
             {/* The bulk LoE wizard existed with zero inbound links — reachable
                 only by typing the URL. */}
-            <Link
-              href="/hr/employees/import"
-              className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
-            >
+            <Link href="/hr/employees/import" className="inline-flex h-10 items-center gap-2 rounded-ctl border border-line-2 px-4 text-sm font-medium text-text hover:bg-sunken">
               <FileText className="h-4 w-4" />
-              Import LoEs
+              Import letters of employment
             </Link>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink/90"
-            >
+            <button onClick={() => { setShowCreate(true); window.scrollTo(0, 0); }} className="inline-flex h-10 items-center gap-2 rounded-ctl bg-ink px-4 text-sm font-semibold text-on-ink hover:bg-ink-hover">
               <Plus className="h-4 w-4" />
-              New Employee
+              New employee
             </button>
           </div>
         )}
       </div>
 
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label="Active staff" value={data ? String(activeEmployees.length) : null}
+          note={<><b className="font-semibold text-text-2">{ftCount}</b> full-time · <b className="font-semibold text-text-2">{ptCount}</b> part-time</>} />
+        <KeyNumber label="On probation" value={data ? String(probationCount) : null} tone={probationCount > 0 ? "warn" : undefined}
+          note={probationCount > 0 ? "waiting to be confirmed" : "everyone confirmed"} />
+        <KeyNumber label="No profile" value={data ? String(noProfileCount) : null} tone={noProfileCount > 0 ? "warn" : undefined}
+          note={noProfileCount > 0 ? "job, outlet and pay not set up" : "every profile set up"} />
+        <KeyNumber label="Onboarding" value={data ? String(onboardingOpen) : null} tone={onboardingOpen > 0 ? "warn" : undefined}
+          note={onboardingOpen > 0 ? "not finished yet" : "everyone onboarded"} />
+      </div>
+
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
         <input
           type="text"
-          placeholder="Search by name, full name, or phone..."
+          placeholder="Search by name or phone…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-lg border bg-background py-2 pl-10 pr-4 text-sm"
+          className="h-10 w-full rounded-ctl border border-line bg-surface pl-10 pr-4 text-sm text-text"
         />
       </div>
 
       <div className="flex flex-wrap gap-2">
         {([
           { key: "all", label: `All (${activeEmployees.length})` },
-          { key: "full_time", label: `Full-Time (${ftCount})` },
-          { key: "part_time", label: `Part-Time (${ptCount})` },
+          { key: "full_time", label: `Full-time (${ftCount})` },
+          { key: "part_time", label: `Part-time (${ptCount})` },
           ...(probationCount > 0 ? [{ key: "probation" as const, label: `Probation (${probationCount})` }] : []),
           ...(contractCount > 0 ? [{ key: "contract" as const, label: `Contract (${contractCount})` }] : []),
-          ...(noProfileCount > 0 ? [{ key: "no_profile" as const, label: `No Profile (${noProfileCount})` }] : []),
+          ...(noProfileCount > 0 ? [{ key: "no_profile" as const, label: `No profile (${noProfileCount})` }] : []),
           ...(resignedCount > 0 ? [{ key: "resigned" as const, label: `Resigned (${resignedCount})` }] : []),
         ] as const).map((tab) => (
           <button
             key={tab.key}
             onClick={() => setFilter(tab.key)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+            className={`h-8 rounded-full border px-3 text-xs transition ${
               filter === tab.key
-                ? "border-ink bg-ink text-on-ink"
-                : "bg-background hover:bg-muted"
+                ? "border-text bg-raised font-semibold text-text"
+                : "border-line text-text-2 hover:bg-sunken"
             }`}
           >
             {tab.label}
@@ -432,11 +436,11 @@ export default function EmployeesPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-xs">
-          <span className="font-medium text-muted-foreground">Role</span>
+          <span className="font-medium text-text-3">Role</span>
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
-            className="rounded-lg border bg-background px-2 py-1.5 text-xs"
+            className="h-9 rounded-ctl border border-line bg-surface px-2 text-xs text-text"
           >
             <option value="all">All roles</option>
             {roleOptions.map((r) => (
@@ -446,11 +450,11 @@ export default function EmployeesPage() {
         </label>
 
         <label className="flex items-center gap-2 text-xs">
-          <span className="font-medium text-muted-foreground">Outlet</span>
+          <span className="font-medium text-text-3">Outlet</span>
           <select
             value={outletFilter}
             onChange={(e) => setOutletFilter(e.target.value)}
-            className="rounded-lg border bg-background px-2 py-1.5 text-xs"
+            className="h-9 rounded-ctl border border-line bg-surface px-2 text-xs text-text"
           >
             <option value="all">All outlets</option>
             <option value="none">No outlet (HQ)</option>
@@ -463,7 +467,7 @@ export default function EmployeesPage() {
         {hasActiveFilters && (
           <button
             onClick={clearAll}
-            className="rounded-lg border px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+            className="h-9 rounded-ctl border border-line px-3 text-xs font-medium text-text-2 hover:bg-sunken"
           >
             Clear filters
           </button>
@@ -472,7 +476,7 @@ export default function EmployeesPage() {
 
       {/* Select-all bar — only render once there's at least one row to act on. */}
       {employees.length > 0 && (
-        <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-xs">
+        <div className="flex items-center justify-between rounded-ctl bg-sunken px-3 py-2 text-xs">
           <label className="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -484,7 +488,7 @@ export default function EmployeesPage() {
               }}
               onChange={toggleSelectAllVisible}
             />
-            <span className="font-medium text-muted-foreground">
+            <span className="font-medium text-text-3">
               {selectedIds.size > 0
                 ? `${selectedIds.size} selected`
                 : `Select all visible (${employees.length})`}
@@ -493,7 +497,7 @@ export default function EmployeesPage() {
           {selectedIds.size > 0 && (
             <button
               onClick={clearSelection}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-text-3 hover:text-text"
             >
               Clear selection
             </button>
@@ -501,7 +505,8 @@ export default function EmployeesPage() {
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="overflow-hidden rounded-card border border-line bg-surface">
+        {employees.length === 0 && <p className="px-4 py-12 text-center text-sm text-text-3">No one matches.</p>}
         {employees.map((emp) => {
           const hasProfile = !!emp.hrProfile;
           const resigned = isResigned(emp);
@@ -533,7 +538,7 @@ export default function EmployeesPage() {
                   router.push(`/hr/employees/${emp.id}`);
                 }
               }}
-              className={`flex cursor-pointer items-center gap-4 rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md ${
+              className={`flex cursor-pointer items-center gap-3 border-b border-line px-4 py-3 last:border-b-0 transition-colors hover:bg-sunken/50 ${
                 resigned ? "opacity-70" : ""
               } ${isSelected ? "ring-2 ring-brand/60" : ""}`}
             >
@@ -559,34 +564,32 @@ export default function EmployeesPage() {
                   className={`h-10 w-10 shrink-0 rounded-full object-cover ${resigned ? "grayscale" : ""}`}
                 />
               ) : (
-                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${
-                  resigned ? "bg-red-300" : hasProfile ? "bg-green-500" : "bg-line"
-                }`}>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sunken text-sm font-semibold text-text-2">
                   {(emp.fullName || emp.name).split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                 </div>
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <p className="font-semibold break-words">{emp.fullName || emp.name}</p>
+                  <p className="break-words text-sm font-medium text-text">{emp.fullName || emp.name}</p>
                   {emp.fullName && emp.name !== emp.fullName && (
-                    <span className="text-xs text-muted-foreground">({emp.name})</span>
+                    <span className="text-xs text-text-3">({emp.name})</span>
                   )}
-                  <span className="rounded-full bg-sunken px-2 py-0.5 text-[10px] font-medium text-text-2">
+                  <span className="rounded-full bg-sunken px-2 py-0.5 text-[11px] text-text-2">
                     {emp.role}
                   </span>
                   {emp.hrProfile?.employment_type === "part_time" && (
-                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
-                      PART-TIME
+                    <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn-text">
+                      Part-time
                     </span>
                   )}
                   {emp.hrProfile?.employment_type === "full_time" && (
-                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                      FULL-TIME
+                    <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[11px] text-ok-text">
+                      Full-time
                     </span>
                   )}
                   {resigned && (
-                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-800">
-                      RESIGNED
+                    <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[11px] text-danger-text">
+                      Resigned
                     </span>
                   )}
                   {/* Onboarding progress — only shown if there are applicable
@@ -594,36 +597,36 @@ export default function EmployeesPage() {
                   {!resigned && emp.onboarding && emp.onboarding.total > 0 && emp.onboarding.done < emp.onboarding.total && (
                     <span
                       title={`Onboarding ${emp.onboarding.done}/${emp.onboarding.total} complete`}
-                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${
                         emp.onboarding.done === 0
-                          ? "bg-red-50 text-red-700"
+                          ? "bg-danger-soft text-danger-text"
                           : emp.onboarding.done < emp.onboarding.total / 2
-                            ? "bg-amber-50 text-amber-800"
-                            : "bg-blue-50 text-blue-700"
+                            ? "bg-warn-soft text-warn-text"
+                            : "bg-info-soft text-info-text"
                       }`}
                     >
                       <span className={`inline-block h-1.5 w-1.5 rounded-full ${
-                        emp.onboarding.done === 0 ? "bg-red-500"
-                        : emp.onboarding.done < emp.onboarding.total / 2 ? "bg-amber-500"
-                        : "bg-blue-500"
+                        emp.onboarding.done === 0 ? "bg-danger"
+                        : emp.onboarding.done < emp.onboarding.total / 2 ? "bg-warn"
+                        : "bg-info"
                       }`} />
-                      ONBOARDING {emp.onboarding.done}/{emp.onboarding.total}
+                      Onboarding {emp.onboarding.done}/{emp.onboarding.total}
                     </span>
                   )}
                 </div>
                 {resigned && resignedSubtitle && (
-                  <p className="text-xs font-medium text-red-700">{resignedSubtitle}</p>
+                  <p className="text-xs font-medium text-danger-text">{resignedSubtitle}</p>
                 )}
-                <p className="text-sm text-muted-foreground">
+                <p className="text-[12px] text-text-3">
                   {emp.outlet?.name || "HQ"}{" "}
                   {emp.hrProfile?.position && `· ${emp.hrProfile.position}`}
                 </p>
                 {emp.hrProfile?.employment_type === "part_time" && emp.hrProfile?.hourly_rate ? (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-text-3">
                     RM {Number(emp.hrProfile.hourly_rate).toFixed(2)}/hr · weekly pay
                   </p>
                 ) : emp.hrProfile?.basic_salary ? (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-text-3">
                     RM {Number(emp.hrProfile.basic_salary).toLocaleString()}/mo
                   </p>
                 ) : null}
@@ -642,16 +645,16 @@ export default function EmployeesPage() {
                         "_blank",
                       );
                     }}
-                    className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-100"
-                    title="Download EA Form"
+                    className="flex h-9 items-center gap-1 rounded-ctl border border-line-2 px-2.5 text-[12px] font-medium text-text hover:bg-sunken"
+                    title="Download EA form"
                   >
                     <Download className="h-3.5 w-3.5" />
                     EA
                   </button>
                 ) : hasProfile ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                  <CheckCircle2 className="h-5 w-5 text-ok-text" />
                 ) : (
-                  <AlertCircle className="h-5 w-5 text-amber-400" />
+                  <AlertCircle className="h-5 w-5 text-warn-text" />
                 )}
                 <ChevronRight className="h-4 w-4 text-text-3" />
               </div>
@@ -663,28 +666,28 @@ export default function EmployeesPage() {
       {/* Floating bulk-action bar — only when there's at least one selection. */}
       {selectedIds.size > 0 && (
         <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
-          <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
+          <div className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-raised px-4 py-3 shadow-lg">
             <span className="text-sm font-medium">
               {selectedIds.size} selected
             </span>
             <button
-              onClick={() => setBulkMemoOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-on-ink hover:bg-ink/90"
+              onClick={() => { setBulkMemoOpen(true); window.scrollTo(0, 0); }}
+              className="flex h-9 items-center gap-1.5 rounded-ctl bg-ink px-3 text-xs font-semibold text-on-ink hover:bg-ink-hover"
             >
               <MessageSquare className="h-3.5 w-3.5" />
               Issue memo to {selectedIds.size}
             </button>
             <button
               onClick={exportSelectedCsv}
-              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+              className="flex h-9 items-center gap-1.5 rounded-ctl border border-line-2 px-3 text-xs font-medium text-text hover:bg-sunken"
             >
               <Download className="h-3.5 w-3.5" />
               Export CSV
             </button>
             <button
               onClick={clearSelection}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"
-              title="Clear selection"
+              className="flex h-9 w-9 items-center justify-center rounded-ctl text-text-3 hover:bg-sunken"
+              title="Clear selection" aria-label="Clear selection"
             >
               <X className="h-4 w-4" />
             </button>
@@ -692,31 +695,31 @@ export default function EmployeesPage() {
         </div>
       )}
 
-      {/* Bulk memo modal. Posts to /api/hr/memos with user_ids array. */}
+      </>)}
+
+      {/* Bulk memo: a full page (multi-field). Posts to /api/hr/memos with user_ids array. */}
       {bulkMemoOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!bulkSending) setBulkMemoOpen(false); }}>
-          <div className="w-full max-w-lg rounded-xl bg-background p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Issue memo</h2>
-                <p className="text-xs text-muted-foreground">To {selectedIds.size} {selectedIds.size === 1 ? "employee" : "employees"}</p>
-              </div>
-              <button onClick={() => setBulkMemoOpen(false)} className="rounded p-1 hover:bg-muted" disabled={bulkSending}>
-                <X className="h-4 w-4" />
-              </button>
+        <div>
+          <div className="max-w-[720px]">
+            <button onClick={() => setBulkMemoOpen(false)} disabled={bulkSending} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+              <ArrowLeft className="h-4 w-4" /> All people
+            </button>
+            <div className="mt-3 mb-5">
+              <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Issue memo</h1>
+              <p className="mt-0.5 text-sm text-text-2">To {selectedIds.size} {selectedIds.size === 1 ? "employee" : "employees"}. They see it in the Staff app.</p>
             </div>
 
             {/* Recipient pill summary — shown in a scrollable strip so HR can
                 eyeball who they're about to message before hitting send. */}
-            <div className="mb-3 max-h-20 overflow-y-auto rounded-lg border bg-muted/30 p-2">
+            <div className="mb-3 max-h-20 overflow-y-auto rounded-lg border bg-sunken p-2">
               <div className="flex flex-wrap gap-1">
                 {selectedEmployees.slice(0, 30).map((e) => (
-                  <span key={e.id} className="rounded-full bg-background px-2 py-0.5 text-[11px]">
+                  <span key={e.id} className="rounded-full bg-bg px-2 py-0.5 text-[11px]">
                     {e.fullName || e.name}
                   </span>
                 ))}
                 {selectedEmployees.length > 30 && (
-                  <span className="rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground">
+                  <span className="rounded-full bg-bg px-2 py-0.5 text-[11px] text-text-3">
                     +{selectedEmployees.length - 30} more
                   </span>
                 )}
@@ -725,11 +728,11 @@ export default function EmployeesPage() {
 
             <div className="space-y-3 text-sm">
               <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Type</span>
+                <span className="text-xs font-medium text-text-3">Type</span>
                 <select
                   value={bulkMemoType}
                   onChange={(e) => setBulkMemoType(e.target.value as typeof bulkMemoType)}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm"
                   disabled={bulkSending}
                 >
                   <option value="announcement">Announcement</option>
@@ -739,22 +742,22 @@ export default function EmployeesPage() {
                 </select>
               </label>
               <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Title *</span>
+                <span className="text-xs font-medium text-text-3">Title *</span>
                 <input
                   type="text"
                   value={bulkMemoTitle}
                   onChange={(e) => setBulkMemoTitle(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm"
                   placeholder="e.g. Reminder: clock in within 5 mins of shift start"
                   disabled={bulkSending}
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Body *</span>
+                <span className="text-xs font-medium text-text-3">Body *</span>
                 <textarea
                   value={bulkMemoBody}
                   onChange={(e) => setBulkMemoBody(e.target.value)}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm"
                   rows={5}
                   placeholder="Memo body — supports plain text. Each recipient gets their own ack record."
                   disabled={bulkSending}
@@ -763,21 +766,21 @@ export default function EmployeesPage() {
             </div>
 
             {bulkError && (
-              <p className="mt-3 rounded bg-red-50 px-3 py-2 text-xs text-red-600">{bulkError}</p>
+              <p className="mt-3 rounded bg-danger-soft px-3 py-2 text-xs text-danger-text">{bulkError}</p>
             )}
 
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setBulkMemoOpen(false)}
                 disabled={bulkSending}
-                className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
+                className="h-10 rounded-ctl border border-line-2 px-4 text-sm text-text hover:bg-sunken"
               >
                 Cancel
               </button>
               <button
                 onClick={sendBulkMemo}
                 disabled={bulkSending || !bulkMemoTitle.trim() || !bulkMemoBody.trim()}
-                className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink/90 disabled:opacity-50"
+                className="flex h-10 items-center gap-2 rounded-ctl bg-ink px-4 text-sm font-semibold text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {bulkSending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Send to {selectedIds.size}
@@ -788,13 +791,14 @@ export default function EmployeesPage() {
       )}
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { if (!creating) { setShowCreate(false); clearLoe(); } }}>
-          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-background p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">New Employee</h2>
-              <button onClick={() => { setShowCreate(false); clearLoe(); }} className="rounded p-1 hover:bg-muted" disabled={creating}>
-                <X className="h-4 w-4" />
-              </button>
+        <div>
+          <div className="max-w-[720px]">
+            <button onClick={() => { setShowCreate(false); clearLoe(); }} disabled={creating} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+              <ArrowLeft className="h-4 w-4" /> All people
+            </button>
+            <div className="mt-3 mb-5">
+              <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">New employee</h1>
+              <p className="mt-0.5 text-sm text-text-2">Start from their letter of employment, or fill in the details by hand.</p>
             </div>
 
             <div className="space-y-3 text-sm">
@@ -820,13 +824,13 @@ export default function EmployeesPage() {
                     "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-xs transition " +
                     (loeDragOver
                       ? "border-text bg-raised font-semibold text-text"
-                      : "border-line-2 bg-muted/20 text-muted-foreground hover:bg-muted/30")
+                      : "border-line-2 bg-sunken text-text-3 hover:bg-sunken")
                   }
                 >
                   {parsingLoe ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin text-brand-text" />
-                      <span className="font-medium text-foreground">Parsing LoE with AI…</span>
+                      <span className="font-medium text-text">Parsing LoE with AI…</span>
                     </>
                   ) : loeDragOver ? (
                     <>
@@ -836,7 +840,7 @@ export default function EmployeesPage() {
                   ) : (
                     <>
                       <Sparkles className="h-5 w-5 text-brand-text" />
-                      <span className="font-semibold text-foreground">Upload LoE to auto-fill</span>
+                      <span className="font-semibold text-text">Upload the letter of employment to fill this in</span>
                       <span>We&apos;ll read the letter and prefill the fields below. The PDF also saves to the employee&apos;s Documents.</span>
                       <span className="text-[10px]">Drop a file here, or click to choose · Skip to fill manually</span>
                     </>
@@ -855,17 +859,17 @@ export default function EmployeesPage() {
                 </label>
               ) : (
                 <div className="flex items-center gap-2 rounded-xl border bg-card px-3 py-2 text-xs">
-                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <FileText className="h-4 w-4 shrink-0 text-text-3" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{loeFile.name}</div>
-                    <div className="mt-0.5 text-[10px] text-muted-foreground">
+                    <div className="mt-0.5 text-[10px] text-text-3">
                       {loePrefilled && loeConfidence && (
                         <>
                           Prefilled · confidence{" "}
                           <span className={
-                            loeConfidence === "high" ? "text-emerald-600 font-semibold"
-                            : loeConfidence === "medium" ? "text-amber-600 font-semibold"
-                            : "text-red-600 font-semibold"
+                            loeConfidence === "high" ? "text-ok-text font-semibold"
+                            : loeConfidence === "medium" ? "text-warn-text font-semibold"
+                            : "text-danger-text font-semibold"
                           }>
                             {loeConfidence}
                           </span>
@@ -878,7 +882,7 @@ export default function EmployeesPage() {
                   <button
                     onClick={clearLoe}
                     disabled={creating}
-                    className="rounded-lg border border-red-200 bg-red-50 p-1 text-red-600 hover:bg-red-100"
+                    className="rounded-lg border border-danger/30 bg-danger-soft p-1 text-danger-text hover:bg-danger-soft"
                     title="Remove LoE"
                   >
                     <X className="h-3 w-3" />
@@ -888,46 +892,46 @@ export default function EmployeesPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">Name *</span>
+                  <span className="text-xs font-medium text-text-3">Name *</span>
                   <input type="text" value={newEmp.name} onChange={(e) => setNewEmp({ ...newEmp, name: e.target.value })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Display name" />
+                    className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm" placeholder="Display name" />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">Full legal name</span>
+                  <span className="text-xs font-medium text-text-3">Full legal name</span>
                   <input type="text" value={newEmp.fullName} onChange={(e) => setNewEmp({ ...newEmp, fullName: e.target.value })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="As per IC" />
+                    className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm" placeholder="As per IC" />
                 </label>
               </div>
               {/* Login access toggle — when off, phone + PIN become truly optional */}
-              <label className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs">
+              <label className="flex items-center gap-2 rounded-lg border bg-sunken px-3 py-2 text-xs">
                 <input
                   type="checkbox"
                   checked={wantsLogin}
                   onChange={(e) => setWantsLogin(e.target.checked)}
                 />
                 <span className="font-medium">This employee needs a staff-app login</span>
-                <span className="text-muted-foreground">
+                <span className="text-text-3">
                   — uncheck for contract / vendor / HR-only records
                 </span>
               </label>
 
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">Phone {wantsLogin ? "*" : "(optional)"}</span>
+                  <span className="text-xs font-medium text-text-3">Phone {wantsLogin ? "*" : "(optional)"}</span>
                   <input type="text" value={newEmp.phone} onChange={(e) => setNewEmp({ ...newEmp, phone: e.target.value })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder={wantsLogin ? "+60…" : "Leave blank if no login"} />
+                    className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm" placeholder={wantsLogin ? "+60…" : "Leave blank if no login"} />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">Email</span>
+                  <span className="text-xs font-medium text-text-3">Email</span>
                   <input type="email" value={newEmp.email} onChange={(e) => setNewEmp({ ...newEmp, email: e.target.value })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm" />
                 </label>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">Role *</span>
+                  <span className="text-xs font-medium text-text-3">Role *</span>
                   <select value={newEmp.role} onChange={(e) => setNewEmp({ ...newEmp, role: e.target.value })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm">
+                    className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm">
                     <option value="STAFF">STAFF</option>
                     <option value="MANAGER">MANAGER</option>
                     <option value="ADMIN">ADMIN</option>
@@ -935,14 +939,14 @@ export default function EmployeesPage() {
                   </select>
                 </label>
                 <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">Position</span>
+                  <span className="text-xs font-medium text-text-3">Position</span>
                   <input type="text" value={newEmp.position} onChange={(e) => setNewEmp({ ...newEmp, position: e.target.value })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm" />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">Employment</span>
+                  <span className="text-xs font-medium text-text-3">Employment</span>
                   <select value={newEmp.employment_type} onChange={(e) => setNewEmp({ ...newEmp, employment_type: e.target.value })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm">
+                    className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm">
                     <option value="full_time">Full-time</option>
                     <option value="part_time">Part-time</option>
                     <option value="contract">Contract</option>
@@ -951,21 +955,21 @@ export default function EmployeesPage() {
                 </label>
               </div>
               <label className="block">
-                <span className="text-xs font-medium text-muted-foreground">Outlet</span>
+                <span className="text-xs font-medium text-text-3">Outlet</span>
                 <select value={newEmp.outletId} onChange={(e) => setNewEmp({ ...newEmp, outletId: e.target.value })}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm">
+                  className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm">
                   <option value="">HQ / No outlet</option>
                   {outlets?.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">Join date</span>
+                  <span className="text-xs font-medium text-text-3">Join date</span>
                   <input type="date" value={newEmp.join_date} onChange={(e) => setNewEmp({ ...newEmp, join_date: e.target.value })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm" />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">
+                  <span className="text-xs font-medium text-text-3">
                     {newEmp.employment_type === "part_time" ? "Hourly rate (RM)" : "Basic salary (RM)"}
                   </span>
                   <input type="number" step="0.01"
@@ -973,7 +977,7 @@ export default function EmployeesPage() {
                     onChange={(e) => setNewEmp({ ...newEmp,
                       ...(newEmp.employment_type === "part_time" ? { hourly_rate: e.target.value } : { basic_salary: e.target.value })
                     })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm" />
                 </label>
               </div>
               {/* No allowance field here on purpose: the old input wrote
@@ -982,37 +986,37 @@ export default function EmployeesPage() {
                   RM200 pool; a flat amount is set on the profile afterwards. */}
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">IC number</span>
+                  <span className="text-xs font-medium text-text-3">IC number</span>
                   <input type="text" value={newEmp.ic_number} onChange={(e) => setNewEmp({ ...newEmp, ic_number: e.target.value })}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" />
+                    className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm" />
                 </label>
                 {wantsLogin && (
                   <label className="block">
-                    <span className="text-xs font-medium text-muted-foreground">PIN (4-6 digits)</span>
+                    <span className="text-xs font-medium text-text-3">PIN (4-6 digits)</span>
                     <input type="text" inputMode="numeric" maxLength={6} value={newEmp.pin}
                       onChange={(e) => setNewEmp({ ...newEmp, pin: e.target.value.replace(/\D/g, "") })}
-                      className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm" placeholder="Optional — can set later" />
+                      className="mt-1 w-full rounded-lg border bg-bg px-3 py-2 text-sm" placeholder="Optional — can set later" />
                   </label>
                 )}
               </div>
             </div>
 
             {createError && (
-              <p className="mt-3 rounded bg-red-50 px-3 py-2 text-xs text-red-600">{createError}</p>
+              <p className="mt-3 rounded bg-danger-soft px-3 py-2 text-xs text-danger-text">{createError}</p>
             )}
 
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => { setShowCreate(false); clearLoe(); }}
                 disabled={creating}
-                className="rounded-lg border px-4 py-2 text-sm hover:bg-muted"
+                className="h-10 rounded-ctl border border-line-2 px-4 text-sm text-text hover:bg-sunken"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreate}
                 disabled={creating || !newEmp.name || (wantsLogin && !newEmp.phone)}
-                className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink/90 disabled:opacity-50"
+                className="flex h-10 items-center gap-2 rounded-ctl bg-ink px-4 text-sm font-semibold text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {creating && <Loader2 className="h-4 w-4 animate-spin" />}
                 Create employee

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { KeyNumber } from "@/components/ui/key-number";
 import {
-  Bot,
   ChevronDown,
   ChevronRight,
   CircleOff,
@@ -68,18 +68,18 @@ interface MessageRow {
 }
 
 const KIND_META: Record<MessageRow["kind"], { label: string; emoji: string; classes: string }> = {
-  handoff: { label: "Handoff", emoji: "🔁", classes: "bg-blue-50 text-blue-700" },
-  correction: { label: "Correction", emoji: "🛠", classes: "bg-rose-50 text-rose-700" },
-  learning: { label: "Learned", emoji: "🧠", classes: "bg-violet-50 text-violet-700" },
-  logic_change: { label: "Logic change", emoji: "⚙️", classes: "bg-amber-50 text-amber-700" },
-  report: { label: "Report", emoji: "📣", classes: "bg-emerald-50 text-emerald-700" },
+  handoff: { label: "Handoff", emoji: "🔁", classes: "bg-info-soft text-info-text" },
+  correction: { label: "Correction", emoji: "🛠", classes: "bg-danger-soft text-danger-text" },
+  learning: { label: "Learned", emoji: "🧠", classes: "bg-info-soft text-info-text" },
+  logic_change: { label: "Logic change", emoji: "⚙️", classes: "bg-warn-soft text-warn-text" },
+  report: { label: "Report", emoji: "📣", classes: "bg-ok-soft text-ok-text" },
   note: { label: "Your note", emoji: "💬", classes: "bg-sunken text-text-2" },
 };
 
 const MODE_META: Record<AgentMode, { label: string; classes: string; icon: React.ReactNode }> = {
   off: { label: "Off", classes: "bg-sunken text-text-2", icon: <CircleOff className="h-3.5 w-3.5" /> },
-  shadow: { label: "Shadow", classes: "bg-amber-50 text-amber-700", icon: <Eye className="h-3.5 w-3.5" /> },
-  armed: { label: "Armed", classes: "bg-emerald-50 text-emerald-700", icon: <Zap className="h-3.5 w-3.5" /> },
+  shadow: { label: "Shadow", classes: "bg-warn-soft text-warn-text", icon: <Eye className="h-3.5 w-3.5" /> },
+  armed: { label: "Armed", classes: "bg-ok-soft text-ok-text", icon: <Zap className="h-3.5 w-3.5" /> },
 };
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -223,56 +223,46 @@ export default function AgentsPage() {
 
   return (
     <div className="px-4 pt-6 pb-10 md:px-8">
-      <div className="mb-5 flex items-start justify-between gap-4">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
-            <Bot className="h-5 w-5 text-text-2" /> AI Agents
-          </h2>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">AI agents</h1>
           <p className="mt-0.5 text-sm text-text-2">
-            Every autonomous actor, its mode and cost, and the plain-English record of what they tell each other.
+            Which agents act on their own, which only watch, what they cost, and what they tell each other.
           </p>
         </div>
-        <div className="flex flex-col items-end gap-1.5">
+        <div className="flex flex-col gap-1.5 sm:items-end">
           <div className="flex items-center gap-2">
             <button
               onClick={() => void connectTelegram()}
               disabled={tgBusy}
               title="Register the Telegram webhook so your replies and button taps reach the agents. Set CELSIUS_PULSE_WEBHOOK_SECRET first."
-              className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-text-2 hover:bg-sunken disabled:opacity-50"
+              className="flex h-10 items-center gap-1.5 rounded-ctl border border-line-2 bg-surface px-3 text-sm text-text hover:bg-sunken disabled:opacity-50"
             >
-              <Send className="h-3.5 w-3.5" /> {tgBusy ? "Connecting..." : "Connect Telegram"}
+              <Send className="h-3.5 w-3.5" /> {tgBusy ? "Connecting…" : "Connect Telegram"}
             </button>
             <button
               onClick={() => (view === "fleet" ? void load() : void loadMessages(msgKind))}
-              className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-text-2 hover:bg-sunken"
+              className="flex h-10 items-center gap-1.5 rounded-ctl border border-line-2 bg-surface px-3 text-sm text-text hover:bg-sunken"
             >
               <RefreshCw className="h-3.5 w-3.5" /> Refresh
             </button>
           </div>
           {tgStatus && (
-            <p className={`max-w-xs text-right text-xs ${tgStatus.ok ? "text-green-600" : "text-amber-600"}`}>
+            <p className={`max-w-xs text-xs sm:text-right ${tgStatus.ok ? "text-ok-text" : "text-warn-text"}`}>
               {tgStatus.text}
             </p>
           )}
         </div>
       </div>
 
-      <div className="mb-5 inline-flex overflow-hidden rounded-lg border border-line">
-        <button
-          onClick={() => setView("fleet")}
-          className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${view === "fleet" ? "bg-gray-900 text-white" : "bg-surface text-text-2 hover:bg-sunken"}`}
-        >
-          Fleet
-        </button>
-        <button
-          onClick={() => {
-            setView("conversations");
-            if (messages.length === 0) void loadMessages(msgKind);
-          }}
-          className={`px-3.5 py-1.5 text-sm font-medium transition-colors ${view === "conversations" ? "bg-gray-900 text-white" : "bg-surface text-text-2 hover:bg-sunken"}`}
-        >
-          Conversations
-        </button>
+      <div className="mb-5 flex gap-6 border-b border-line">
+        {([["fleet", "Agents"], ["conversations", "What they said"]] as const).map(([k, l]) => (
+          <button key={k}
+            onClick={() => { setView(k); if (k === "conversations" && messages.length === 0) void loadMessages(msgKind); }}
+            className={`-mb-px min-h-10 border-b-2 text-sm transition-colors ${view === k ? "border-text font-semibold text-text" : "border-transparent text-text-2 hover:text-text"}`}>
+            {l}
+          </button>
+        ))}
       </div>
 
       {view === "conversations" && (
@@ -289,19 +279,16 @@ export default function AgentsPage() {
 
       {view === "fleet" && (
       <>
-      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Total agents" value={agents.length} />
-        <Stat label="Armed" value={armed} accent="text-emerald-700" />
-        <Stat label="Shadow" value={shadow} accent="text-amber-700" />
-        <Stat label="Active w/o arming criteria" value={noCriteria} accent={noCriteria ? "text-red-600" : undefined} />
-      </div>
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <TextStat label="Est. API cost / month" value={usd(estMonthly)} sub="running agents, at current token estimates" />
-        <TextStat label="Actual API cost / 30d" value={usd(actual30d)} sub="from the action ledger" accent="text-text" />
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label="Acting on their own" value={loading ? null : String(armed)} note={<>of <b className="font-semibold text-text-2">{agents.length}</b> agents</>} />
+        <KeyNumber label="Watching only" value={loading ? null : String(shadow)} note="suggest, but change nothing" />
+        <KeyNumber label="No rule for going live" value={loading ? null : String(noCriteria)} tone={noCriteria ? "warn" : undefined}
+          note={noCriteria ? "running without arming criteria" : "every running agent has one"} />
+        <KeyNumber label="Cost, last 30 days" value={loading ? null : usd(actual30d)} note={<>about <b className="font-semibold text-text-2">{usd(estMonthly)}</b> a month expected</>} />
       </div>
 
       {error && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 flex items-center gap-2 rounded-card bg-danger-soft px-4 py-3 text-sm text-danger-text">
           <AlertTriangle className="h-4 w-4" /> {error}
         </div>
       )}
@@ -314,38 +301,21 @@ export default function AgentsPage() {
 
       {Object.entries(byDomain).map(([domain, rows]) => (
         <div key={domain} className="mb-6">
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-text-2">
+          <h2 className="mb-2 text-sm font-semibold text-text">
             {DOMAIN_LABELS[domain] ?? domain}
-          </h3>
-          <div className="overflow-x-auto rounded-xl border border-line bg-surface">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-text-3">
-                  <th className="px-4 py-2.5 font-medium">Agent</th>
-                  <th className="px-4 py-2.5 font-medium">Mode</th>
-                  <th className="px-4 py-2.5 font-medium">Trigger</th>
-                  <th className="px-4 py-2.5 font-medium">LLM</th>
-                  <th className="px-4 py-2.5 font-medium">Last run</th>
-                  <th className="px-4 py-2.5 font-medium">7-day actions</th>
-                  <th className="px-4 py-2.5 font-medium">Est / run</th>
-                  <th className="px-4 py-2.5 font-medium">Est / month</th>
-                  <th className="px-4 py-2.5 font-medium">Actual 30d</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((a) => (
-                  <AgentRowView
-                    key={a.key}
-                    agent={a}
-                    expanded={expanded === a.key}
-                    saving={saving === a.key}
-                    actions={actions[a.key]}
-                    onExpand={() => void toggleExpand(a.key)}
-                    onSetMode={(m) => void setMode(a, m)}
-                  />
-                ))}
-              </tbody>
-            </table>
+          </h2>
+          <div className="overflow-hidden rounded-card border border-line bg-surface">
+            {rows.map((a) => (
+              <AgentRowView
+                key={a.key}
+                agent={a}
+                expanded={expanded === a.key}
+                saving={saving === a.key}
+                actions={actions[a.key]}
+                onExpand={() => void toggleExpand(a.key)}
+                onSetMode={(m) => void setMode(a, m)}
+              />
+            ))}
           </div>
         </div>
       ))}
@@ -385,8 +355,8 @@ function Conversations({
           <button
             key={f.key}
             onClick={() => onKind(f.key)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              activeKind === f.key ? "bg-gray-900 text-white" : "bg-surface text-text-2 border border-line hover:bg-sunken"
+            className={`min-h-9 rounded-full px-3 text-xs transition-colors ${
+              activeKind === f.key ? "border border-text bg-raised font-semibold text-text" : "bg-surface text-text-2 border border-line hover:bg-sunken"
             }`}
           >
             {f.label}
@@ -406,7 +376,7 @@ function Conversations({
           {messages.map((m) => {
             const meta = KIND_META[m.kind];
             return (
-              <li key={m.id} className="rounded-xl border border-line bg-surface px-4 py-3">
+              <li key={m.id} className="rounded-card border border-line bg-surface px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-1.5 text-sm">
                     <span className="font-semibold text-text">{m.fromLabel}</span>
@@ -433,24 +403,6 @@ function Conversations({
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: number; accent?: string }) {
-  return (
-    <div className="rounded-xl border border-line bg-surface px-4 py-3">
-      <div className={`text-2xl font-semibold ${accent ?? "text-text"}`}>{value}</div>
-      <div className="mt-0.5 text-xs text-text-2">{label}</div>
-    </div>
-  );
-}
-
-function TextStat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: string }) {
-  return (
-    <div className="rounded-xl border border-line bg-surface px-4 py-3">
-      <div className="text-xs text-text-2">{label}</div>
-      <div className={`mt-0.5 text-2xl font-semibold ${accent ?? "text-text"}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-[11px] text-text-3">{sub}</div>}
-    </div>
-  );
-}
 
 function AgentRowView({
   agent,
@@ -468,78 +420,45 @@ function AgentRowView({
   onSetMode: (m: AgentMode) => void;
 }) {
   return (
-    <>
-      <tr className="border-b border-line last:border-0 hover:bg-sunken/60">
-        <td className="px-4 py-3">
-          <button onClick={onExpand} className="flex items-start gap-1.5 text-left">
-            {expanded ? (
-              <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-text-3" />
-            ) : (
-              <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-text-3" />
-            )}
-            <span>
-              <span className="font-medium text-text">{agent.name}</span>
+    <div className="border-b border-line last:border-b-0">
+      <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
+        <button onClick={onExpand} className="flex min-w-0 flex-1 items-start gap-1.5 text-left">
+          {expanded ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-text-3" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-text-3" />}
+          <span className="min-w-0">
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-sm font-medium text-text">{agent.name}</span>
               {!agent.arming_criteria && agent.mode !== "off" && (
-                <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600">
-                  <AlertTriangle className="h-3 w-3" /> no arming criteria
+                <span className="inline-flex items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn-text">
+                  <AlertTriangle className="h-3 w-3" /> no rule for going live
                 </span>
               )}
             </span>
-          </button>
-        </td>
-        <td className="px-4 py-3">
-          <div className="inline-flex overflow-hidden rounded-lg border border-line">
-            {(["off", "shadow", "armed"] as AgentMode[]).map((m) => (
-              <button
-                key={m}
-                disabled={saving}
-                onClick={() => onSetMode(m)}
-                className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-colors ${
-                  agent.mode === m ? MODE_META[m].classes : "bg-surface text-text-3 hover:text-text-2"
-                } ${saving ? "opacity-50" : ""}`}
-              >
-                {MODE_META[m].icon} {MODE_META[m].label}
-              </button>
-            ))}
-          </div>
-        </td>
-        <td className="px-4 py-3 text-text-2">
-          <span className="text-xs">{agent.kind}</span>
-          {agent.trigger_detail && (
-            <span className="ml-1.5 rounded bg-sunken px-1.5 py-0.5 font-mono text-[11px] text-text-2">
-              {agent.trigger_detail}
+            <span className="mt-0.5 block text-[12px] text-text-3">
+              {agent.kind}{agent.trigger_detail ? ` ${agent.trigger_detail}` : ""}
+              {" · "}{agent.uses_llm ? (agent.model ?? "AI model") : "rules"}
+              {" · last ran "}{timeAgo(agent.last_run_at)}
+              {" · "}{agent.week.total} actions this week{agent.week.overridden > 0 ? `, ${agent.week.overridden} overridden` : ""}
+              {agent.actualCost30d > 0 ? ` · ${usd(agent.actualCost30d)} in 30 days` : ""}
             </span>
-          )}
-        </td>
-        <td className="px-4 py-3">
-          {agent.uses_llm ? (
-            <span className="rounded bg-violet-50 px-1.5 py-0.5 font-mono text-[11px] text-violet-700">
-              {agent.model ?? "LLM"}
-            </span>
-          ) : (
-            <span className="text-xs text-text-3">rules</span>
-          )}
-        </td>
-        <td className="px-4 py-3 text-xs text-text-2">{timeAgo(agent.last_run_at)}</td>
-        <td className="px-4 py-3 text-xs text-text-2">
-          {agent.week.total}
-          {agent.week.overridden > 0 && (
-            <span className="ml-1.5 text-red-600">({agent.week.overridden} overridden)</span>
-          )}
-        </td>
-        <td className="px-4 py-3 text-xs text-text-2">
-          {agent.uses_llm && agent.estCost.perRun > 0 ? usd(agent.estCost.perRun) : <span className="text-text-3">-</span>}
-        </td>
-        <td className="px-4 py-3 text-xs text-text-2">
-          {agent.mode !== "off" && agent.estCost.perMonth > 0 ? usd(agent.estCost.perMonth) : <span className="text-text-3">-</span>}
-        </td>
-        <td className="px-4 py-3 text-xs text-text-2">
-          {agent.actualCost30d > 0 ? usd(agent.actualCost30d) : <span className="text-text-3">-</span>}
-        </td>
-      </tr>
+          </span>
+        </button>
+        <div className="inline-flex shrink-0 self-start overflow-hidden rounded-ctl border border-line sm:self-center">
+          {(["off", "shadow", "armed"] as AgentMode[]).map((m) => (
+            <button
+              key={m}
+              disabled={saving}
+              onClick={() => onSetMode(m)}
+              className={`flex min-h-9 items-center gap-1 px-3 text-xs font-medium transition-colors ${
+                agent.mode === m ? MODE_META[m].classes : "bg-surface text-text-3 hover:text-text-2"
+              } ${saving ? "opacity-50" : ""}`}
+            >
+              {MODE_META[m].icon} {MODE_META[m].label}
+            </button>
+          ))}
+        </div>
+      </div>
       {expanded && (
-        <tr className="border-b border-line bg-sunken/40 last:border-0">
-          <td colSpan={9} className="px-4 py-4 sm:px-11">
+        <div className="border-t border-line bg-sunken/40 px-4 py-4 sm:px-11">
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="space-y-3 text-sm">
                 <p className="text-text-2">{agent.description || "No description."}</p>
@@ -552,7 +471,7 @@ function AgentRowView({
                       )}
                     </>
                   ) : (
-                    <span className="text-red-600">Not set — this agent cannot be armed until it is.</span>
+                    <span className="text-danger-text">Not set — this agent cannot be armed until it is.</span>
                   )}
                 </Detail>
                 {agent.uses_llm && agent.estCost.perRun > 0 && (
@@ -589,8 +508,8 @@ function AgentRowView({
                         <div className="mt-0.5 flex flex-wrap gap-2 text-[11px] text-text-3">
                           {x.outlet_id && <span>outlet {x.outlet_id.slice(0, 8)}</span>}
                           {x.confidence != null && <span>conf {Number(x.confidence).toFixed(2)}</span>}
-                          {!x.autonomous && <span className="text-blue-500">human-initiated</span>}
-                          {x.human_override && <span className="text-red-500">overridden</span>}
+                          {!x.autonomous && <span className="text-info-text">human-initiated</span>}
+                          {x.human_override && <span className="text-danger-text">overridden</span>}
                           {x.cost_usd != null && <span>${Number(x.cost_usd).toFixed(4)}</span>}
                         </div>
                       </li>
@@ -599,10 +518,9 @@ function AgentRowView({
                 )}
               </div>
             </div>
-          </td>
-        </tr>
+        </div>
       )}
-    </>
+    </div>
   );
 }
 

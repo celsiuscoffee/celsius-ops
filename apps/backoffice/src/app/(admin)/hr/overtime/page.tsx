@@ -82,9 +82,9 @@ const monthRange = (key: string) => {
 };
 
 function sourceOf(r: OTRequest): { label: string; icon: typeof Hand; cls: string } {
-  if (r.reason?.startsWith(AUTO_PREFIX)) return { label: "Attendance approval", icon: ClipboardCheck, cls: "text-green-700" };
-  if (r.request_type === "pre_approval") return { label: "Staff request", icon: UserRound, cls: "text-blue-700" };
-  return { label: "Manager post-hoc", icon: Hand, cls: "text-purple-700" };
+  if (r.reason?.startsWith(AUTO_PREFIX)) return { label: "Attendance approval", icon: ClipboardCheck, cls: "text-ok-text" };
+  if (r.request_type === "pre_approval") return { label: "Staff request", icon: UserRound, cls: "text-info-text" };
+  return { label: "Manager post-hoc", icon: Hand, cls: "text-info-text" };
 }
 
 export default function OvertimeLedgerPage() {
@@ -197,10 +197,10 @@ export default function OvertimeLedgerPage() {
 
   const statusPill = (s: string) => {
     const map: Record<string, string> = {
-      pending: "bg-yellow-100 text-yellow-800",
-      approved: "bg-green-100 text-green-800",
-      rejected: "bg-red-100 text-red-800",
-      partial: "bg-blue-100 text-blue-800",
+      pending: "bg-warn-soft text-warn-text",
+      approved: "bg-ok-soft text-ok-text",
+      rejected: "bg-danger-soft text-danger-text",
+      partial: "bg-info-soft text-info-text",
       cancelled: "bg-sunken text-text-2",
     };
     return <span className={`rounded px-2 py-0.5 text-xs font-medium ${map[s] || "bg-sunken"}`}>{s}</span>;
@@ -213,17 +213,17 @@ export default function OvertimeLedgerPage() {
         description={
           <>
             {monthLabel(month)}: <strong>{approvedHours}h</strong> approved across {byPerson.length} staff
-            {counts.pending > 0 ? <> · <strong className="text-yellow-800">{counts.pending} pending</strong></> : null}
+            {counts.pending > 0 ? <> · <strong className="text-warn-text">{counts.pending} pending</strong></> : null}
             . Clocked OT is approved on{" "}
-            <Link href="/hr/attendance" className="text-brand-text underline">Attendance Review</Link>; this is the ledger.
+            <Link href="/hr/attendance" className="text-brand-text underline">Clock-ins</Link>; this is the ledger.
           </>
         }
         action={
           <>
-            <select value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border bg-card px-2.5 py-1.5 text-sm text-foreground" title="Month">
+            <select value={month} onChange={(e) => setMonth(e.target.value)} className="h-10 rounded-ctl border border-line bg-surface px-2.5 text-sm text-text" title="Month">
               {months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
             </select>
-            <select value={userId} onChange={(e) => setUserId(e.target.value)} className="rounded-lg border bg-card px-2.5 py-1.5 text-sm text-foreground" title="Staff">
+            <select value={userId} onChange={(e) => setUserId(e.target.value)} className="rounded-lg border bg-card px-2.5 py-1.5 text-sm text-text" title="Staff">
               <option value="">All staff</option>
               {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
@@ -248,7 +248,7 @@ export default function OvertimeLedgerPage() {
               className="rounded-full border bg-card px-3 py-1 text-xs hover:border-ink"
               title={`${p.days} day${p.days === 1 ? "" : "s"} — click to filter`}
             >
-              <span className="font-medium">{p.name}</span> <span className="text-muted-foreground">{p.hours}h</span>
+              <span className="font-medium">{p.name}</span> <span className="text-text-3">{p.hours}h</span>
             </button>
           ))}
         </div>
@@ -280,9 +280,9 @@ export default function OvertimeLedgerPage() {
       {/* List */}
       <div className="rounded-xl border bg-card p-4">
         {isLoading && !data ? (
-          <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-text-3" /></div>
         ) : rows.length === 0 ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">
+          <div className="py-10 text-center text-sm text-text-3">
             <Clock className="mx-auto mb-2 h-8 w-8 opacity-30" />
             {tab === "pending" ? "Nothing pending — clocked OT is approved on Attendance Review" : `No ${tab === "all" ? "" : tab} OT in ${monthLabel(month)}`}
           </div>
@@ -290,7 +290,7 @@ export default function OvertimeLedgerPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
+                <tr className="border-b text-left text-xs text-text-3">
                   <th className="py-2 pr-3">Staff</th>
                   <th className="py-2 pr-3">Date</th>
                   <th className="py-2 pr-3">Hours</th>
@@ -327,7 +327,7 @@ export default function OvertimeLedgerPage() {
                             Review
                           </button>
                         ) : (
-                          <button onClick={() => setReviewing(r)} className="rounded border px-3 py-1 text-xs font-medium text-text-2 hover:bg-muted">
+                          <button onClick={() => setReviewing(r)} className="rounded border px-3 py-1 text-xs font-medium text-text-2 hover:bg-sunken">
                             Details
                           </button>
                         )}
@@ -353,28 +353,28 @@ export default function OvertimeLedgerPage() {
               <h3 className="text-lg font-semibold">Unclocked OT</h3>
               <button onClick={() => setNewOT(null)} className="rounded p-1 hover:bg-sunken"><X className="h-4 w-4" /></button>
             </div>
-            <p className="mb-4 text-xs text-muted-foreground">
+            <p className="mb-4 text-xs text-text-3">
               For overtime with no clock-in behind it. If the person clocked in, approve the day on Attendance Review instead — that pays the clocked tail.
             </p>
             <div className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Staff</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">Staff</span>
                 <select value={newOT.user_id} onChange={(e) => setNewOT({ ...newOT, user_id: e.target.value })} className="w-full rounded border px-3 py-2 text-sm">
                   <option value="">— Select —</option>
                   {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Date of OT</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">Date of OT</span>
                 <input type="date" value={newOT.date} onChange={(e) => setNewOT({ ...newOT, date: e.target.value })} className="w-full rounded border px-3 py-2 text-sm" />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-muted-foreground">Hours (½-hour steps)</span>
+                  <span className="mb-1 block text-xs font-medium text-text-3">Hours (½-hour steps)</span>
                   <input type="number" step="0.5" min="0.5" max="24" value={newOT.hours} onChange={(e) => setNewOT({ ...newOT, hours: e.target.value })} className="w-full rounded border px-3 py-2 text-sm" />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-muted-foreground">Rate</span>
+                  <span className="mb-1 block text-xs font-medium text-text-3">Rate</span>
                   <select value={newOT.ot_type} onChange={(e) => setNewOT({ ...newOT, ot_type: e.target.value })} className="w-full rounded border px-3 py-2 text-sm">
                     <option value="1.5x">1.5× — weekday</option>
                     <option value="2x">2× — rest day</option>
@@ -384,7 +384,7 @@ export default function OvertimeLedgerPage() {
                 </label>
               </div>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Reason</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">Reason</span>
                 <textarea value={newOT.reason} onChange={(e) => setNewOT({ ...newOT, reason: e.target.value })} rows={3} className="w-full rounded border px-3 py-2 text-sm" placeholder="Why was OT needed, and why is there no clock-in?" />
               </label>
             </div>
@@ -453,11 +453,11 @@ function ReviewModal({ req, onClose, onDecide, saving }: {
                 const duration = mins != null ? `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, "0")}m` : "ongoing";
                 return (
                   <div key={l.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-xs">
-                    <span className="flex items-center gap-1 text-text-2"><LogIn className="h-3.5 w-3.5 text-green-600" /><span className="font-mono">{fmtMyt(l.clock_in)}</span></span>
-                    <span className="flex items-center gap-1 text-text-2"><LogOut className="h-3.5 w-3.5 text-red-600" /><span className="font-mono">{l.clock_out ? fmtMyt(l.clock_out) : "—"}</span></span>
+                    <span className="flex items-center gap-1 text-text-2"><LogIn className="h-3.5 w-3.5 text-ok-text" /><span className="font-mono">{fmtMyt(l.clock_in)}</span></span>
+                    <span className="flex items-center gap-1 text-text-2"><LogOut className="h-3.5 w-3.5 text-danger-text" /><span className="font-mono">{l.clock_out ? fmtMyt(l.clock_out) : "—"}</span></span>
                     <span className="text-text-2">{duration}</span>
                     {l.overtime_hours != null && Number(l.overtime_hours) > 0 && (
-                      <span className="ml-auto rounded bg-amber-50 px-1.5 py-0.5 font-mono text-[11px] text-amber-800">
+                      <span className="ml-auto rounded bg-warn-soft px-1.5 py-0.5 font-mono text-[11px] text-warn-text">
                         OT {toHalf(l.overtime_hours)}h{l.overtime_type ? ` · ${l.overtime_type}` : ""}
                       </span>
                     )}
@@ -467,14 +467,14 @@ function ReviewModal({ req, onClose, onDecide, saving }: {
             </div>
           </div>
         ) : (
-          <p className="mb-4 flex items-center gap-1 text-xs text-amber-700"><AlertTriangle className="h-3.5 w-3.5" /> No clock-in on this date — this OT is unclocked.</p>
+          <p className="mb-4 flex items-center gap-1 text-xs text-warn-text"><AlertTriangle className="h-3.5 w-3.5" /> No clock-in on this date — this OT is unclocked.</p>
         )}
 
         {!decided && (
           <>
             <div className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Hours to approve (½-hour steps)</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">Hours to approve (½-hour steps)</span>
                 <input
                   type="number" step="0.5" min="0.5" max={requested}
                   value={hours}
@@ -483,11 +483,11 @@ function ReviewModal({ req, onClose, onDecide, saving }: {
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Manager notes (optional)</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">Manager notes (optional)</span>
                 <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className="w-full rounded border px-3 py-2 text-sm" />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Rejection reason (only if rejecting)</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">Rejection reason (only if rejecting)</span>
                 <input value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} className="w-full rounded border px-3 py-2 text-sm" placeholder="e.g. No prior approval sought" />
               </label>
             </div>
@@ -497,14 +497,14 @@ function ReviewModal({ req, onClose, onDecide, saving }: {
               <button
                 onClick={() => onDecide("rejected", 0, rejectionReason || "Rejected", notes)}
                 disabled={saving}
-                className="flex items-center gap-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                className="flex items-center gap-1 rounded-lg bg-danger px-4 py-2 text-sm font-medium text-white hover:bg-danger disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />} Reject
               </button>
               <button
                 onClick={() => onDecide(h < requested ? "partial" : "approved", h, undefined, notes)}
                 disabled={saving || h < 0.5 || h > requested}
-                className="flex items-center gap-1 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                className="flex items-center gap-1 rounded-lg bg-ok px-4 py-2 text-sm font-medium text-white hover:bg-ok disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 {h < requested ? `Approve ${h}h of ${requested}h` : `Approve ${h}h`}

@@ -19,6 +19,7 @@ import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2 } from "lucide-react";
 import { toast, usePrompt } from "@celsius/ui";
 import { useFetch } from "@/lib/use-fetch";
+import { KeyNumber } from "@/components/ui/key-number";
 
 type Status = "on_time" | "late" | "absent" | "upcoming" | "rest_day" | "no_roster" | "on_leave" | "off";
 type Cell = {
@@ -139,7 +140,7 @@ export default function RosterPage() {
             {outletName || "Roster"} · {dayWords(weekStart)} – {dayWords(addDays(weekStart, 6))}
           </p>
           <h1 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Roster</h1>
-          <p className="mt-1.5 text-sm text-text-2 max-md:hidden">The week&apos;s shifts, who came, and what waits on you, in one place.</p>
+          <p className="mt-1.5 text-sm text-text-2">The week&apos;s shifts, who came, and what waits on you, in one place.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <select
@@ -162,10 +163,10 @@ export default function RosterPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="On time" value={onTimePct == null ? "—" : `${onTimePct}%`} sub={s ? `${s.present - s.late} of ${s.present} shifts worked` : ""} />
-        <Kpi label="Late" value={s ? String(s.late) : "—"} sub="after the grace period" tone={s && s.late ? "warn" : undefined} />
-        <Kpi label="Did not come" value={s ? String(s.absent) : "—"} sub="rostered, no clock-in" tone={s && s.absent ? "bad" : undefined} />
-        <Kpi label="On leave" value={s ? String(s.on_leave) : "—"} sub={`${leaveToDecide.length} leave to decide`} />
+        <KeyNumber label="On time" value={onTimePct == null ? "–" : `${onTimePct}%`} note={s ? `${s.present - s.late} of ${s.present} shifts worked` : ""} />
+        <KeyNumber label="Late" value={s ? String(s.late) : null} note="after the grace period" tone={s && s.late ? "warn" : undefined} />
+        <KeyNumber label="Did not come" value={s ? String(s.absent) : null} note="rostered, no clock-in" tone={s && s.absent ? "warn" : undefined} />
+        <KeyNumber label="On leave" value={s ? String(s.on_leave) : null} note={`${leaveToDecide.length} leave to decide`} />
       </div>
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -310,15 +311,6 @@ export default function RosterPage() {
   );
 }
 
-function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: "warn" | "bad" }) {
-  return (
-    <div className="rounded-card border border-line bg-surface px-4 py-3.5">
-      <p className="text-[13px] text-text-2">{label}</p>
-      <p className={"mt-1 text-2xl font-medium tabular-nums " + (tone === "bad" ? "text-danger-text" : tone === "warn" ? "text-warn-text" : "text-text")}>{value}</p>
-      <p className="mt-0.5 text-xs text-text-3">{sub}</p>
-    </div>
-  );
-}
 function Key({ cls, label }: { cls: string; label: string }) {
   return <span className="inline-flex items-center gap-1.5"><i className={"inline-block h-2.5 w-3.5 rounded-[3px] " + cls} />{label}</span>;
 }

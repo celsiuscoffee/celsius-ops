@@ -59,12 +59,12 @@ type AudienceType = "all_managers" | "discipline" | "outlet" | "users";
 
 function fmtTime(iso: string | null): string {
   if (!iso) return "";
-  return new Date(iso).toLocaleString("en-MY", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }
 
 const SEV_CLASS: Record<string, string> = {
-  urgent: "bg-red-100 text-red-700",
-  important: "bg-amber-100 text-amber-700",
+  urgent: "bg-danger-soft text-danger-text",
+  important: "bg-warn-soft text-warn-text",
   normal: "bg-sunken text-text-2",
 };
 
@@ -163,13 +163,13 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
       <div className="mb-3 flex items-center gap-2">
         <Megaphone className="h-4 w-4 text-brand-text" />
         <span className="text-sm font-medium">Send an instruction</span>
-        <span className="hidden text-xs text-muted-foreground sm:inline">
+        <span className="hidden text-xs text-text-3 sm:inline">
           Directive over WhatsApp — tracked per person until they confirm
         </span>
       </div>
 
       {/* Composer */}
-      <div className="mb-5 rounded-lg border bg-muted/30 p-3">
+      <div className="mb-5 rounded-lg border bg-sunken p-3">
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -182,7 +182,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
           onChange={(e) => setBody(e.target.value)}
           placeholder="Details (optional)"
           rows={2}
-          className="mb-2 w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground"
+          className="mb-2 w-full rounded-md border bg-bg px-3 py-2 text-sm text-text"
           disabled={sending}
         />
 
@@ -196,7 +196,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
                 onClick={() => setAudienceType(key)}
                 className={
                   "flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition " +
-                  (active ? "border-text bg-raised font-semibold text-text" : "text-muted-foreground hover:text-foreground")
+                  (active ? "border-text bg-raised font-semibold text-text" : "text-text-3 hover:text-text")
                 }
                 disabled={sending}
               >
@@ -211,7 +211,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
           <select
             value={routeKey}
             onChange={(e) => setRouteKey(e.target.value)}
-            className="mb-2 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"
+            className="mb-2 h-9 w-full rounded-md border bg-bg px-2 text-sm text-text"
             disabled={sending}
           >
             {disciplines.map((d) => (
@@ -226,7 +226,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
           <select
             value={outletId}
             onChange={(e) => setOutletId(e.target.value)}
-            className="mb-2 h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground"
+            className="mb-2 h-9 w-full rounded-md border bg-bg px-2 text-sm text-text"
             disabled={sending}
           >
             <option value="">Select an outlet…</option>
@@ -247,7 +247,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
               className="mb-1.5 h-8 text-xs"
               disabled={sending}
             />
-            <div className="max-h-40 overflow-y-auto rounded-md border bg-background p-1">
+            <div className="max-h-40 overflow-y-auto rounded-md border bg-bg p-1">
               {filteredStaff.map((s) => {
                 const on = picked.has(s.id);
                 return (
@@ -256,7 +256,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
                     onClick={() => togglePick(s.id)}
                     className={
                       "flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition " +
-                      (on ? "bg-brand-soft text-brand-text" : "hover:bg-muted")
+                      (on ? "bg-brand-soft text-brand-text" : "hover:bg-sunken")
                     }
                     disabled={sending}
                   >
@@ -269,15 +269,15 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
                       {on && <Check className="h-3 w-3" />}
                     </span>
                     <span className="flex-1 truncate">{s.name}</span>
-                    <span className="text-[10px] text-muted-foreground">{s.role}</span>
+                    <span className="text-[10px] text-text-3">{s.role}</span>
                   </button>
                 );
               })}
               {filteredStaff.length === 0 && (
-                <div className="px-2 py-3 text-center text-xs text-muted-foreground">No staff match.</div>
+                <div className="px-2 py-3 text-center text-xs text-text-3">No staff match.</div>
               )}
             </div>
-            {picked.size > 0 && <div className="mt-1 text-[11px] text-muted-foreground">{picked.size} selected</div>}
+            {picked.size > 0 && <div className="mt-1 text-[11px] text-text-3">{picked.size} selected</div>}
           </div>
         )}
 
@@ -285,7 +285,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
           <select
             value={severity}
             onChange={(e) => setSeverity(e.target.value)}
-            className="h-9 rounded-md border bg-background px-2 text-sm text-foreground"
+            className="h-9 rounded-md border bg-bg px-2 text-sm text-text"
             disabled={sending}
           >
             <option value="normal">Normal</option>
@@ -300,7 +300,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
         {msg && (
           <div
             className={
-              "mt-2 rounded-md px-3 py-2 text-xs " + (msg.ok ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-800")
+              "mt-2 rounded-md px-3 py-2 text-xs " + (msg.ok ? "bg-ok-soft text-ok-text" : "bg-warn-soft text-warn-text")
             }
           >
             {msg.text}
@@ -309,13 +309,13 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
       </div>
 
       {/* Sent instructions */}
-      <div className="mb-2 text-xs font-medium text-muted-foreground">Sent instructions</div>
+      <div className="mb-2 text-xs font-medium text-text-3">Sent instructions</div>
       {isLoading ? (
-        <div className="p-6 text-center text-muted-foreground">
+        <div className="p-6 text-center text-text-3">
           <Loader2 className="mx-auto h-5 w-5 animate-spin" />
         </div>
       ) : instructions.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+        <div className="rounded-lg border border-dashed p-8 text-center text-sm text-text-3">
           No instructions sent yet. Compose one above.
         </div>
       ) : (
@@ -356,19 +356,19 @@ function InstructionRow({ ins, onAck }: { ins: Instruction; onAck: () => void })
   return (
     <li className="rounded-lg border bg-card p-3">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-2 text-left">
-        {open ? <ChevronDown className="mt-0.5 h-4 w-4 text-muted-foreground" /> : <ChevronRight className="mt-0.5 h-4 w-4 text-muted-foreground" />}
+        {open ? <ChevronDown className="mt-0.5 h-4 w-4 text-text-3" /> : <ChevronRight className="mt-0.5 h-4 w-4 text-text-3" />}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             {ins.severity !== "normal" && (
               <Badge className={"text-[10px] " + (SEV_CLASS[ins.severity] ?? SEV_CLASS.normal)}>{ins.severity}</Badge>
             )}
-            <span className="text-sm font-medium text-foreground">{ins.title}</span>
-            <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{fmtTime(ins.createdAt)}</span>
+            <span className="text-sm font-medium text-text">{ins.title}</span>
+            <span className="ml-auto shrink-0 text-[10px] text-text-3">{fmtTime(ins.createdAt)}</span>
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-text-3">
             <span>→ {ins.audienceLabel || "recipients"}</span>
             <Badge
-              className={"text-[10px] " + (allAcked ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700")}
+              className={"text-[10px] " + (allAcked ? "bg-ok-soft text-ok-text" : "bg-info-soft text-info-text")}
             >
               {ins.acked}/{ins.total} confirmed
             </Badge>
@@ -379,7 +379,7 @@ function InstructionRow({ ins, onAck }: { ins: Instruction; onAck: () => void })
 
       {open && (
         <div className="mt-3 border-t pt-3">
-          {ins.body && <div className="mb-2 whitespace-pre-wrap text-xs text-muted-foreground">{ins.body}</div>}
+          {ins.body && <div className="mb-2 whitespace-pre-wrap text-xs text-text-3">{ins.body}</div>}
           <div className="mb-2 flex items-center gap-2">
             {ins.pending > 0 && (
               <Button
@@ -395,7 +395,7 @@ function InstructionRow({ ins, onAck }: { ins: Instruction; onAck: () => void })
             )}
           </div>
           {!detail ? (
-            <div className="py-2 text-center text-muted-foreground">
+            <div className="py-2 text-center text-text-3">
               <Loader2 className="mx-auto h-4 w-4 animate-spin" />
             </div>
           ) : (
@@ -405,23 +405,23 @@ function InstructionRow({ ins, onAck }: { ins: Instruction; onAck: () => void })
                   <span
                     className={
                       "flex h-4 w-4 items-center justify-center rounded-full " +
-                      (r.ackedAt ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground")
+                      (r.ackedAt ? "bg-ok-soft text-ok-text" : "bg-sunken text-text-3")
                     }
                   >
                     {r.ackedAt && <Check className="h-3 w-3" />}
                   </span>
-                  <span className="flex-1 truncate text-foreground">{r.name}</span>
+                  <span className="flex-1 truncate text-text">{r.name}</span>
                   {r.ackedAt ? (
-                    <span className="text-[10px] text-green-700">confirmed {fmtTime(r.ackedAt)}</span>
+                    <span className="text-[10px] text-ok-text">confirmed {fmtTime(r.ackedAt)}</span>
                   ) : r.deliveryStatus === "skipped" ? (
-                    <span className="text-[10px] text-amber-700">no phone</span>
+                    <span className="text-[10px] text-warn-text">no phone</span>
                   ) : r.deliveryStatus === "failed" ? (
-                    <span className="text-[10px] text-red-600">not delivered</span>
+                    <span className="text-[10px] text-danger-text">not delivered</span>
                   ) : (
                     <button
                       onClick={() => act("ack", r.id)}
                       disabled={busy}
-                      className="text-[10px] text-muted-foreground underline hover:text-foreground"
+                      className="text-[10px] text-text-3 underline hover:text-text"
                       title="Mark confirmed manually"
                     >
                       mark confirmed
