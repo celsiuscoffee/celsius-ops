@@ -6,12 +6,9 @@ import { countedInBase, summariseCounts, unresolvedIn } from "@/lib/inventory/co
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  ClipboardCheck, Loader2, Search,
+  ArrowLeft, Loader2, Search,
   CheckCircle2, AlertTriangle, Save,
 } from "lucide-react";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
 
 interface StockCountItem {
   id: string;
@@ -95,17 +92,15 @@ export default function StockCountPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // When dialog opens, populate edit reasons from existing data
-  useEffect(() => {
-    if (selected) {
-      const reasons: Record<string, string> = {};
-      selected.items.forEach((item) => {
-        if (item.varianceReason) reasons[item.id] = item.varianceReason;
-      });
-      setEditReasons(reasons);
-      setShowAllItems(false);
-    }
-  }, [selected]);
+  // Opening a count loads its saved reasons into the editor.
+  function openCount(sc: StockCount) {
+    const reasons: Record<string, string> = {};
+    sc.items.forEach((item) => { if (item.varianceReason) reasons[item.id] = item.varianceReason; });
+    setEditReasons(reasons);
+    setShowAllItems(false);
+    setSelected(sc);
+    window.scrollTo(0, 0);
+  }
 
   const filtered = useMemo(() => {
     return data.filter((sc) => {
@@ -234,6 +229,137 @@ export default function StockCountPage() {
     return `${rounded.toLocaleString()} ${conversion > 0 && conversion !== 1 ? pkgLabel : baseUom}`;
   }
 
+
+  // ── Review: a full page, not a modal (data-dense detail gets the room) ──
+  if (selected) {
+    const counted = selected.items.filter((i) => i.countedQty != null);
+    const isOff = (i: StockCountItem) => { const v = getVariance(i); return v !== null && v !== 0; };
+    const discrepancyItems = counted.filter(isOff);
+    const checkedCount = counted.filter((i) => getVariance(i) !== null).length;
+    const uncheckedCount = counted.length - checkedCount;
+    // A count with no expectedQty was never compared. Observed 2026-08-12 at
+    // Tamarind: 9 items, all expectedQty null, the old review said "None"
+    // while the shelf was 32kg short on ICEHOT Foam. Silence about a missing
+    // check has to look different from a clean check.
+    const nothingChecked = checkedCount === 0 && counted.length > 0;
+    const unresolvedCount = discrepancyItems.filter((i) => !(editReasons[i.id] || i.varianceReason)).length;
+    // Exception-only: discrepancies first; the rest on request. When nothing
+    // was checked there are no exceptions, so show everything counted.
+    const rest = counted.filter((i) => !isOff(i));
+    const visible = showAllItems || nothingChecked ? [...discrepancyItems, ...rest] : discrepancyItems;
+    const editable = selected.status === "SUBMITTED" || selected.status === "REVIEWED";
+    const banner = nothingChecked
+      ? { cls: "bg-warn-soft text-warn-text", title: "Not checked", text: `No expected stock was recorded for any of these ${counted.length} items, so nothing was compared. The figures below are what was counted, not a checked result.` }
+      : discrepancyItems.length === 0
+        ? { cls: "bg-ok-soft text-ok-text", title: "Everything matched", text: `All ${checkedCount} checked items match the system.${uncheckedCount > 0 ? ` ${uncheckedCount} had no expected stock to compare.` : ""}` }
+        : unresolvedCount > 0
+          ? { cls: "bg-warn-soft text-warn-text", title: unresolvedCount === discrepancyItems.length ? `${unresolvedCount} ${unresolvedCount === 1 ? "gap needs" : "gaps need"} a reason` : `${unresolvedCount} of ${discrepancyItems.length} gaps still need a reason`, text: "Pick why the shelf differs from the system, then save." }
+          : { cls: "bg-sunken text-text-2", title: `${discrepancyItems.length} ${discrepancyItems.length === 1 ? "gap" : "gaps"}, all explained`, text: uncheckedCount > 0 ? `${uncheckedCount} items had no expected stock to compare.` : "Nothing left to do on this count." };
+
+    return (
+      <div className="max-w-[960px] px-4 pt-6 pb-10 md:px-8">
+        <button onClick={() => setSelected(null)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+          <ArrowLeft className="h-4 w-4" /> All stock counts
+        </button>
+        <h1 className="mt-3 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
+          {selected.outlet} <span className="font-normal text-text-3">· {selected.frequency.toLowerCase()} count</span>
+        </h1>
+        <p className="mt-0.5 text-sm text-text-2">
+          {formatDate(selected.countDate)} at {formatTime(selected.createdAt)} · counted by {selected.countedBy} · {counted.length} of {selected.items.length} items
+        </p>
+
+        <div className={`mt-5 flex gap-2.5 rounded-card px-4 py-3 ${banner.cls}`}>
+          {nothingChecked || unresolvedCount > 0 ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
+          <div>
+            <p className="text-sm font-semibold">{banner.title}</p>
+            <p className="text-[13px] opacity-90">{banner.text}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-card border border-line bg-surface">
+          <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+            <p className="text-sm font-semibold text-text">
+              {showAllItems || nothingChecked ? `All ${counted.length} counted items` : `${discrepancyItems.length} ${discrepancyItems.length === 1 ? "gap" : "gaps"}`}
+            </p>
+            {rest.length > 0 && !nothingChecked && (
+              <button onClick={() => setShowAllItems((v) => !v)} className="whitespace-nowrap text-[13px] font-medium text-brand-text hover:underline">
+                {showAllItems ? "Show gaps only" : `Show all ${counted.length} items`}
+              </button>
+            )}
+          </div>
+          {visible.length === 0 && <p className="px-4 py-8 text-center text-sm text-text-3">No gaps on this count.</p>}
+          {visible.map((item) => {
+            const variance = getVariance(item);
+            const off = variance !== null && variance !== 0;
+            const cf = item.packageConversion || 1;
+            const uom = item.package || item.baseUom;
+            return (
+              <div key={item.id} className="border-b border-line px-4 py-3 last:border-b-0">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-text">{item.product}</p>
+                    <p className="mt-0.5 text-[12px] text-text-3">
+                      System <span className="font-mono text-text-2">{formatBaseQty(item.expectedQty, cf, item.baseUom, uom)}</span>
+                      {" · "}Counted <span className="font-mono text-text-2">{formatPackageQty(item.countedQty, item.baseUom, uom, cf)}</span>
+                    </p>
+                  </div>
+                  <p className={`shrink-0 font-mono text-sm font-semibold ${variance === null ? "text-text-3" : !off ? "text-ok-text" : variance < 0 ? "text-danger-text" : "text-warn-text"}`}>
+                    {variance === null ? "Not checked" : !off ? "Matched" : `${variance > 0 ? "+" : ""}${formatBaseQty(variance, cf, item.baseUom, uom)}`}
+                  </p>
+                </div>
+                {off && (
+                  // Reasons stay editable after auto-approval: approval applies
+                  // the balances; the reason is the manager's follow-up.
+                  editable ? (
+                    <select
+                      aria-label={`Reason for ${item.product}`}
+                      className="mt-2 h-10 w-full rounded-ctl border border-line bg-surface px-3 text-sm text-text sm:w-72"
+                      value={editReasons[item.id] || item.varianceReason || ""}
+                      onChange={(e) => setEditReasons((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                    >
+                      <option value="">Pick a reason…</option>
+                      {VARIANCE_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  ) : (
+                    <p className="mt-1 text-[13px] text-text-2">Reason: {item.varianceReason || "none given"}</p>
+                  )
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {editable && discrepancyItems.length > 0 && (
+          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => saveReasons(selected.id)} disabled={saving}>
+              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+              Save reasons
+            </Button>
+            {selected.status === "SUBMITTED" && (
+              <Button onClick={() => markReviewed(selected.id)} disabled={reviewing || unresolvedCount > 0} className="bg-ink text-on-ink hover:bg-ink-hover">
+                {reviewing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
+                Approve and close
+              </Button>
+            )}
+          </div>
+        )}
+        {selected.status === "SUBMITTED" && discrepancyItems.length === 0 && (
+          <div className="mt-4 flex justify-end">
+            <Button onClick={() => markReviewed(selected.id)} disabled={reviewing} className="bg-ink text-on-ink hover:bg-ink-hover">
+              {reviewing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
+              Approve and close
+            </Button>
+          </div>
+        )}
+        {selected.status === "REVIEWED" && selected.reviewedAt && (
+          <p className="mt-4 text-right text-[12px] text-text-3">
+            {isAutoApproved(selected) ? "Auto-approved" : "Reviewed"} on {formatDate(selected.reviewedAt)} at {formatTime(selected.reviewedAt)}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
@@ -301,7 +427,7 @@ export default function StockCountPage() {
                   ? { text: `${uncheckedItems} unchecked`, cls: "bg-warn-soft text-warn-text" }
                   : { text: "All matched", cls: "bg-ok-soft text-ok-text" };
           return (
-            <button key={sc.id} onClick={() => setSelected(sc)}
+            <button key={sc.id} onClick={() => openCount(sc)}
               className="flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 hover:bg-sunken/50">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-text">
@@ -318,282 +444,6 @@ export default function StockCountPage() {
         })}
       </div>
 
-      {/* ── Review Dialog ── */}
-      <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
-          {selected && (() => {
-            const itemsWithVariance = selected.items
-              .filter((i) => i.countedQty != null)
-              .sort((a, b) => {
-                // Show discrepancies first
-                const va = getVariance(a);
-                const vb = getVariance(b);
-                if (va !== null && va !== 0 && (vb === null || vb === 0)) return -1;
-                if (vb !== null && vb !== 0 && (va === null || va === 0)) return 1;
-                return 0;
-              });
-            const discrepancyCount = itemsWithVariance.filter((i) => {
-              const v = getVariance(i);
-              return v !== null && v !== 0;
-            }).length;
-            const unresolvedCount = itemsWithVariance.filter((i) => {
-              const v = getVariance(i);
-              return v !== null && v !== 0 && !(editReasons[i.id] || i.varianceReason);
-            }).length;
-            const discrepancyItems = itemsWithVariance.filter((i) => {
-              const v = getVariance(i);
-              return v !== null && v !== 0;
-            });
-            // A count with no expectedQty was never compared to anything.
-            // getVariance returns null there, so it lands in the same bucket as
-            // "checked and equal" — which is how a count where NOTHING was
-            // checked used to render a green "No discrepancies". Observed
-            // 2026-08-12 at Tamarind: 9 items, all expectedQty null, the review
-            // screen reported "None" while the shelf was 32kg short of the
-            // system on ICEHOT Foam. Silence about a missing check has to look
-            // different from a clean check.
-            const checkedCount = itemsWithVariance.filter((i) => getVariance(i) !== null).length;
-            const uncheckedCount = itemsWithVariance.length - checkedCount;
-            const nothingChecked = checkedCount === 0 && itemsWithVariance.length > 0;
-            // Exception-only: show just the discrepancy rows unless the manager
-            // expands to the full list. When nothing was checked there are no
-            // exception rows to show, so fall back to the full list rather than
-            // rendering an empty table under a "not checked" banner.
-            const visibleItems = showAllItems || nothingChecked ? itemsWithVariance : discrepancyItems;
-
-            return (
-              <>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <ClipboardCheck className="h-5 w-5 text-brand-text" />
-                    Stock Count — {selected.outlet}
-                  </DialogTitle>
-                </DialogHeader>
-
-                {/* Meta cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-2">
-                  <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-text-2 uppercase">Date</p>
-                    <p className="text-sm font-semibold">{formatDate(selected.countDate)}</p>
-                  </div>
-                  <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-text-2 uppercase">Type</p>
-                    <p className="text-sm font-semibold capitalize">{selected.frequency.toLowerCase()}</p>
-                  </div>
-                  <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-text-2 uppercase">Counted By</p>
-                    <p className="text-sm font-semibold">{selected.countedBy}</p>
-                  </div>
-                  <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-text-2 uppercase">Items</p>
-                    <p className="text-sm font-semibold">{itemsWithVariance.length}</p>
-                  </div>
-                  <div className={`rounded-lg border p-2.5 ${
-                    discrepancyCount > 0 ? "border-red-200 bg-red-50"
-                      : uncheckedCount > 0 ? "border-amber-200 bg-amber-50"
-                      : "border-green-200 bg-green-50"
-                  }`}>
-                    <p className="text-[10px] text-text-2 uppercase">Discrepancies</p>
-                    <p className={`text-sm font-semibold ${
-                      discrepancyCount > 0 ? "text-red-600"
-                        : uncheckedCount > 0 ? "text-amber-700"
-                        : "text-green-600"
-                    }`}>
-                      {discrepancyCount > 0
-                        ? `${discrepancyCount} found`
-                        : nothingChecked
-                          ? "Not checked"
-                          : uncheckedCount > 0
-                            ? `${uncheckedCount} unchecked`
-                            : "None"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Exception-only review: discrepancies first, expandable to all */}
-                <div className="mt-3 flex items-center justify-between gap-2">
-                  <p className="text-xs text-text-2">
-                    {discrepancyCount > 0
-                      ? showAllItems
-                        ? `Showing all ${itemsWithVariance.length} items`
-                        : `Showing ${discrepancyCount} discrepanc${discrepancyCount === 1 ? "y" : "ies"} only`
-                      : nothingChecked
-                        ? "Not checked — no expected stock was recorded for this count"
-                        : uncheckedCount > 0
-                          ? `${checkedCount} checked and clean · ${uncheckedCount} had no expected stock to compare`
-                          : "No discrepancies — nothing to review"}
-                  </p>
-                  {itemsWithVariance.length > discrepancyItems.length && (
-                    <button
-                      onClick={() => setShowAllItems((v) => !v)}
-                      className="text-xs text-brand-text hover:underline whitespace-nowrap"
-                    >
-                      {showAllItems
-                        ? "Show discrepancies only"
-                        : `Show all ${itemsWithVariance.length} items`}
-                    </button>
-                  )}
-                </div>
-
-                {/* Never claim a clean bill of health for a count that was never
-                    compared. This is a banner rather than a replacement for the
-                    table: when nothing was checked, the counted figures are
-                    exactly what the manager needs to see. */}
-                {nothingChecked && (
-                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex gap-2.5">
-                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-amber-800">Not checked</p>
-                      <p className="text-xs text-amber-700/90">
-                        No expected stock was recorded for any of these {itemsWithVariance.length} items,
-                        so nothing was compared. The figures below are what was counted, not a verified result.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {discrepancyCount === 0 && !nothingChecked && !showAllItems ? (
-                  <div className="mt-2 rounded-lg border border-green-200 bg-green-50 px-4 py-4 text-center">
-                    <CheckCircle2 className="h-5 w-5 text-green-600 mx-auto" />
-                    <p className="mt-1.5 text-sm font-medium text-green-700">No discrepancies found</p>
-                    <p className="text-xs text-green-600/80">
-                      All {checkedCount} checked items are in line — nothing to action.
-                      {uncheckedCount > 0 && ` ${uncheckedCount} had no expected stock to compare against.`}
-                    </p>
-                  </div>
-                ) : (
-                <div className="mt-2 rounded-lg border overflow-hidden overflow-x-auto">
-                  <table className="w-full text-xs min-w-[720px]">
-                    <thead>
-                      <tr className="bg-sunken border-b">
-                        <th className="px-3 py-2 text-left font-medium text-text-2">Product</th>
-                        <th className="px-3 py-2 text-right font-medium text-text-2">Expected</th>
-                        <th className="px-3 py-2 text-right font-medium text-text-2">Counted</th>
-                        <th className="px-3 py-2 text-right font-medium text-text-2">Variance</th>
-                        <th className="px-3 py-2 text-left font-medium text-text-2 min-w-[180px]">Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleItems.map((item) => {
-                        const variance = getVariance(item);
-                        const hasVariance = variance !== null && variance !== 0;
-                        const cf = item.packageConversion || 1;
-                        const uom = item.package || item.baseUom;
-
-                        return (
-                          <tr key={item.id} className={`border-b border-line ${hasVariance ? "bg-red-50/30" : ""}`}>
-                            <td className="px-3 py-2">
-                              <p className="font-medium text-text">{item.product}</p>
-                              <p className="text-[10px] text-text-3">{item.sku}</p>
-                            </td>
-                            <td className="px-3 py-2 text-right font-mono text-text-2">
-                              {formatBaseQty(item.expectedQty, cf, item.baseUom, uom)}
-                            </td>
-                            <td className="px-3 py-2 text-right font-mono font-medium text-text">
-                              {formatPackageQty(item.countedQty, item.baseUom, uom, cf)}
-                            </td>
-                            <td className={`px-3 py-2 text-right font-mono font-bold ${
-                              !hasVariance ? "text-green-600" : variance! < 0 ? "text-red-600" : "text-amber-600"
-                            }`}>
-                              {variance === null ? "—" : variance === 0 ? "✓" : (
-                                <>
-                                  {variance > 0 ? "+" : ""}{formatBaseQty(variance, cf, item.baseUom, uom)}
-                                </>
-                              )}
-                            </td>
-                            <td className="px-3 py-2">
-                              {hasVariance ? (
-                                // Reasons stay editable after auto-approval —
-                                // approval applies the balances; the reason
-                                // coding is the manager's follow-up work.
-                                selected.status === "SUBMITTED" || selected.status === "REVIEWED" ? (
-                                  <select
-                                    className="h-7 w-full rounded border border-line px-2 text-xs"
-                                    value={editReasons[item.id] || item.varianceReason || ""}
-                                    onChange={(e) => setEditReasons((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                                  >
-                                    <option value="">Select reason...</option>
-                                    {VARIANCE_REASONS.map((r) => (
-                                      <option key={r} value={r}>{r}</option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <span className="text-text-2">{item.varianceReason || "—"}</span>
-                                )
-                              ) : (
-                                <span className="text-text-3">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                )}
-
-                {/* Actions */}
-                {selected.status === "SUBMITTED" && (
-                  <div className="mt-4 flex items-center justify-between">
-                    <p className="text-xs text-text-2">
-                      {unresolvedCount > 0
-                        ? <span className="text-red-500 font-medium">{unresolvedCount} discrepancies need a reason before review</span>
-                        : <span className="text-green-600">All discrepancies resolved ✓</span>
-                      }
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => saveReasons(selected.id)}
-                        disabled={saving}
-                      >
-                        {saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                        Save
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => markReviewed(selected.id)}
-                        disabled={reviewing || unresolvedCount > 0}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        {reviewing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
-                        Approve &amp; Close
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {selected.status === "REVIEWED" && discrepancyCount > 0 && (
-                  <div className="mt-4 flex items-center justify-between">
-                    <p className="text-xs text-text-2">
-                      {unresolvedCount > 0
-                        ? <span className="text-red-500 font-medium">{unresolvedCount} discrepanc{unresolvedCount === 1 ? "y" : "ies"} still need{unresolvedCount === 1 ? "s" : ""} a reason</span>
-                        : <span className="text-green-600">All discrepancies resolved ✓</span>
-                      }
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => saveReasons(selected.id)}
-                      disabled={saving}
-                    >
-                      {saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                      Save reasons
-                    </Button>
-                  </div>
-                )}
-
-                {selected.status === "REVIEWED" && selected.reviewedAt && (
-                  <p className="mt-3 text-xs text-text-3 text-right">
-                    {isAutoApproved(selected) ? "Auto-approved" : "Reviewed"} on {formatDate(selected.reviewedAt)} at {formatTime(selected.reviewedAt)}
-                  </p>
-                )}
-              </>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

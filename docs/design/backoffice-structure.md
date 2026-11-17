@@ -293,8 +293,9 @@ under 90%); items counted with no expected stock to compare (amber, the
 Tamarind blind spot). The table became one list with one signal per count;
 tapping a row opens the same review. Maths in `lib/inventory/count-summary.ts`
 (tested). The key-number tile is now shared: `components/ui/key-number.tsx`.
-Still to do: the review is a modal with a wide table; it should become a
-full-page view (no cramped containers for data-dense detail).
+The review is now a full page (back link, one banner saying what is left to
+do, gaps first as a list with the reason picker under each, Save reasons /
+Approve and close), replacing the modal whose table was cut off on a phone.
 
 Still to do in step 6: page-by-page layout (title + one line, at most four key
 numbers each against a reference, one list), section by section, starting with

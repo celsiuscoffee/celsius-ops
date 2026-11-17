@@ -13,8 +13,8 @@ current month.
 
 - 2026-11-17 — **Stock › Stock Count on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
   4 key numbers from `lib/inventory/count-summary.ts`, list instead of table, shared
-  `components/ui/key-number.tsx` (Overview + Wastage moved onto it). Review modal unchanged
-  (next: full-page review). Then Transfers, Menu.
+  `components/ui/key-number.tsx` (Overview + Wastage moved onto it). Review is a full page
+  (was a modal). Next: Transfers, Menu.
 
 - 2026-11-17 — **Stock › Wastage on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
   4 key numbers from `lib/inventory/waste-summary.ts`, one list. Preview mocks must answer
