@@ -304,8 +304,10 @@ statuses to 5 plain ones. One list; a late transfer says "In transit 4 days".
 The detail is a full page with a banner naming the next step and the same
 actions; the small colour-coded action icons on each row are gone (actions
 live on the detail page). Maths in `lib/inventory/transfer-summary.ts`
-(tested). Still a modal: New transfer and Smart transfer (multi-row forms;
-should become full pages next).
+(tested). New transfer and Smart transfer are full pages too (were modals):
+the new-transfer rows show source and destination stock before → after and
+flag a quantity over what the source holds; smart suggestions each become a
+draft on one tap. Only the one-field reject box stays a dialog.
 
 Still to do in step 6: page-by-page layout (title + one line, at most four key
 numbers each against a reference, one list), section by section, starting with

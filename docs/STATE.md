@@ -18,7 +18,7 @@ current month.
 
 - 2026-11-17 — **Stock › Transfers on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
   4 key numbers from `lib/inventory/transfer-summary.ts` (late = in transit > 2 days), list,
-  detail as a full page. New/Smart transfer forms still modals. Next: those forms, then Menu.
+  detail as a full page. New/Smart transfer are full pages too. Next: Menu.
 
 - 2026-11-17 — **Stock › Stock Count on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
   4 key numbers from `lib/inventory/count-summary.ts`, list instead of table, shared

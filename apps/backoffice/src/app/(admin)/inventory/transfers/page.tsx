@@ -173,6 +173,7 @@ export default function TransfersPage() {
   const loadSmartTransfers = async () => {
     setAiLoading(true);
     setAiOpen(true);
+    window.scrollTo(0, 0);
     try {
       const res = await fetch("/api/inventory/ai-decisions");
       if (res.ok) {
@@ -244,6 +245,7 @@ export default function TransfersPage() {
 
   const openCreate = () => {
     setCreateOpen(true);
+    window.scrollTo(0, 0);
     setFromOutletId("");
     setToOutletId("");
     setTransferNotes("");
@@ -387,7 +389,143 @@ export default function TransfersPage() {
 
   return (
     <div className="px-4 pt-6 pb-10 md:px-8">
-      {selected ? (
+      {createOpen ? (
+        // ── New transfer: a full page (multi-row form) ──
+        <div className="max-w-[960px]">
+          <button onClick={() => setCreateOpen(false)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+            <ArrowLeft className="h-4 w-4" /> All transfers
+          </button>
+          <h1 className="mt-3 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">New transfer</h1>
+          <p className="mt-0.5 text-sm text-text-2">Pick where the stock leaves from and where it goes, then add items. It is saved as a draft.</p>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-[13px] font-medium text-text-2">From outlet</span>
+              <select className="mt-1 h-10 w-full rounded-ctl border border-line bg-surface px-3 text-sm text-text" value={fromOutletId}
+                onChange={(e) => { setFromOutletId(e.target.value); setCart([]); fetchStockForOutlet(e.target.value, setStockBalances); }}>
+                <option value="">Pick an outlet…</option>
+                {outlets.filter((o) => o.id !== toOutletId).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[13px] font-medium text-text-2">To outlet</span>
+              <select className="mt-1 h-10 w-full rounded-ctl border border-line bg-surface px-3 text-sm text-text" value={toOutletId}
+                onChange={(e) => { setToOutletId(e.target.value); fetchStockForOutlet(e.target.value, setToStockBalances); }}>
+                <option value="">Pick an outlet…</option>
+                {outlets.filter((o) => o.id !== fromOutletId).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-5">
+            <span className="text-[13px] font-medium text-text-2">Add items</span>
+            <div className="relative mt-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
+              <Input placeholder={fromOutletId ? "Search items in stock at this outlet…" : "Pick the from outlet first"} className="pl-9"
+                value={productSearch} onChange={(e) => setProductSearch(e.target.value)} disabled={!fromOutletId} />
+            </div>
+            {productSearch && (
+              <div className="mt-1 max-h-64 overflow-y-auto rounded-card border border-line bg-surface">
+                {filteredProducts.length === 0 && <p className="px-4 py-3 text-[13px] text-text-3">No items in stock match.</p>}
+                {filteredProducts.slice(0, 8).map((p) => {
+                  const pkg = p.packages.find((pk) => pk.isDefault) || p.packages[0];
+                  const pkgStock = Math.floor((stockBalances[p.id] ?? 0) / (pkg?.conversionFactor || 1));
+                  return (
+                    <button key={p.id} onClick={() => addToCart(p)} className="flex w-full items-center justify-between gap-3 border-b border-line px-4 py-2.5 text-left last:border-b-0 hover:bg-sunken/50">
+                      <span className="truncate text-sm text-text">{p.name}</span>
+                      <span className="shrink-0 text-[12px] text-text-3">{pkgStock} {pkg?.label || p.baseUom} in stock</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-card border border-line bg-surface">
+            <p className="border-b border-line px-4 py-3 text-sm font-semibold text-text">{cart.length === 0 ? "No items yet" : `${cart.length} ${cart.length === 1 ? "item" : "items"}`}</p>
+            {cart.map((item, idx) => {
+              const fromAfter = item.availableStock - item.quantity;
+              const toCurrent = Math.floor((toStockBalances[item.productId] ?? 0) / item.conversionFactor);
+              const over = item.quantity > item.availableStock;
+              return (
+                <div key={item.productId} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-text">{item.name} <span className="font-normal text-text-3">· {item.uom}</span></p>
+                    <p className={`mt-0.5 text-[12px] ${over ? "text-danger-text" : "text-text-3"}`}>
+                      {over ? `Only ${item.availableStock} in stock at the source` : <>From <span className="font-mono">{item.availableStock}→{fromAfter}</span>{toOutletId && <> · To <span className="font-mono">{toCurrent}→{toCurrent + item.quantity}</span></>}</>}
+                    </p>
+                  </div>
+                  <input type="number" min="1" max={item.availableStock} aria-label={`Quantity of ${item.name}`}
+                    className={`h-10 w-20 rounded-ctl border bg-surface px-2 text-right font-mono text-sm text-text ${over ? "border-danger-text" : "border-line"}`}
+                    value={item.quantity} onChange={(e) => updateCartQty(idx, parseInt(e.target.value) || 0)} />
+                  <button onClick={() => removeFromCart(idx)} aria-label={`Remove ${item.name}`} className="rounded-ctl p-2 text-text-3 hover:bg-sunken hover:text-danger-text">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          <label className="mt-5 block">
+            <span className="text-[13px] font-medium text-text-2">Note (optional)</span>
+            <Input className="mt-1" placeholder="Why this transfer…" value={transferNotes} onChange={(e) => setTransferNotes(e.target.value)} />
+          </label>
+
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreate} disabled={!fromOutletId || !toOutletId || cart.length === 0 || submitting} className="bg-ink text-on-ink hover:bg-ink-hover">
+              {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ArrowLeftRight className="mr-1.5 h-4 w-4" />}Save draft transfer
+            </Button>
+          </div>
+        </div>
+      ) : aiOpen ? (
+        // ── Smart transfer suggestions: a full page ──
+        <div className="max-w-[960px]">
+          <button onClick={() => setAiOpen(false)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+            <ArrowLeft className="h-4 w-4" /> All transfers
+          </button>
+          <h1 className="mt-3 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Smart transfer</h1>
+          <p className="mt-0.5 text-sm text-text-2">Suggested moves where one outlet has more than it needs and another is short. Each becomes a draft you can check before it goes.</p>
+
+          {aiLoading ? (
+            <div className="mt-8 flex items-center gap-2 text-sm text-text-2"><Loader2 className="h-4 w-4 animate-spin" /> Checking stock across outlets…</div>
+          ) : aiTransfers.length === 0 ? (
+            <div className="mt-5 flex gap-2.5 rounded-card bg-ok-soft px-4 py-3 text-ok-text">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              <p className="text-sm font-semibold">Outlets are balanced. Nothing to move.</p>
+            </div>
+          ) : (
+            <>
+              <div className="mt-5 space-y-3">
+                {aiTransfers.map((t, idx) => (
+                  <div key={idx} className="overflow-hidden rounded-card border border-line bg-surface">
+                    <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="flex items-center gap-1.5 text-sm font-semibold text-text">{t.fromOutletName} <ArrowRight className="h-3.5 w-3.5 text-text-3" /> {t.toOutletName}</p>
+                        <p className="mt-0.5 text-[12px] text-text-3">{t.reason}</p>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => createSingleSmartTransfer(t)} disabled={aiCreating} className="shrink-0">
+                        {aiCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Make draft"}
+                      </Button>
+                    </div>
+                    {t.items.map((item, i) => (
+                      <div key={i} className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
+                        <span className="truncate text-sm text-text-2">{item.productName}</span>
+                        <span className="shrink-0 font-mono text-sm text-text">{item.quantity} {item.packageName}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              {aiTransfers.length > 1 && <div className="mt-5 flex justify-end">
+                <Button onClick={createAllSmartTransfers} disabled={aiCreating} className="bg-ink text-on-ink hover:bg-ink-hover">
+                  {aiCreating ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Zap className="mr-1.5 h-4 w-4" />}Make all {aiTransfers.length} drafts
+                </Button>
+              </div>}
+            </>
+          )}
+        </div>
+      ) : selected ? (
         // ── Detail: a full page, not a modal ──
         <div className="max-w-[960px]">
           <button onClick={() => setSelected(null)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
@@ -541,77 +679,14 @@ export default function TransfersPage() {
       )}
 
       {/* Reject Dialog */}
-      {/* Smart Transfer Dialog */}
-      <Dialog open={aiOpen} onOpenChange={setAiOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-blue-500" />
-              Smart Transfer Recommendations
-            </DialogTitle>
-          </DialogHeader>
-          {aiLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-              <span className="ml-2 text-sm text-text-2">Analyzing stock levels across outlets...</span>
-            </div>
-          ) : aiTransfers.length === 0 ? (
-            <div className="py-12 text-center">
-              <CheckCircle2 className="mx-auto h-8 w-8 text-green-400" />
-              <p className="mt-2 text-sm text-text-2">All outlets are balanced. No transfers needed.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-xs text-text-2">{aiTransfers.length} transfer{aiTransfers.length !== 1 ? "s" : ""} recommended based on stock imbalances</p>
-              {aiTransfers.map((t, idx) => (
-                <div key={idx} className="rounded-lg border border-blue-100 bg-blue-50/30 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-text">
-                      <span>{t.fromOutletName}</span>
-                      <ArrowRight className="h-3.5 w-3.5 text-blue-500" />
-                      <span>{t.toOutletName}</span>
-                    </div>
-                    <button
-                      onClick={() => createSingleSmartTransfer(t)}
-                      disabled={aiCreating}
-                      className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {aiCreating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Create Draft"}
-                    </button>
-                  </div>
-                  <p className="text-xs text-blue-600 mb-2">{t.reason}</p>
-                  <div className="space-y-1">
-                    {t.items.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <span className="text-text-2">{item.productName} <span className="text-text-3">({item.productSku})</span></span>
-                        <span className="font-medium text-text">{item.quantity} {item.packageName}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {aiTransfers.length > 0 && (
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setAiOpen(false)}>Close</Button>
-              <Button onClick={createAllSmartTransfers} disabled={aiCreating} className="bg-blue-600 hover:bg-blue-700">
-                {aiCreating ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Zap className="mr-1.5 h-4 w-4" />}
-                Create All ({aiTransfers.length}) Drafts
-              </Button>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Reject Transfer</DialogTitle>
+            <DialogTitle>Reject transfer</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-text-2">Please provide a reason for rejecting this transfer.</p>
           <textarea
-            className="mt-2 w-full rounded-md border border-line px-3 py-2 text-sm focus:border-ink focus:outline-none"
+            className="mt-2 w-full rounded-md border border-line px-3 py-2 text-sm bg-surface text-text focus:border-ink focus:outline-none"
             rows={3}
             placeholder="Reason for rejection..."
             value={rejectionReason}
@@ -622,180 +697,14 @@ export default function TransfersPage() {
             <Button
               onClick={handleReject}
               disabled={!rejectionReason.trim()}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-danger-text text-on-ink hover:opacity-90"
             >
-              Reject Transfer
+              Reject transfer
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Create Transfer Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ArrowLeftRight className="h-5 w-5 text-brand-text" />
-              New Transfer
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {/* Outlet selectors */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-text-2">From Outlet</label>
-                <select
-                  className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm"
-                  value={fromOutletId}
-                  onChange={(e) => { setFromOutletId(e.target.value); setCart([]); fetchStockForOutlet(e.target.value, setStockBalances); }}
-                >
-                  <option value="">Select...</option>
-                  {outlets.filter((o) => o.id !== toOutletId).map((o) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-text-2">To Outlet</label>
-                <select
-                  className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm"
-                  value={toOutletId}
-                  onChange={(e) => { setToOutletId(e.target.value); fetchStockForOutlet(e.target.value, setToStockBalances); }}
-                >
-                  <option value="">Select...</option>
-                  {outlets.filter((o) => o.id !== fromOutletId).map((o) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Product search + add */}
-            <div>
-              <label className="text-xs font-medium text-text-2">Add Products</label>
-              {!fromOutletId && <p className="mt-1 text-xs text-amber-600">Select source outlet first</p>}
-              <div className="relative mt-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
-                <Input
-                  placeholder={fromOutletId ? "Search product..." : "Select source outlet first..."}
-                  className="pl-9"
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  disabled={!fromOutletId}
-                />
-              </div>
-              {productSearch && (
-                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border bg-surface shadow-sm">
-                  {filteredProducts.length === 0 && (
-                    <p className="px-3 py-2 text-xs text-text-3">No products found</p>
-                  )}
-                  {filteredProducts.slice(0, 8).map((p) => {
-                    const pkg = p.packages.find((pk) => pk.isDefault) || p.packages[0];
-                    const conv = pkg?.conversionFactor || 1;
-                    const baseStock = stockBalances[p.id] ?? 0;
-                    const pkgStock = Math.floor(baseStock / conv);
-                    return (
-                      <button
-                        key={p.id}
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-sunken"
-                        onClick={() => addToCart(p)}
-                      >
-                        <span className="text-text">{p.name}</span>
-                        <span className="text-xs text-text-3">{pkgStock} {pkg?.label || p.baseUom} · {p.sku}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Cart items */}
-            {cart.length > 0 && (
-              <div className="rounded-lg border overflow-hidden overflow-x-auto">
-                <table className="w-full text-xs min-w-[720px]">
-                  <thead>
-                    <tr className="bg-sunken border-b">
-                      <th className="px-3 py-2 text-left font-medium text-text-2">Product</th>
-                      <th className="px-3 py-2 text-left font-medium text-text-2">Pkg</th>
-                      <th className="px-3 py-2 text-right font-medium text-text-2">From</th>
-                      <th className="px-3 py-2 text-right font-medium text-text-2 w-20">Qty</th>
-                      <th className="px-3 py-2 text-right font-medium text-text-2">To</th>
-                      <th className="px-3 py-2 w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cart.map((item, idx) => {
-                      const conv = item.conversionFactor;
-                      const fromAfter = item.availableStock - item.quantity;
-                      const toBase = toStockBalances[item.productId] ?? 0;
-                      const toCurrent = Math.floor(toBase / conv);
-                      const toAfter = toCurrent + item.quantity;
-                      return (
-                      <tr key={item.productId} className={`border-b border-line ${item.quantity > item.availableStock ? "bg-red-50" : ""}`}>
-                        <td className="px-3 py-2">
-                          <p className="font-medium text-text">{item.name}</p>
-                          <p className="text-[10px] text-text-3">{item.sku}</p>
-                        </td>
-                        <td className="px-3 py-2 text-text-2">{item.uom}</td>
-                        <td className="px-3 py-2 text-right">
-                          <span className={item.availableStock <= 0 ? "text-red-600 font-medium" : "text-text-2"}>{item.availableStock}</span>
-                          <span className="text-text-3 mx-0.5">&rarr;</span>
-                          <span className={fromAfter <= 0 ? "text-red-600 font-medium" : "text-text-2 font-medium"}>{fromAfter}</span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min="1"
-                            max={item.availableStock}
-                            className="w-full rounded border border-line px-2 py-1 text-right text-xs focus:border-ink focus:outline-none"
-                            value={item.quantity}
-                            onChange={(e) => updateCartQty(idx, parseInt(e.target.value) || 0)}
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <span className="text-text-2">{toCurrent}</span>
-                          <span className="text-text-3 mx-0.5">&rarr;</span>
-                          <span className="text-green-600 font-medium">{toAfter}</span>
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <button onClick={() => removeFromCart(idx)} className="text-red-400 hover:text-red-600">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Notes */}
-            <div>
-              <label className="text-xs font-medium text-text-2">Notes (optional)</label>
-              <Input
-                className="mt-1"
-                placeholder="Reason for transfer..."
-                value={transferNotes}
-                onChange={(e) => setTransferNotes(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button
-              onClick={handleCreate}
-              disabled={!fromOutletId || !toOutletId || cart.length === 0 || submitting}
-              className="bg-ink hover:bg-ink-hover"
-            >
-              {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ArrowLeftRight className="mr-1.5 h-4 w-4" />}
-              Create Transfer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
