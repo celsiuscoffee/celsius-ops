@@ -11,6 +11,10 @@ current month.
 
 ## Verified facts
 
+- 2026-11-17 — **Stock › Wastage on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
+  4 key numbers from `lib/inventory/waste-summary.ts`, one list. Preview mocks must answer
+  `/api/inventory/ai-decisions` (AIInsightBanner crashes on `[]`). Next: Stock Count, Transfers, Menu.
+
 - 2026-11-17 — **Step 6 part 1: every backoffice page on the Celsius UI palette** (PR
   celsiuscoffee/celsius-ops#1278, `docs/design/backoffice-structure.md` §2e). Codemod over 176
   files; main buttons are espresso `bg-ink text-on-ink` (white text on ink was unreadable in

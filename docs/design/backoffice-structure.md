@@ -279,6 +279,12 @@ one list (recent purchase orders). Same two APIs; the purchasing totals that
 repeated Procurement were dropped. The 3% waste line is a starting guess for
 the owner to set.
 
+**Stock › Wastage rebuilt (17 Nov)**: "What we threw away, why, and whether it
+is going down." Four key numbers: last 7 days against the 7 before (amber when
+up more than 10%), this month against last month, top reason by cost with its
+share, and the most-wasted item. One list, newest first. Maths in
+`lib/inventory/waste-summary.ts` (Malaysia time, tested); same API.
+
 Still to do in step 6: page-by-page layout (title + one line, at most four key
 numbers each against a reference, one list), section by section, starting with
 the most-used pages once Office Usage has data.
