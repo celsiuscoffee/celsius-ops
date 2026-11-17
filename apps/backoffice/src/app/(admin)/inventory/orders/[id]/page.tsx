@@ -62,11 +62,11 @@ type EditItem = {
 };
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  DRAFT: { label: "Draft", color: "bg-gray-400" },
-  APPROVED: { label: "Confirmed", color: "bg-blue-500" },
-  SENT: { label: "Sent", color: "bg-green-500" },
-  AWAITING_DELIVERY: { label: "Awaiting Delivery", color: "bg-purple-500" },
-  COMPLETED: { label: "Completed", color: "bg-gray-500" },
+  DRAFT: { label: "Draft", color: "bg-sunken text-text-2" },
+  APPROVED: { label: "Confirmed", color: "bg-info-soft text-info-text" },
+  SENT: { label: "Sent", color: "bg-ok-soft text-ok-text" },
+  AWAITING_DELIVERY: { label: "Awaiting delivery", color: "bg-info-soft text-info-text" },
+  COMPLETED: { label: "Completed", color: "bg-ok-soft text-ok-text" },
 };
 
 export default function EditOrderPage({ params }: { params: Promise<{ id: string }> }) {
@@ -196,7 +196,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
   if (error || !order) {
     return (
       <div className="px-4 pt-6 pb-10 md:px-8">
-        <p className="text-sm text-red-500">{error || "Order not found"}</p>
+        <p className="text-sm text-danger-text">{error || "Order not found"}</p>
         <Link href="/inventory/orders" className="mt-2 text-sm text-brand-text hover:underline">
           Back to orders
         </Link>
@@ -239,21 +239,21 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
             </Button>
           )}
           {isDraft && (
-            <Button onClick={() => saveOrder(true)} disabled={saving} className="bg-blue-500 hover:bg-blue-600">
+            <Button onClick={() => saveOrder(true)} disabled={saving} className="bg-ink text-on-ink hover:bg-ink-hover">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
               Confirm Request
             </Button>
           )}
           {isApproved && order.supplier?.phone && (
             <a href={buildWhatsAppUrl()} target="_blank" rel="noopener noreferrer">
-              <Button className="bg-green-500 hover:bg-green-600">
+              <Button className="bg-ink text-on-ink hover:bg-ink-hover">
                 <MessageCircle className="mr-1.5 h-4 w-4" />
                 WhatsApp Supplier
               </Button>
             </a>
           )}
           {isApproved && (
-            <Button onClick={markAsSent} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+            <Button onClick={markAsSent} disabled={saving} className="bg-ink text-on-ink hover:bg-ink-hover">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
               Mark as Sent
             </Button>
@@ -264,14 +264,14 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Deposit requirement banner — shown when supplier requires upfront deposit */}
         {order.supplier?.depositPercent != null && order.supplier.depositPercent > 0 && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <div className="rounded-lg border border-line bg-warn-soft p-3">
             <div className="flex items-start gap-2">
               <span className="text-lg">💰</span>
               <div className="flex-1 text-sm">
-                <p className="font-semibold text-amber-900">
+                <p className="font-semibold text-warn-text">
                   {order.supplier.name} requires {order.supplier.depositPercent}% deposit upfront
                 </p>
-                <p className="mt-0.5 text-xs text-amber-800">
+                <p className="mt-0.5 text-xs text-warn-text">
                   Deposit: <span className="font-mono font-medium">RM {(order.totalAmount * order.supplier.depositPercent / 100).toFixed(2)}</span>
                   {" · "}
                   Balance: <span className="font-mono font-medium">RM {(order.totalAmount * (100 - order.supplier.depositPercent) / 100).toFixed(2)}</span>
@@ -285,7 +285,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         {/* Delivery Date */}
         <div className="rounded-lg border bg-surface p-4">
           <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-text-2">
-            <Truck className="h-3.5 w-3.5" /> Delivery Date
+            <Truck className="h-3.5 w-3.5" /> Delivery date
           </label>
           <Input
             type="date"
@@ -299,7 +299,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
         {/* Order Items */}
         <div className="rounded-lg border bg-surface">
           <div className="border-b px-4 py-3">
-            <p className="text-xs font-semibold text-text-2 uppercase">Order Items</p>
+            <p className="text-xs font-semibold text-text-2 uppercase">Order items</p>
           </div>
           <table className="w-full text-sm">
             <thead>
@@ -307,7 +307,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                 <th className="px-4 py-2 text-left font-medium text-text-2">Product</th>
                 <th className="px-4 py-2 text-left font-medium text-text-2">Package</th>
                 <th className="px-4 py-2 text-right font-medium text-text-2 w-24">Qty</th>
-                <th className="px-4 py-2 text-right font-medium text-text-2 w-28">Unit Price</th>
+                <th className="px-4 py-2 text-right font-medium text-text-2 w-28">Unit price</th>
                 <th className="px-4 py-2 text-right font-medium text-text-2 w-28">Total</th>
                 {(isDraft || isApproved) && <th className="px-4 py-2 w-10"></th>}
               </tr>
@@ -316,7 +316,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
               {editItems.map((item, idx) => {
                 if (item.removed) {
                   return (
-                    <tr key={item.id} className="border-b border-line bg-red-50/50">
+                    <tr key={item.id} className="border-b border-line bg-danger-soft">
                       <td className="px-4 py-2.5 text-text-3 line-through" colSpan={5}>
                         {item.product}
                       </td>
@@ -327,7 +327,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                               prev.map((p, i) => (i === idx ? { ...p, removed: false } : p))
                             )
                           }
-                          className="text-blue-500 hover:text-blue-700"
+                          className="text-info-text hover:text-info-text"
                           title="Undo"
                         >
                           <Plus className="h-3.5 w-3.5" />
@@ -391,7 +391,7 @@ export default function EditOrderPage({ params }: { params: Promise<{ id: string
                               prev.map((p, i) => (i === idx ? { ...p, removed: true } : p))
                             )
                           }
-                          className="text-red-400 hover:text-red-600"
+                          className="text-danger-text hover:text-danger-text"
                           title="Remove"
                         >
                           <X className="h-3.5 w-3.5" />

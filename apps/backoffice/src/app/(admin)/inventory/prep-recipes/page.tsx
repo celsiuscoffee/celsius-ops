@@ -4,19 +4,19 @@ import { useMemo, useState } from "react";
 import { formatRM } from "@celsius/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Search, Pencil, Trash2, ChefHat, Loader2, X, AlertTriangle } from "lucide-react";
+import { KeyNumber } from "@/components/ui/key-number";
+import { Plus, Search, Pencil, Trash2, Loader2, X, ArrowLeft, ChevronDown } from "lucide-react";
 
 /**
- * Prep recipes — the central-kitchen sub-BOM.
+ * Prep recipes — the prep sub-BOM (raw → prepped). Celsius has no central
+ * kitchen: prep happens at the outlets.
  *
- * Each row is one prepped product (e.g. "Grilled Chicken"), the raw inputs it
- * consumes, and how much a batch yields. The page's real job beyond data entry
- * is the cost check: computed cost-per-unit vs Central Preparation's list
- * price, so a stale or mis-keyed transfer price shows up instead of quietly
- * mis-valuing stock.
+ * Each row is one prepped product, the raw inputs it consumes, and how much a
+ * batch yields. Beyond data entry the page's job is the cost check: computed
+ * cost per unit vs the prepped item's listed price (`transferPrice` from the
+ * API), so a stale or mis-keyed price shows up instead of quietly mis-valuing
+ * stock.
  */
 
 type RecipeItem = {
@@ -114,6 +114,7 @@ export default function PrepRecipesPage() {
   const [outputSearch, setOutputSearch] = useState("");
   const [inputSearch, setInputSearch] = useState("");
   const [listSearch, setListSearch] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -128,7 +129,7 @@ export default function PrepRecipesPage() {
 
   const openAdd = () => {
     setForm(emptyForm); setEditingId(null); setError(null);
-    setOutputSearch(""); setInputSearch(""); setDialogOpen(true);
+    setOutputSearch(""); setInputSearch(""); setDialogOpen(true); window.scrollTo(0, 0);
   };
 
   const openEdit = (r: Recipe) => {
@@ -146,7 +147,7 @@ export default function PrepRecipesPage() {
       })),
     });
     setEditingId(r.id); setError(null);
-    setOutputSearch(""); setInputSearch(""); setDialogOpen(true);
+    setOutputSearch(""); setInputSearch(""); setDialogOpen(true); window.scrollTo(0, 0);
   };
 
   const addLine = (p: ProductOption) => {
@@ -238,166 +239,21 @@ export default function PrepRecipesPage() {
     .filter((p) => !inputSearch || p.name.toLowerCase().includes(inputSearch.toLowerCase()))
     .slice(0, 8);
 
-  return (
-    <div className="space-y-5 px-4 pt-6 pb-10 md:px-8">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
-            <ChefHat className="h-5 w-5 text-brand-text" /> Prep Recipes
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-text-2">
-            What Central Preparation turns raw stock into — 10kg raw chicken → 10 pcs Grilled
-            Chicken. Outlet menus consume the prepped item; this is the missing half that depletes
-            the raw stock behind it and checks the transfer price against real raw cost.
-          </p>
-        </div>
-        <Button onClick={openAdd} className="shrink-0">
-          <Plus className="mr-1 h-4 w-4" /> Add recipe
-        </Button>
-      </div>
+  const active = recipes.filter((r) => r.isActive);
+  const drifting = recipes.filter((r) => r.variancePct != null && Math.abs(r.variancePct) > VARIANCE_WARN_PCT).length;
+  const unpriced = recipes.filter((r) => r.anyCostMissing).length;
+  const untimed = recipes.filter((r) => r.prepMinutes == null).length;
 
-      <div className="relative max-w-xs">
-        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
-        <Input
-          value={listSearch}
-          onChange={(e) => setListSearch(e.target.value)}
-          placeholder="Search prepped item…"
-          className="pl-8"
-        />
-      </div>
-
-      {loading ? (
-        <div className="flex items-center gap-2 py-12 text-sm text-text-2">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading recipes…
-        </div>
-      ) : visible.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-line py-14 text-center">
-          <ChefHat className="mx-auto h-8 w-8 text-text-3" />
-          <p className="mt-2 text-sm font-medium text-text-2">No prep recipes yet</p>
-          <p className="mx-auto mt-1 max-w-md text-xs text-text-2">
-            Until a prepped item has a recipe, its raw inputs never deplete in theory and show up
-            as pure variance in the consumption report.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {visible.map((r) => {
-            const drift = r.variancePct != null && Math.abs(r.variancePct) > VARIANCE_WARN_PCT;
-            return (
-              <div key={r.id} className="rounded-lg border border-line bg-surface p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-text">{r.outputProductName}</span>
-                      <Badge className="border-line bg-sunken text-text-2">
-                        yields {r.yieldQuantity} {r.yieldUom}
-                      </Badge>
-                      {!r.isActive && (
-                        <Badge className="border-line bg-sunken text-text-2">Inactive</Badge>
-                      )}
-                      {r.prepMinutes != null ? (
-                        <Badge className="border-line bg-sunken text-text-2">
-                          {r.prepMinutes} min/batch
-                          {r.minutesPerUnit != null && (
-                            <span className="text-text-3"> · {r.minutesPerUnit.toFixed(2)}/{r.yieldUom}</span>
-                          )}
-                        </Badge>
-                      ) : (
-                        <Badge className="border-line bg-sunken text-text-2">Not timed</Badge>
-                      )}
-                      {r.anyCostMissing && (
-                        <Badge className="border-amber-200 bg-amber-50 text-amber-700">
-                          <AlertTriangle className="mr-1 inline h-3 w-3" />
-                          Input not priced
-                        </Badge>
-                      )}
-                    </div>
-                    {r.prepNote && <p className="mt-1 text-xs text-text-2">{r.prepNote}</p>}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => remove(r)}>
-                      <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-md bg-sunken p-3">
-                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-text-2">
-                      Raw inputs
-                    </p>
-                    <ul className="space-y-1">
-                      {r.items.map((i) => (
-                        <li key={i.id} className="flex justify-between gap-3 text-xs text-text-2">
-                          <span className="truncate">
-                            {i.productName}
-                            <span className="text-text-3"> · {i.quantityUsed} {i.uom || i.baseUom}</span>
-                          </span>
-                          <span className={i.costMissing ? "text-amber-600" : "text-text-2"}>
-                            {i.costMissing ? "no price" : formatRM(i.lineCost)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="rounded-md bg-sunken p-3">
-                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-text-2">
-                      Cost check
-                    </p>
-                    <dl className="space-y-1 text-xs">
-                      <div className="flex justify-between">
-                        <dt className="text-text-2">Batch cost</dt>
-                        <dd className="text-text">{formatRM(r.batchCost)}</dd>
-                      </div>
-                      {/* Per-BASE-unit figures need 4dp: a gram-based prep item
-                          costs ~RM0.03/g, which 2dp rounds into uselessness. */}
-                      <div className="flex justify-between">
-                        <dt className="text-text-2">Computed / {r.outputBaseUom}</dt>
-                        <dd className="font-medium text-text">{formatRM(r.costPerUnit, { decimals: 4 })}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt className="text-text-2">Central Prep price</dt>
-                        <dd className="text-text">
-                          {r.transferPrice != null ? formatRM(r.transferPrice, { decimals: 4 }) : "—"}
-                        </dd>
-                      </div>
-                      {r.variance != null && (
-                        <div className="flex justify-between border-t border-line pt-1">
-                          <dt className="text-text-2">Difference</dt>
-                          <dd className={drift ? "font-medium text-amber-700" : "text-text-2"}>
-                            {r.variance > 0 ? "+" : ""}{formatRM(r.variance, { decimals: 4 })}
-                            {r.variancePct != null && ` (${r.variancePct > 0 ? "+" : ""}${r.variancePct}%)`}
-                          </dd>
-                        </div>
-                      )}
-                    </dl>
-                    {drift && (
-                      <p className="mt-1.5 text-[11px] text-amber-700">
-                        Transfer price is {r.variancePct! > 0 ? "below" : "above"} computed raw cost —
-                        stock is valued {r.variancePct! > 0 ? "lean" : "rich"}.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editingId ? "Edit prep recipe" : "New prep recipe"}</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
+  if (dialogOpen) {
+    // Add / edit: a full page (dynamic input rows), not a modal.
+    return (
+      <div className="max-w-[960px] px-4 pt-6 pb-10 md:px-8">
+        <button onClick={() => setDialogOpen(false)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text"><ArrowLeft className="h-4 w-4" /> All prep recipes</button>
+        <h1 className="mt-3 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{editingId ? "Edit prep recipe" : "New prep recipe"}</h1>
+        <p className="mt-0.5 text-sm text-text-2">What one batch uses, what it makes, and how long it takes one person.</p>
+          <div className="mt-5 space-y-5">
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-2">Prepped item (output)</label>
+              <label className="mb-1 block text-[13px] font-medium text-text-2">Prepped item (output)</label>
               {form.outputProductId ? (
                 <div className="flex items-center justify-between rounded-md border border-line px-3 py-2">
                   <span className="text-sm text-text">{form.outputName}</span>
@@ -424,7 +280,7 @@ export default function PrepRecipesPage() {
                             if (!form.yieldUom) set("yieldUom", p.baseUom);
                             setOutputSearch("");
                           }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-sunken"
+                          className="block w-full px-3 py-2.5 text-left text-sm hover:bg-sunken"
                         >
                           {p.name} <span className="text-xs text-text-3">{p.sku}</span>
                         </button>
@@ -442,7 +298,7 @@ export default function PrepRecipesPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-2">Batch yields</label>
+                <label className="mb-1 block text-[13px] font-medium text-text-2">Batch yields</label>
                 <Input
                   type="number"
                   value={form.yieldQuantity}
@@ -451,7 +307,7 @@ export default function PrepRecipesPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-2">Unit</label>
+                <label className="mb-1 block text-[13px] font-medium text-text-2">Unit</label>
                 <Input
                   value={form.yieldUom}
                   onChange={(e) => set("yieldUom", e.target.value)}
@@ -461,7 +317,7 @@ export default function PrepRecipesPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-2">
+              <label className="mb-1 block text-[13px] font-medium text-text-2">
                 Prep time — one person, one batch (minutes)
               </label>
               <Input
@@ -472,7 +328,7 @@ export default function PrepRecipesPage() {
               />
               <p className="mt-1 text-[11px] text-text-3">
                 Hands-on minutes for ONE person to finish the whole batch. Leave blank if not timed
-                yet — the Prep Manhours report counts untimed recipes separately instead of assuming
+                yet — the prep hours report counts untimed recipes separately instead of assuming
                 they are free.
                 {form.prepMinutes.trim() !== "" && parseFloat(form.yieldQuantity) > 0 && (
                   <> That is{" "}
@@ -486,7 +342,7 @@ export default function PrepRecipesPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-2">Raw inputs</label>
+              <label className="mb-1 block text-[13px] font-medium text-text-2">Raw inputs</label>
               {form.lines.length > 0 && (
                 <div className="mb-2 space-y-1.5">
                   {form.lines.map((l) => (
@@ -500,8 +356,8 @@ export default function PrepRecipesPage() {
                         className="w-24"
                       />
                       <span className="w-10 text-xs text-text-2">{l.uom}</span>
-                      <button onClick={() => removeLine(l.productId)}>
-                        <X className="h-3.5 w-3.5 text-text-3" />
+                      <button onClick={() => removeLine(l.productId)} aria-label={`Remove ${l.name}`} className="flex h-9 w-9 items-center justify-center rounded-ctl hover:bg-sunken">
+                        <X className="h-4 w-4 text-text-3" />
                       </button>
                     </div>
                   ))}
@@ -518,7 +374,7 @@ export default function PrepRecipesPage() {
                     <button
                       key={p.id}
                       onClick={() => addLine(p)}
-                      className="block w-full px-3 py-2 text-left text-sm hover:bg-sunken"
+                      className="block w-full px-3 py-2.5 text-left text-sm hover:bg-sunken"
                     >
                       {p.name} <span className="text-xs text-text-3">{p.baseUom}</span>
                     </button>
@@ -531,7 +387,7 @@ export default function PrepRecipesPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-text-2">Prep note (optional)</label>
+              <label className="mb-1 block text-[13px] font-medium text-text-2">Prep note (optional)</label>
               <Input
                 value={form.prepNote}
                 onChange={(e) => set("prepNote", e.target.value)}
@@ -552,7 +408,7 @@ export default function PrepRecipesPage() {
                   </span>
                 </div>
                 {previewCost.missing && (
-                  <p className="mt-1 text-[11px] text-amber-700">
+                  <p className="mt-1 text-[11px] text-warn-text">
                     Some inputs have no supplier price — batch cost is understated.
                   </p>
                 )}
@@ -560,19 +416,115 @@ export default function PrepRecipesPage() {
             )}
 
             {error && (
-              <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
+              <p className="rounded-md bg-danger-soft px-3 py-2 text-xs text-danger-text">{error}</p>
             )}
 
-            <div className="flex justify-end gap-2 pt-1">
-              <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button onClick={save} disabled={!canSave || saving}>
+            <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={save} disabled={!canSave || saving} className="bg-ink text-on-ink hover:bg-ink-hover">
                 {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
                 {editingId ? "Save changes" : "Create recipe"}
               </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-[1100px] space-y-5 px-4 pt-6 pb-10 md:px-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Prep recipes</h1>
+          <p className="mt-0.5 max-w-2xl text-sm text-text-2">What the outlets make from raw stock before it goes into a drink or dish, what a batch costs, and whether its price still matches.</p>
+        </div>
+        <Button onClick={openAdd} className="shrink-0 bg-ink text-on-ink hover:bg-ink-hover">
+          <Plus className="mr-1.5 h-4 w-4" /> Add recipe
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label="Recipes in use" value={loading ? null : String(active.length)} note={<>of <b className="font-semibold text-text-2">{recipes.length}</b> recipes</>} />
+        <KeyNumber label="Price off by over 10%" value={loading ? null : String(drifting)} tone={drifting > 0 ? "warn" : undefined}
+          note={drifting > 0 ? "listed price and raw cost disagree" : "prices match raw cost"} />
+        <KeyNumber label="Inputs not priced" value={loading ? null : String(unpriced)} tone={unpriced > 0 ? "warn" : undefined}
+          note={unpriced > 0 ? "batch cost is understated" : "every input has a price"} />
+        <KeyNumber label="Not timed" value={loading ? null : String(untimed)} note="prep hours unknown for these" />
+      </div>
+
+      <div className="relative sm:max-w-xs">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
+        <Input value={listSearch} onChange={(e) => setListSearch(e.target.value)} placeholder="Search prepped item…" className="pl-9" />
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-12 text-sm text-text-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading recipes…</div>
+      ) : visible.length === 0 ? (
+        <div className="rounded-card border border-line bg-surface px-4 py-12 text-center">
+          <p className="text-sm font-medium text-text-2">No prep recipes yet</p>
+          <p className="mx-auto mt-1 max-w-md text-[13px] text-text-3">Until a prepped item has a recipe, its raw inputs never come off stock and show up as unexplained usage.</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-card border border-line bg-surface">
+          {visible.map((r) => {
+            const drift = r.variancePct != null && Math.abs(r.variancePct) > VARIANCE_WARN_PCT;
+            const open = expanded === r.id;
+            return (
+              <div key={r.id} className={`border-b border-line last:border-b-0 ${!r.isActive ? "opacity-60" : ""}`}>
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <button onClick={() => setExpanded(open ? null : r.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open}>
+                    <ChevronDown className={`h-4 w-4 shrink-0 text-text-3 transition-transform ${open ? "rotate-180" : ""}`} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-text">{r.outputProductName}{!r.isActive && <span className="font-normal text-text-3"> · not in use</span>}</span>
+                      <span className="mt-0.5 block truncate text-[12px] text-text-3">
+                        Batch makes {r.yieldQuantity} {r.yieldUom} · <span className="font-mono">{formatRM(r.costPerUnit, { decimals: 4 })}</span> per {r.outputBaseUom}
+                        {r.prepMinutes != null ? ` · ${r.prepMinutes} min a batch` : " · not timed"}
+                      </span>
+                    </span>
+                  </button>
+                  {r.anyCostMissing && <span className="hidden shrink-0 rounded-full bg-warn-soft px-2 py-0.5 text-[12px] text-warn-text sm:inline">Input not priced</span>}
+                  {drift && <span className="shrink-0 rounded-full bg-warn-soft px-2 py-0.5 text-[12px] text-warn-text">{r.variancePct! > 0 ? "+" : ""}{r.variancePct}%</span>}
+                  <button onClick={() => openEdit(r)} aria-label={`Edit ${r.outputProductName}`} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-ctl text-text-3 hover:bg-sunken hover:text-text"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => remove(r)} aria-label={`Delete ${r.outputProductName}`} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-ctl text-text-3 hover:bg-danger-soft hover:text-danger-text"><Trash2 className="h-4 w-4" /></button>
+                </div>
+                {open && (
+                  // Full-width inline expansion, not a drawer.
+                  <div className="grid gap-3 px-4 pb-4 md:grid-cols-2">
+                    <div className="rounded-ctl bg-sunken p-3">
+                      <p className="mb-1.5 text-[12px] font-medium text-text-2">Raw inputs</p>
+                      <ul className="space-y-1">
+                        {r.items.map((i) => (
+                          <li key={i.id} className="flex justify-between gap-3 text-[13px] text-text-2">
+                            <span className="truncate">{i.productName}<span className="text-text-3"> · {i.quantityUsed} {i.uom || i.baseUom}</span></span>
+                            <span className={`font-mono ${i.costMissing ? "text-warn-text" : "text-text-2"}`}>{i.costMissing ? "no price" : formatRM(i.lineCost)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      {r.prepNote && <p className="mt-2 text-[12px] text-text-3">{r.prepNote}</p>}
+                    </div>
+                    <div className="rounded-ctl bg-sunken p-3">
+                      <p className="mb-1.5 text-[12px] font-medium text-text-2">Cost check</p>
+                      {/* Per-base-unit figures need 4dp: a gram-based prep item costs ~RM0.03/g. */}
+                      <dl className="space-y-1 text-[13px]">
+                        <div className="flex justify-between"><dt className="text-text-2">Batch cost</dt><dd className="font-mono text-text">{formatRM(r.batchCost)}</dd></div>
+                        <div className="flex justify-between"><dt className="text-text-2">Raw cost per {r.outputBaseUom}</dt><dd className="font-mono font-medium text-text">{formatRM(r.costPerUnit, { decimals: 4 })}</dd></div>
+                        <div className="flex justify-between"><dt className="text-text-2">Listed price per {r.outputBaseUom}</dt><dd className="font-mono text-text">{r.transferPrice != null ? formatRM(r.transferPrice, { decimals: 4 }) : "–"}</dd></div>
+                        {r.variance != null && (
+                          <div className="flex justify-between border-t border-line pt-1">
+                            <dt className="text-text-2">Difference</dt>
+                            <dd className={`font-mono ${drift ? "font-medium text-warn-text" : "text-text-2"}`}>{r.variance > 0 ? "+" : ""}{formatRM(r.variance, { decimals: 4 })}{r.variancePct != null && ` (${r.variancePct > 0 ? "+" : ""}${r.variancePct}%)`}</dd>
+                          </div>
+                        )}
+                      </dl>
+                      {drift && <p className="mt-1.5 text-[12px] text-warn-text">The listed price is {r.variancePct! > 0 ? "below" : "above"} the raw cost, so this stock is valued {r.variancePct! > 0 ? "too low" : "too high"}.</p>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

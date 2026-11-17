@@ -5,15 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
+import { KeyNumber } from "@/components/ui/key-number";
 import { Card } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useConfirm, toast } from "@celsius/ui";
 import {
+  ArrowLeft,
   Plus,
   Search,
   Pencil,
@@ -100,9 +96,11 @@ export default function SuppliersPage() {
       (s.location || "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const openAdd = () => { setForm(emptyForm); setEditingId(null); setDialogOpen(true); };
+  const closeForm = () => { setDialogOpen(false); setEditingId(null); setForm(emptyForm); };
+  const openAdd = () => { window.scrollTo(0, 0); setForm(emptyForm); setEditingId(null); setDialogOpen(true); };
 
   const openEdit = (supplier: Supplier) => {
+    window.scrollTo(0, 0);
     setForm({
       name: supplier.name, location: supplier.location, phone: supplier.phone,
       supplierCode: supplier.code, leadTimeDays: String(supplier.leadTimeDays || 1),
@@ -145,6 +143,7 @@ export default function SuppliersPage() {
   };
 
   const openPriceList = (supplier: Supplier) => {
+    window.scrollTo(0, 0);
     setSelectedSupplier(supplier);
     setEditingPriceId(null);
     setAddingProduct(false);
@@ -280,23 +279,37 @@ export default function SuppliersPage() {
     );
   }
 
+  const sum = {
+    active: suppliers.filter((x) => x.status === "ACTIVE").length,
+    noProducts: suppliers.filter((x) => x.status === "ACTIVE" && x.products.length === 0).length,
+    noPhone: suppliers.filter((x) => x.status === "ACTIVE" && !x.phone).length,
+    noBank: suppliers.filter((x) => x.status === "ACTIVE" && !x.bankAccountNumber).length,
+  };
+
   return (
     <div className="px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      {!dialogOpen && !priceDialogOpen && (<>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Suppliers</h2>
-          <p className="mt-0.5 text-sm text-text-2">{suppliers.length} suppliers with product pricing</p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Suppliers</h1>
+          <p className="mt-0.5 text-sm text-text-2">Who we buy from, how to reach and pay them, and what they sell us.</p>
         </div>
-        <Button onClick={openAdd} className="bg-ink hover:bg-ink-hover">
-          <Plus className="mr-1.5 h-4 w-4" />
-          Add Supplier
-        </Button>
+        <Button onClick={openAdd} className="self-start bg-ink text-on-ink hover:bg-ink-hover"><Plus className="mr-1.5 h-4 w-4" />Add supplier</Button>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label="Active suppliers" value={String(sum.active)} note={<>of <b className="font-semibold text-text-2">{suppliers.length}</b> on file</>} />
+        <KeyNumber label="No price list" value={String(sum.noProducts)} tone={sum.noProducts > 0 ? "warn" : undefined}
+          note={sum.noProducts > 0 ? "nothing can be ordered from them" : "every supplier has prices"} />
+        <KeyNumber label="No WhatsApp number" value={String(sum.noPhone)} tone={sum.noPhone > 0 ? "warn" : undefined}
+          note={sum.noPhone > 0 ? "orders cannot be sent to them" : "every supplier can get orders"} />
+        <KeyNumber label="No bank details" value={String(sum.noBank)} tone={sum.noBank > 0 ? "warn" : undefined}
+          note={sum.noBank > 0 ? "payments need details first" : "every supplier can be paid"} />
       </div>
 
       {/* Search */}
-      <div className="mt-4 relative">
+      <div className="relative mt-6">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
         <Input
           placeholder="Search by name, code, or location..."
@@ -307,7 +320,7 @@ export default function SuppliersPage() {
       </div>
 
       {/* Supplier cards */}
-      <div className="mt-4 grid gap-3 sm:gap-4 md:grid-cols-2">
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
         {filtered.length === 0 && (
           <p className="col-span-2 py-12 text-center text-sm text-text-3">No suppliers found</p>
         )}
@@ -316,44 +329,44 @@ export default function SuppliersPage() {
             <div className="p-4">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 text-green-700 font-bold text-sm">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-ok-soft text-ok-text font-bold text-sm">
                     {supplier.name.charAt(0)}
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-text">{supplier.name}</h3>
-                      <Badge variant={supplier.status === "ACTIVE" ? "default" : "secondary"} className={`text-[10px] ${supplier.status === "ACTIVE" ? "bg-green-500" : ""}`}>
+                      <Badge variant={supplier.status === "ACTIVE" ? "default" : "secondary"} className={`text-[10px] ${supplier.status === "ACTIVE" ? "bg-ok-soft text-ok-text" : ""}`}>
                         {supplier.status.toLowerCase()}
                       </Badge>
                     </div>
                     <div className="mt-0.5 flex items-center gap-3 text-xs text-text-2">
                       {supplier.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{supplier.location}</span>}
-                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{supplier.leadTimeDays}d lead</span>
+                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{supplier.leadTimeDays} {supplier.leadTimeDays === 1 ? "day" : "days"} to deliver</span>
                       {supplier.depositPercent != null && supplier.depositPercent > 0 && (
                         <span
                           title={supplier.depositTermsDays ? `Balance due ${supplier.depositTermsDays}d after invoice date` : "Deposit required"}
-                          className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800"
+                          className="inline-flex items-center rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-semibold text-warn-text"
                         >
                           {supplier.depositPercent}% deposit
-                          {supplier.depositTermsDays ? <span className="ml-1 font-normal text-amber-700">· {supplier.depositTermsDays}d terms</span> : null}
+                          {supplier.depositTermsDays ? <span className="ml-1 font-normal text-warn-text">· {supplier.depositTermsDays}d terms</span> : null}
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => openEdit(supplier)} className="rounded-md p-1.5 text-text-3 hover:bg-sunken hover:text-text-2">
-                    <Pencil className="h-3.5 w-3.5" />
+                  <button onClick={() => openEdit(supplier)} aria-label={`Edit ${supplier.name}`} className="flex h-9 w-9 items-center justify-center rounded-ctl text-text-3 hover:bg-sunken hover:text-text">
+                    <Pencil className="h-4 w-4" />
                   </button>
-                  <button onClick={() => handleDelete(supplier.id)} className="rounded-md p-1.5 text-text-3 hover:bg-red-50 hover:text-red-500">
-                    <Trash2 className="h-3.5 w-3.5" />
+                  <button onClick={() => handleDelete(supplier.id)} aria-label={`Delete ${supplier.name}`} className="flex h-9 w-9 items-center justify-center rounded-ctl text-text-3 hover:bg-danger-soft hover:text-danger-text">
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               </div>
 
               <div className="mt-3 flex items-center gap-3">
                 {supplier.phone && (
-                  <a href={`https://wa.me/${supplier.phone.replace("+", "")}`} target="_blank" className="flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1 text-xs text-green-700 hover:bg-green-100">
+                  <a href={`https://wa.me/${supplier.phone.replace("+", "")}`} target="_blank" className="flex items-center gap-1.5 rounded-full bg-ok-soft px-3 py-1 text-xs text-ok-text hover:bg-ok-soft">
                     <MessageCircle className="h-3 w-3" />
                     WhatsApp
                   </a>
@@ -364,7 +377,7 @@ export default function SuppliersPage() {
 
               {supplier.bankName && (
                 <div className="mt-2 flex items-center gap-2 text-xs text-text-2">
-                  <Landmark className="h-3 w-3 text-blue-400" />
+                  <Landmark className="h-3 w-3 text-info-text" />
                   <span>{supplier.bankName}</span>
                   {supplier.bankAccountNumber && <span className="font-mono text-text-2">{supplier.bankAccountNumber}</span>}
                 </div>
@@ -386,21 +399,24 @@ export default function SuppliersPage() {
           </Card>
         ))}
       </div>
+      </>)}
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingId(null); setForm(emptyForm); } }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Supplier" : "Add Supplier"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-2">
+      {/* Add/Edit: a full page, not a modal */}
+      {dialogOpen && (
+        <div className="max-w-[760px]">
+          <button onClick={closeForm} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+            <ArrowLeft className="h-4 w-4" /> All suppliers
+          </button>
+          <h1 className="mt-3 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{editingId ? `Edit ${form.name || "supplier"}` : "Add supplier"}</h1>
+          <p className="mt-0.5 text-sm text-text-2">Who they are, how to reach and pay them, and how long they take to deliver.</p>
+          <div className="mt-5 grid gap-4">
             <div className="grid sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium text-text-2">Supplier Name</label>
+                <label className="text-sm font-medium text-text-2">Supplier name</label>
                 <Input className="mt-1" placeholder="e.g. Sri Ternak" value={form.name} onChange={(e) => updateField("name", e.target.value)} />
               </div>
               <div>
-                <label className="text-sm font-medium text-text-2">Supplier Code</label>
+                <label className="text-sm font-medium text-text-2">Supplier code</label>
                 <Input className="mt-1" placeholder="e.g. ST001" value={form.supplierCode} onChange={(e) => updateField("supplierCode", e.target.value)} />
               </div>
             </div>
@@ -424,19 +440,19 @@ export default function SuppliersPage() {
                 <Input className="mt-1" placeholder="Fresh, Daily" value={form.tags} onChange={(e) => updateField("tags", e.target.value)} />
               </div>
             </div>
-            <div className="rounded-lg border border-blue-100 bg-blue-50/30 p-3">
-              <p className="mb-2 text-xs font-medium text-blue-700">Bank Details</p>
+            <div className="rounded-lg border border-line bg-info-soft p-3">
+              <p className="mb-2 text-xs font-medium text-info-text">Bank details</p>
               <div className="grid sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-text-2">Bank Name</label>
+                  <label className="text-xs font-medium text-text-2">Bank name</label>
                   <Input className="mt-1" placeholder="e.g. Maybank" value={form.bankName} onChange={(e) => updateField("bankName", e.target.value)} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-text-2">Account Number</label>
+                  <label className="text-xs font-medium text-text-2">Account number</label>
                   <Input className="mt-1" placeholder="e.g. 5123456789" value={form.bankAccountNumber} onChange={(e) => updateField("bankAccountNumber", e.target.value)} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-text-2">Account Name</label>
+                  <label className="text-xs font-medium text-text-2">Account name</label>
                   <Input className="mt-1" placeholder="e.g. Supplier Sdn Bhd" value={form.bankAccountName} onChange={(e) => updateField("bankAccountName", e.target.value)} />
                 </div>
               </div>
@@ -444,7 +460,7 @@ export default function SuppliersPage() {
 
             {/* Deposit Payment Terms */}
             <div className="border-t pt-3">
-              <p className="text-xs font-semibold text-text-2 mb-2">Deposit Terms</p>
+              <p className="text-xs font-semibold text-text-2 mb-2">Deposit terms</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-text-2">Deposit %</label>
@@ -458,27 +474,33 @@ export default function SuppliersPage() {
               <p className="text-[10px] text-text-3 mt-1">Leave empty for normal full payment. Set % for deposit-first suppliers.</p>
             </div>
 
-            <Button onClick={handleSubmit} disabled={saving || !form.name} className="w-full bg-ink hover:bg-ink-hover disabled:opacity-50">
-              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-              {editingId ? "Save Changes" : "Add Supplier"}
-            </Button>
+            <div className="flex flex-col-reverse gap-2 border-t border-line pt-4 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={closeForm}>Cancel</Button>
+              <Button onClick={handleSubmit} disabled={saving || !form.name} className="bg-ink text-on-ink hover:bg-ink-hover disabled:opacity-50">
+                {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                {editingId ? "Save changes" : "Add supplier"}
+              </Button>
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
-      {/* Price List Dialog */}
-      <Dialog open={priceDialogOpen} onOpenChange={setPriceDialogOpen}>
-        <DialogContent className="max-w-lg sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{selectedSupplier?.name} — Price List</DialogTitle>
-          </DialogHeader>
+      {/* Price list: a full page, not a modal (product rows with prices) */}
+      {priceDialogOpen && (
+        <div className="max-w-[960px]">
+          <button onClick={() => setPriceDialogOpen(false)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+            <ArrowLeft className="h-4 w-4" /> All suppliers
+          </button>
+          <h1 className="mt-3 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{selectedSupplier?.name}: price list</h1>
+          <p className="mt-0.5 text-sm text-text-2">What this supplier sells us, in which pack, and at what price.</p>
+          <div className="mt-5">
           {selectedSupplier && (
             <div className="py-2">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm text-text-2">{selectedSupplier.products.length} {selectedSupplier.products.length === 1 ? 'product' : 'products'}</p>
                 <Button size="sm" variant="outline" onClick={() => { setAddingProduct(true); setProductSearch(""); }}>
                   <Plus className="mr-1 h-3 w-3" />
-                  Add Product
+                  Add product
                 </Button>
               </div>
 
@@ -525,7 +547,7 @@ export default function SuppliersPage() {
                         <td className="px-3 py-2 text-right">
                           {editingPriceId === p.id ? (
                             <div className="flex items-center justify-end gap-1">
-                              <button onClick={() => savePrice(p)} disabled={savingPrice} className="text-green-600 hover:text-green-700">
+                              <button onClick={() => savePrice(p)} disabled={savingPrice} className="text-ok-text hover:text-ok-text">
                                 {savingPrice ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                               </button>
                               <button onClick={() => setEditingPriceId(null)} className="text-text-3 hover:text-text-2">
@@ -537,7 +559,7 @@ export default function SuppliersPage() {
                               <button onClick={() => startEditPrice(p)} className="text-text-3 hover:text-text-2">
                                 <Pencil className="h-3 w-3" />
                               </button>
-                              <button onClick={() => removeProduct(p)} className="text-text-3 hover:text-red-500">
+                              <button onClick={() => removeProduct(p)} className="text-text-3 hover:text-danger-text">
                                 <Trash2 className="h-3 w-3" />
                               </button>
                             </div>
@@ -589,7 +611,7 @@ export default function SuppliersPage() {
                         </td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <button onClick={addProduct} disabled={!selectedSku || !newPrice || savingPrice} className="text-green-600 hover:text-green-700 disabled:text-text-3">
+                            <button onClick={addProduct} disabled={!selectedSku || !newPrice || savingPrice} className="text-ok-text hover:text-ok-text disabled:text-text-3">
                               {savingPrice ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
                             </button>
                             <button onClick={() => { setAddingProduct(false); setProductSearch(""); setSelectedSku(null); setNewPrice(""); }} className="text-text-3 hover:text-text-2">
@@ -604,8 +626,9 @@ export default function SuppliersPage() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

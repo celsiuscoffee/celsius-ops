@@ -211,8 +211,8 @@ function SupplierCombobox({
         ref={triggerRef}
         onClick={() => setOpen(!open)}
         className={`flex cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-sm ${
-          open ? "border-blue-400 ring-1 ring-blue-400" : "border-line"
-        }`}
+ open ? "border-line ring-1 ring-line-2" : "border-line"
+}`}
       >
         <span className={selectedName ? "text-text" : "text-text-3"}>
           {selectedName || "All Suppliers"}
@@ -244,7 +244,7 @@ function SupplierCombobox({
                 placeholder="Search supplier..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded border-0 bg-sunken px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-400"
+                className="w-full rounded border-0 bg-sunken px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-line-2"
               />
             </div>
             <div className="max-h-60 overflow-y-auto py-1">
@@ -252,10 +252,10 @@ function SupplierCombobox({
                 type="button"
                 onClick={() => { onChange(""); setOpen(false); }}
                 className={`flex w-full items-center px-3 py-2 text-left text-sm hover:bg-sunken ${
-                  !value ? "bg-blue-50 font-medium text-blue-700" : "text-text-2"
-                }`}
+ !value ? "bg-info-soft font-medium text-info-text" : "text-text-2"
+}`}
               >
-                All Suppliers
+                All suppliers
               </button>
               {filtered.map((s) => (
                 <button
@@ -263,8 +263,8 @@ function SupplierCombobox({
                   type="button"
                   onClick={() => { onChange(s.id); setOpen(false); }}
                   className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-sunken ${
-                    value === s.id ? "bg-blue-50 font-medium text-blue-700" : "text-text-2"
-                  }`}
+ value === s.id ? "bg-info-soft font-medium text-info-text" : "text-text-2"
+}`}
                 >
                   <span>{s.name}</span>
                   <span className="text-xs text-text-3">{s.products.length} products</span>
@@ -773,7 +773,7 @@ export default function CreateOrderPage() {
             </Button>
           </Link>
           <div>
-            <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Smart Order</h2>
+            <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Smart order</h2>
             <p className="text-sm text-text-2">Create purchase orders based on stock levels</p>
           </div>
         </div>
@@ -804,7 +804,7 @@ export default function CreateOrderPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-2">Search Products</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Search products</label>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
                   <Input placeholder="Search by name or SKU..." value={productSearch} onChange={(e) => setProductSearch(e.target.value)} className="pl-9" />
@@ -820,9 +820,9 @@ export default function CreateOrderPage() {
           {/* Tabs */}
           <div className="mb-4 flex items-center gap-2">
             {([
-              { id: "smart" as const, label: "Smart Order", icon: Sparkles, count: needsOrdering.length + (aiData?.summary.transfersNeeded || 0) },
-              { id: "all" as const, label: "All Products", icon: Package, count: 0 },
-              { id: "reorder" as const, label: "Quick Reorder", icon: RotateCcw, count: quickReorders.length },
+              { id: "smart" as const, label: "Smart order", icon: Sparkles, count: needsOrdering.length + (aiData?.summary.transfersNeeded || 0) },
+              { id: "all" as const, label: "All products", icon: Package, count: 0 },
+              { id: "reorder" as const, label: "Quick reorder", icon: RotateCcw, count: quickReorders.length },
             ]).map((tab) => {
               const Icon = tab.icon;
               return (
@@ -830,13 +830,13 @@ export default function CreateOrderPage() {
                   key={tab.id}
                   onClick={() => setCreateTab(tab.id)}
                   className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    createTab === tab.id ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"
-                  }`}
+ createTab === tab.id ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"
+}`}
                 >
                   <Icon className="h-4 w-4" />
                   {tab.label}
                   {tab.count > 0 && (
-                    <span className={`ml-1 rounded-full px-2 py-0.5 text-xs ${createTab === tab.id ? "bg-surface/20" : "bg-red-100 text-red-600"}`}>
+                    <span className={`ml-1 rounded-full px-2 py-0.5 text-xs ${createTab === tab.id ? "bg-surface/20" : "bg-danger-soft text-danger-text"}`}>
                       {tab.count}
                     </span>
                   )}
@@ -867,13 +867,13 @@ export default function CreateOrderPage() {
                     <>
                       <Package className="mx-auto h-8 w-8 text-text-3" />
                       <p className="mt-2 text-sm text-text-2">No par levels set for this outlet</p>
-                      <p className="mt-1 text-xs text-text-3">Set par levels in Settings → Par Levels, or use the <button onClick={() => setCreateTab("all")} className="text-brand-text underline">All Products</button> tab to order manually</p>
+                      <p className="mt-1 text-xs text-text-3">Set par levels in Settings → Par Levels, or use the <button onClick={() => setCreateTab("all")} className="text-brand-text underline">All products</button> tab to order manually</p>
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="mx-auto h-8 w-8 text-green-400" />
+                      <CheckCircle2 className="mx-auto h-8 w-8 text-ok-text" />
                       <p className="mt-2 text-sm text-text-2">All stock levels are healthy</p>
-                      <p className="mt-1 text-xs text-text-3">Use the <button onClick={() => setCreateTab("all")} className="text-brand-text underline">All Products</button> tab to order manually</p>
+                      <p className="mt-1 text-xs text-text-3">Use the <button onClick={() => setCreateTab("all")} className="text-brand-text underline">All products</button> tab to order manually</p>
                     </>
                   )}
                 </Card>
@@ -889,10 +889,10 @@ export default function CreateOrderPage() {
                             <p className="text-sm font-semibold text-text">
                               {needsOrdering.length} item{needsOrdering.length !== 1 ? "s" : ""} below par
                               {needsOrdering.filter((i) => i.status === "critical").length > 0 && (
-                                <span className="text-red-600"> ({needsOrdering.filter((i) => i.status === "critical").length} critical)</span>
+                                <span className="text-danger-text"> ({needsOrdering.filter((i) => i.status === "critical").length} critical)</span>
                               )}
                               {needsOrdering.filter((i) => i.transferOption).length > 0 && (
-                                <span className="text-blue-600"> · {needsOrdering.filter((i) => i.transferOption).length} transferable</span>
+                                <span className="text-info-text"> · {needsOrdering.filter((i) => i.transferOption).length} transferable</span>
                               )}
                             </p>
                             {aiData && aiData.summary.totalReorderValue > 0 && (
@@ -924,7 +924,7 @@ export default function CreateOrderPage() {
                             }}
                           >
                             <Zap className="mr-1 h-3.5 w-3.5" />
-                            Add All to Cart
+                            Add all to cart
                           </Button>
                         )}
                       </div>
@@ -935,12 +935,12 @@ export default function CreateOrderPage() {
                   {aiData && aiData.transfers.length > 0 && (
                     <div>
                       <div className="mb-2 flex items-center gap-2">
-                        <ArrowLeftRight className="h-4 w-4 text-blue-500" />
-                        <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Transfer Instead of Ordering</h3>
-                        <span className="text-[10px] text-blue-400">Save cost by using surplus from other outlets</span>
+                        <ArrowLeftRight className="h-4 w-4 text-info-text" />
+                        <h3 className="text-xs font-semibold text-info-text uppercase tracking-wide">Transfer instead of ordering</h3>
+                        <span className="text-[10px] text-info-text">Save cost by using surplus from other outlets</span>
                       </div>
                       {aiData.transfers.map((t, idx) => (
-                        <Card key={idx} className="px-4 py-3 mb-2 border-blue-200 bg-blue-50/30">
+                        <Card key={idx} className="px-4 py-3 mb-2 border-line bg-info-soft">
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="text-sm font-medium text-text">
@@ -950,9 +950,9 @@ export default function CreateOrderPage() {
                             </div>
                             <button
                               onClick={() => router.push(`/inventory/transfers?from=${t.fromOutletId}&to=${selectedOutletId}`)}
-                              className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
+                              className="rounded-md bg-info-text px-3 py-1.5 text-xs font-medium text-on-ink hover:opacity-90 transition-colors"
                             >
-                              Create Transfer
+                              Create transfer
                             </button>
                           </div>
                           <div className="mt-2 space-y-1">
@@ -961,7 +961,7 @@ export default function CreateOrderPage() {
                                 <span className="text-text-2 font-medium">{item.productName}</span>
                                 <div className="flex items-center gap-3 text-text-2">
                                   <span>Surplus: {item.fromQty}</span>
-                                  <span className="font-semibold text-blue-600">{item.transferQty} {item.packageName || item.baseUom}</span>
+                                  <span className="font-semibold text-info-text">{item.transferQty} {item.packageName || item.baseUom}</span>
                                 </div>
                               </div>
                             ))}
@@ -983,23 +983,23 @@ export default function CreateOrderPage() {
                       <div className="space-y-2">
                         {needsOrdering.map((item) => {
                           const pct = item.parLevel > 0 ? Math.min(100, Math.round((item.currentQty / item.parLevel) * 100)) : 0;
-                          const barColor = item.status === "critical" ? "bg-red-500" : "bg-amber-500";
+                          const barColor = item.status === "critical" ? "bg-danger-text" : "bg-warn-text";
                           const inCartAlready = item.supplier && item.supplierProduct && isInCart(item.productId, item.supplier.id, item.supplierProduct.packageId);
                           const cartItem = item.supplier && item.supplierProduct ? cart.find((c) => cartMatch(c, item.productId, item.supplier!.id, item.supplierProduct!.packageId)) : null;
                           const pkgQty = item.supplierProduct ? Math.max(1, Math.ceil((item.suggestedOrderQty || 1) / (item.supplierProduct.conversionFactor || 1))) : 1;
                           const tf = item.transferOption;
 
                           return (
-                            <Card key={item.productId} className={`px-4 py-3 ${item.status === "critical" ? "border-red-200 bg-red-50/30" : "border-amber-200 bg-amber-50/30"}`}>
+                            <Card key={item.productId} className={`px-4 py-3 ${item.status === "critical" ? "border-line bg-danger-soft" : "border-line bg-warn-soft"}`}>
                               <div className="flex items-center justify-between">
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2">
                                     <p className="text-sm font-semibold text-text">{item.name}</p>
-                                    <Badge className={`text-[10px] ${(item.daysLeft ?? 0) < 0.1 ? "bg-red-600" : (item.daysLeft ?? 0) < 1 ? "bg-red-500" : "bg-amber-500"}`}>
+                                    <Badge className={`text-[10px] ${(item.daysLeft ?? 0) < 0.1 ? "bg-danger-soft text-danger-text" : (item.daysLeft ?? 0) < 1 ? "bg-danger-soft text-danger-text" : "bg-warn-soft text-warn-text"}`}>
                                       {(item.daysLeft ?? 0) < 0.1 ? "OUT" : `${(item.daysLeft ?? 0).toFixed(1)}d left`}
                                     </Badge>
                                     {tf && (
-                                      <Badge className="bg-blue-100 text-blue-700 text-[10px] border border-blue-200">
+                                      <Badge className="bg-info-soft text-info-text text-[10px] border border-line">
                                         <ArrowLeftRight className="mr-0.5 h-2.5 w-2.5" />
                                         Transfer available
                                       </Badge>
@@ -1032,7 +1032,7 @@ export default function CreateOrderPage() {
                                       <button onClick={() => updateCartQty(item.productId, item.supplier!.id, item.supplierProduct!.packageId, 1)} className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-soft text-brand-text hover:bg-brand-soft"><Plus className="h-3.5 w-3.5" /></button>
                                     </div>
                                   ) : item.supplier && item.supplierProduct ? (
-                                    <Button size="sm" className={`h-8 text-xs ${item.status === "critical" ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700"}`}
+                                    <Button size="sm" className={`h-8 text-xs ${item.status === "critical" ? "bg-ink text-on-ink hover:bg-ink-hover" : "bg-ink text-on-ink hover:bg-ink-hover"}`}
                                       onClick={() => addToCart({
                                         productId: item.productId, productPackageId: item.supplierProduct!.packageId,
                                         name: item.name, sku: item.sku, supplier: item.supplier!.name,
@@ -1051,13 +1051,13 @@ export default function CreateOrderPage() {
 
                               {/* Transfer suggestion row */}
                               {tf && (
-                                <div className="mt-2 flex items-center justify-between rounded-md bg-blue-50 border border-blue-100 px-3 py-2">
+                                <div className="mt-2 flex items-center justify-between rounded-md bg-info-soft border border-line px-3 py-2">
                                   <div className="flex items-center gap-2">
-                                    <ArrowLeftRight className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                                    <ArrowLeftRight className="h-3.5 w-3.5 text-info-text shrink-0" />
                                     <div className="text-xs">
-                                      <span className="text-blue-800 font-medium">{tf.fromOutletName}</span>
-                                      <span className="text-blue-500 mx-1">has surplus →</span>
-                                      <span className="text-blue-700 font-semibold">{tf.transferQty} {tf.packageName}</span>
+                                      <span className="text-info-text font-medium">{tf.fromOutletName}</span>
+                                      <span className="text-info-text mx-1">has surplus →</span>
+                                      <span className="text-info-text font-semibold">{tf.transferQty} {tf.packageName}</span>
                                     </div>
                                   </div>
                                   <button
@@ -1077,7 +1077,7 @@ export default function CreateOrderPage() {
                                       if (res.ok) alert(`Transfer created from ${tf.fromOutletName}`);
                                       else alert("Failed to create transfer");
                                     }}
-                                    className="shrink-0 rounded-md bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-blue-700 transition-colors"
+                                    className="shrink-0 rounded-md bg-info-text px-2.5 py-1 text-[11px] font-medium text-on-ink hover:opacity-90 transition-colors"
                                   >
                                     Transfer
                                   </button>
@@ -1174,7 +1174,7 @@ export default function CreateOrderPage() {
                           {order.orderNumber} &middot; {new Date(order.createdAt).toLocaleDateString("en-MY")} &middot; RM {order.totalAmount.toFixed(2)}
                         </p>
                       </div>
-                      <Button size="sm" className="h-8 bg-green-600 text-xs hover:bg-green-700" onClick={() => handleReorder(order)}>
+                      <Button size="sm" className="h-8 bg-ok-soft text-ok-text text-xs hover:opacity-90" onClick={() => handleReorder(order)}>
                         <RotateCcw className="mr-1 h-3.5 w-3.5" />Reorder
                       </Button>
                     </div>
@@ -1196,7 +1196,7 @@ export default function CreateOrderPage() {
             <Card className="p-4">
               <div className="mb-3 flex items-center justify-between">
                 <span className="flex items-center gap-2 text-sm font-semibold text-text">
-                  <ShoppingCart className="h-4 w-4" />Order Cart
+                  <ShoppingCart className="h-4 w-4" />Order cart
                 </span>
                 {cart.length > 0 && (
                   <Badge className="bg-ink">{cart.length}</Badge>
@@ -1224,12 +1224,12 @@ export default function CreateOrderPage() {
                           </div>
 
                           {/* Delivery date (optional) */}
-                          <div className="mb-2 flex items-center gap-1.5 rounded-md bg-blue-50 px-2 py-1.5">
-                            <Truck className="h-3 w-3 text-blue-500" />
-                            <span className="text-[11px] text-blue-700">Delivery:</span>
+                          <div className="mb-2 flex items-center gap-1.5 rounded-md bg-info-soft px-2 py-1.5">
+                            <Truck className="h-3 w-3 text-info-text" />
+                            <span className="text-[11px] text-info-text">Delivery:</span>
                             <input
                               type="date"
-                              className="rounded border border-blue-200 bg-surface px-1.5 py-0.5 text-[11px] text-blue-700 focus:border-blue-400 focus:outline-none"
+                              className="rounded border border-line bg-surface px-1.5 py-0.5 text-[11px] text-info-text focus:border-line focus:outline-none"
                               value={deliveryDates[group.supplierId] || ""}
                               onChange={(e) => setDeliveryDates((prev) => ({ ...prev, [group.supplierId]: e.target.value }))}
                             />
@@ -1240,7 +1240,7 @@ export default function CreateOrderPage() {
                               <div key={`${item.productId}-${item.supplierId}-${item.productPackageId}`} className="text-xs">
                                 <div className="flex items-center justify-between">
                                   <p className="truncate text-text-2 font-medium flex-1 min-w-0">{item.name}</p>
-                                  <button onClick={() => removeFromCart(item.productId, item.supplierId, item.productPackageId)} className="text-red-400 hover:text-red-600 ml-1"><Trash2 className="h-3 w-3" /></button>
+                                  <button onClick={() => removeFromCart(item.productId, item.supplierId, item.productPackageId)} className="text-danger-text hover:text-danger-text ml-1"><Trash2 className="h-3 w-3" /></button>
                                 </div>
                                 <div className="flex items-center justify-between mt-1">
                                   <div className="flex items-center gap-1.5">
@@ -1282,7 +1282,7 @@ export default function CreateOrderPage() {
                       Save as Draft
                     </Button>
                     {Object.entries(cartBySupplier).map(([supplier, group]) => (
-                      <Button key={supplier} className="w-full h-10 bg-green-600 hover:bg-green-700 text-sm" onClick={() => sendViaWhatsApp(supplier)}>
+                      <Button key={supplier} className="w-full h-10 bg-ink text-on-ink hover:bg-ink-hover text-sm" onClick={() => sendViaWhatsApp(supplier)}>
                         <MessageCircle className="mr-1.5 h-4 w-4" />
                         Send to {supplier} ({group.items.length})
                       </Button>
@@ -1302,10 +1302,10 @@ export default function CreateOrderPage() {
             <DialogTitle>Send Order to {whatsappDialog.supplier}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-2">
-            <div className="rounded-lg bg-green-50 p-3">
+            <div className="rounded-lg bg-ok-soft p-3">
               <pre className="whitespace-pre-wrap text-xs text-text-2">{whatsappDialog.message}</pre>
             </div>
-            <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => openWhatsApp("direct")} disabled={sending || !whatsappDialog.phone}>
+            <Button className="w-full bg-ink text-on-ink hover:bg-ink-hover" onClick={() => openWhatsApp("direct")} disabled={sending || !whatsappDialog.phone}>
               {sending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <MessageCircle className="mr-1.5 h-4 w-4" />}
               {sending ? "Creating order..." : whatsappDialog.phone ? `Send to ${whatsappDialog.supplier}` : "Open WhatsApp"}
             </Button>
@@ -1313,7 +1313,7 @@ export default function CreateOrderPage() {
               type="button"
               onClick={() => openWhatsApp("picker")}
               disabled={sending}
-              className="w-full rounded-md border border-green-200 bg-surface px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+              className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm font-medium text-ok-text hover:bg-ok-soft disabled:opacity-50"
             >
               Send to a group / pick chat →
             </button>

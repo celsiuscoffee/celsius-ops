@@ -3,30 +3,27 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { Search, ChevronRight, RefreshCw, Download, X } from "lucide-react";
+import { Search, RefreshCw, Download, X } from "lucide-react";
+import { KeyNumber } from "@/components/ui/key-number";
+import { DateRangePicker } from "@/components/date-range-picker";
+import { summariseOrders } from "@/lib/orders-summary";
 import type { OrderRow } from "@/lib/pickup/types";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { storeLabel } from "@/lib/pickup/store-label";
 
 const STATUS_COLOUR: Record<string, string> = {
   pending:   "bg-sunken text-text-2",
-  paid:      "bg-blue-100 text-blue-600",
-  preparing: "bg-amber-100 text-amber-700",
-  ready:     "bg-green-100 text-green-700",
+  paid:      "bg-info-soft text-info-text",
+  preparing: "bg-warn-soft text-warn-text",
+  ready:     "bg-ok-soft text-ok-text",
   completed: "bg-sunken text-text-2",
-  failed:    "bg-red-100 text-red-600",
+  failed:    "bg-danger-soft text-danger-text",
 };
 
 const STORES = ["all", "shah-alam", "conezion", "tamarind"];
 const STATUSES = ["all", "pending", "paid", "preparing", "ready", "completed", "failed"];
 const CHANNELS = ["all", "pickup", "qr", "pos", "grab"];
 const CHANNEL_LABEL: Record<string, string> = { all: "All channels", pickup: "Pickup", qr: "Table QR", pos: "In-store", grab: "Grab" };
-const CHANNEL_BADGE: Record<string, string> = {
-  pickup: "bg-blue-100 text-blue-700",
-  qr:     "bg-teal-100 text-teal-700",
-  pos:    "bg-purple-100 text-purple-700",
-  grab:   "bg-green-100 text-green-700",
-};
 
 function todayString() {
   return new Date().toISOString().slice(0, 10);
@@ -128,230 +125,119 @@ export default function PickupOrders() {
     (o.customer_phone ?? "").includes(search)
   );
 
-  const totalRevenue = filtered
-    .filter((o) => !["pending", "failed"].includes(o.status))
-    .reduce((s, o) => s + o.total, 0);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { setNow(Date.now()); }, [orders]);
+  const summary = summariseOrders(filtered, now);
+  const rm = (sen: number) => `RM ${(sen / 100).toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const timeOf = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kuala_Lumpur" });
+  const dateOf = (iso: string) => new Date(iso).toLocaleDateString("en-MY", { day: "numeric", month: "short", timeZone: "Asia/Kuala_Lumpur" });
+  const ctl = "h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text focus:border-ink focus:outline-none";
 
   return (
-    <div className="space-y-5 max-w-6xl px-4 pt-6 pb-10 md:px-8">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="max-w-[1100px] space-y-5 px-4 pt-6 pb-10 md:px-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Orders</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {filtered.length} {filtered.length === 1 ? 'order' : 'orders'} · RM {(totalRevenue / 100).toFixed(2)} total
-          </p>
+          <p className="mt-0.5 text-sm text-text-2">Every app, table QR and Grab order: what sold, what customers are waiting for, what failed.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowExport(true)}
-            className="flex items-center gap-1.5 text-sm font-medium bg-ink text-on-ink px-3 py-1.5 rounded-xl hover:bg-ink/90 transition-colors"
-          >
-            <Download className="h-4 w-4" strokeWidth={1.75} />
-            Export CSV
-          </button>
-          <button
-            onClick={load}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-text transition-colors"
-          >
+          <button onClick={load} aria-label="Refresh" className="flex h-10 w-10 items-center justify-center rounded-ctl border border-line text-text-2 hover:text-text">
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+          </button>
+          <button onClick={() => setShowExport((v) => !v)} className="inline-flex h-10 items-center gap-1.5 rounded-ctl bg-ink px-4 text-sm font-semibold text-on-ink hover:bg-ink-hover">
+            <Download className="h-4 w-4" strokeWidth={1.75} /> Export CSV
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-surface rounded-2xl p-4 space-y-3">
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search order number, customer name or phone..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-        </div>
-
-        {/* Row 2: filters */}
-        <div className="flex flex-wrap gap-2">
-          {/* Store filter */}
-          <select
-            value={store}
-            onChange={(e) => setStore(e.target.value)}
-            className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            {STORES.map((s) => (
-              <option key={s} value={s}>{s === "all" ? "All outlets" : storeLabel(s)}</option>
-            ))}
-          </select>
-
-          {/* Status filter */}
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>{s === "all" ? "All statuses" : s.charAt(0).toUpperCase() + s.slice(1)}</option>
-            ))}
-          </select>
-
-          {/* Channel filter */}
-          <select
-            value={channel}
-            onChange={(e) => setChannel(e.target.value)}
-            className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          >
-            {CHANNELS.map((c) => (
-              <option key={c} value={c}>{CHANNEL_LABEL[c]}</option>
-            ))}
-          </select>
-
-          {/* Date range */}
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-          <span className="self-center text-muted-foreground text-sm">-</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-
-          {(store !== "all" || status !== "all" || channel !== "all" || dateFrom || dateTo) && (
-            <button
-              onClick={() => { setStore("all"); setStatus("all"); setChannel("all"); setDateFrom(""); setDateTo(""); }}
-              className="text-sm text-primary font-medium"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="bg-surface rounded-2xl overflow-hidden">
-        {loading ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>
-        ) : filtered.length === 0 ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">No orders found</div>
-        ) : (
-          <>
-            {/* Header */}
-            <div className="hidden md:grid grid-cols-[1fr_1.1fr_0.9fr_0.7fr_0.9fr_0.7fr_0.8fr_40px] gap-3 px-5 py-3 border-b bg-muted/30 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              <span>Order</span>
-              <span>Customer</span>
-              <span>Outlet</span>
-              <span>Channel</span>
-              <span>Date / Time</span>
-              <span>Total</span>
-              <span>Status</span>
-              <span />
-            </div>
-
-            <div className="divide-y">
-              {filtered.map((order) => {
-                const ch = order.channel ?? "pickup";
-                const rowClass =
-                  "flex flex-col md:grid md:grid-cols-[1fr_1.1fr_0.9fr_0.7fr_0.9fr_0.7fr_0.8fr_40px] gap-1 md:gap-3 items-start md:items-center px-5 py-3.5 transition-colors hover:bg-muted/20";
-                const content = (
-                  <>
-                    <span className="font-semibold text-sm">
-                      #{order.order_number}
-                      {order.order_type === "dine_in" && order.table_number && (
-                        <span className="ml-2 text-[11px] font-medium text-teal-700">Table {order.table_number}</span>
-                      )}
-                    </span>
-                    <span className="text-sm text-muted-foreground truncate">
-                      {order.customer_name ?? "—"}{order.customer_phone ? ` · ${order.customer_phone}` : ""}
-                    </span>
-                    <span className="text-sm">{storeLabel(order.store_id)}</span>
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit ${CHANNEL_BADGE[ch] ?? "bg-sunken text-text-2"}`}>
-                      {CHANNEL_LABEL[ch] ?? ch}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {new Date(order.created_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}
-                      {" "}
-                      {new Date(order.created_at).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                    <span className="text-sm font-semibold">RM {(order.total / 100).toFixed(2)}</span>
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full w-fit ${STATUS_COLOUR[order.status] ?? "bg-sunken text-text-2"}`}>
-                      {order.status}
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground hidden md:block" />
-                  </>
-                );
-                return (
-                  <Link key={order.id} href={`/pickup/orders/${order.id}`} className={rowClass}>
-                    {content}
-                  </Link>
-                );
-              })}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Export CSV Modal */}
       {showExport && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-surface rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-xl">
-            <div className="flex items-center justify-between">
-              <h2 className="font-bold text-text">Export Orders</h2>
-              <button onClick={() => setShowExport(false)} className="text-muted-foreground hover:text-text">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">From</label>
-                <input
-                  type="date"
-                  value={exportFrom}
-                  onChange={(e) => setExportFrom(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">To</label>
-                <input
-                  type="date"
-                  value={exportTo}
-                  onChange={(e) => setExportTo(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Outlet</label>
-                <select
-                  value={exportStore}
-                  onChange={(e) => setExportStore(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  {STORES.map((s) => (
-                    <option key={s} value={s}>
-                      {s === "all" ? "All outlets" : storeLabel(s)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <button
-              onClick={handleExport}
-              disabled={exporting || !exportFrom || !exportTo}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-ink text-on-ink text-sm font-semibold rounded-xl hover:bg-ink/90 transition-colors disabled:opacity-50"
-            >
-              <Download className="h-4 w-4" strokeWidth={1.75} />
-              {exporting ? "Downloading..." : "Download CSV"}
+        // Export: a full-width inline panel (several fields), not a modal.
+        <div className="rounded-card border border-line bg-surface p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-text">Export orders</p>
+            <button onClick={() => setShowExport(false)} aria-label="Close export" className="flex h-9 w-9 items-center justify-center rounded-ctl text-text-3 hover:bg-sunken hover:text-text"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="block">
+              <span className="text-[13px] font-medium text-text-2">Dates</span>
+              <DateRangePicker className="mt-1" start={exportFrom} end={exportTo} onChange={(a, b) => { setExportFrom(a); setExportTo(b); }} />
+            </label>
+            <label className="block">
+              <span className="text-[13px] font-medium text-text-2">Outlet</span>
+              <select value={exportStore} onChange={(e) => setExportStore(e.target.value)} className={`mt-1 block ${ctl}`}>
+                {STORES.map((s) => <option key={s} value={s}>{s === "all" ? "All outlets" : storeLabel(s)}</option>)}
+              </select>
+            </label>
+            <button onClick={handleExport} disabled={exporting || !exportFrom || !exportTo}
+              className="inline-flex h-10 items-center gap-1.5 rounded-ctl bg-ink px-4 text-sm font-semibold text-on-ink hover:bg-ink-hover disabled:opacity-50">
+              <Download className="h-4 w-4" strokeWidth={1.75} />{exporting ? "Downloading…" : "Download CSV"}
             </button>
           </div>
         </div>
       )}
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label="Sales" value={loading ? null : rm(summary.paid.sales)}
+          note={<><b className="font-semibold text-text-2">{summary.paid.count}</b> orders{summary.paid.average != null ? <>, {rm(summary.paid.average)} each</> : null}</>} />
+        <KeyNumber label="Being made" value={loading ? null : String(summary.inProgress.count)} tone={(summary.inProgress.oldestMinutes ?? 0) > 15 ? "warn" : undefined}
+          note={summary.inProgress.count ? <>oldest <b className="font-semibold text-text-2">{summary.inProgress.oldestMinutes} min</b></> : "nobody waiting"} />
+        <KeyNumber label="Ready to collect" value={loading ? null : String(summary.ready)}
+          note={summary.ready ? "waiting at the counter" : "nothing on the counter"} />
+        <KeyNumber label="Payment failed" value={loading ? null : String(summary.failed.count)} tone={summary.failed.count > 0 ? "warn" : undefined}
+          note={<>of <b className="font-semibold text-text-2">{summary.failed.of}</b> orders shown</>} />
+      </div>
+
+      <div className="space-y-2">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
+          <input type="text" placeholder="Search order number, customer name or phone…" value={search} onChange={(e) => setSearch(e.target.value)}
+            className="h-10 w-full rounded-ctl border border-line bg-surface pl-9 pr-3 text-sm text-text focus:border-ink focus:outline-none" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={store} onChange={(e) => setStore(e.target.value)} className={ctl} aria-label="Outlet">
+            {STORES.map((s) => <option key={s} value={s}>{s === "all" ? "All outlets" : storeLabel(s)}</option>)}
+          </select>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={ctl} aria-label="Status">
+            {STATUSES.map((s) => <option key={s} value={s}>{s === "all" ? "All statuses" : s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+          </select>
+          <select value={channel} onChange={(e) => setChannel(e.target.value)} className={ctl} aria-label="Channel">
+            {CHANNELS.map((c) => <option key={c} value={c}>{CHANNEL_LABEL[c]}</option>)}
+          </select>
+          <DateRangePicker start={dateFrom} end={dateTo} onChange={(a, b) => { setDateFrom(a); setDateTo(b); }} />
+          {(store !== "all" || status !== "all" || channel !== "all" || dateFrom || dateTo) && (
+            <button onClick={() => { setStore("all"); setStatus("all"); setChannel("all"); setDateFrom(""); setDateTo(""); }}
+              className="h-10 px-2 text-sm font-medium text-brand-text hover:underline">Clear filters</button>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-card border border-line bg-surface">
+        {loading ? (
+          <p className="py-12 text-center text-sm text-text-3">Loading…</p>
+        ) : filtered.length === 0 ? (
+          <p className="py-12 text-center text-sm text-text-3">No orders match.</p>
+        ) : filtered.map((order) => {
+          const ch = order.channel ?? "pickup";
+          return (
+            <Link key={order.id} href={`/pickup/orders/${order.id}`} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0 hover:bg-sunken/50">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-text">
+                  #{order.order_number}
+                  <span className="font-normal text-text-2"> · {order.customer_name ?? "No name"}</span>
+                  {order.order_type === "dine_in" && order.table_number && <span className="font-normal text-text-3"> · Table {order.table_number}</span>}
+                </p>
+                <p className="mt-0.5 truncate text-[12px] text-text-3">
+                  {storeLabel(order.store_id)} · {CHANNEL_LABEL[ch] ?? ch} · {dateOf(order.created_at)}, {timeOf(order.created_at)}{order.customer_phone ? ` · ${order.customer_phone}` : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className="font-mono text-sm font-semibold text-text">{rm(order.total)}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] capitalize ${STATUS_COLOUR[order.status] ?? "bg-sunken text-text-2"}`}>{order.status}</span>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }

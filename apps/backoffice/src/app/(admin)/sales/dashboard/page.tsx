@@ -6,7 +6,6 @@ import {
   ShoppingCart,
   TrendingUp,
   Loader2,
-  CalendarDays,
   UtensilsCrossed,
   ShoppingBag,
   Truck,
@@ -18,6 +17,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useLatestRequest } from "@/lib/use-latest-request";
 import { AccumulativeChart } from "./AccumulativeChart";
+import { KeyNumber } from "@/components/ui/key-number";
+import { DateRangePicker } from "@/components/date-range-picker";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -131,23 +132,19 @@ function formatDateShort(dateStr: string): string {
 const PERIOD_OPTIONS: { key: Period; label: string }[] = [
   { key: "daily", label: "Today" },
   { key: "yesterday", label: "Yesterday" },
-  { key: "last7days", label: "Last 7 Days" },
-  { key: "last30days", label: "Last 30 Days" },
-  { key: "weekly", label: "This Week" },
-  { key: "monthly", label: "This Month" },
+  { key: "last7days", label: "Last 7 days" },
+  { key: "last30days", label: "Last 30 days" },
+  { key: "weekly", label: "This week" },
+  { key: "monthly", label: "This month" },
   { key: "custom", label: "Custom" },
 ];
 
-function getPeriodLabel(p: Period): string {
-  return PERIOD_OPTIONS.find((o) => o.key === p)?.label ?? p;
-}
-
 /** Color for % of target */
 function targetColor(pct: number): { bg: string; text: string; label: string } {
-  if (pct >= 100) return { bg: "bg-green-50", text: "text-green-700", label: "On Target" };
-  if (pct >= 80) return { bg: "bg-yellow-50", text: "text-yellow-700", label: "Near Target" };
-  if (pct >= 50) return { bg: "bg-orange-50", text: "text-orange-700", label: "Below Target" };
-  return { bg: "bg-red-50", text: "text-red-700", label: "Critical" };
+  if (pct >= 100) return { bg: "bg-ok-soft", text: "text-ok-text", label: "On Target" };
+  if (pct >= 80) return { bg: "bg-warn-soft", text: "text-warn-text", label: "Near Target" };
+  if (pct >= 50) return { bg: "bg-warn-soft", text: "text-warn-text", label: "Below Target" };
+  return { bg: "bg-danger-soft", text: "text-danger-text", label: "Critical" };
 }
 
 /** % change between current and previous */
@@ -157,11 +154,11 @@ function pctChange(current: number, previous: number): { pct: number; label: str
   const fmtDiff = diffAbs >= 1000 ? `${(diffAbs / 1000).toFixed(1)}k` : diffAbs.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const diffLabel = diff > 0 ? `+RM ${fmtDiff}` : diff < 0 ? `-RM ${fmtDiff}` : "";
   if (current === 0 && previous === 0) return { pct: 0, label: "\u2014", color: "text-text-3", diff: 0, diffLabel: "" };
-  if (previous === 0) return { pct: 0, label: "New", color: "text-green-600", diff, diffLabel };
-  if (current === 0) return { pct: -100, label: "-100%", color: "text-red-500", diff, diffLabel };
+  if (previous === 0) return { pct: 0, label: "New", color: "text-ok-text", diff, diffLabel };
+  if (current === 0) return { pct: -100, label: "-100%", color: "text-danger-text", diff, diffLabel };
   const pct = Math.round(((current - previous) / previous) * 100);
-  if (pct > 0) return { pct, label: `+${pct}%`, color: "text-green-600", diff, diffLabel };
-  if (pct < 0) return { pct, label: `${pct}%`, color: "text-red-500", diff, diffLabel };
+  if (pct > 0) return { pct, label: `+${pct}%`, color: "text-ok-text", diff, diffLabel };
+  if (pct < 0) return { pct, label: `${pct}%`, color: "text-danger-text", diff, diffLabel };
   return { pct: 0, label: "0%", color: "text-text-3", diff: 0, diffLabel: "" };
 }
 
@@ -170,10 +167,10 @@ function cellColor(val: number, target: number): string {
   if (val === 0) return "text-text-3";
   if (target <= 0) return "text-text-2";
   const pct = (val / target) * 100;
-  if (pct >= 100) return "font-semibold text-green-600";
-  if (pct >= 80) return "text-yellow-600";
-  if (pct >= 50) return "text-orange-600";
-  return "text-red-500";
+  if (pct >= 100) return "font-semibold text-ok-text";
+  if (pct >= 80) return "text-warn-text";
+  if (pct >= 50) return "text-warn-text";
+  return "text-danger-text";
 }
 
 // ─── Component ──────────────────────────────────────────────────────────
@@ -283,77 +280,30 @@ export default function SalesDashboard() {
 
   // ─── Render ─────────────────────────────────────────────────────────
 
+  const periodText = data ? (data.period.from === data.period.to ? formatDate(data.period.from) : `${formatDate(data.period.from)} – ${formatDate(data.period.to)}`) : "";
+  const ctl = "h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text focus:border-ink focus:outline-none";
+
   return (
-    <div className="p-3 sm:p-6 pb-10 min-h-0 w-full">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Sales Dashboard</h1>
-        <p className="mt-1 text-sm text-text-2">Sales performance by time round</p>
-      </div>
-
-      {/* Filters bar */}
-      <div className="rounded-xl border border-line bg-surface shadow-sm p-4 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="h-5 w-5 text-brand-text" />
-            <h2 className="text-sm font-semibold text-text">Filters</h2>
-            {data && (
-              <span className="text-xs text-text-3">
-                {data.period.from === data.period.to
-                  ? data.period.from
-                  : `${data.period.from} to ${data.period.to}`}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Outlet filter */}
-            {data?.availableOutlets && data.availableOutlets.length > 1 && (
-              <select
-                value={outletId}
-                onChange={(e) => setOutletId(e.target.value)}
-                className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-text-2 focus:outline-none focus:ring-1 focus:ring-brand"
-              >
-                <option value="all">All Outlets</option>
-                {data.availableOutlets.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
-            )}
-            {/* Period dropdown */}
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value as Period)}
-              className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-text-2 focus:outline-none focus:ring-1 focus:ring-brand"
-            >
-              {PERIOD_OPTIONS.map((p) => (
-                <option key={p.key} value={p.key}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
+    <div className="w-full max-w-[1240px] px-4 pt-6 pb-10 md:px-8">
+      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Sales</h1>
+          <p className="mt-0.5 text-sm text-text-2">How much we sold{periodText ? `, ${periodText}` : ""}, against the period before and against each round&apos;s target.</p>
         </div>
-
-        {/* Custom date pickers */}
-        {period === "custom" && (
-          <div className="flex items-center gap-2 mt-3">
-            <input
-              type="date"
-              value={customFrom}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              className="rounded-lg border border-line px-3 py-1.5 text-xs text-text-2 focus:outline-none focus:ring-1 focus:ring-brand"
-            />
-            <span className="text-xs text-text-3">to</span>
-            <input
-              type="date"
-              value={customTo}
-              onChange={(e) => setCustomTo(e.target.value)}
-              className="rounded-lg border border-line px-3 py-1.5 text-xs text-text-2 focus:outline-none focus:ring-1 focus:ring-brand"
-            />
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {data?.availableOutlets && data.availableOutlets.length > 1 && (
+            <select value={outletId} onChange={(e) => setOutletId(e.target.value)} className={ctl} aria-label="Outlet">
+              <option value="all">All outlets</option>
+              {data.availableOutlets.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+          )}
+          <select value={period} onChange={(e) => setPeriod(e.target.value as Period)} className={ctl} aria-label="Period">
+            {PERIOD_OPTIONS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </select>
+          {period === "custom" && (
+            <DateRangePicker start={customFrom} end={customTo} onChange={(a, b) => { setCustomFrom(a); setCustomTo(b); }} />
+          )}
+        </div>
       </div>
 
       {/* Loading / Error */}
@@ -367,8 +317,8 @@ export default function SalesDashboard() {
       )}
 
       {error && !loading && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center">
-          <p className="text-sm text-red-600">{error}</p>
+        <div className="rounded-xl border border-line bg-danger-soft p-6 text-center">
+          <p className="text-sm text-danger-text">{error}</p>
         </div>
       )}
 
@@ -376,94 +326,39 @@ export default function SalesDashboard() {
         <div className="flex flex-col gap-6">
           {/* Warnings from StoreHub API */}
           {data.warnings && data.warnings.length > 0 && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className="rounded-xl border border-line bg-warn-soft p-4">
               <div className="flex items-center gap-2 mb-1">
-                <AlertTriangle className="h-4 w-4 text-amber-600" />
-                <p className="text-sm font-medium text-amber-800">StoreHub API Issues</p>
+                <AlertTriangle className="h-4 w-4 text-warn-text" />
+                <p className="text-sm font-medium text-warn-text">Some sales data could not be read</p>
               </div>
               {data.warnings.map((w, i) => (
-                <p key={i} className="text-xs text-amber-700 ml-6">{w}</p>
+                <p key={i} className="text-xs text-warn-text ml-6">{w}</p>
               ))}
             </div>
           )}
-          {/* ─── Summary Cards with comparison ─── */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {(() => {
-              const prev = data.previous;
-              const revChange = pctChange(data.summary.revenue, prev.revenue);
-              const ordChange = pctChange(data.summary.orders, prev.orders);
-              const aovChange = pctChange(data.summary.aov, prev.aov);
-              // For an in-progress period the previous one is capped to the same
-              // elapsed point, so the delta is a like-for-like to-now read.
-              const vsLabel = prev.sameTime ? "vs same time, prev period" : "vs prev period";
-              return (
-                <>
-                  <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100">
-                        <DollarSign className="h-5 w-5 text-green-600" />
-                      </div>
-                      <p className="text-xs font-medium text-text-2 uppercase tracking-wide">
-                        Total Revenue
-                      </p>
-                    </div>
-                    <p className="font-sans text-2xl font-bold text-text">
-                      RM {data.summary.revenue.toLocaleString("en-MY", { minimumFractionDigits: 2 })}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={cn("text-xs font-semibold", revChange.color)}>{revChange.label}</span>
-                      {revChange.diffLabel && <span className={cn("text-xs", revChange.color)}>{revChange.diffLabel}</span>}
-                      <span className="text-[10px] text-text-3">{vsLabel}</span>
-                    </div>
-                    {data.deliveryQR && data.deliveryQR.orders > 0 && (
-                      <p className="text-[10px] text-text-3 mt-1.5">
-                        Own sales: RM {(data.summary.ownSalesRevenue ?? data.summary.revenue).toLocaleString("en-MY", { minimumFractionDigits: 2 })}
-                        {" · "}Delivery/QR: RM {data.deliveryQR.revenue.toLocaleString("en-MY", { minimumFractionDigits: 2 })}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100">
-                        <ShoppingCart className="h-5 w-5 text-blue-600" />
-                      </div>
-                      <p className="text-xs font-medium text-text-2 uppercase tracking-wide">
-                        Total Orders
-                      </p>
-                    </div>
-                    <p className="font-sans text-2xl font-bold text-text">
-                      {data.summary.orders.toLocaleString()}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={cn("text-xs font-semibold", ordChange.color)}>{ordChange.label}</span>
-                      {ordChange.diff !== 0 && <span className={cn("text-xs", ordChange.color)}>{ordChange.diff > 0 ? "+" : ""}{ordChange.diff}</span>}
-                      <span className="text-[10px] text-text-3">{vsLabel}</span>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-line bg-surface p-5 shadow-sm">
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100">
-                        <TrendingUp className="h-5 w-5 text-orange-600" />
-                      </div>
-                      <p className="text-xs font-medium text-text-2 uppercase tracking-wide">
-                        Average Order Value
-                      </p>
-                    </div>
-                    <p className="font-sans text-2xl font-bold text-text">
-                      RM {data.summary.aov.toFixed(2)}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={cn("text-xs font-semibold", aovChange.color)}>{aovChange.label}</span>
-                      {aovChange.diffLabel && <span className={cn("text-xs", aovChange.color)}>{aovChange.diffLabel}</span>}
-                      <span className="text-[10px] text-text-3">{vsLabel}</span>
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
+          {/* ─── Key numbers, each against the period before ─── */}
+          {(() => {
+            const prev = data.previous;
+            const revChange = pctChange(data.summary.revenue, prev.revenue);
+            const ordChange = pctChange(data.summary.orders, prev.orders);
+            const aovChange = pctChange(data.summary.aov, prev.aov);
+            // For an in-progress period the previous one is capped to the same
+            // elapsed point, so the delta is a like-for-like to-now read.
+            const vsLabel = prev.sameTime ? "vs same time last period" : "vs last period";
+            const targeted = data.rounds.filter((r) => r.totals.pctOfTarget > 0);
+            const behind = targeted.filter((r) => r.totals.pctOfTarget < 80);
+            const Delta = ({ c }: { c: ReturnType<typeof pctChange> }) => <b className={cn("font-semibold", c.color)}>{c.label}</b>;
+            return (
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <KeyNumber label="Sales" value={`RM ${data.summary.revenue.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  note={<><Delta c={revChange} /> {vsLabel}{data.deliveryQR && data.deliveryQR.orders > 0 ? <>; RM {data.deliveryQR.revenue.toLocaleString("en-MY", { maximumFractionDigits: 0 })} delivery and QR</> : null}</>} />
+                <KeyNumber label="Orders" value={data.summary.orders.toLocaleString("en-MY")} note={<><Delta c={ordChange} /> {vsLabel}</>} />
+                <KeyNumber label="Average order" value={`RM ${data.summary.aov.toFixed(2)}`} note={<><Delta c={aovChange} /> {vsLabel}</>} />
+                <KeyNumber label="Rounds behind target" value={targeted.length ? `${behind.length} of ${targeted.length}` : "–"} word tone={behind.length > 0 ? "warn" : undefined}
+                  note={behind.length ? <>under 80%: {behind.map((r) => r.label).join(", ")}</> : targeted.length ? "every round at 80% or more" : "no targets set"} />
+              </div>
+            );
+          })()}
 
           {/* ─── Accumulative Sales — granularity follows the Period filter ─── */}
           <AccumulativeChart outletId={outletId} period={period} customFrom={customFrom} customTo={customTo} />
@@ -484,11 +379,11 @@ export default function SalesDashboard() {
                   <div className="flex items-start gap-2.5 min-w-0">
                     <div className={cn(
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                      isDefault ? "bg-sunken" : stale ? "bg-amber-100" : "bg-emerald-100",
+                      isDefault ? "bg-sunken" : stale ? "bg-warn-soft" : "bg-ok-soft",
                     )}>
                       <TrendingUp className={cn(
                         "h-4 w-4",
-                        isDefault ? "text-text-2" : stale ? "text-amber-600" : "text-emerald-600",
+                        isDefault ? "text-text-2" : stale ? "text-warn-text" : "text-ok-text",
                       )} />
                     </div>
                     <div className="min-w-0">
@@ -496,7 +391,7 @@ export default function SalesDashboard() {
                         <p className="text-sm font-semibold text-text">AI Sales Targets</p>
                         <span className={cn(
                           "text-[10px] px-1.5 py-0.5 rounded font-medium",
-                          isDefault ? "bg-sunken text-text-2" : stale ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700",
+                          isDefault ? "bg-sunken text-text-2" : stale ? "bg-warn-soft text-warn-text" : "bg-ok-soft text-ok-text",
                         )}>
                           {isDefault ? "Using defaults" : stale ? `Stale · ${daysAgo}d ago` : daysAgo === 0 ? "Updated today" : `Updated ${daysAgo}d ago`}
                         </span>
@@ -512,7 +407,7 @@ export default function SalesDashboard() {
                         </p>
                       )}
                       {targetsRecomputeError && (
-                        <p className="text-[11px] text-red-500 mt-1">{targetsRecomputeError}</p>
+                        <p className="text-[11px] text-danger-text mt-1">{targetsRecomputeError}</p>
                       )}
                     </div>
                   </div>
@@ -588,7 +483,7 @@ export default function SalesDashboard() {
             </div>
 
             {aiError && (
-              <p className="text-xs text-red-500 mb-3">{aiError}</p>
+              <p className="text-xs text-danger-text mb-3">{aiError}</p>
             )}
 
             {aiLoading && recommendations.length === 0 && (
@@ -602,20 +497,20 @@ export default function SalesDashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {recommendations.map((rec, idx) => {
                   const iconMap: Record<string, React.ReactNode> = {
-                    opportunity: <Sparkles className="h-4 w-4 text-green-500" />,
-                    warning: <AlertTriangle className="h-4 w-4 text-amber-500" />,
-                    insight: <Lightbulb className="h-4 w-4 text-blue-500" />,
-                    action: <Zap className="h-4 w-4 text-purple-500" />,
+                    opportunity: <Sparkles className="h-4 w-4 text-ok-text" />,
+                    warning: <AlertTriangle className="h-4 w-4 text-warn-text" />,
+                    insight: <Lightbulb className="h-4 w-4 text-info-text" />,
+                    action: <Zap className="h-4 w-4 text-info-text" />,
                   };
                   const borderMap: Record<string, string> = {
-                    opportunity: "border-l-green-400",
-                    warning: "border-l-amber-400",
-                    insight: "border-l-blue-400",
-                    action: "border-l-purple-400",
+                    opportunity: "border-l-ok",
+                    warning: "border-l-warn",
+                    insight: "border-l-info",
+                    action: "border-l-info",
                   };
                   const impactBadge: Record<string, string> = {
-                    high: "bg-red-50 text-red-600",
-                    medium: "bg-yellow-50 text-yellow-600",
+                    high: "bg-danger-soft text-danger-text",
+                    medium: "bg-warn-soft text-warn-text",
                     low: "bg-sunken text-text-2",
                   };
                   return (
@@ -696,13 +591,13 @@ export default function SalesDashboard() {
                     <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-2 min-w-[80px] bg-sunken">
                       Avg
                     </th>
-                    <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-blue-50 text-blue-700" title="Dine-In">
+                    <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-info-soft text-info-text" title="Dine-In">
                       <UtensilsCrossed className="h-3.5 w-3.5 mx-auto" />
                     </th>
-                    <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-amber-50 text-amber-700" title="Takeaway">
+                    <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-warn-soft text-warn-text" title="Takeaway">
                       <ShoppingBag className="h-3.5 w-3.5 mx-auto" />
                     </th>
-                    <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-purple-50 text-purple-700" title="Delivery">
+                    <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[60px] bg-info-soft text-info-text" title="Delivery">
                       <Truck className="h-3.5 w-3.5 mx-auto" />
                     </th>
                     <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider min-w-[70px] bg-sunken text-text-2">
@@ -785,17 +680,17 @@ export default function SalesDashboard() {
                           </span>
                         </td>
                         {/* Channel columns */}
-                        <td className="px-2 py-3 text-center bg-blue-50/30">
+                        <td className="px-2 py-3 text-center bg-info-soft">
                           <span className="font-sans text-xs text-text-2">
                             {activeMetric === "aov" ? "-" : chDineIn > 0 ? (activeMetric === "revenue" ? formatRM(chDineIn) : chDineIn) : "-"}
                           </span>
                         </td>
-                        <td className="px-2 py-3 text-center bg-amber-50/30">
+                        <td className="px-2 py-3 text-center bg-warn-soft">
                           <span className="font-sans text-xs text-text-2">
                             {activeMetric === "aov" ? "-" : chTakeaway > 0 ? (activeMetric === "revenue" ? formatRM(chTakeaway) : chTakeaway) : "-"}
                           </span>
                         </td>
-                        <td className="px-2 py-3 text-center bg-purple-50/30">
+                        <td className="px-2 py-3 text-center bg-info-soft">
                           <span className="font-sans text-xs text-text-2">
                             {activeMetric === "aov" ? "-" : chDelivery > 0 ? (activeMetric === "revenue" ? formatRM(chDelivery) : chDelivery) : "-"}
                           </span>
@@ -862,13 +757,13 @@ export default function SalesDashboard() {
                       const gtDelivery = data.rounds.reduce((s, r) => s + (activeMetric === "revenue" ? r.totals.delivery.revenue : r.totals.delivery.orders), 0);
                       return (
                         <>
-                          <td className="px-2 py-3 text-center bg-blue-100/50 text-text text-xs font-bold">
+                          <td className="px-2 py-3 text-center bg-info-soft text-text text-xs font-bold">
                             {activeMetric === "aov" ? "-" : gtDineIn > 0 ? (activeMetric === "revenue" ? formatRM(gtDineIn) : gtDineIn) : "-"}
                           </td>
-                          <td className="px-2 py-3 text-center bg-amber-100/50 text-text text-xs font-bold">
+                          <td className="px-2 py-3 text-center bg-warn-soft text-text text-xs font-bold">
                             {activeMetric === "aov" ? "-" : gtTakeaway > 0 ? (activeMetric === "revenue" ? formatRM(gtTakeaway) : gtTakeaway) : "-"}
                           </td>
-                          <td className="px-2 py-3 text-center bg-purple-100/50 text-text text-xs font-bold">
+                          <td className="px-2 py-3 text-center bg-info-soft text-text text-xs font-bold">
                             {activeMetric === "aov" ? "-" : gtDelivery > 0 ? (activeMetric === "revenue" ? formatRM(gtDelivery) : gtDelivery) : "-"}
                           </td>
                         </>
@@ -933,9 +828,9 @@ export default function SalesDashboard() {
             const delCh = pctChange(revDelivery, prevDelRev);
 
             return (
-              <div className="rounded-xl border border-amber-200 bg-amber-50/30 shadow-sm p-4">
+              <div className="rounded-xl border border-line bg-warn-soft shadow-sm p-4">
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
-                  <ShoppingBag className="h-4 w-4 text-amber-600" />
+                  <ShoppingBag className="h-4 w-4 text-warn-text" />
                   <h3 className="text-xs font-semibold text-text-2 uppercase tracking-wide">Pickup & Delivery</h3>
                   <div className="flex items-center gap-2 ml-auto flex-wrap">
                     <span className="text-[10px] bg-sunken text-text-2 px-1.5 py-0.5 rounded font-medium">
@@ -971,18 +866,18 @@ export default function SalesDashboard() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-amber-100 bg-surface p-3">
+                  <div className="rounded-lg border border-line bg-surface p-3">
                     <div className="flex items-center gap-1.5 mb-1.5">
-                      <ShoppingBag className="h-3.5 w-3.5 text-amber-500" />
+                      <ShoppingBag className="h-3.5 w-3.5 text-warn-text" />
                       <span className="text-[11px] font-semibold text-text-2 uppercase">Takeaway</span>
                       <span className={cn("text-[10px] font-semibold ml-auto", taCh.color)}>{taCh.label}</span>
                     </div>
                     <p className="text-lg font-bold text-text">RM {revTakeaway.toLocaleString("en-MY", { minimumFractionDigits: 0 })}</p>
                     <p className="text-[11px] text-text-3">{totTakeaway} {totTakeaway === 1 ? 'order' : 'orders'}</p>
                   </div>
-                  <div className="rounded-lg border border-purple-100 bg-surface p-3">
+                  <div className="rounded-lg border border-line bg-surface p-3">
                     <div className="flex items-center gap-1.5 mb-1.5">
-                      <Truck className="h-3.5 w-3.5 text-purple-500" />
+                      <Truck className="h-3.5 w-3.5 text-info-text" />
                       <span className="text-[11px] font-semibold text-text-2 uppercase">Delivery</span>
                       <span className={cn("text-[10px] font-semibold ml-auto", delCh.color)}>{delCh.label}</span>
                     </div>

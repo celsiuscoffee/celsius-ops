@@ -181,17 +181,17 @@ export default function ParLevelsPage() {
   };
 
   const statusConfig = {
-    none: { label: "No Par Set", className: "bg-sunken text-text-2" },
-    critical: { label: "Critical", className: "bg-red-100 text-red-700" },
-    low: { label: "Low", className: "bg-amber-100 text-amber-700" },
-    ok: { label: "OK", className: "bg-green-100 text-green-700" },
+    none: { label: "No par set", className: "bg-sunken text-text-2" },
+    critical: { label: "Critical", className: "bg-danger-soft text-danger-text" },
+    low: { label: "Low", className: "bg-warn-soft text-warn-text" },
+    ok: { label: "OK", className: "bg-ok-soft text-ok-text" },
   };
 
   const getRowBg = (productId: string): string => {
     const status = getStatus(productId);
     switch (status) {
-      case "critical": return "bg-red-50/50";
-      case "low": return "bg-amber-50/50";
+      case "critical": return "bg-danger-soft";
+      case "low": return "bg-warn-soft";
       case "ok": return "";
       default: return "";
     }
@@ -337,9 +337,9 @@ export default function ParLevelsPage() {
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Par Levels</h2>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Par levels</h1>
           <p className="mt-0.5 text-sm text-text-2">
-            Manage reorder points and target stock levels per product
+            When each item should be reordered, and how much to keep on the shelf.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -348,14 +348,14 @@ export default function ParLevelsPage() {
               onClick={() => setShowRecalcSettings(true)}
               disabled={recalculating}
               variant="outline"
-              className="border-purple-200 text-purple-700 hover:bg-purple-50"
+              className="border-line text-info-text hover:bg-info-soft"
             >
               {recalculating ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               ) : (
                 <Sparkles className="mr-1.5 h-4 w-4" />
               )}
-              Smart Recalculate
+              Smart recalculate
             </Button>
           )}
           {productsWithoutParCount > 0 && selectedOutletId && (
@@ -364,7 +364,7 @@ export default function ParLevelsPage() {
               className="bg-ink hover:bg-ink-hover"
             >
               <TrendingDown className="mr-1.5 h-4 w-4" />
-              Bulk Set ({productsWithoutParCount})
+              Bulk set ({productsWithoutParCount})
             </Button>
           )}
         </div>
@@ -404,10 +404,10 @@ export default function ParLevelsPage() {
               key={cat}
               onClick={() => setCategoryFilter(cat)}
               className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                categoryFilter === cat
-                  ? "border-text bg-raised font-semibold text-text"
-                  : "border-line text-text-2 hover:bg-sunken"
-              }`}
+ categoryFilter === cat
+ ? "border-text bg-raised font-semibold text-text"
+ : "border-line text-text-2 hover:bg-sunken"
+}`}
             >
               {cat}
             </button>
@@ -417,17 +417,17 @@ export default function ParLevelsPage() {
 
       {/* Empty state banner — shown when no products have par levels configured */}
       {!loading && products.length > 0 && productsWithoutParCount === products.length && (
-        <div className="mt-4 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-          <Sparkles className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-500" />
-          <div className="text-sm text-blue-800">
+        <div className="mt-4 flex items-start gap-3 rounded-lg border border-line bg-info-soft px-4 py-3">
+          <Sparkles className="mt-0.5 h-5 w-5 flex-shrink-0 text-info-text" />
+          <div className="text-sm text-info-text">
             <p className="font-medium">No par levels configured yet</p>
-            <p className="mt-0.5 text-blue-600">
+            <p className="mt-0.5 text-info-text">
               Use{" "}
               <button
                 onClick={() => setShowRecalcSettings(true)}
-                className="font-medium underline underline-offset-2 hover:text-blue-800"
+                className="font-medium underline underline-offset-2 hover:text-info-text"
               >
-                Smart Recalculate
+                Smart recalculate
               </button>{" "}
               to auto-set par levels based on your sales data, or click{" "}
               <span className="font-medium">&lsquo;Set&rsquo;</span> on individual products to configure them manually.
@@ -444,11 +444,11 @@ export default function ParLevelsPage() {
               <th className="px-4 py-3 text-left font-medium text-text-2">Product</th>
               <th className="px-4 py-3 text-left font-medium text-text-2">SKU</th>
               <th className="px-4 py-3 text-left font-medium text-text-2">Category</th>
-              <th className="px-4 py-3 text-left font-medium text-text-2">Order Unit</th>
-              <th className="px-4 py-3 text-right font-medium text-text-2">Current Stock</th>
-              <th className="px-4 py-3 text-right font-medium text-text-2">Par Level</th>
-              <th className="px-4 py-3 text-right font-medium text-text-2">Reorder Point</th>
-              <th className="px-4 py-3 text-right font-medium text-text-2">Avg Daily Usage</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Order unit</th>
+              <th className="px-4 py-3 text-right font-medium text-text-2">Current stock</th>
+              <th className="px-4 py-3 text-right font-medium text-text-2">Par level</th>
+              <th className="px-4 py-3 text-right font-medium text-text-2">Reorder point</th>
+              <th className="px-4 py-3 text-right font-medium text-text-2">Avg daily usage</th>
               <th className="px-4 py-3 text-center font-medium text-text-2">Status</th>
               <th className="px-4 py-3 text-right font-medium text-text-2">Actions</th>
             </tr>
@@ -625,7 +625,7 @@ export default function ParLevelsPage() {
                           />
                           <button
                             onClick={() => handleQuickSet(product.id)}
-                            className="rounded p-1 text-green-600 hover:bg-green-50"
+                            className="rounded p-1 text-ok-text hover:bg-ok-soft"
                           >
                             <Check className="h-3.5 w-3.5" />
                           </button>
@@ -656,7 +656,7 @@ export default function ParLevelsPage() {
       <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
         <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Bulk Set Par Levels</DialogTitle>
+            <DialogTitle>Bulk set par levels</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <p className="text-sm text-text-2">
@@ -691,24 +691,24 @@ export default function ParLevelsPage() {
           </div>
         </DialogContent>
       </Dialog>
-      {/* Smart Recalculate Settings Dialog */}
+      {/* Smart recalculate Settings Dialog */}
       <Dialog open={showRecalcSettings} onOpenChange={setShowRecalcSettings}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-purple-600" />
-              Smart Recalculate
+              <Sparkles className="h-5 w-5 text-info-text" />
+              Smart recalculate
             </DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="rounded-lg border border-purple-100 bg-purple-50/50 p-3">
-              <p className="text-sm text-purple-800">
+            <div className="rounded-lg border border-line bg-info-soft p-3">
+              <p className="text-sm text-info-text">
                 Calculates par levels using actual sales data and supplier lead times.
               </p>
-              <div className="mt-2 space-y-1 text-xs text-purple-600">
-                <p><strong>Reorder Point</strong> = Daily Usage × (Lead Time + Safety Days)</p>
-                <p><strong>Par Level</strong> = Daily Usage × (Lead Time + Safety + Coverage Days)</p>
-                <p><strong>Max Level</strong> = Par Level × class multiplier (A 1.25× · B 1.5× · C 2×)</p>
+              <div className="mt-2 space-y-1 text-xs text-info-text">
+                <p><strong>Reorder point</strong> = Daily Usage × (Lead Time + Safety Days)</p>
+                <p><strong>Par level</strong> = Daily Usage × (Lead Time + Safety + Coverage Days)</p>
+                <p><strong>Max level</strong> = Par Level × class multiplier (A 1.25× · B 1.5× · C 2×)</p>
                 <p>
                   <strong>Coverage</strong> is set per value class to cap inventory value: high-spend
                   items (A) hold 2 days, mid (B) 3, cheap tail (C) 5.
@@ -718,7 +718,7 @@ export default function ParLevelsPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm font-medium text-text-2">Safety Days</label>
+                <label className="text-sm font-medium text-text-2">Safety days</label>
                 <Input
                   className="mt-1"
                   type="number"
@@ -730,7 +730,7 @@ export default function ParLevelsPage() {
                 <p className="mt-1 text-xs text-text-3">Buffer for demand spikes</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-text-2">Coverage Days</label>
+                <label className="text-sm font-medium text-text-2">Coverage days</label>
                 <Input
                   className="mt-1"
                   type="number"
@@ -757,7 +757,7 @@ export default function ParLevelsPage() {
                 handleSmartRecalculate();
               }}
               disabled={recalculating}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+              className="w-full bg-ink text-on-ink hover:bg-ink-hover text-on-ink"
             >
               {recalculating ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
@@ -775,33 +775,33 @@ export default function ParLevelsPage() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-purple-600" />
-              Recalculation Complete
+              <Sparkles className="h-5 w-5 text-info-text" />
+              Recalculation complete
             </DialogTitle>
           </DialogHeader>
           {recalcResult && (
             <div className="grid gap-4 py-2">
               {/* Summary Cards */}
               <div className="grid grid-cols-4 gap-3">
-                <div className="rounded-lg border border-green-100 bg-green-50 p-3 text-center">
-                  <p className="text-2xl font-bold text-green-700">{recalcResult.productsUpdated}</p>
-                  <p className="text-xs text-green-600">Products Updated</p>
+                <div className="rounded-lg border border-line bg-ok-soft p-3 text-center">
+                  <p className="text-2xl font-bold text-ok-text">{recalcResult.productsUpdated}</p>
+                  <p className="text-xs text-ok-text">Products updated</p>
                 </div>
-                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-center">
-                  <p className="text-2xl font-bold text-blue-700">{recalcResult.salesTransactions?.toLocaleString()}</p>
-                  <p className="text-xs text-blue-600">Sales Analyzed</p>
+                <div className="rounded-lg border border-line bg-info-soft p-3 text-center">
+                  <p className="text-2xl font-bold text-info-text">{recalcResult.salesTransactions?.toLocaleString()}</p>
+                  <p className="text-xs text-info-text">Sales analyzed</p>
                 </div>
-                <div className="rounded-lg border border-purple-100 bg-purple-50 p-3 text-center">
-                  <p className="text-2xl font-bold text-purple-700">{recalcResult.lookbackDays}d</p>
-                  <p className="text-xs text-purple-600">Lookback Period</p>
+                <div className="rounded-lg border border-line bg-info-soft p-3 text-center">
+                  <p className="text-2xl font-bold text-info-text">{recalcResult.lookbackDays}d</p>
+                  <p className="text-xs text-info-text">Lookback period</p>
                 </div>
-                <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-center">
-                  <p className="text-2xl font-bold text-amber-700">
+                <div className="rounded-lg border border-line bg-warn-soft p-3 text-center">
+                  <p className="text-2xl font-bold text-warn-text">
                     {recalcResult.projectedParValue != null
                       ? `RM ${Math.round(recalcResult.projectedParValue).toLocaleString()}`
                       : "—"}
                   </p>
-                  <p className="text-xs text-amber-600">Value at Par (cap)</p>
+                  <p className="text-xs text-warn-text">Value at Par (cap)</p>
                 </div>
               </div>
 
@@ -838,11 +838,11 @@ export default function ParLevelsPage() {
                     <tr className="border-b border-line bg-sunken">
                       <th className="px-3 py-2 text-left font-medium text-text-2">Product</th>
                       <th className="px-3 py-2 text-center font-medium text-text-2">Class</th>
-                      <th className="px-3 py-2 text-right font-medium text-text-2">Daily Usage</th>
-                      <th className="px-3 py-2 text-right font-medium text-text-2">Lead Time</th>
-                      <th className="px-3 py-2 text-right font-medium text-text-2">Reorder Pt</th>
-                      <th className="px-3 py-2 text-right font-medium text-text-2">Par Level</th>
-                      <th className="px-3 py-2 text-right font-medium text-text-2">Max Level</th>
+                      <th className="px-3 py-2 text-right font-medium text-text-2">Daily usage</th>
+                      <th className="px-3 py-2 text-right font-medium text-text-2">Lead time</th>
+                      <th className="px-3 py-2 text-right font-medium text-text-2">Reorder pt</th>
+                      <th className="px-3 py-2 text-right font-medium text-text-2">Par level</th>
+                      <th className="px-3 py-2 text-right font-medium text-text-2">Max level</th>
                       <th className="px-3 py-2 text-right font-medium text-text-2">Value @ Par</th>
                     </tr>
                   </thead>
@@ -860,12 +860,12 @@ export default function ParLevelsPage() {
                             {d.valueClass ? (
                               <span
                                 className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold ${
-                                  d.valueClass === "A"
-                                    ? "bg-red-100 text-red-700"
-                                    : d.valueClass === "B"
-                                      ? "bg-amber-100 text-amber-700"
-                                      : "bg-sunken text-text-2"
-                                }`}
+ d.valueClass === "A"
+ ? "bg-danger-soft text-danger-text"
+ : d.valueClass === "B"
+ ? "bg-warn-soft text-warn-text"
+ : "bg-sunken text-text-2"
+}`}
                               >
                                 {d.valueClass}
                               </span>
@@ -880,9 +880,9 @@ export default function ParLevelsPage() {
                               {d.leadTime}d
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-right font-medium text-amber-600">{toPkg(d.reorderPoint)}</td>
-                          <td className="px-3 py-2 text-right font-medium text-blue-600">{toPkg(d.parLevel)}</td>
-                          <td className="px-3 py-2 text-right font-medium text-purple-600">{toPkg(d.maxLevel)}</td>
+                          <td className="px-3 py-2 text-right font-medium text-warn-text">{toPkg(d.reorderPoint)}</td>
+                          <td className="px-3 py-2 text-right font-medium text-info-text">{toPkg(d.parLevel)}</td>
+                          <td className="px-3 py-2 text-right font-medium text-info-text">{toPkg(d.maxLevel)}</td>
                           <td className="px-3 py-2 text-right text-text-2">
                             {d.parValue != null && d.parValue > 0 ? `RM ${d.parValue.toLocaleString()}` : "—"}
                           </td>

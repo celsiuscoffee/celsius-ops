@@ -244,14 +244,14 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
           <div className="grid grid-cols-2 gap-x-4 divide-x divide-line">
             <BuildColumn
               title="Hot recipe"
-              accent="text-orange-600"
+              accent="text-warn-text"
               icon={<Flame className="h-3 w-3" />}
               steps={hotSteps}
             />
             <div className="pl-4">
               <BuildColumn
                 title="Iced recipe"
-                accent="text-sky-600"
+                accent="text-info-text"
                 icon={<Snowflake className="h-3 w-3" />}
                 steps={icedSteps}
               />
@@ -265,7 +265,7 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
       {/* Serve in (packaging) */}
       {pkgRows.length > 0 && (
         <div className="border-t border-line px-4 py-2 text-[11px]">
-          <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600">Serve in</p>
+          <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wide text-warn-text">Serve in</p>
           <ul className="space-y-0.5">
             {pkgRows.map((p, i) => (
               <li key={i} className="flex items-baseline justify-between gap-2">
@@ -282,7 +282,7 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
       {/* Plating expectation — editable; only prints when a note is set. */}
       <div className={`border-t border-line px-4 py-2 text-[11px] ${trimmedNote && !editing ? "" : "print:hidden"}`}>
         <div className="mb-0.5 flex items-center justify-between">
-          <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-emerald-700">
+          <p className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wide text-ok-text">
             <Utensils className="h-3 w-3" /> Plating
           </p>
           {!editing && trimmedNote && (
@@ -304,7 +304,7 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
               <button onClick={() => { setNote(menu.platingNote ?? ""); setEditing(false); }} disabled={saving} className="rounded px-2 py-1 text-[10px] text-text-2 hover:bg-sunken">
                 Cancel
               </button>
-              <button onClick={saveNote} disabled={saving} className="flex items-center gap-1 rounded bg-green-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-green-700">
+              <button onClick={saveNote} disabled={saving} className="flex items-center gap-1 rounded bg-ok px-2 py-1 text-[10px] font-medium text-white hover:bg-ok">
                 {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />} Save
               </button>
             </div>
@@ -331,7 +331,7 @@ function RecipeCard({ menu, showCosts, onSaved }: { menu: MenuItem; showCosts: b
               <span className="tabular-nums">
                 <span className="font-semibold text-text">{formatRM(menu.cogs)}</span>
                 {menu.cogsPercent > 0 && (
-                  <span className={`ml-1 font-medium ${menu.cogsPercent > 40 ? "text-red-600" : menu.cogsPercent > 30 ? "text-amber-600" : "text-green-600"}`}>
+                  <span className={`ml-1 font-medium ${menu.cogsPercent > 40 ? "text-danger-text" : menu.cogsPercent > 30 ? "text-warn-text" : "text-ok-text"}`}>
                     {menu.cogsPercent.toFixed(0)}%
                   </span>
                 )}
@@ -401,10 +401,10 @@ export default function RecipeCardsPage() {
           <Link href="/inventory/menus" className="text-text-3 hover:text-brand-text">
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Recipe Cards</h2>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Recipe cards</h1>
         </div>
         <p className="mt-0.5 text-sm text-text-2">
-          Barista recipe cards from the Bill of Materials — reference photo, Hot &amp; Iced recipes, and plating notes. {filtered.length} of {menus.length} shown.
+          Printable cards for the bar: the photo, the hot and iced recipe, and how to serve it. {filtered.length} of {menus.length} shown.
         </p>
 
         <div className="mt-4 flex flex-col gap-3">

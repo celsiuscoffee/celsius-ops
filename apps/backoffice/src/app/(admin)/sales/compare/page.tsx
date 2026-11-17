@@ -92,20 +92,20 @@ type CompareResponse = {
 // ─── Constants ───────────────────────────────────────────────────────────
 
 const PERIOD_COLORS = [
-  "#C2452D", "#3B82F6", "#10B981", "#F59E0B",
-  "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16",
+  "var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)",
+  "var(--color-chart-5)", "var(--color-info)", "var(--color-ok)", "var(--color-warn)",
 ];
 const PERIOD_BG = [
-  "bg-red-50", "bg-blue-50", "bg-emerald-50", "bg-amber-50",
-  "bg-violet-50", "bg-pink-50", "bg-cyan-50", "bg-lime-50",
+  "bg-danger-soft", "bg-info-soft", "bg-ok-soft", "bg-warn-soft",
+  "bg-info-soft", "bg-danger-soft", "bg-info-soft", "bg-ok-soft",
 ];
 const PERIOD_BORDER = [
-  "border-red-200", "border-blue-200", "border-emerald-200", "border-amber-200",
-  "border-violet-200", "border-pink-200", "border-cyan-200", "border-lime-200",
+  "border-line", "border-line", "border-line", "border-line",
+  "border-line", "border-line", "border-line", "border-line",
 ];
 const PERIOD_TEXT = [
-  "text-red-700", "text-blue-700", "text-emerald-700", "text-amber-700",
-  "text-violet-700", "text-pink-700", "text-cyan-700", "text-lime-700",
+  "text-danger-text", "text-info-text", "text-ok-text", "text-warn-text",
+  "text-info-text", "text-danger-text", "text-info-text", "text-ok-text",
 ];
 
 const MAX_SLOTS = 8;
@@ -156,8 +156,8 @@ function fmtRM(v: number): string {
 function pctChange(current: number, previous: number): { label: string; color: string } {
   if (previous === 0) return { label: current > 0 ? "New" : "—", color: "text-text-3" };
   const pct = ((current - previous) / previous) * 100;
-  if (pct > 0) return { label: `+${pct.toFixed(1)}%`, color: "text-green-600" };
-  if (pct < 0) return { label: `${pct.toFixed(1)}%`, color: "text-red-500" };
+  if (pct > 0) return { label: `+${pct.toFixed(1)}%`, color: "text-ok-text" };
+  if (pct < 0) return { label: `${pct.toFixed(1)}%`, color: "text-danger-text" };
   return { label: "0%", color: "text-text-3" };
 }
 
@@ -363,14 +363,14 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
 
   return [
     {
-      label: "Today vs Same Day Last Week",
+      label: "Today vs same day last week",
       slots: [
         { id: pid(), from: today, to: today },
         { id: pid(), from: addDays(today, -7), to: addDays(today, -7) },
       ],
     },
     {
-      label: "Last 7 Days (daily)",
+      label: "Last 7 days, by day",
       slots: Array.from({ length: 7 }, (_, i) => ({
         id: pid(),
         from: addDays(today, -6 + i),
@@ -378,35 +378,35 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
       })),
     },
     {
-      label: "This Week vs Last Week",
+      label: "This week vs last week",
       slots: [
         { id: pid(), from: thisMonday, to: getSunday(thisMonday) },
         { id: pid(), from: addDays(thisMonday, -7), to: addDays(thisMonday, -1) },
       ],
     },
     {
-      label: "Last 4 Weeks",
+      label: "Last 4 weeks",
       slots: Array.from({ length: 4 }, (_, i) => {
         const mon = addDays(thisMonday, -7 * i);
         return { id: pid(), from: mon, to: getSunday(mon) };
       }),
     },
     {
-      label: "Last 8 Weeks",
+      label: "Last 8 weeks",
       slots: Array.from({ length: 8 }, (_, i) => {
         const mon = addDays(thisMonday, -7 * i);
         return { id: pid(), from: mon, to: getSunday(mon) };
       }),
     },
     {
-      label: "This Month vs Last Month",
+      label: "This month vs last month",
       slots: [
         { id: pid(), from: thisMonthStart, to: getMonthEnd(today) },
         { id: pid(), from: lastMonthStart, to: lastMonthEnd },
       ],
     },
     {
-      label: "Last 3 Months",
+      label: "Last 3 months",
       slots: Array.from({ length: 3 }, (_, i) => {
         const mStart = getMonthStart(subtractMonths(today, i));
         const mEnd = i === 0 ? getMonthEnd(today) : getMonthEnd(mStart);
@@ -414,7 +414,7 @@ function getPresets(): { label: string; slots: ComparisonSlot[] }[] {
       }),
     },
     {
-      label: "Last 6 Months",
+      label: "Last 6 months",
       slots: Array.from({ length: 6 }, (_, i) => {
         const mStart = getMonthStart(subtractMonths(today, i));
         const mEnd = i === 0 ? getMonthEnd(today) : getMonthEnd(mStart);
@@ -596,7 +596,7 @@ export default function SalesComparePage() {
 
   const outletButtonLabel =
     outletIds.length === 0
-      ? "All Outlets"
+      ? "All outlets"
       : outletIds.length === 1
         ? (outlets.find((o) => o.id === outletIds[0])?.name ?? "1 outlet")
         : `${outletIds.length} outlets`;
@@ -644,15 +644,15 @@ export default function SalesComparePage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#f5f3f0] p-4 sm:p-6 space-y-4">
+    <div className="min-h-screen space-y-4 px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-brand-soft shrink-0">
           <ArrowLeftRight className="w-5 h-5 text-brand-text" />
         </div>
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Sales Compare</h1>
-          <p className="text-sm text-text-2">Compare sales across different periods</p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Compare</h1>
+          <p className="mt-0.5 text-sm text-text-2">Put two or more periods, outlets or channels side by side to see what changed.</p>
         </div>
       </div>
 
@@ -709,7 +709,7 @@ export default function SalesComparePage() {
             </div>
             <button
               onClick={clearAll}
-              className="text-xs text-text-3 hover:text-red-500 whitespace-nowrap shrink-0"
+              className="text-xs text-text-3 hover:text-danger-text whitespace-nowrap shrink-0"
             >
               Clear all
             </button>
@@ -725,7 +725,7 @@ export default function SalesComparePage() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-line-2 text-sm text-text-2 hover:border-ink hover:text-brand-text transition-colors"
               >
                 <Plus className="w-4 h-4" />
-                Add Period
+                Add period
               </button>
 
               {showPicker && (
@@ -912,7 +912,7 @@ export default function SalesComparePage() {
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+        <div className="bg-danger-soft border border-line rounded-xl p-4 text-sm text-danger-text">
           {error}
         </div>
       )}
@@ -927,7 +927,7 @@ export default function SalesComparePage() {
 
       {/* Warnings */}
       {data?.warnings && data.warnings.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+        <div className="bg-warn-soft border border-line rounded-xl p-3 text-xs text-warn-text">
           {data.warnings.map((w, i) => (
             <p key={i}>{w}</p>
           ))}
@@ -943,7 +943,7 @@ export default function SalesComparePage() {
               {([
                 { key: "revenue" as const, label: "Revenue", icon: DollarSign },
                 { key: "orders" as const, label: "Orders", icon: ShoppingCart },
-                { key: "aov" as const, label: "AOV", icon: TrendingUp },
+                { key: "aov" as const, label: "Average order", icon: TrendingUp },
               ]).map((m) => (
                 <button
                   key={m.key}
@@ -1033,7 +1033,7 @@ export default function SalesComparePage() {
                 </div>
                 <ResponsiveContainer width="100%" height={320}>
                   <LineChart data={chartData} margin={{ top: 5, right: 12, left: -8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={8} />
                     <YAxis
                       tick={{ fontSize: 11 }}
@@ -1050,9 +1050,9 @@ export default function SalesComparePage() {
                     {nowLabel && (
                       <ReferenceLine
                         x={nowLabel}
-                        stroke="#9ca3af"
+                        stroke="var(--color-text-3)"
                         strokeDasharray="4 3"
-                        label={{ value: "now", position: "top", fontSize: 10, fill: "#9ca3af" }}
+                        label={{ value: "now", position: "top", fontSize: 10, fill: "var(--color-text-3)" }}
                       />
                     )}
                     <Tooltip
@@ -1060,7 +1060,7 @@ export default function SalesComparePage() {
                         value == null ? "—" : chartMetric === "revenue" ? fmtRM(value as number) : value,
                         name,
                       ]}
-                      contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }}
+                      contentStyle={{ borderRadius: 10, border: "1px solid var(--color-line)", background: "var(--color-raised)", color: "var(--color-text)", fontSize: 12 }}
                     />
                     <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
                     {data.periods.map((p, i) => (
@@ -1134,13 +1134,13 @@ export default function SalesComparePage() {
                           const aovDiff = p.summary.aov - prev.summary.aov;
                           return (
                             <>
-                              <span className={revDiff >= 0 ? "text-green-600" : "text-red-500"}>
+                              <span className={revDiff >= 0 ? "text-ok-text" : "text-danger-text"}>
                                 {revDiff >= 0 ? "+" : ""}RM {revDiff.toLocaleString("en-MY", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                               </span>
-                              <span className={ordDiff >= 0 ? "text-green-600" : "text-red-500"}>
+                              <span className={ordDiff >= 0 ? "text-ok-text" : "text-danger-text"}>
                                 {ordDiff >= 0 ? "+" : ""}{ordDiff} orders
                               </span>
-                              <span className={aovDiff >= 0 ? "text-green-600" : "text-red-500"}>
+                              <span className={aovDiff >= 0 ? "text-ok-text" : "text-danger-text"}>
                                 {aovDiff >= 0 ? "+" : ""}RM {aovDiff.toFixed(2)} AOV
                               </span>
                             </>
@@ -1294,15 +1294,15 @@ export default function SalesComparePage() {
                       const vals = allDow.map((d) => metric === "revenue" ? d.avgRevenue : d.avgOrders);
                       const maxVal = Math.max(...vals);
                       return (
-                        <tr key={dow} className={`border-b border-line ${di >= 5 ? "bg-amber-50/30" : ""}`}>
-                          <td className={`py-2 pr-3 font-medium text-text-2 sticky left-0 z-10 whitespace-nowrap ${di >= 5 ? "bg-amber-50/30" : "bg-surface"}`}>
-                            {dow} {di >= 5 && <span className="text-[9px] text-amber-500 ml-1">wknd</span>}
+                        <tr key={dow} className={`border-b border-line ${di >= 5 ? "bg-warn-soft" : ""}`}>
+                          <td className={`py-2 pr-3 font-medium text-text-2 sticky left-0 z-10 whitespace-nowrap ${di >= 5 ? "bg-warn-soft" : "bg-surface"}`}>
+                            {dow} {di >= 5 && <span className="text-[9px] text-warn-text ml-1">wknd</span>}
                           </td>
                           {allDow.map((d, pi) => {
                             const val = metric === "revenue" ? d.avgRevenue : metric === "orders" ? d.avgOrders : (d.avgOrders > 0 ? Math.round((d.avgRevenue / d.avgOrders) * 100) / 100 : 0);
                             const isBest = val === maxVal && maxVal > 0 && data.periods.length > 1;
                             return (
-                              <td key={pi} className={`text-right py-2 px-2 tabular-nums whitespace-nowrap ${isBest ? "font-semibold text-green-700" : "text-text-2"}`}>
+                              <td key={pi} className={`text-right py-2 px-2 tabular-nums whitespace-nowrap ${isBest ? "font-semibold text-ok-text" : "text-text-2"}`}>
                                 {d.count === 0 ? <span className="text-text-3">—</span> : metric === "revenue" || metric === "aov" ? fmtRM(val) : val}
                               </td>
                             );
@@ -1554,9 +1554,9 @@ export default function SalesComparePage() {
                   </thead>
                   <tbody>
                     {([
-                      { key: "dineIn" as const, label: "Dine In", cls: "text-blue-600" },
-                      { key: "takeaway" as const, label: "Takeaway", cls: "text-amber-600" },
-                      { key: "delivery" as const, label: "Delivery", cls: "text-purple-600" },
+                      { key: "dineIn" as const, label: "Dine-in", cls: "text-info-text" },
+                      { key: "takeaway" as const, label: "Takeaway", cls: "text-warn-text" },
+                      { key: "delivery" as const, label: "Delivery", cls: "text-info-text" },
                     ]).map((ch) => (
                       <tr key={ch.key} className="border-b border-line">
                         <td className={`py-2 pr-3 font-medium sticky left-0 bg-surface z-10 whitespace-nowrap ${ch.cls}`}>{ch.label}</td>
@@ -1630,7 +1630,7 @@ export default function SalesComparePage() {
                               <tr className="border-b border-line">
                                 <th className="text-left py-1.5 pr-3 font-medium text-text-2 sticky left-0 bg-surface z-10">Date</th>
                                 <th className="text-right py-1.5 px-2 font-medium text-text-2">Total</th>
-                                <th className="text-right py-1.5 px-2 font-medium text-blue-500">7d MA</th>
+                                <th className="text-right py-1.5 px-2 font-medium text-info-text">7d MA</th>
                                 {roundLabels.map((rl) => (
                                   <th key={rl} className="text-right py-1.5 px-1.5 font-medium text-text-3 whitespace-nowrap">{rl}</th>
                                 ))}
@@ -1650,7 +1650,7 @@ export default function SalesComparePage() {
                                     <td className="text-right py-1.5 px-2 text-text-2 tabular-nums font-medium">
                                       {metric === "revenue" ? fmtRM(val) : val}
                                     </td>
-                                    <td className="text-right py-1.5 px-2 text-blue-600 tabular-nums">
+                                    <td className="text-right py-1.5 px-2 text-info-text tabular-nums">
                                       {ma !== null ? (metric === "revenue" ? fmtRM(ma) : Math.round(ma as number)) : <span className="text-text-3">—</span>}
                                     </td>
                                     {d.roundMAs.map((rm) => {
@@ -1659,7 +1659,7 @@ export default function SalesComparePage() {
                                       const aboveMA = rma !== null && rma > 0 && rv > rma;
                                       const belowMA = rma !== null && rma > 0 && rv < rma * 0.85;
                                       return (
-                                        <td key={rm.key} className={`text-right py-1.5 px-1.5 tabular-nums whitespace-nowrap ${belowMA ? "text-red-500" : aboveMA ? "text-green-600" : "text-text-2"}`}>
+                                        <td key={rm.key} className={`text-right py-1.5 px-1.5 tabular-nums whitespace-nowrap ${belowMA ? "text-danger-text" : aboveMA ? "text-ok-text" : "text-text-2"}`}>
                                           {metric === "revenue" ? fmtRM(rv) : rm.value}
                                         </td>
                                       );

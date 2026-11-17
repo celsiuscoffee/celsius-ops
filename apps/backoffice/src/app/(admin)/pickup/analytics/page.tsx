@@ -21,9 +21,9 @@ type Range = "7d" | "30d" | "90d";
 
 const RANGE_DAYS: Record<Range, number> = { "7d": 7, "30d": 30, "90d": 90 };
 const STORE_COLOURS: Record<string, string> = {
-  "shah-alam": "#160800",
-  "conezion":  "#e67e22",
-  "tamarind":  "#27ae60",
+  "shah-alam": "var(--color-chart-1)",
+  "conezion":  "var(--color-chart-2)",
+  "tamarind":  "var(--color-chart-3)",
 };
 
 function startOf(daysAgo: number) {
@@ -96,13 +96,10 @@ interface EngagementResponse {
 // Cohort heatmap cell color — matches the existing analytics palette
 // (espresso to terracotta gradient with cream as the empty state).
 function cohortBg(pct: number): string {
-  if (pct === 0) return "#f5f5f4";
-  const t = Math.min(1, pct);
-  // Interpolate between #fdf6e3 (very light) and #160800 (espresso).
-  const r = Math.round(253 + (22 - 253) * t);
-  const g = Math.round(246 + (8 - 246) * t);
-  const b = Math.round(227 + (0 - 227) * t);
-  return `rgb(${r}, ${g}, ${b})`;
+  if (pct === 0) return "var(--color-sunken)";
+  const t = Math.round(Math.min(1, pct) * 100);
+  // Blend from the sunken surface to the text colour, so it works in both themes.
+  return `color-mix(in srgb, var(--color-text) ${t}%, var(--color-sunken))`;
 }
 
 export default function PickupAnalyticsPage() {
@@ -264,7 +261,7 @@ export default function PickupAnalyticsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Pickup app</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Orders, revenue and engagement from the Celsius Coffee app</p>
+          <p className="text-sm text-text-2 mt-0.5">Orders, revenue and engagement from the Celsius Coffee app</p>
         </div>
         <div className="flex gap-1 bg-surface rounded-xl p-1">
           {(["7d", "30d", "90d"] as Range[]).map((r) => (
@@ -272,7 +269,7 @@ export default function PickupAnalyticsPage() {
               key={r}
               onClick={() => setRange(r)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                range === r ? "bg-ink text-on-ink" : "text-muted-foreground hover:text-text"
+                range === r ? "bg-ink text-on-ink" : "text-text-2 hover:text-text"
               }`}
             >
               {r === "7d" ? "7 days" : r === "30d" ? "30 days" : "90 days"}
@@ -288,32 +285,32 @@ export default function PickupAnalyticsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-surface rounded-2xl p-4">
           <p className="text-2xl font-bold text-text">{loading ? "—" : formatRM(grossRevenue / 100)}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Gross revenue</p>
-          <p className="text-[10px] text-muted-foreground/70 mt-1">Pre-discount, pre-SST</p>
+          <p className="text-xs text-text-2 mt-0.5">Gross revenue</p>
+          <p className="text-[10px] text-text-3 mt-1">Pre-discount, pre-SST</p>
         </div>
         <div className="bg-surface rounded-2xl p-4">
-          <p className="text-2xl font-bold text-[#c05040]">
+          <p className="text-2xl font-bold text-brand-text">
             {loading ? "—" : `−${formatRM(totalDiscount / 100)}`}
           </p>
-          <p className="text-xs text-muted-foreground mt-0.5">Discounts</p>
-          <p className="text-[10px] text-muted-foreground/70 mt-1">
+          <p className="text-xs text-text-2 mt-0.5">Discounts</p>
+          <p className="text-[10px] text-text-3 mt-1">
             {loading ? "—" : `${(discountRate * 100).toFixed(1)}% of gross`}
           </p>
         </div>
         <div className="bg-surface rounded-2xl p-4">
           <p className="text-2xl font-bold text-text">{loading ? "—" : formatRM(netRevenue / 100)}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Net revenue</p>
-          <p className="text-[10px] text-muted-foreground/70 mt-1">Gross − discounts, ex-SST</p>
+          <p className="text-xs text-text-2 mt-0.5">Net revenue</p>
+          <p className="text-[10px] text-text-3 mt-1">Gross − discounts, ex-SST</p>
         </div>
         <div className="bg-surface rounded-2xl p-4">
           <p className="text-2xl font-bold text-text">
             {loading ? "—" : orders.length.toLocaleString()}
-            <span className="text-sm font-medium text-muted-foreground ml-2">
+            <span className="text-sm font-medium text-text-2 ml-2">
               {loading ? "" : `· AOV ${formatRM(avgOrder / 100)}`}
             </span>
           </p>
-          <p className="text-xs text-muted-foreground mt-0.5">Orders</p>
-          <p className="text-[10px] text-muted-foreground/70 mt-1">
+          <p className="text-xs text-text-2 mt-0.5">Orders</p>
+          <p className="text-[10px] text-text-3 mt-1">
             {loading ? "—" : `Collected ${formatRM(totalRevenue / 100)} incl SST`}
           </p>
         </div>
@@ -323,27 +320,27 @@ export default function PickupAnalyticsPage() {
       <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-4">Revenue Over Time</h2>
         {loading ? (
-          <div className="h-52 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+          <div className="h-52 flex items-center justify-center text-sm text-text-2">Loading...</div>
         ) : (
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={dailySeries} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
               <defs>
                 <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#160800" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#160800" stopOpacity={0}    />
+                  <stop offset="5%"  stopColor="var(--color-text)" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="var(--color-text)" stopOpacity={0}    />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `RM${v}`} />
               <Tooltip
                 formatter={(value) => [`${formatRM((value as number))}`, "Revenue"]}
-                contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }}
+                contentStyle={{ borderRadius: 10, border: "1px solid var(--color-line)", background: "var(--color-raised)", color: "var(--color-text)", fontSize: 12 }}
               />
               <Area
                 type="monotone"
                 dataKey="revRM"
-                stroke="#160800"
+                stroke="var(--color-text)"
                 strokeWidth={2}
                 fill="url(#revGrad)"
                 dot={false}
@@ -357,18 +354,18 @@ export default function PickupAnalyticsPage() {
       <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-4">Orders Per Day</h2>
         {loading ? (
-          <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+          <div className="h-48 flex items-center justify-center text-sm text-text-2">Loading...</div>
         ) : (
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={dailySeries} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
               <Tooltip
                 formatter={(value) => [value as number, "Orders"]}
-                contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }}
+                contentStyle={{ borderRadius: 10, border: "1px solid var(--color-line)", background: "var(--color-raised)", color: "var(--color-text)", fontSize: 12 }}
               />
-              <Bar dataKey="orders" radius={[4, 4, 0, 0]} fill="#160800" />
+              <Bar dataKey="orders" radius={[4, 4, 0, 0]} fill="var(--color-text)" />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -378,22 +375,22 @@ export default function PickupAnalyticsPage() {
       <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-4">By Outlet</h2>
         {loading ? (
-          <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+          <div className="h-40 flex items-center justify-center text-sm text-text-2">Loading...</div>
         ) : storeSeries.length === 0 ? (
-          <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">No data</div>
+          <div className="h-40 flex items-center justify-center text-sm text-text-2">No data</div>
         ) : (
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={storeSeries} margin={{ top: 5, right: 10, left: -10, bottom: 0 }} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" horizontal={false} />
               <XAxis type="number" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `RM${v}`} />
               <YAxis type="category" dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={110} />
               <Tooltip
                 formatter={(value) => [`${formatRM((value as number))}`, "Revenue"]}
-                contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }}
+                contentStyle={{ borderRadius: 10, border: "1px solid var(--color-line)", background: "var(--color-raised)", color: "var(--color-text)", fontSize: 12 }}
               />
               <Bar dataKey="revRM" radius={[0, 4, 4, 0]}>
                 {storeSeries.map((s) => (
-                  <Cell key={s.store} fill={STORE_COLOURS[s.store] ?? "#888"} />
+                  <Cell key={s.store} fill={STORE_COLOURS[s.store] ?? "var(--color-text-3)"} />
                 ))}
               </Bar>
             </BarChart>
@@ -405,12 +402,12 @@ export default function PickupAnalyticsPage() {
       <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-4">Top Products</h2>
         {loading ? (
-          <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+          <div className="h-40 flex items-center justify-center text-sm text-text-2">Loading...</div>
         ) : topProducts.length === 0 ? (
-          <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">No data</div>
+          <div className="h-40 flex items-center justify-center text-sm text-text-2">No data</div>
         ) : (
           <div className="space-y-2">
-            <div className="grid grid-cols-[28px_1fr_80px_100px] gap-3 px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            <div className="grid grid-cols-[28px_1fr_80px_100px] gap-3 px-3 py-1 text-xs font-semibold text-text-2 uppercase tracking-wide">
               <span>#</span>
               <span>Product</span>
               <span className="text-right">Units</span>
@@ -419,9 +416,9 @@ export default function PickupAnalyticsPage() {
             {topProducts.map((p, idx) => (
               <div
                 key={p.name}
-                className="grid grid-cols-[28px_1fr_80px_100px] gap-3 items-center px-3 py-2.5 rounded-xl hover:bg-muted/30 transition-colors"
+                className="grid grid-cols-[28px_1fr_80px_100px] gap-3 items-center px-3 py-2.5 rounded-xl hover:bg-sunken transition-colors"
               >
-                <span className="text-sm font-bold text-muted-foreground">{idx + 1}</span>
+                <span className="text-sm font-bold text-text-2">{idx + 1}</span>
                 <span className="text-sm font-medium truncate">{p.name}</span>
                 <span className="text-sm text-right">{p.units.toLocaleString()}</span>
                 <span className="text-sm font-semibold text-right">RM {(p.revenue / 100).toFixed(2)}</span>
@@ -436,31 +433,31 @@ export default function PickupAnalyticsPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-sm">Orders by Hour</h2>
           {!loading && peakHour.count > 0 && (
-            <span className="text-xs text-muted-foreground">
-              Peak: <span className="font-semibold text-amber-600">{peakHour.label}</span> ({peakHour.count} {peakHour.count === 1 ? 'order' : 'orders'})
+            <span className="text-xs text-text-2">
+              Peak: <span className="font-semibold text-warn-text">{peakHour.label}</span> ({peakHour.count} {peakHour.count === 1 ? 'order' : 'orders'})
             </span>
           )}
         </div>
         {loading ? (
-          <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+          <div className="h-48 flex items-center justify-center text-sm text-text-2">Loading...</div>
         ) : (
           <ResponsiveContainer width="100%" height={200}>
             <BarChart
               data={hourSeries.filter((h) => h.hour >= 6 && h.hour <= 23)}
               margin={{ top: 5, right: 10, left: -10, bottom: 0 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
               <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
               <Tooltip
                 formatter={(value) => [value as number, "Orders"]}
-                contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }}
+                contentStyle={{ borderRadius: 10, border: "1px solid var(--color-line)", background: "var(--color-raised)", color: "var(--color-text)", fontSize: 12 }}
               />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                 {hourSeries.filter((h) => h.hour >= 6 && h.hour <= 23).map((h) => (
                   <Cell
                     key={h.hour}
-                    fill={h.hour === peakHour.hour && peakHour.count > 0 ? "#f59e0b" : "#160800"}
+                    fill={h.hour === peakHour.hour && peakHour.count > 0 ? "var(--color-warn)" : "var(--color-text)"}
                   />
                 ))}
               </Bar>
@@ -476,7 +473,7 @@ export default function PickupAnalyticsPage() {
           the funnel can layer in here. */}
       <div className="pt-2">
         <h2 className="text-lg font-bold text-text">Engagement</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">
+        <p className="text-xs text-text-2 mt-0.5">
           Activity, retention, and loyalty engagement across the period.
         </p>
       </div>
@@ -495,8 +492,8 @@ export default function PickupAnalyticsPage() {
         ].map(({ label, value, hint }) => (
           <div key={label} className="bg-surface rounded-2xl p-4">
             <p className="text-2xl font-bold text-text">{engLoading ? "—" : value}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
-            <p className="text-[10px] text-muted-foreground/70 mt-1">{hint}</p>
+            <p className="text-xs text-text-2 mt-0.5">{label}</p>
+            <p className="text-[10px] text-text-3 mt-1">{hint}</p>
           </div>
         ))}
       </div>
@@ -505,9 +502,9 @@ export default function PickupAnalyticsPage() {
       <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-4">New vs Returning Activity</h2>
         {engLoading ? (
-          <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+          <div className="h-48 flex items-center justify-center text-sm text-text-2">Loading...</div>
         ) : !engagement ? (
-          <div className="h-48 flex items-center justify-center text-sm text-muted-foreground">No data</div>
+          <div className="h-48 flex items-center justify-center text-sm text-text-2">No data</div>
         ) : (
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart
@@ -520,20 +517,20 @@ export default function PickupAnalyticsPage() {
             >
               <defs>
                 <linearGradient id="newGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#e67e22" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#e67e22" stopOpacity={0} />
+                  <stop offset="5%" stopColor="var(--color-brand)" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="var(--color-brand)" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="retGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#160800" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#160800" stopOpacity={0} />
+                  <stop offset="5%" stopColor="var(--color-text)" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="var(--color-text)" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
-              <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #e5e7eb", fontSize: 12 }} />
-              <Area type="monotone" dataKey="returning" stackId="1" name="Returning orders" stroke="#160800" strokeWidth={2} fill="url(#retGrad)" />
-              <Area type="monotone" dataKey="new"       stackId="1" name="First-time members" stroke="#e67e22" strokeWidth={2} fill="url(#newGrad)" />
+              <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid var(--color-line)", background: "var(--color-raised)", color: "var(--color-text)", fontSize: 12 }} />
+              <Area type="monotone" dataKey="returning" stackId="1" name="Returning orders" stroke="var(--color-text)" strokeWidth={2} fill="url(#retGrad)" />
+              <Area type="monotone" dataKey="new"       stackId="1" name="First-time members" stroke="var(--color-brand)" strokeWidth={2} fill="url(#newGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         )}
@@ -542,18 +539,18 @@ export default function PickupAnalyticsPage() {
       {/* Cohort retention heatmap */}
       <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-1">Weekly Retention Cohorts</h2>
-        <p className="text-[11px] text-muted-foreground mb-4">
+        <p className="text-[11px] text-text-2 mb-4">
           % of each week&apos;s first-time members that placed another order in weeks 1–4 since.
         </p>
         {engLoading ? (
-          <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+          <div className="h-32 flex items-center justify-center text-sm text-text-2">Loading...</div>
         ) : !engagement || engagement.cohorts.weeks.length === 0 ? (
-          <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">Not enough history yet</div>
+          <div className="h-32 flex items-center justify-center text-sm text-text-2">Not enough history yet</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="text-xs w-full">
               <thead>
-                <tr className="text-muted-foreground">
+                <tr className="text-text-2">
                   <th className="text-left font-medium pb-2 pr-3">Cohort (wk of)</th>
                   <th className="text-right font-medium pb-2 pr-3">Size</th>
                   <th className="text-center font-medium pb-2 px-1">+1w</th>
@@ -568,14 +565,14 @@ export default function PickupAnalyticsPage() {
                     <td className="py-1.5 pr-3 text-text font-medium whitespace-nowrap">
                       {new Date(wk.label).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}
                     </td>
-                    <td className="py-1.5 pr-3 text-right text-muted-foreground">{wk.size}</td>
+                    <td className="py-1.5 pr-3 text-right text-text-2">{wk.size}</td>
                     {wk.retention.map((p, i) => (
                       <td key={i} className="px-1 py-1">
                         <div
                           className="text-center rounded-md py-1.5 text-[11px] font-semibold"
                           style={{
                             backgroundColor: cohortBg(p),
-                            color: p > 0.4 ? "#fff" : "#160800",
+                            color: p > 0.4 ? "var(--color-surface)" : "var(--color-text)",
                           }}
                         >
                           {wk.size > 0 ? `${Math.round(p * 100)}%` : "—"}
@@ -593,19 +590,19 @@ export default function PickupAnalyticsPage() {
       {/* Tier distribution */}
       <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-1">Loyalty Tier Distribution</h2>
-        <p className="text-[11px] text-muted-foreground mb-4">
+        <p className="text-[11px] text-text-2 mb-4">
           Snapshot across all members in this brand (not range-bound).
         </p>
         {engLoading ? (
-          <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+          <div className="h-40 flex items-center justify-center text-sm text-text-2">Loading...</div>
         ) : !engagement || engagement.tiers.length === 0 ? (
-          <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">No tiers configured</div>
+          <div className="h-40 flex items-center justify-center text-sm text-text-2">No tiers configured</div>
         ) : (
           <div className="space-y-2">
             {engagement.tiers.map((t) => (
               <div key={t.slug} className="flex items-center gap-3">
                 <div className="w-20 text-[12px] font-semibold text-text capitalize">{t.tier}</div>
-                <div className="flex-1 bg-muted/30 rounded-full h-5 relative overflow-hidden">
+                <div className="flex-1 bg-sunken rounded-full h-5 relative overflow-hidden">
                   <div
                     className="absolute inset-y-0 left-0 rounded-full"
                     style={{
@@ -613,12 +610,12 @@ export default function PickupAnalyticsPage() {
                       backgroundColor:
                         t.slug === "elite"  ? "#0a0c12" :
                         t.slug === "gold"   ? "#FFD700" :
-                        t.slug === "silver" ? "#9ca3af" :
+                        t.slug === "silver" ? "var(--color-text-3)" :
                         t.slug === "bronze" ? "#e2725b" : "#d6d3d1",
                     }}
                   />
                 </div>
-                <div className="w-28 text-right text-[12px] text-muted-foreground">
+                <div className="w-28 text-right text-[12px] text-text-2">
                   {t.count.toLocaleString()} ({Math.round(t.pct * 100)}%)
                 </div>
               </div>
@@ -630,13 +627,13 @@ export default function PickupAnalyticsPage() {
       {/* Reward engagement */}
       <div className="bg-surface rounded-2xl p-5">
         <h2 className="font-bold text-sm mb-1">Reward Engagement</h2>
-        <p className="text-[11px] text-muted-foreground mb-4">
+        <p className="text-[11px] text-text-2 mb-4">
           Vouchers issued, used, and redemptions in this period — plus all-time funnel.
         </p>
         {engLoading ? (
-          <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+          <div className="h-32 flex items-center justify-center text-sm text-text-2">Loading...</div>
         ) : !engagement ? (
-          <div className="h-32 flex items-center justify-center text-sm text-muted-foreground">No data</div>
+          <div className="h-32 flex items-center justify-center text-sm text-text-2">No data</div>
         ) : (
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -646,17 +643,17 @@ export default function PickupAnalyticsPage() {
                 { label: "Redemptions",     value: engagement.rewards.rangeRedemptions.toLocaleString() },
                 { label: "Lifetime redemption rate", value: `${Math.round(engagement.rewards.redemptionRate * 100)}%` },
               ].map((k) => (
-                <div key={k.label} className="bg-muted/20 rounded-xl p-3">
+                <div key={k.label} className="bg-sunken rounded-xl p-3">
                   <div className="text-lg font-bold text-text">{k.value}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">{k.label}</div>
+                  <div className="text-[10px] text-text-2 mt-0.5">{k.label}</div>
                 </div>
               ))}
             </div>
             {engagement.rewards.byReward.length === 0 ? (
-              <div className="text-xs text-muted-foreground py-2">No reward activity in this period.</div>
+              <div className="text-xs text-text-2 py-2">No reward activity in this period.</div>
             ) : (
               <div>
-                <div className="grid grid-cols-[1fr_70px_70px_80px] gap-2 px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <div className="grid grid-cols-[1fr_70px_70px_80px] gap-2 px-2 py-1 text-[10px] font-semibold text-text-2 uppercase tracking-wide">
                   <span>Reward</span>
                   <span className="text-right">Issued</span>
                   <span className="text-right">Used</span>
@@ -665,11 +662,11 @@ export default function PickupAnalyticsPage() {
                 {engagement.rewards.byReward.slice(0, 10).map((r) => (
                   <div
                     key={r.rewardId}
-                    className="grid grid-cols-[1fr_70px_70px_80px] gap-2 items-center px-2 py-2 rounded-lg hover:bg-muted/20 transition-colors"
+                    className="grid grid-cols-[1fr_70px_70px_80px] gap-2 items-center px-2 py-2 rounded-lg hover:bg-sunken transition-colors"
                   >
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">{r.name}</div>
-                      <div className="text-[10px] text-muted-foreground capitalize">
+                      <div className="text-[10px] text-text-2 capitalize">
                         {r.rewardType.replace(/_/g, " ")}{r.autoIssue ? " · auto-issued" : ""}
                       </div>
                     </div>

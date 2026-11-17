@@ -145,17 +145,16 @@ export default function CashierPerformancePage() {
     <div className="space-y-5 max-w-5xl px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Cashier Performance</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Phone-number collection per cashier — the loyalty top-of-funnel. Counter-rung
-            orders only (Grab / pickup / QR self-orders excluded). Target {target}%.
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Cashier performance</h1>
+          <p className="text-sm text-text-2 mt-0.5">
+            How often each cashier takes the customer&apos;s phone number at the counter. Target {target}%; app, QR and Grab orders are not counted.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <select
             value={outletId}
             onChange={(e) => setOutletId(e.target.value)}
-            className="rounded-lg border border-line-2 bg-surface px-3 py-1.5 text-sm font-medium text-text"
+            className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
           >
             <option value="all">All outlets</option>
             {outlets.map((o) => (
@@ -165,13 +164,13 @@ export default function CashierPerformancePage() {
           <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
-            className="rounded-lg border border-line-2 bg-surface px-3 py-1.5 text-sm font-medium text-text"
+            className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
           >
             {DAYS_OPTIONS.map((d) => (
               <option key={d} value={d}>Last {d} days</option>
             ))}
           </select>
-          {loading && <Loader2 className="h-4 w-4 animate-spin text-[#A2492C]" />}
+          {loading && <Loader2 className="h-4 w-4 animate-spin text-brand-text" />}
         </div>
       </div>
 
@@ -181,7 +180,7 @@ export default function CashierPerformancePage() {
       <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 transition-opacity ${loading ? "opacity-40" : ""}`}>
         <div className="rounded-2xl bg-surface p-4 border border-line">
           <div className="flex items-center gap-2 mb-1.5">
-            <Target className="h-4 w-4 text-[#A2492C]" />
+            <Target className="h-4 w-4 text-brand-text" />
             <p className="text-[11px] font-bold uppercase tracking-wider text-text-2">Collection Rate</p>
           </div>
           <p className={`text-2xl font-bold ${rateColor(overall?.rate ?? 0, target)}`}>
@@ -254,20 +253,20 @@ export default function CashierPerformancePage() {
                   <td className="px-4 py-3 text-sm text-text-3">{i + 1}</td>
                   <td className="px-4 py-3 text-sm text-text">
                     <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FBEBE8] text-xs font-bold text-[#A2492C]">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand-text">
                         {c.name.charAt(0)}
                       </div>
                       <span className="font-medium">{c.name}</span>
                       {c.suspicious && (
                         <span title={`One number appears on ${c.maxSamePhone} of this cashier's orders — review for fake/own-number entry.`}>
-                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          <AlertTriangle className="h-4 w-4 text-warn-text" />
                         </span>
                       )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-right text-text-2">{c.orders.toLocaleString()}</td>
                   <td className="px-4 py-3 text-sm text-right font-medium text-text">{c.collected.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-sm text-right font-medium text-emerald-700" title="New members enrolled (fresh acquisitions)">{c.collectedNew.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-sm text-right font-medium text-ok-text" title="New members enrolled (fresh acquisitions)">{c.collectedNew.toLocaleString()}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <div className="h-1.5 w-24 rounded-full bg-line overflow-hidden">
@@ -290,13 +289,13 @@ export default function CashierPerformancePage() {
         )}
       </div>
 
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-text-2">
         Collection rate + new/repeat (New = enrolled at/around the order). Pair Adds = how many
         Pair-with-a-Bite suggestions the cashier added. Upsell % = share of the cashier&apos;s orders that
         ended up including an upsold pair (orders with an upsell ÷ total orders; several pairs in one
         order still count once) — order-based + success-based, so button-spam can&apos;t inflate it.
         Per-staff HR view is Phase B.
-        <AlertTriangle className="inline h-3 w-3 text-amber-500" />
+        <AlertTriangle className="inline h-3 w-3 text-warn-text" />
         flags a cashier where one number recurs across many tickets (possible fake/own-number entry).
       </p>
     </div>
@@ -328,21 +327,21 @@ function SortableTh({
 }
 
 function rateColor(rate: number, target: number): string {
-  if (rate >= target) return "text-emerald-600";
-  if (rate >= target * 0.6) return "text-amber-600";
-  return "text-red-600";
+  if (rate >= target) return "text-ok-text";
+  if (rate >= target * 0.6) return "text-warn-text";
+  return "text-danger-text";
 }
 function rateBar(rate: number, target: number): string {
-  if (rate >= target) return "bg-emerald-500";
-  if (rate >= target * 0.6) return "bg-amber-500";
-  return "bg-red-500";
+  if (rate >= target) return "bg-ok";
+  if (rate >= target * 0.6) return "bg-warn";
+  return "bg-danger";
 }
 
 function KpiCard({ Icon, label, value, sub }: { Icon: React.ComponentType<{ className?: string }>; label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-2xl bg-surface p-4 border border-line">
       <div className="flex items-center gap-2 mb-1.5">
-        <Icon className="h-4 w-4 text-[#A2492C]" />
+        <Icon className="h-4 w-4 text-brand-text" />
         <p className="text-[11px] font-bold uppercase tracking-wider text-text-2">{label}</p>
       </div>
       <p className="text-2xl font-bold text-text">{value}</p>

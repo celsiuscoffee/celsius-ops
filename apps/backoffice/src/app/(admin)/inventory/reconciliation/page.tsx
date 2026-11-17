@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
 import { formatRM } from "@celsius/shared";
 import {
-  Scale,
   AlertTriangle,
   Clock,
   ChevronDown,
@@ -58,12 +57,12 @@ type Totals = {
 };
 
 const KIND_META: Record<ExceptionKind, { label: string; cls: string }> = {
-  FLAGGED: { label: "Mismatch", cls: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" },
-  SHORT_PAID: { label: "Short-paid", cls: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" },
-  OVERDUE: { label: "Overdue", cls: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
-  BILLED_OVER_PO: { label: "Over PO", cls: "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300" },
-  CARRY_FORWARD: { label: "Balance due", cls: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
-  UNVERIFIED: { label: "Verify", cls: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300" },
+  FLAGGED: { label: "Mismatch", cls: "bg-danger-soft text-danger-text" },
+  SHORT_PAID: { label: "Short-paid", cls: "bg-warn-soft text-warn-text" },
+  OVERDUE: { label: "Overdue", cls: "bg-warn-soft text-warn-text" },
+  BILLED_OVER_PO: { label: "Over PO", cls: "bg-danger-soft text-danger-text" },
+  CARRY_FORWARD: { label: "Balance due", cls: "bg-info-soft text-info-text" },
+  UNVERIFIED: { label: "Verify", cls: "bg-info-soft text-info-text" },
 };
 
 function KindBadge({ kind }: { kind: ExceptionKind }) {
@@ -85,15 +84,15 @@ function SummaryCard({
   tone?: "danger" | "warn";
 }) {
   const ring =
-    tone === "danger" ? "border-red-200 dark:border-red-900" : tone === "warn" ? "border-amber-200 dark:border-amber-900" : "border-border";
+    tone === "danger" ? "border-line" : tone === "warn" ? "border-line" : "border-line";
   return (
-    <div className={`rounded-lg border ${ring} bg-card p-4`}>
-      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+    <div className={`rounded-lg border ${ring} bg-surface p-4`}>
+      <div className="flex items-center gap-2 text-xs font-medium text-text-3">
         {icon}
         {label}
       </div>
-      <div className="mt-1.5 text-2xl font-semibold text-foreground">{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
+      <div className="mt-1.5 text-2xl font-semibold text-text">{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-text-3">{sub}</div>}
     </div>
   );
 }
@@ -117,15 +116,11 @@ export default function ReconciliationPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 px-4 pt-6 pb-10 md:px-8">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
-          <Scale className="h-5 w-5" />
-          Supplier Reconciliation
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Statement of account per supplier — outstanding balances, aging, and the payment ↔ invoice ↔ PoP mismatches
-          that need a human to match or chase.
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Invoice match</h1>
+        <p className="mt-0.5 text-sm text-text-2">
+          What we owe each supplier, how old it is, and payments that do not yet match an invoice.
         </p>
       </div>
 
@@ -162,64 +157,64 @@ export default function ReconciliationPage() {
 
       {/* Per-supplier statement */}
       {isLoading ? (
-        <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+        <div className="flex items-center justify-center gap-2 py-16 text-sm text-text-3">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading statements…
         </div>
       ) : suppliers.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card py-16 text-center">
-          <CheckCircle2 className="h-8 w-8 text-green-500" />
-          <div className="text-sm font-medium text-foreground">Nothing to reconcile</div>
-          <div className="text-xs text-muted-foreground">Every supplier is settled with no open balances or mismatches.</div>
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-line bg-surface py-16 text-center">
+          <CheckCircle2 className="h-8 w-8 text-ok-text" />
+          <div className="text-sm font-medium text-text">Nothing to reconcile</div>
+          <div className="text-xs text-text-3">Every supplier is settled with no open balances or mismatches.</div>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="overflow-hidden rounded-lg border border-line bg-surface">
           {suppliers.map((s) => {
             const isOpen = expanded.has(s.supplierId);
             return (
-              <div key={s.supplierId} className="border-b border-border last:border-b-0">
+              <div key={s.supplierId} className="border-b border-line last:border-b-0">
                 <button
                   type="button"
                   onClick={() => toggle(s.supplierId)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/40"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-sunken/40"
                 >
                   {isOpen ? (
-                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <ChevronDown className="h-4 w-4 shrink-0 text-text-3" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <ChevronRight className="h-4 w-4 shrink-0 text-text-3" />
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate font-medium text-foreground">{s.supplierName}</span>
+                      <span className="truncate font-medium text-text">{s.supplierName}</span>
                       {s.paymentTerms && (
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{s.paymentTerms}</span>
+                        <span className="rounded bg-sunken px-1.5 py-0.5 text-[11px] text-text-3">{s.paymentTerms}</span>
                       )}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-text-3">
                       <span>{s.openCount} open</span>
                       {s.overdueCount > 0 && (
-                        <span className="text-amber-600 dark:text-amber-400">{s.overdueCount} overdue</span>
+                        <span className="text-warn-text">{s.overdueCount} overdue</span>
                       )}
                       {s.oldestOpenDays > 0 && <span>oldest {s.oldestOpenDays}d</span>}
                     </div>
                   </div>
                   {/* Exception badge */}
                   {s.exceptions.length > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-medium text-warn-text">
                       <AlertTriangle className="h-3 w-3" />
                       {s.exceptions.length}
                     </span>
                   )}
                   <div className="text-right">
-                    <div className="font-semibold text-foreground">{formatRM(s.outstanding)}</div>
-                    <div className="text-[11px] text-muted-foreground">outstanding</div>
+                    <div className="font-semibold text-text">{formatRM(s.outstanding)}</div>
+                    <div className="text-[11px] text-text-3">outstanding</div>
                   </div>
                 </button>
 
                 {isOpen && (
-                  <div className="border-t border-border bg-muted/20 px-4 py-3">
+                  <div className="border-t border-line bg-sunken/20 px-4 py-3">
                     {s.exceptions.length === 0 ? (
-                      <div className="py-2 text-xs text-muted-foreground">
+                      <div className="py-2 text-xs text-text-3">
                         No mismatches — {formatRM(s.outstanding)} outstanding across {s.openCount} open invoice(s).
                       </div>
                     ) : (
@@ -227,24 +222,24 @@ export default function ReconciliationPage() {
                         {s.exceptions.map((e) => (
                           <div
                             key={e.invoiceId}
-                            className="rounded-md border border-border bg-card p-3 text-sm"
+                            className="rounded-md border border-line bg-surface p-3 text-sm"
                           >
                             <div className="flex flex-wrap items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-1.5">
-                                  <span className="font-medium text-foreground">{e.invoiceNumber}</span>
+                                  <span className="font-medium text-text">{e.invoiceNumber}</span>
                                   {e.poNumber && (
-                                    <span className="text-xs text-muted-foreground">· {e.poNumber}</span>
+                                    <span className="text-xs text-text-3">· {e.poNumber}</span>
                                   )}
                                   {e.kinds.map((k) => (
                                     <KindBadge key={k} kind={k} />
                                   ))}
                                 </div>
-                                <div className="mt-1 text-xs text-muted-foreground">{e.reason}</div>
+                                <div className="mt-1 text-xs text-text-3">{e.reason}</div>
                                 {e.flags.length > 0 && (
                                   <ul className="mt-1.5 space-y-1">
                                     {e.flags.map((f) => (
-                                      <li key={f.code} className="flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400">
+                                      <li key={f.code} className="flex items-start gap-1.5 text-xs text-danger-text">
                                         <Flag className="mt-0.5 h-3 w-3 shrink-0" />
                                         <span>{f.message}</span>
                                       </li>
@@ -254,14 +249,14 @@ export default function ReconciliationPage() {
                               </div>
                               <div className="flex shrink-0 flex-col items-end gap-1">
                                 <div className="text-right">
-                                  <div className="font-medium text-foreground">{formatRM(e.balance)}</div>
-                                  <div className="text-[11px] text-muted-foreground">
+                                  <div className="font-medium text-text">{formatRM(e.balance)}</div>
+                                  <div className="text-[11px] text-text-3">
                                     {formatRM(e.amountPaid)} of {formatRM(e.amount)}
                                   </div>
                                 </div>
                                 <Link
                                   href={`/inventory/invoices?search=${encodeURIComponent(e.invoiceNumber)}`}
-                                  className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-info-text hover:text-info-text"
                                 >
                                   Open invoice
                                   <ExternalLink className="h-3 w-3" />
