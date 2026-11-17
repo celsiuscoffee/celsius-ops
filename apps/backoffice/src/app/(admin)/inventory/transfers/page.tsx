@@ -493,7 +493,7 @@ export default function TransfersPage() {
             { key: "RECEIVED", label: `Received (${stats.received})` },
             { key: "CANCELLED", label: `Cancelled (${stats.cancelled})` },
           ].map((t) => (
-            <button key={t.key} onClick={() => setStatusFilter(t.key)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === t.key ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2"}`}>
+            <button key={t.key} onClick={() => setStatusFilter(t.key)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === t.key ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2"}`}>
               {t.label}
             </button>
           ))}

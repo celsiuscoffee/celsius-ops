@@ -105,7 +105,7 @@ export default function MessagesPanel() {
               onClick={() => setKind(k.key)}
               className={
                 "rounded-md border px-2 py-1 text-xs transition " +
-                (active ? "border-ink bg-brand-soft text-brand-text" : "text-muted-foreground hover:text-foreground")
+                (active ? "border-text bg-raised font-semibold text-text" : "text-muted-foreground hover:text-foreground")
               }
             >
               {k.label}{n ? ` ${n}` : ""}

@@ -225,7 +225,7 @@ export default function StaffPage() {
 
   const roleColor = (role: string) => {
     if (role === "OWNER") return "border-amber-500 text-amber-600";
-    if (role === "ADMIN") return "border-ink text-brand-text";
+    if (role === "ADMIN") return "border-text bg-raised font-semibold text-text";
     if (role === "MANAGER") return "border-blue-500 text-blue-600";
     return "border-line-2 text-text-2";
   };
@@ -354,7 +354,7 @@ export default function StaffPage() {
         </select>
         <div className="flex gap-1.5">
           {(["all", "ACTIVE", "DEACTIVATED"] as const).map((t) => (
-            <button key={t} onClick={() => setFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${filter === t ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2"}`}>
+            <button key={t} onClick={() => setFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${filter === t ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2"}`}>
               {t === "all" ? "All" : t.toLowerCase()}
             </button>
           ))}

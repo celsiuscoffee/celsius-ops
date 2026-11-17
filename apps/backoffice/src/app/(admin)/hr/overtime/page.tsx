@@ -268,7 +268,7 @@ export default function OvertimeLedgerPage() {
               key={t.k}
               onClick={() => setTab(t.k)}
               className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium ${
-                tab === t.k ? "border-ink text-brand-text" : "border-transparent text-text-2 hover:text-text-2"
+                tab === t.k ? "border-text bg-raised font-semibold text-text" : "border-transparent text-text-2 hover:text-text-2"
               }`}
             >
               <Ic className="h-4 w-4" /> {t.l}

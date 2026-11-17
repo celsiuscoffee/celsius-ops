@@ -162,7 +162,7 @@ export default function POSPrintersPage() {
         </div>
         <button
           onClick={() => setEditing(blankRow(outletId))}
-          className="flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
+          className="flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-ink-hover transition-colors"
         >
           <Plus className="h-4 w-4" /> Add Printer
         </button>
@@ -195,7 +195,7 @@ export default function POSPrintersPage() {
           <p className="mt-1 text-xs text-text-3">The POS will fall back to the built-in printer for every station.</p>
           <button
             onClick={() => setEditing(blankRow(outletId))}
-            className="mt-4 inline-flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
+            className="mt-4 inline-flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-ink-hover transition-colors"
           >
             <Plus className="h-4 w-4" /> Add the first printer
           </button>
@@ -418,7 +418,7 @@ function PrinterModal({
           <button
             onClick={onSave}
             disabled={saving || !row.name}
-            className="flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors disabled:opacity-60"
+            className="flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-ink-hover transition-colors disabled:opacity-60"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             {isNew ? "Add" : "Save"}

@@ -271,7 +271,7 @@ export default function ReviewSettingsPage() {
                       onClick={() => setRatingThreshold(n)}
                       className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium border transition-colors ${
                         ratingThreshold === n
-                          ? "border-ink bg-brand-soft text-brand-text"
+                          ? "border-text bg-raised font-semibold text-text"
                           : "border-border bg-surface text-muted-foreground hover:bg-muted"
                       }`}
                     >

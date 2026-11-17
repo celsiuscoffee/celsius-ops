@@ -317,7 +317,7 @@ export default function CashflowPage() {
             <button
               type="button"
               onClick={() => setOutletPickerOpen((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-md border bg-surface px-3 py-1.5 text-sm transition-colors ${outletIds.length > 0 ? "border-ink text-brand-text" : "border-line text-text-2 hover:bg-sunken"}`}
+              className={`flex items-center gap-1.5 rounded-md border bg-surface px-3 py-1.5 text-sm transition-colors ${outletIds.length > 0 ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}
             >
               {outletButtonLabel}
               {outletIds.length > 0 && (
@@ -415,7 +415,7 @@ export default function CashflowPage() {
           onClick={() => setIncludeInterco((v) => !v)}
           aria-pressed={includeInterco}
           title="Include or exclude inter-entity transfers"
-          className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${includeInterco ? "border-ink bg-brand-soft text-brand-text" : "border-line bg-surface text-text-2 hover:bg-sunken"}`}
+          className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${includeInterco ? "border-text bg-raised font-semibold text-text" : "border-line bg-surface text-text-2 hover:bg-sunken"}`}
         >
           Interco {includeInterco ? "on" : "off"}
         </button>

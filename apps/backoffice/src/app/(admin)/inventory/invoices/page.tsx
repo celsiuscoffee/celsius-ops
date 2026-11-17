@@ -1277,12 +1277,12 @@ export default function InvoicesPage() {
         </div>
         <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0 sm:pb-0">
           {([["unpaid", "Unpaid"], ["paid", "Paid"], ["all", "All"]] as const).map(([value, label]) => (
-            <button key={value} onClick={() => setTab(value)} className={`shrink-0 rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:bg-sunken"}`}>{label}</button>
+            <button key={value} onClick={() => setTab(value)} className={`shrink-0 rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}>{label}</button>
           ))}
         </div>
         <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0 sm:pb-0">
           {([["all", "All Types"], ["supplier", "Supplier"], ["staff_claim", "Staff Claims"], ["payment_request", "Payment Requests"], ["transfer", "Transfers"]] as const).map(([value, label]) => (
-            <button key={value} onClick={() => setTypeFilter(value)} className={`shrink-0 rounded-full border px-3 py-1 text-xs transition-colors ${typeFilter === value ? "border-purple-400 bg-purple-50 text-purple-700" : "border-line text-text-2 hover:bg-sunken"}`}>{label}</button>
+            <button key={value} onClick={() => setTypeFilter(value)} className={`shrink-0 rounded-full border px-3 py-1 text-xs transition-colors ${typeFilter === value ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}>{label}</button>
           ))}
         </div>
         <button

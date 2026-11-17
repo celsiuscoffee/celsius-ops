@@ -285,7 +285,7 @@ export default function WastagePage() {
               <label className="text-sm font-medium">Reason</label>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {REASONS.map((r) => (
-                  <button key={r} onClick={() => setReason(r)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${reason === r ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2"}`}>{r}</button>
+                  <button key={r} onClick={() => setReason(r)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${reason === r ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2"}`}>{r}</button>
                 ))}
               </div>
             </div>

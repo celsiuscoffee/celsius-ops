@@ -973,7 +973,7 @@ export default function SplashPostersPage() {
                         }
                         className={`rounded-lg border p-3 text-left transition-colors ${
                           selected
-                            ? "border-ink bg-brand-soft"
+                            ? "border-text bg-raised font-semibold text-text"
                             : "border-line hover:bg-sunken"
                         }`}
                       >
@@ -1180,7 +1180,7 @@ export default function SplashPostersPage() {
                         form.placement === "home" ? "h-52" : "h-72"
                       } ${
                         dragOver
-                          ? "border-ink bg-brand-soft text-brand-text"
+                          ? "border-text bg-raised font-semibold text-text"
                           : "border-line-2 text-text-2 hover:border-ink hover:bg-sunken"
                       }`}
                     >

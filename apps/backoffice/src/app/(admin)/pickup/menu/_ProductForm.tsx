@@ -638,7 +638,7 @@ export function ProductForm({ product, categories }: Props) {
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center gap-2 bg-ink text-on-ink px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors disabled:opacity-60"
+            className="flex items-center gap-2 bg-ink text-on-ink px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-ink-hover transition-colors disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
             {isEditing ? "Save Changes" : "Create Product"}

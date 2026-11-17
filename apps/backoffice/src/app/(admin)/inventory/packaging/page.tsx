@@ -357,7 +357,7 @@ export default function PackagingPage() {
               <div className="mt-1.5 flex gap-1.5">
                 {[{ v: "", label: "Any" }, { v: "Iced", label: "Iced" }, { v: "Hot", label: "Hot" }].map((o) => (
                   <button key={o.v} onClick={() => set("modifier", o.v)}
-                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${form.modifier === o.v ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}>
+                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${form.modifier === o.v ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:border-line-2"}`}>
                     {o.label}
                   </button>
                 ))}
@@ -371,7 +371,7 @@ export default function PackagingPage() {
               <div className="mt-1.5 flex gap-1.5">
                 {(Object.keys(SCOPE_LABEL) as Scope[]).map((s) => (
                   <button key={s} onClick={() => set("scope", s)}
-                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${form.scope === s ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}>
+                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${form.scope === s ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:border-line-2"}`}>
                     {SCOPE_LABEL[s]}
                   </button>
                 ))}
@@ -387,7 +387,7 @@ export default function PackagingPage() {
                             if (editingId) set("categories", active ? [] : [c]); // Edit = single category
                             else set("categories", active ? form.categories.filter((x) => x !== c) : [...form.categories, c]);
                           }}
-                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}>
+                          className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:border-line-2"}`}>
                           {c}{active && <Check className="h-3 w-3" />}
                         </button>
                       );

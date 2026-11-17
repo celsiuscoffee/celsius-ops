@@ -1009,7 +1009,7 @@ export default function MembersPage() {
                 onClick={() => loadSegment(seg)}
                 className={`whitespace-nowrap border-b-2 pl-4 pr-1 py-3 text-sm font-medium transition-colors flex items-center gap-1.5 ${
                   activeCustomSegment === seg.id
-                    ? "border-ink text-brand-text"
+                    ? "border-text bg-raised font-semibold text-text"
                     : "border-transparent text-text-2 hover:border-line-2 dark:hover:border-neutral-600 hover:text-text-2"
                 }`}
               >
@@ -1057,7 +1057,7 @@ export default function MembersPage() {
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
               filters.length > 0
-                ? "border-ink bg-brand-soft text-brand-text"
+                ? "border-text bg-raised font-semibold text-text"
                 : "border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
             )}
           >
@@ -1073,7 +1073,7 @@ export default function MembersPage() {
                 className={cn(
                   "appearance-none rounded-full border pl-7 pr-6 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                   tagFilter
-                    ? "border-ink bg-brand-soft text-brand-text"
+                    ? "border-text bg-raised font-semibold text-text"
                     : "border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 text-text-2"
                 )}
               >
@@ -1103,7 +1103,7 @@ export default function MembersPage() {
                 className={cn(
                   "appearance-none rounded-full border pl-7 pr-6 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                   outletFilter
-                    ? "border-ink bg-brand-soft text-brand-text"
+                    ? "border-text bg-raised font-semibold text-text"
                     : "border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 text-text-2"
                 )}
               >
@@ -1132,7 +1132,7 @@ export default function MembersPage() {
               className={cn(
                 "appearance-none rounded-full border pl-7 pr-6 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                 tierFilter
-                  ? "border-ink bg-brand-soft text-brand-text"
+                  ? "border-text bg-raised font-semibold text-text"
                   : "border-line dark:border-neutral-700 bg-surface dark:bg-neutral-800 text-text-2"
               )}
             >
@@ -1496,7 +1496,7 @@ export default function MembersPage() {
             className={cn(
               "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
               bulkTierOpen
-                ? "border-ink bg-brand-soft text-brand-text"
+                ? "border-text bg-raised font-semibold text-text"
                 : "border-line dark:border-neutral-600 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
             )}
           >
@@ -1900,7 +1900,7 @@ export default function MembersPage() {
                     key={opt.id || "reset"}
                     className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
                       selected
-                        ? "border-ink bg-brand-soft"
+                        ? "border-text bg-raised font-semibold text-text"
                         : "border-line dark:border-neutral-600 hover:bg-sunken dark:hover:bg-neutral-700"
                     }`}
                   >

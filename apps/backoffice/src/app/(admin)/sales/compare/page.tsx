@@ -854,7 +854,7 @@ export default function SalesComparePage() {
             <button
               onClick={() => setShowOutletPicker(!showOutletPicker)}
               className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border bg-surface transition-colors ${
-                outletIds.length > 0 ? "border-ink text-brand-text" : "border-line text-text-2"
+                outletIds.length > 0 ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2"
               }`}
             >
               {outletButtonLabel}

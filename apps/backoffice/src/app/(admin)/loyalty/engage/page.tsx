@@ -846,7 +846,7 @@ export default function NotificationsPage() {
             className={cn(
               "flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition-colors",
               showSmsLog
-                ? "border-ink bg-brand-soft text-brand-text"
+                ? "border-text bg-raised font-semibold text-text"
                 : "border-line dark:border-neutral-700 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
             )}
           >
@@ -1474,7 +1474,7 @@ export default function NotificationsPage() {
                       className={cn(
                         "flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors",
                         formScheduleType === "now"
-                          ? "border-ink bg-brand-soft text-brand-text"
+                          ? "border-text bg-raised font-semibold text-text"
                           : "border-line dark:border-neutral-600 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
                       )}
                     >
@@ -1493,7 +1493,7 @@ export default function NotificationsPage() {
                       className={cn(
                         "flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors",
                         formScheduleType === "later"
-                          ? "border-ink bg-brand-soft text-brand-text"
+                          ? "border-text bg-raised font-semibold text-text"
                           : "border-line dark:border-neutral-600 text-text-2 hover:bg-sunken dark:hover:bg-neutral-700"
                       )}
                     >

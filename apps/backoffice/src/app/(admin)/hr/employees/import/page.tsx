@@ -207,7 +207,7 @@ export default function LoeImportPage() {
           className={
             "rounded-xl border-2 border-dashed p-10 text-center transition " +
             (dragOver
-              ? "border-ink bg-brand-soft"
+              ? "border-text bg-raised font-semibold text-text"
               : "border-line-2 bg-card")
           }
         >

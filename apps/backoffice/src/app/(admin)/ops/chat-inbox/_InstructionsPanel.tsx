@@ -196,7 +196,7 @@ export default function InstructionsPanel({ onChange }: { onChange: () => void }
                 onClick={() => setAudienceType(key)}
                 className={
                   "flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition " +
-                  (active ? "border-ink bg-brand-soft text-brand-text" : "text-muted-foreground hover:text-foreground")
+                  (active ? "border-text bg-raised font-semibold text-text" : "text-muted-foreground hover:text-foreground")
                 }
                 disabled={sending}
               >

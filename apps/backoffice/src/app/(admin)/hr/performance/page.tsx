@@ -219,7 +219,7 @@ export default function PerformancePage() {
               onClick={() => setTab(t.id)}
               className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
                 activeTab === t.id
-                  ? "border-ink text-brand-text"
+                  ? "border-text bg-raised font-semibold text-text"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >

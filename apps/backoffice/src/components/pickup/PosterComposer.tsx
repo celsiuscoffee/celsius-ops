@@ -1016,7 +1016,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                             onClick={() => patch({ font: f.id })}
                             className={`rounded-md border px-2 py-1.5 text-[11px] font-semibold ${
                               active
-                                ? "border-ink bg-brand-soft text-brand-text"
+                                ? "border-text bg-raised font-semibold text-text"
                                 : "border-line text-text-2"
                             }`}
                             style={{ fontFamily: f.stack }}
@@ -1037,7 +1037,7 @@ export function PosterComposer({ bgUrl, placement, initialState, onCancel, onSav
                           onClick={() => patch({ align: a })}
                           className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${
                             selectedLayer.align === a
-                              ? "border-ink bg-brand-soft text-brand-text"
+                              ? "border-text bg-raised font-semibold text-text"
                               : "border-line text-text-2"
                           }`}
                         >

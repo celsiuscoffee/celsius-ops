@@ -420,7 +420,7 @@ export default function MenusPage() {
                   statusFilter === f.key
                     ? f.key === "high"
                       ? "border-red-300 bg-red-50 text-red-600"
-                      : "border-ink bg-brand-soft text-brand-text"
+                      : "border-text bg-raised font-semibold text-text"
                     : "border-line text-text-2 hover:border-line-2"
                 }`}
               >
@@ -433,7 +433,7 @@ export default function MenusPage() {
         <div className="flex flex-wrap gap-1.5">
           <button
             onClick={() => setCatFilter([])}
-            className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter.length === 0 ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter.length === 0 ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:border-line-2"}`}
           >
             All
           </button>
@@ -443,7 +443,7 @@ export default function MenusPage() {
               <button
                 key={c}
                 onClick={() => toggleCat(c)}
-                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}
+                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:border-line-2"}`}
               >
                 {c}
                 {active && <X className="h-3 w-3" />}

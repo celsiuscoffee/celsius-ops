@@ -303,7 +303,7 @@ export default function RulesPage() {
                     onClick={() => setFormOutlets(toggleArrayItem(formOutlets, b.id))}
                     className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                       formOutlets.includes(b.id)
-                        ? "border-ink bg-brand-soft text-brand-text"
+                        ? "border-text bg-raised font-semibold text-text"
                         : "border-line text-text-2 hover:border-line-2"
                     }`}
                   >
@@ -323,7 +323,7 @@ export default function RulesPage() {
                     onClick={() => setFormApprovers(toggleArrayItem(formApprovers, m.id))}
                     className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                       formApprovers.includes(m.id)
-                        ? "border-ink bg-brand-soft text-brand-text"
+                        ? "border-text bg-raised font-semibold text-text"
                         : "border-line text-text-2 hover:border-line-2"
                     }`}
                   >

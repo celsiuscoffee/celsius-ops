@@ -211,7 +211,7 @@ export default function OutletsPage() {
 
       <div className="mt-4 flex gap-1.5">
         {(["all", "OUTLET", "CENTRAL_KITCHEN"] as const).map((t) => (
-          <button key={t} onClick={() => setFilter(t)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${filter === t ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:bg-sunken"}`}>
+          <button key={t} onClick={() => setFilter(t)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${filter === t ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}>
             {t === "all" ? "All" : t === "OUTLET" ? "Outlet" : "Central Kitchen"}
           </button>
         ))}

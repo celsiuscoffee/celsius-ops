@@ -279,7 +279,7 @@ export default function OrdersPage() {
             <button
               key={value}
               onClick={() => setTab(value)}
-              className={`rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:bg-sunken"}`}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}
             >
               {label}
             </button>

@@ -819,7 +819,7 @@ export default function EmployeesPage() {
                   className={
                     "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-xs transition " +
                     (loeDragOver
-                      ? "border-ink bg-brand-soft text-brand-text"
+                      ? "border-text bg-raised font-semibold text-text"
                       : "border-line-2 bg-muted/20 text-muted-foreground hover:bg-muted/30")
                   }
                 >

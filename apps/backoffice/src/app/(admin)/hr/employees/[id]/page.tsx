@@ -977,7 +977,7 @@ export default function EmployeeDetailPage() {
                 className={
                   "mt-2 flex cursor-pointer items-center justify-center gap-2 rounded border-2 border-dashed py-4 text-xs transition " +
                   (docDragOver
-                    ? "border-ink bg-brand-soft text-brand-text"
+                    ? "border-text bg-raised font-semibold text-text"
                     : "border-line-2 bg-background text-muted-foreground hover:bg-muted/30")
                 }
               >

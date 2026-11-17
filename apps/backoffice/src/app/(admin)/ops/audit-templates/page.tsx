@@ -142,14 +142,14 @@ export default function AuditTemplatesPage() {
                 <button
                   type="button"
                   onClick={() => setNewTarget("OUTLET")}
-                  className={`rounded-md border px-3 py-2 text-sm ${newTarget === "OUTLET" ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}
+                  className={`rounded-md border px-3 py-2 text-sm ${newTarget === "OUTLET" ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:border-line-2"}`}
                 >
                   Outlet (SOP / Quality)
                 </button>
                 <button
                   type="button"
                   onClick={() => setNewTarget("STAFF")}
-                  className={`rounded-md border px-3 py-2 text-sm ${newTarget === "STAFF" ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}
+                  className={`rounded-md border px-3 py-2 text-sm ${newTarget === "STAFF" ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:border-line-2"}`}
                 >
                   Staff Skills
                 </button>

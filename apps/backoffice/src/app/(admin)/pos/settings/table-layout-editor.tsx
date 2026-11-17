@@ -240,13 +240,13 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
               className="h-9 w-44 rounded-lg border border-line px-3 text-sm text-text outline-none focus:border-ink"
             />
             <span className="text-xs font-medium text-text-2">Add table:</span>
-            <button onClick={() => addTable(2, "round")} title="2-seater (round bistro)" className="flex items-center gap-1 rounded-lg bg-ink px-2.5 py-2 text-xs font-semibold text-on-ink hover:bg-[#2d1100]">
+            <button onClick={() => addTable(2, "round")} title="2-seater (round bistro)" className="flex items-center gap-1 rounded-lg bg-ink px-2.5 py-2 text-xs font-semibold text-on-ink hover:bg-ink-hover">
               <Plus className="h-3.5 w-3.5" /> 2 pax
             </button>
-            <button onClick={() => addTable(4, "square")} title="4-seater" className="flex items-center gap-1 rounded-lg bg-ink px-2.5 py-2 text-xs font-semibold text-on-ink hover:bg-[#2d1100]">
+            <button onClick={() => addTable(4, "square")} title="4-seater" className="flex items-center gap-1 rounded-lg bg-ink px-2.5 py-2 text-xs font-semibold text-on-ink hover:bg-ink-hover">
               <Plus className="h-3.5 w-3.5" /> 4 pax
             </button>
-            <button onClick={() => addTable(6, "square")} title="6-seater (large)" className="flex items-center gap-1 rounded-lg bg-ink px-2.5 py-2 text-xs font-semibold text-on-ink hover:bg-[#2d1100]">
+            <button onClick={() => addTable(6, "square")} title="6-seater (large)" className="flex items-center gap-1 rounded-lg bg-ink px-2.5 py-2 text-xs font-semibold text-on-ink hover:bg-ink-hover">
               <Plus className="h-3.5 w-3.5" /> 6 pax
             </button>
             {floors.length > 1 && (
@@ -360,7 +360,7 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
           )}
         </>
       ) : (
-        <button onClick={addFloor} className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-on-ink hover:bg-[#2d1100]">
+        <button onClick={addFloor} className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-on-ink hover:bg-ink-hover">
           <Plus className="h-3.5 w-3.5" /> Add your first floor
         </button>
       )}

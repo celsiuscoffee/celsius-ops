@@ -433,7 +433,7 @@ export default function POSTableQRPage() {
             </div>
             <button
               onClick={generate}
-              className="flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
+              className="flex items-center gap-2 bg-ink text-on-ink px-4 py-2 rounded-xl text-sm font-semibold hover:bg-ink-hover transition-colors"
             >
               <Sparkles className="h-4 w-4" /> Generate
             </button>

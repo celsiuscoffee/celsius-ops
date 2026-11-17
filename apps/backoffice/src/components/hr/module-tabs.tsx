@@ -119,7 +119,7 @@ export function HrModuleTabs() {
             className={
               "whitespace-nowrap border-b-2 px-3 pb-2 pt-1 text-sm font-medium transition " +
               (active
-                ? "border-ink text-brand-text"
+                ? "border-text bg-raised font-semibold text-text"
                 : "border-transparent text-muted-foreground hover:border-line-2 hover:text-foreground")
             }
           >

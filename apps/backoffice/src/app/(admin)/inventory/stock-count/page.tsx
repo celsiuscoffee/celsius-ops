@@ -287,7 +287,7 @@ export default function StockCountPage() {
         </div>
         <div className="flex gap-1.5">
           {(["all", "flagged", "SUBMITTED", "REVIEWED"] as const).map((t) => (
-            <button key={t} onClick={() => setStatusFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${statusFilter === t ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2"}`}>
+            <button key={t} onClick={() => setStatusFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${statusFilter === t ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2"}`}>
               {t === "all" ? `All (${stats.total})`
                 : t === "flagged" ? `Flagged (${stats.flagged})`
                 : t === "SUBMITTED" ? `Pending (${stats.submitted})`

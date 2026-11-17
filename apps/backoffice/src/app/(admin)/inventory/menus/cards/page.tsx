@@ -425,7 +425,7 @@ export default function RecipeCardsPage() {
 
             <button
               onClick={() => window.print()}
-              className="ml-auto flex items-center gap-2 rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-on-ink transition-colors hover:bg-[#2d1100]"
+              className="ml-auto flex items-center gap-2 rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-on-ink transition-colors hover:bg-ink-hover"
             >
               <Printer className="h-4 w-4" /> Print all
             </button>
@@ -435,7 +435,7 @@ export default function RecipeCardsPage() {
           <div className="flex flex-wrap gap-1.5">
             <button
               onClick={() => setCatFilter([])}
-              className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter.length === 0 ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${catFilter.length === 0 ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:border-line-2"}`}
             >
               All
             </button>
@@ -445,7 +445,7 @@ export default function RecipeCardsPage() {
                 <button
                   key={c}
                   onClick={() => toggleCat(c)}
-                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2 hover:border-line-2"}`}
+                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${active ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:border-line-2"}`}
                 >
                   {c}
                   {active && <X className="h-3 w-3" />}

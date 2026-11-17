@@ -606,7 +606,7 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
               <button
                 onClick={openMatch}
                 disabled={busy}
-                className={`h-6 rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${open ? "border-ink text-brand-text" : "border-line text-text-2 hover:bg-sunken"}`}
+                className={`h-6 rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${open ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}
               >
                 Match…
               </button>
@@ -615,7 +615,7 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
               onClick={toggleAttach}
               disabled={busy}
               title="Attach the invoice or receipt behind this line (needed for bank fees & other non-supplier expenses)"
-              className={`flex h-6 items-center gap-0.5 rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${attachOpen ? "border-ink text-brand-text" : "border-line text-text-2 hover:bg-sunken"}`}
+              className={`flex h-6 items-center gap-0.5 rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${attachOpen ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}
             >
               <Paperclip className="h-3 w-3" />{attachments && attachments.length > 0 ? attachments.length : ""}
             </button>
@@ -623,7 +623,7 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
               onClick={toggleHistory}
               disabled={busy}
               title="Who changed this line's category or match, and when"
-              className={`flex h-6 items-center rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${historyOpen ? "border-ink text-brand-text" : "border-line text-text-2 hover:bg-sunken"}`}
+              className={`flex h-6 items-center rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${historyOpen ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}
             >
               <History className="h-3 w-3" />
             </button>
@@ -696,7 +696,7 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
                   if (f) upload(f);
                 }}
                 className={`mt-0.5 inline-flex w-fit cursor-pointer items-center gap-1 rounded border border-dashed px-2 py-1 text-[11px] transition-colors ${
-                  attachDragging ? "border-ink bg-brand-soft text-brand-text" : "border-line-2 text-text-2 hover:bg-surface"
+                  attachDragging ? "border-text bg-raised font-semibold text-text" : "border-line-2 text-text-2 hover:bg-surface"
                 }`}
               >
                 {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Paperclip className="h-3 w-3" />}

@@ -405,7 +405,7 @@ export default function ParLevelsPage() {
               onClick={() => setCategoryFilter(cat)}
               className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                 categoryFilter === cat
-                  ? "border-ink bg-brand-soft text-brand-text"
+                  ? "border-text bg-raised font-semibold text-text"
                   : "border-line text-text-2 hover:bg-sunken"
               }`}
             >

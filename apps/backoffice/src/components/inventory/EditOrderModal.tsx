@@ -681,7 +681,7 @@ export function EditOrderModal({
                   onDrop={handleDrop}
                   onClick={openFilePicker}
                   className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-5 transition-colors ${
-                    dragOver ? "border-ink bg-brand-soft" : "border-line hover:border-line-2 hover:bg-sunken"
+                    dragOver ? "border-text bg-raised font-semibold text-text" : "border-line hover:border-line-2 hover:bg-sunken"
                   }`}
                 >
                   {uploading ? (

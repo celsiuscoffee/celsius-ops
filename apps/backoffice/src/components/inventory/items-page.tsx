@@ -415,7 +415,7 @@ export function ItemsPage({ kind }: { kind: ItemKind }) {
               onClick={() => setGroupFilter(grp)}
               className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                 groupFilter === grp
-                  ? "border-ink bg-brand-soft text-brand-text"
+                  ? "border-text bg-raised font-semibold text-text"
                   : "border-line text-text-2 hover:bg-sunken"
               }`}
             >

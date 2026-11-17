@@ -1081,7 +1081,7 @@ function DashboardView() {
           <div className="relative">
             <button
               onClick={() => setShowFilter(!showFilter)}
-              className={`rounded-lg border p-2 transition-colors ${filterRating ? "border-ink bg-brand-soft text-brand-text" : "border-border bg-surface text-muted-foreground hover:bg-muted"}`}
+              className={`rounded-lg border p-2 transition-colors ${filterRating ? "border-text bg-raised font-semibold text-text" : "border-border bg-surface text-muted-foreground hover:bg-muted"}`}
             >
               <Filter className="h-4 w-4" />
             </button>

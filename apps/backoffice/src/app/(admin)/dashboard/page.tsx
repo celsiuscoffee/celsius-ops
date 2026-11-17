@@ -123,12 +123,12 @@ export default function DashboardPage() {
       {data && data.canSeeAllOutlets && (
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setOutlet("all")}
-            className={`rounded-full border px-3 py-1 text-xs ${outlet === "all" ? "border-ink bg-brand-soft text-brand-text" : "text-muted-foreground hover:bg-muted"}`}>
+            className={`rounded-full border px-3 py-1 text-xs ${outlet === "all" ? "border-text bg-raised font-semibold text-text" : "text-muted-foreground hover:bg-muted"}`}>
             All outlets
           </button>
           {data.outlets.map((o) => (
             <button key={o.id} onClick={() => setOutlet(o.id)}
-              className={`rounded-full border px-3 py-1 text-xs ${outlet === o.id ? "border-ink bg-brand-soft text-brand-text" : "text-muted-foreground hover:bg-muted"}`}>
+              className={`rounded-full border px-3 py-1 text-xs ${outlet === o.id ? "border-text bg-raised font-semibold text-text" : "text-muted-foreground hover:bg-muted"}`}>
               {o.name}
             </button>
           ))}
