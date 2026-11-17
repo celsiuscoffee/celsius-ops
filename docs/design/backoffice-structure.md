@@ -309,6 +309,13 @@ the new-transfer rows show source and destination stock before → after and
 flag a quantity over what the source holds; smart suggestions each become a
 draft on one tap. Only the one-field reject box stays a dialog.
 
+**Menu › Items rebuilt (17 Nov)**: "What customers can order in the app, in
+what order, and what is switched off." Four key numbers: on the menu (of all
+items, categories), switched off (amber), best sellers, no photo (amber: blank
+tiles in the app). Tabs renamed Catalog/Availability → All items/By outlet.
+Drag-to-reorder, best-seller star, on/off switch, edit and delete all kept;
+"86'd" became an "Off" tag by the name; touch targets 36 px.
+
 Still to do in step 6: page-by-page layout (title + one line, at most four key
 numbers each against a reference, one list), section by section, starting with
 the most-used pages once Office Usage has data.

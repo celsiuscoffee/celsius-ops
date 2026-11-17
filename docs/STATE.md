@@ -11,6 +11,10 @@ current month.
 
 ## Verified facts
 
+- 2026-11-17 — **Menu › Items on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
+  key numbers, Celsius tokens, same editor (reorder, on/off, best sellers). Next: Recipes,
+  Menu Status.
+
 - 2026-11-17 — **Celsius has no central kitchen** (owner). Do not design for one: no CK
   section, no CK outlet type in Settings › Outlets (picker and filter removed; the
   `OutletType.CENTRAL_KITCHEN` enum value stays in the schema, unused). Transfers are

@@ -175,7 +175,7 @@ export function AvailabilityMatrix() {
           managed on the Catalog tab.
         </p>
         {offCount > 0 && (
-          <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+          <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-warn-soft px-3 py-1 text-xs font-medium text-warn-text">
             <AlertTriangle className="h-3.5 w-3.5" />
             {offCount} outlet override{offCount === 1 ? "" : "s"} active
           </p>

@@ -259,7 +259,7 @@ export const NAV_SECTIONS: NavSection[] = [
           { label: "Recipes",      href: "/inventory/menus",        icon: <BookOpen className={ICON_SIZE} />,    moduleKey: "inventory:menus" },
           // Printable per-item BOM — linked from the Recipes page.
           { label: "Recipe Cards", href: "/inventory/menus/cards",  icon: <Printer className={ICON_SIZE} />,     moduleKey: "inventory:menus", hidden: true },
-          // Central-kitchen sub-BOM (raw → prepped).
+          // Prep sub-recipes made at the outlets (raw → prepped). Celsius has no central kitchen.
           { label: "Prep Recipes", href: "/inventory/prep-recipes", icon: <ChefHat className={ICON_SIZE} />,     moduleKey: "inventory:menus" },
           { label: "Packaging",    href: "/inventory/packaging",    icon: <PackageOpen className={ICON_SIZE} />, moduleKey: "inventory:packaging" },
         ],
