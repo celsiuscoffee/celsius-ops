@@ -316,6 +316,27 @@ tiles in the app). Tabs renamed Catalog/Availability → All items/By outlet.
 Drag-to-reorder, best-seller star, on/off switch, edit and delete all kept;
 "86'd" became an "Off" tag by the name; touch targets 36 px.
 
+**Every other page (17 Nov, "do all")**: the same pattern applied section by
+section. Rail pages got a one-line purpose, up to four key numbers from data
+the page already loads, one list and full-page forms: Sales dashboard, Orders,
+Sales reports, Recipes, Prep recipes, Packaging, Menu status, Ingredients and
+Perishables, Purchase orders, Suppliers, Members, Vouchers, Reviews,
+Campaigns, Messages, Ads, People, Team overview, Outlet scorecard, Audits,
+SOPs, AI agents. Light pass (title + line, tokens, sentence case, 12-hour
+times, phone fit) on the rest. New tested helpers: `lib/orders-summary.ts`,
+`lib/inventory/items-summary.ts`, `lib/loyalty/vouchers-summary.ts`,
+`lib/reviews-summary.ts`. Untouched until the owner decides: payroll and pay
+pages (payroll, allowances, PT rates, performance, review penalties,
+compliance), Payment requests, the Money section, and the Invoices payment
+pop-ups. Thresholds that are guesses for the owner: food cost amber above
+35% (Recipes), order waiting amber over 15 minutes (Orders), outlets under 80%
+of round target (Sales dashboard). Prep recipes' "Central Prep price" is now
+"Listed price" (the field is still `transferPrice`; Celsius has no central
+kitchen). Follow-ups: shared `pos/_ReportsTabs.tsx`, `components/hr/page-header.tsx`
+and `components/inventory/EditOrderModal.tsx` still use old styling; nav labels
+are still Title Case while pages say sentence case; wide tables kept on
+Members, Google campaigns, Rank scoreboard, GrabFood and the sales report.
+
 Still to do in step 6: page-by-page layout (title + one line, at most four key
 numbers each against a reference, one list), section by section, starting with
 the most-used pages once Office Usage has data.

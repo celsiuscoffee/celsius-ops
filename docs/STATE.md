@@ -11,6 +11,13 @@ current month.
 
 ## Verified facts
 
+- 2026-11-17 — **Step 6 done for every non-pay page** (PR celsiuscoffee/celsius-ops#1278,
+  `backoffice-structure.md` §2e). Built by 4 parallel forks; one ran `git stash` mid-run and
+  everyone's edits were restored by hand (local stash@{0} kept as backup in that container).
+  Lesson: never let parallel agents in one working tree run git stash/checkout; give each its
+  own worktree. Not yet seen on live data. Pay pages, Payment requests and Money untouched.
+  Next: owner review of all screens, then shared components and nav label case.
+
 - 2026-11-17 — **Menu › Items on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
   key numbers, Celsius tokens, same editor (reorder, on/off, best sellers). Next: Recipes,
   Menu Status.
