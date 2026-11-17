@@ -1020,10 +1020,13 @@ function AdjustmentForm({
   const [code, setCode] = useState("");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [relatesToYear, setRelatesToYear] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const selected = catalog.find((c) => c.code === code);
+  // Arrears can be pay for a previous year (EA B.2) — ask which year.
+  const isArrears = /ARREAR/i.test(code);
   // Use kind based on category. Deductions go into other_deductions.
   // Pre-tax deductions (deduct_from_gross) are stored in allowances as
   // negative entries — handled server-side from kind='allowance' with negative
@@ -1036,6 +1039,7 @@ function AdjustmentForm({
     setCode("");
     setAmount("");
     setNote("");
+    setRelatesToYear("");
     setErr(null);
   };
 
@@ -1059,6 +1063,7 @@ function AdjustmentForm({
           label: selected?.name,
           amount: Number(amount),
           note: note || null,
+          ...(isArrears && relatesToYear ? { relates_to_year: Number(relatesToYear) } : {}),
         }),
       });
       const body = await res.json();
@@ -1111,6 +1116,21 @@ function AdjustmentForm({
           className="rounded border bg-background px-2 py-1.5 text-xs"
         />
       </div>
+      {isArrears && kind === "allowance" && (
+        <label className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+          For a previous year?
+          <input
+            type="number"
+            min={2000}
+            step={1}
+            value={relatesToYear}
+            onChange={(e) => setRelatesToYear(e.target.value)}
+            placeholder="e.g. 2025"
+            className="w-20 rounded border bg-background px-2 py-1 text-xs"
+          />
+          <span>Fill only if these arrears are pay for an earlier year (reported in EA B.2). Leave blank for this year&apos;s months.</span>
+        </label>
+      )}
       {selected && (
         <p className="text-[10px] text-muted-foreground">
           Will record as <strong>{kind === "allowance" ? "Earning" : "Post-tax Deduction"}</strong>.
