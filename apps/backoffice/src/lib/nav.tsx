@@ -140,56 +140,56 @@ const ICON_SIZE = "h-4 w-4";
 // Page URLs and moduleKeys never change here; only labels/grouping do, so deep
 // links, bookmarks and grants always survive a reshuffle.
 export const NAV_SECTIONS: NavSection[] = [
-  // Sales — how much we sold, and through which channel.
+  // Structure follows Gosamē Office's menu (owner, 18 Nov 2026: "only follow
+  // the ones gosame did"): Agents on top, then Sell (Sales, Customers), Make and
+  // supply (Food, Stock, Orders), Run the business (Team, Money, Standards).
+  // Celsius-only pages with no Gosamē home are hidden (still open by URL / ⌘K).
+  // Agents — what the AI agents are doing and why (Gosamē: Colony).
+  {
+    label: "Agents",
+    icon: <Bot className={ICON_SIZE} />,
+    items: [
+      { label: "AI agents", href: "/agents", icon: <Bot className={ICON_SIZE} />, moduleKey: "settings:system" },
+    ],
+  },
+  // Sales — how much did we sell? One page; its views are tabs.
   {
     label: "Sales",
     group: "Sell",
     icon: <BarChart3 className={ICON_SIZE} />,
     subgroups: [
       {
-        label: "Dashboard",
+        label: "Sales",
         items: [
-          { label: "Dashboard", href: "/sales/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "sales:dashboard" },
-          { label: "Compare",   href: "/sales/compare",   icon: <Scale className={ICON_SIZE} />,           moduleKey: "sales:dashboard" },
-        ],
-      },
-      {
-        label: "Orders",
-        items: [
-          { label: "Orders", href: "/pickup/orders", icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "pickup:orders" },
-        ],
-      },
-      {
-        label: "Reports",
-        items: [
-          { label: "Reports",             href: "/pos/reports",             icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "sales:reports" },
-          // Per-cashier till numbers (docs/design/cashier-performance-dashboard.md);
-          // the till's own cashier scorecard reads the same metrics.
-          { label: "Cashier performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,     moduleKey: "sales:reports" },
+          { label: "Sales",               href: "/sales/dashboard",         icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "sales:dashboard" },
+          { label: "Compare",             href: "/sales/compare",           icon: <Scale className={ICON_SIZE} />,           moduleKey: "sales:dashboard" },
+          { label: "Orders",              href: "/pickup/orders",           icon: <ClipboardList className={ICON_SIZE} />,   moduleKey: "pickup:orders" },
+          { label: "Reports",             href: "/pos/reports",             icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "sales:reports" },
+          // Per-cashier till numbers (docs/design/cashier-performance-dashboard.md).
+          { label: "Cashier performance", href: "/pos/cashier-performance", icon: <Users className={ICON_SIZE} />,           moduleKey: "sales:reports" },
           // Pickup app orders, revenue and engagement (the old /pickup dashboard redirects here).
-          { label: "Pickup app",          href: "/pickup/analytics",        icon: <ShoppingBag className={ICON_SIZE} />, moduleKey: "sales:reports" },
+          { label: "Pickup app",          href: "/pickup/analytics",        icon: <ShoppingBag className={ICON_SIZE} />,     moduleKey: "sales:reports" },
         ],
       },
     ],
   },
-  // Customers — who they are, what they got, what they say. Reviews and local
-  // rank are one job (the Google profile), so they share a page.
+  // Customers — who are they, are they happy, do they come back?
   {
     label: "Customers",
     group: "Sell",
     icon: <Users className={ICON_SIZE} />,
     subgroups: [
       {
-        label: "Members",
+        label: "Profiles",
         items: [
-          { label: "Members",      href: "/loyalty/members",      icon: <Users className={ICON_SIZE} />,     moduleKey: "loyalty:members" },
+          { label: "Profiles",     href: "/loyalty/members",      icon: <Users className={ICON_SIZE} />,     moduleKey: "loyalty:members" },
           { label: "Manual grant", href: "/loyalty/manual-grant", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "loyalty:manual-grant" },
         ],
       },
       {
-        label: "Rewards history",
+        label: "Rewards",
         items: [
-          { label: "Vouchers",    href: "/loyalty/vouchers",    icon: <TicketPercent className={ICON_SIZE} />, moduleKey: "loyalty:redemptions" },
+          { label: "Rewards",     href: "/loyalty/vouchers",    icon: <TicketPercent className={ICON_SIZE} />, moduleKey: "loyalty:redemptions" },
           { label: "Redemptions", href: "/loyalty/redemptions", icon: <Receipt className={ICON_SIZE} />,       moduleKey: "loyalty:redemptions" },
           // Raw per-transaction points ledger — audit-grade, reached via ⌘K.
           { label: "Points log",  href: "/loyalty/points-log",  icon: <Coins className={ICON_SIZE} />,         moduleKey: "loyalty:redemptions", hidden: true },
@@ -200,57 +200,41 @@ export const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Reviews",         href: "/reviews",            icon: <Star className={ICON_SIZE} />,          moduleKey: "reviews:list" },
           { label: "Feedback",        href: "/reviews/feedback",   icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "reviews:list" },
-          { label: "Local rank",      href: "/reviews/geogrid",    icon: <MapPinned className={ICON_SIZE} />,     moduleKey: "reviews:list" },
-          { label: "Rank scoreboard", href: "/reviews/scoreboard", icon: <Target className={ICON_SIZE} />,        moduleKey: "reviews:list" },
-        ],
-      },
-    ],
-  },
-  // Marketing — what brings customers in and back, and whether it pays.
-  // Loyalty set-up (tiers, challenges, mystery pool, earn rate…) is behind the
-  // Settings gear.
-  {
-    label: "Marketing",
-    group: "Sell",
-    icon: <Megaphone className={ICON_SIZE} />,
-    subgroups: [
-      {
-        label: "Campaigns",
-        items: [
-          // Campaigns = Loops (the legacy /loyalty/campaigns editor redirects here).
-          { label: "Campaigns", href: "/loyalty/loops", icon: <Repeat className={ICON_SIZE} />, moduleKey: "loyalty:campaigns" },
+          { label: "Search position", href: "/reviews/geogrid",    icon: <MapPinned className={ICON_SIZE} />,     moduleKey: "reviews:list" },
+          { label: "Scoreboard",      href: "/reviews/scoreboard", icon: <Target className={ICON_SIZE} />,        moduleKey: "reviews:list" },
         ],
       },
       {
+        // Gosamē: WhatsApp. Celsius sends SMS and push; campaigns are the
+        // automated sends (the legacy /loyalty/campaigns editor redirects there).
         label: "Messages",
         items: [
-          // SMS broadcasts + push reminders, as tabs inside the page.
-          { label: "Messages", href: "/loyalty/engage", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
-        ],
-      },
-      {
-        label: "Ads",
-        items: [
-          { label: "Google",           href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:overview" },
-          { label: "Google campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ads:campaigns" },
-          { label: "Optimizer",        href: "/ads/optimizer", icon: <Scissors className={ICON_SIZE} />,        moduleKey: "ads:campaigns" },
-          { label: "GrabFood",         href: "/ads/grab",      icon: <Megaphone className={ICON_SIZE} />,       moduleKey: "ads:grab" },
-          { label: "Ad invoices",      href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,         moduleKey: "ads:invoices" },
+          { label: "Messages",  href: "/loyalty/engage", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
+          { label: "Campaigns", href: "/loyalty/loops",  icon: <Repeat className={ICON_SIZE} />,        moduleKey: "loyalty:campaigns" },
+          // Ads have no Gosamē home: hidden, still open by URL and ⌘K.
+          { label: "Ads",              href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:overview",  hidden: true },
+          { label: "Google campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ads:campaigns", hidden: true },
+          { label: "Ads optimizer",    href: "/ads/optimizer", icon: <Scissors className={ICON_SIZE} />,        moduleKey: "ads:campaigns", hidden: true },
+          { label: "GrabFood ads",     href: "/ads/grab",      icon: <Megaphone className={ICON_SIZE} />,       moduleKey: "ads:grab",      hidden: true },
+          { label: "Ad invoices",      href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,         moduleKey: "ads:invoices",  hidden: true },
         ],
       },
     ],
   },
-  // Menu — what we sell (shared by POS, the pickup app and Grab), what each
-  // item costs to make, and what is switched off right now.
+  // Food — what do we sell, how is it made, what does it earn? Celsius has no
+  // central kitchen, so Gosamē's CK section has no counterpart.
   {
-    label: "Menu",
+    label: "Food",
     group: "Make and supply",
     icon: <UtensilsCrossed className={ICON_SIZE} />,
     subgroups: [
       {
-        label: "Items",
+        label: "Menu",
         items: [
-          { label: "Items", href: "/pickup/menu", icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
+          // Shared by POS, the pickup app and Grab.
+          { label: "Menu",        href: "/pickup/menu",           icon: <UtensilsCrossed className={ICON_SIZE} />, moduleKey: "pickup:menu" },
+          // Store open/closed and items switched off, per outlet and channel.
+          { label: "Menu status", href: "/pos/store-menu-status", icon: <Power className={ICON_SIZE} />,           moduleKey: "pickup:settings" },
         ],
       },
       {
@@ -259,21 +243,14 @@ export const NAV_SECTIONS: NavSection[] = [
           { label: "Recipes",      href: "/inventory/menus",        icon: <BookOpen className={ICON_SIZE} />,    moduleKey: "inventory:menus" },
           // Printable per-item BOM — linked from the Recipes page.
           { label: "Recipe cards", href: "/inventory/menus/cards",  icon: <Printer className={ICON_SIZE} />,     moduleKey: "inventory:menus", hidden: true },
-          // Prep sub-recipes made at the outlets (raw → prepped). Celsius has no central kitchen.
+          // Prep sub-recipes made at the outlets (raw → prepped).
           { label: "Prep recipes", href: "/inventory/prep-recipes", icon: <ChefHat className={ICON_SIZE} />,     moduleKey: "inventory:menus" },
           { label: "Packaging",    href: "/inventory/packaging",    icon: <PackageOpen className={ICON_SIZE} />, moduleKey: "inventory:packaging" },
         ],
       },
-      {
-        label: "Menu status",
-        items: [
-          // Store open/closed and items switched off, per outlet and channel.
-          { label: "Menu status", href: "/pos/store-menu-status", icon: <Power className={ICON_SIZE} />, moduleKey: "pickup:settings" },
-        ],
-      },
     ],
   },
-  // Stock — what we hold, where, and where it leaks. Counts, wastage and
+  // Stock — what do we hold, where, and where does it leak? Counts, waste and
   // transfers are done on the floor in the staff app; this is the HQ view.
   {
     label: "Stock",
@@ -281,47 +258,40 @@ export const NAV_SECTIONS: NavSection[] = [
     icon: <Boxes className={ICON_SIZE} />,
     subgroups: [
       {
-        label: "Overview",
+        label: "Food cost",
         items: [
-          { label: "Overview", href: "/inventory/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "inventory:products" },
-          { label: "Reports",  href: "/inventory/reports",   icon: <LineChart className={ICON_SIZE} />,       moduleKey: "inventory:reports" },
+          { label: "Food cost", href: "/inventory/dashboard", icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "inventory:products" },
+          { label: "Reports",   href: "/inventory/reports",   icon: <LineChart className={ICON_SIZE} />,       moduleKey: "inventory:reports" },
         ],
       },
       {
-        label: "Ingredients",
+        label: "Items",
         items: [
-          { label: "Ingredients", href: "/inventory/products",    icon: <Package className={ICON_SIZE} />,    moduleKey: "inventory:products" },
-          { label: "Par levels",  href: "/inventory/par-levels",  icon: <TrendingUp className={ICON_SIZE} />, moduleKey: "inventory:par-levels" },
-          // Same item list as Ingredients, filtered to itemType PERISHABLE.
-          { label: "Perishables", href: "/inventory/perishables", icon: <Box className={ICON_SIZE} />,        moduleKey: "inventory:perishables" },
+          { label: "Items",          href: "/inventory/products",    icon: <Package className={ICON_SIZE} />,        moduleKey: "inventory:products" },
+          { label: "Reserve levels", href: "/inventory/par-levels",  icon: <TrendingUp className={ICON_SIZE} />,     moduleKey: "inventory:par-levels" },
+          // Same item list, filtered to itemType PERISHABLE.
+          { label: "Perishables",    href: "/inventory/perishables", icon: <Box className={ICON_SIZE} />,            moduleKey: "inventory:perishables" },
+          // Outlet-to-outlet moves (Gosamē moves stock only from its CK).
+          { label: "Transfers",      href: "/inventory/transfers",   icon: <ArrowLeftRight className={ICON_SIZE} />, moduleKey: "inventory:transfers" },
         ],
       },
       {
-        label: "Stock count",
+        label: "Counts",
         items: [
-          { label: "Stock count", href: "/inventory/stock-count", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "inventory:stock-count" },
+          { label: "Counts", href: "/inventory/stock-count", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "inventory:stock-count" },
         ],
       },
       {
-        label: "Wastage",
+        label: "Waste",
         items: [
-          { label: "Wastage", href: "/inventory/wastage", icon: <Trash2 className={ICON_SIZE} />, moduleKey: "inventory:wastage" },
-        ],
-      },
-      {
-        label: "Transfers",
-        items: [
-          { label: "Transfers", href: "/inventory/transfers", icon: <ArrowLeftRight className={ICON_SIZE} />, moduleKey: "inventory:transfers" },
+          { label: "Waste", href: "/inventory/wastage", icon: <Trash2 className={ICON_SIZE} />, moduleKey: "inventory:wastage" },
         ],
       },
     ],
   },
-  // Procurement — right items, right price, paid correctly. Owner-preferred
-  // labels (restored 2026-07-11): "Purchase Orders" = the WhatsApp
-  // supplier-chat surface where POs are raised; "PO List" = the resulting list
-  // at /inventory/orders. This is the team's vocabulary — don't "fix" it.
+  // Orders (was Procurement) — right items, right price, paid correctly?
   {
-    label: "Procurement",
+    label: "Orders",
     group: "Make and supply",
     icon: <Truck className={ICON_SIZE} />,
     subgroups: [
@@ -332,25 +302,18 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        label: "Purchase orders",
+        label: "Supplier orders",
         items: [
-          { label: "Purchase orders",    href: "/inventory/orders",     icon: <FileText className={ICON_SIZE} />, moduleKey: "inventory:orders" },
-          { label: "Receiving", href: "/inventory/receivings", icon: <Receipt className={ICON_SIZE} />,  moduleKey: "inventory:receivings" },
+          { label: "Supplier orders", href: "/inventory/orders",     icon: <FileText className={ICON_SIZE} />, moduleKey: "inventory:orders" },
+          { label: "Deliveries",      href: "/inventory/receivings", icon: <Receipt className={ICON_SIZE} />,  moduleKey: "inventory:receivings" },
         ],
       },
       {
         label: "Invoices",
         items: [
           { label: "Invoices",      href: "/inventory/invoices",       icon: <ClipboardList className={ICON_SIZE} />, moduleKey: "inventory:invoices" },
-          // Invoice ↔ PO matching. Renamed from "Reconciliation" so it can't be
-          // confused with Money → Bank Match.
+          // Invoice ↔ PO matching (not bank matching: that is Money → Bank inbox).
           { label: "Invoice match", href: "/inventory/reconciliation", icon: <Scale className={ICON_SIZE} />,         moduleKey: "inventory:invoices" },
-        ],
-      },
-      {
-        label: "Payment requests",
-        items: [
-          { label: "Payment requests", href: "/inventory/pay-and-claim", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "inventory:pay-and-claim" },
         ],
       },
       {
@@ -382,17 +345,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "PT hours",    href: "/hr/pt-hours",  icon: <Clock className={ICON_SIZE} />,           moduleKey: "hr:attendance", hidden: true },
       { label: "Availability",   href: "/hr/availability", icon: <Clock className={ICON_SIZE} />,     moduleKey: "hr:schedules", hidden: true },
       { label: "Coverage rules", href: "/hr/coverage",     icon: <Flame className={ICON_SIZE} />,     moduleKey: "hr:schedules", hidden: true },
-      // People: the staff list; its tab strip holds the HR overview, PT rates,
-      // app access, certificates and memos.
-      { label: "People",      href: "/hr/employees", icon: <UserCog className={ICON_SIZE} />,         moduleKey: "hr:employees" },
-      { label: "Overview",    href: "/hr",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "hr:dashboard", hidden: true },
-      { label: "Analytics",   href: "/hr/analytics", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "hr:dashboard", hidden: true },
-      // Keyed on hr:employees, not hr:payroll — a PT staffing manager sets hourly
-      // rates without getting the payroll module (runs, payslips, bank files).
-      { label: "PT rates",    href: "/hr/pt-rates",  icon: <Banknote className={ICON_SIZE} />,        moduleKey: "hr:employees", hidden: true },
-      { label: "App access",  href: "/hr/access-presets", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "hr:employees", hidden: true },
-      { label: "Certifications", href: "/hr/certifications", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "hr:employees", hidden: true },
-      { label: "Memos",       href: "/hr/memos",     icon: <FileText className={ICON_SIZE} />,        moduleKey: "hr:memos", hidden: true },
       { label: "Payroll",     href: "/hr/payroll",   icon: <Banknote className={ICON_SIZE} />,        moduleKey: "hr:payroll" },
       // Read-only view of what the levers scored. Corrections live on
       // /hr/performance; this stays as the plain company-wide readout.
@@ -405,29 +357,58 @@ export const NAV_SECTIONS: NavSection[] = [
       // team, and the API scopes them to their subtree and to line waivers.
       { label: "Performance", href: "/hr/performance", icon: <TrendingUp className={ICON_SIZE} />,    moduleKey: "hr:performance" },
       { label: "Review penalties", href: "/hr/review-penalties", icon: <AlertTriangle className={ICON_SIZE} />, moduleKey: "hr:review-penalties", hidden: true },
+      // People: the staff list; its tab strip holds the HR overview, PT rates,
+      // app access, certificates and memos.
+      { label: "People",      href: "/hr/employees", icon: <UserCog className={ICON_SIZE} />,         moduleKey: "hr:employees" },
+      { label: "Overview",    href: "/hr",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "hr:dashboard", hidden: true },
+      { label: "Analytics",   href: "/hr/analytics", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "hr:dashboard", hidden: true },
+      // Keyed on hr:employees, not hr:payroll — a PT staffing manager sets hourly
+      // rates without getting the payroll module (runs, payslips, bank files).
+      { label: "PT rates",    href: "/hr/pt-rates",  icon: <Banknote className={ICON_SIZE} />,        moduleKey: "hr:employees", hidden: true },
+      { label: "App access",  href: "/hr/access-presets", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "hr:employees", hidden: true },
+      { label: "Certifications", href: "/hr/certifications", icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "hr:employees", hidden: true },
+      { label: "Memos",       href: "/hr/memos",     icon: <FileText className={ICON_SIZE} />,        moduleKey: "hr:memos", hidden: true },
     ],
   },
 
-  // Money (was Finance) — moduleKeys start with "finance:", which canAccess
-  // hard-restricts to OWNER/ADMIN regardless of moduleAccess.
+
+  // Money (was Finance) — where is our cash, and are the books right?
+  // moduleKeys start with "finance:", which canAccess hard-restricts to
+  // OWNER/ADMIN regardless of moduleAccess.
   {
     label: "Money",
     group: "Run the business",
     icon: <Coins className={ICON_SIZE} />,
     subgroups: [
       {
-        label: "Cash flow",
+        label: "Overview",
         items: [
-          { label: "Cash flow",     href: "/finance/cashflow",         icon: <LineChart className={ICON_SIZE} />,       moduleKey: "finance:cashflow" },
-          { label: "Cash tracking", href: "/finance/cash-tracking",    icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
-          { label: "Monthly",       href: "/finance/monthly-cashflow", icon: <CalendarDays className={ICON_SIZE} />,    moduleKey: "finance:cashflow" },
+          { label: "Overview",    href: "/finance",            icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "finance:reports" },
+          { label: "Tax & close", href: "/finance/compliance", icon: <CalendarClock className={ICON_SIZE} />,   moduleKey: "finance:reports" },
         ],
       },
       {
-        label: "Bank match",
+        label: "Bank inbox",
         items: [
-          // Bank ↔ books. Renamed from "Reconciliation" (see Invoice Match).
-          { label: "Bank match", href: "/finance/recon", icon: <Scale className={ICON_SIZE} />, moduleKey: "finance:reports" },
+          // Bank ↔ books.
+          { label: "Bank inbox", href: "/finance/recon", icon: <Scale className={ICON_SIZE} />, moduleKey: "finance:reports" },
+        ],
+      },
+      {
+        label: "Cash flow",
+        items: [
+          { label: "Cash flow",       href: "/finance/cashflow",           icon: <LineChart className={ICON_SIZE} />,       moduleKey: "finance:cashflow" },
+          { label: "Cash tracking",   href: "/finance/cash-tracking",      icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
+          { label: "Monthly",         href: "/finance/monthly-cashflow",   icon: <CalendarDays className={ICON_SIZE} />,    moduleKey: "finance:cashflow" },
+          { label: "Bank statements", href: "/finance/bank-statements",    icon: <FileText className={ICON_SIZE} />,        moduleKey: "finance:cashflow" },
+          { label: "Regular bills",   href: "/finance/recurring-expenses", icon: <Repeat className={ICON_SIZE} />,          moduleKey: "finance:cashflow" },
+        ],
+      },
+      {
+        // Gosamē: Bills → Staff claims, the same page.
+        label: "Payment requests",
+        items: [
+          { label: "Payment requests", href: "/inventory/pay-and-claim", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "inventory:pay-and-claim" },
         ],
       },
       {
@@ -438,57 +419,45 @@ export const NAV_SECTIONS: NavSection[] = [
           { label: "Fixed assets", href: "/finance/fixed-assets", icon: <Landmark className={ICON_SIZE} />,   moduleKey: "finance:reports" },
         ],
       },
-      // Home/Compliance/Bank Statements/Payouts/Recurring Expenses are dropped
-      // from nav per owner — pages still exist.
     ],
   },
-  // Standards (was Ops) — is every outlet running to standard? Both outlet
-  // scores sit on one page; the old /ops/dashboard redirects to it.
+  // Standards (was Ops) — is every outlet running to standard?
   {
     label: "Standards",
     group: "Run the business",
     icon: <ClipboardCheck className={ICON_SIZE} />,
     subgroups: [
       {
-        label: "Outlet scorecard",
+        label: "Checklists",
         items: [
-          { label: "Outlet scorecard", href: "/ops/performance",   icon: <BarChart3 className={ICON_SIZE} />, moduleKey: "ops:performance" },
-          // The scores the ops scoreboard job sends out (/api/scorecard).
-          { label: "Area scorecard",   href: "/loyalty/dashboard", icon: <Trophy className={ICON_SIZE} />,    moduleKey: "loyalty:dashboard" },
+          // Recurring SOP checklists per outlet and staff, with Coverage on top
+          // (the old /ops/compliance page redirects here).
+          { label: "Checklists", href: "/ops/schedules", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "ops:checklists" },
+        ],
+      },
+      {
+        label: "What happened",
+        items: [
+          // Incidents, messages and reminders.
+          { label: "What happened", href: "/ops/chat-inbox", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "ops:chat-inbox" },
         ],
       },
       {
         label: "Audits",
         items: [
-          { label: "Audits", href: "/ops/audit", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "ops:audit" },
+          { label: "Audits",           href: "/ops/audit",         icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "ops:audit" },
+          // Both outlet scores; the old /ops/dashboard redirects here.
+          { label: "Outlet scorecard", href: "/ops/performance",   icon: <BarChart3 className={ICON_SIZE} />,      moduleKey: "ops:performance" },
+          // The scores the ops scoreboard job sends out (/api/scorecard).
+          { label: "Area scorecard",   href: "/loyalty/dashboard", icon: <Trophy className={ICON_SIZE} />,         moduleKey: "loyalty:dashboard" },
         ],
       },
       {
         label: "SOPs",
         items: [
           { label: "SOPs", href: "/ops/sops", icon: <BookOpen className={ICON_SIZE} />, moduleKey: "ops:sops" },
-          // Recurring SOP checklists per outlet and staff, with Coverage on top
-          // (the old /ops/compliance page redirects here).
-          { label: "Schedules", href: "/ops/schedules", icon: <CalendarClock className={ICON_SIZE} />, moduleKey: "ops:checklists" },
         ],
       },
-      {
-        label: "What happened",
-        items: [
-          // Was "Ops Workspace": incidents, messages and reminders.
-          { label: "What happened", href: "/ops/chat-inbox", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "ops:chat-inbox" },
-        ],
-      },
-    ],
-  },
-  // Agents — what the AI agents are doing and why. Not configuration, so it
-  // left Settings → System. Same grant as before.
-  {
-    label: "Agents",
-    icon: <Bot className={ICON_SIZE} />,
-    dividerBefore: true,
-    items: [
-      { label: "AI agents", href: "/agents", icon: <Bot className={ICON_SIZE} />, moduleKey: "settings:system" },
     ],
   },
   // ── Settings — rendered behind the gear in the sidebar footer, not in the
@@ -500,17 +469,7 @@ export const NAV_SECTIONS: NavSection[] = [
     placement: "footer",
     subgroups: [
       {
-        label: "Business",
-        items: [
-          { label: "Outlets",           href: "/settings/outlets", icon: <Building2 className={ICON_SIZE} />,   moduleKey: "settings:outlets" },
-          { label: "Staff & access",    href: "/settings/staff",   icon: <UserCog className={ICON_SIZE} />,     moduleKey: "settings:staff" },
-          { label: "Approval rules",    href: "/settings/rules",   icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "settings:rules" },
-          { label: "HR settings",       href: "/hr/settings",      icon: <UserCog className={ICON_SIZE} />,     moduleKey: "hr:settings" },
-          { label: "Chart of accounts", href: "/finance/coa",      icon: <BookOpen className={ICON_SIZE} />,    moduleKey: "finance:reports" },
-        ],
-      },
-      {
-        label: "POS & pickup",
+        label: "Outlet",
         items: [
           { label: "POS settings",    href: "/pos/settings",          icon: <CreditCard className={ICON_SIZE} />,  moduleKey: "pickup:settings" },
           { label: "Printers",        href: "/pos/printers",          icon: <Printer className={ICON_SIZE} />,     moduleKey: "pickup:settings" },
@@ -520,10 +479,29 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
+        label: "Company and people",
+        items: [
+          { label: "Outlet details",    href: "/settings/outlets", icon: <Building2 className={ICON_SIZE} />,   moduleKey: "settings:outlets" },
+          { label: "Staff access",      href: "/settings/staff",   icon: <UserCog className={ICON_SIZE} />,     moduleKey: "settings:staff" },
+          { label: "Approvals",         href: "/settings/rules",   icon: <ShieldCheck className={ICON_SIZE} />, moduleKey: "settings:rules" },
+          { label: "HR policies",       href: "/hr/settings",      icon: <UserCog className={ICON_SIZE} />,     moduleKey: "hr:settings" },
+          { label: "Accounts",          href: "/finance/coa",      icon: <BookOpen className={ICON_SIZE} />,    moduleKey: "finance:reports" },
+        ],
+      },
+      {
+        label: "Stock",
+        items: [
+          { label: "Item groups",      href: "/inventory/groups",     icon: <Tags className={ICON_SIZE} />,           moduleKey: "inventory:categories" },
+          { label: "Count days",       href: "/settings/stock-count", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
+        ],
+      },
+      {
         // Ordered to mirror the pickup app's rewards screen first, then the
         // programme rules.
-        label: "Loyalty",
+        label: "Customers",
         items: [
+          { label: "Reviews",    href: "/reviews/settings", icon: <MessageCircle className={ICON_SIZE} />, moduleKey: "reviews:settings" },
+          { label: "Google ads", href: "/ads/settings",     icon: <Megaphone className={ICON_SIZE} />,     moduleKey: "ads:settings" },
           { label: "Challenges",       href: "/loyalty/missions",         icon: <Target className={ICON_SIZE} />,   moduleKey: "loyalty:rewards" },
           { label: "Mystery pool",     href: "/loyalty/mystery",          icon: <Sparkles className={ICON_SIZE} />, moduleKey: "loyalty:rewards" },
           { label: "Admin claimables", href: "/loyalty/admin-claimables", icon: <Gift className={ICON_SIZE} />,     moduleKey: "loyalty:rewards" },
@@ -537,21 +515,7 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        label: "Marketing",
-        items: [
-          { label: "Reviews",    href: "/reviews/settings", icon: <MessageCircle className={ICON_SIZE} />, moduleKey: "reviews:settings" },
-          { label: "Google ads", href: "/ads/settings",     icon: <Megaphone className={ICON_SIZE} />,     moduleKey: "ads:settings" },
-        ],
-      },
-      {
-        label: "Stock",
-        items: [
-          { label: "Groups & storage", href: "/inventory/groups",     icon: <Tags className={ICON_SIZE} />,           moduleKey: "inventory:categories" },
-          { label: "Stock count",      href: "/settings/stock-count", icon: <ClipboardCheck className={ICON_SIZE} />, moduleKey: "settings:stock-count" },
-        ],
-      },
-      {
-        label: "System",
+        label: "Office",
         items: [
           { label: "SOP categories", href: "/ops/categories",        icon: <Tags className={ICON_SIZE} />,   moduleKey: "ops:categories" },
           { label: "Integrations",   href: "/settings/integrations", icon: <Plug className={ICON_SIZE} />,   moduleKey: "settings:integrations" },

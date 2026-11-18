@@ -956,7 +956,7 @@ export default function MembersPage() {
     return (
       <div className="px-4 pt-6 pb-24 md:px-8 md:pb-10">
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Members</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Profiles</h1>
           <p className="mt-0.5 text-sm text-text-2">Who is in the rewards programme, who comes back, and who can redeem now.</p>
         </div>
         <div className="flex items-center justify-center py-20 text-text-3">
@@ -972,7 +972,7 @@ export default function MembersPage() {
       <div className="mb-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Members</h1>
+            <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Profiles</h1>
             <p className="mt-0.5 text-sm text-text-2">Who is in the rewards programme, who comes back, and who can redeem now.</p>
           </div>
         </div>

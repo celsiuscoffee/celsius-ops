@@ -584,7 +584,7 @@ export default function GeogridPage() {
         <ArrowLeft className="h-3.5 w-3.5" /> Reviews
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Local rank</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Search position</h1>
         <div className="flex flex-wrap gap-2">
           <Link
             href="/reviews/geogrid/progress"

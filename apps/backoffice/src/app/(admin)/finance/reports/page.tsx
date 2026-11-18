@@ -3045,7 +3045,7 @@ export default function FinanceReportsPage() {
       {(tab === "bs" || tab === "cf") && (
         <div className="rounded-lg border border-warn bg-warn-soft p-3 text-xs sm:text-sm text-warn-text">
           <span className="font-medium">Ledger-based.</span>{" "}
-          Bank activity, payroll accruals and sales settlements now post to the ledger automatically. Two known gaps remain: unclassified inflows sit in <strong>Suspense (1999)</strong> until they are reconciled (clear them on the Bank match page), and pre-June sales journals are partial. Cross-check cash against the <strong>Cash flow</strong> page.
+          Bank activity, payroll accruals and sales settlements now post to the ledger automatically. Two known gaps remain: unclassified inflows sit in <strong>Suspense (1999)</strong> until they are reconciled (clear them on the Bank inbox page), and pre-June sales journals are partial. Cross-check cash against the <strong>Cash flow</strong> page.
         </div>
       )}
 

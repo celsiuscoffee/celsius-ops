@@ -238,7 +238,7 @@ export default function PickupMenu() {
       <ConfirmDialog />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Items</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Menu</h1>
           <p className="mt-0.5 text-sm text-text-2">What customers can order in the app, in what order, and what is switched off.</p>
         </div>
         <Link href="/pickup/menu/new" className="inline-flex h-10 items-center gap-1.5 self-start rounded-ctl bg-ink px-4 text-sm font-semibold text-on-ink hover:bg-ink-hover">

@@ -231,7 +231,7 @@ export default function OrdersPage() {
     <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Purchase orders</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Supplier orders</h1>
           <p className="mt-0.5 text-sm text-text-2">Every order to a supplier: what is still to arrive, and what came short.</p>
         </div>
         <Link href="/inventory/orders/create" className="self-start">

@@ -14,7 +14,7 @@ describe("which page a path counts as", () => {
     expect(pageOf("/pos/z-report/12345")).toBe("/pos/z-report/:id");
   });
   it("names a page by where it sits in the menu", () => {
-    expect(pageLabel("/inventory/reconciliation")).toEqual({ label: "Invoice match", where: "Procurement › Invoices" });
+    expect(pageLabel("/inventory/reconciliation")).toEqual({ label: "Invoice match", where: "Orders › Invoices" });
     expect(pageLabel("/dashboard").label).toBe("Today");
     expect(pageLabel("/nowhere").where).toBe("Off the menu");
   });

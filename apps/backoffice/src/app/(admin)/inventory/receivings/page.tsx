@@ -363,7 +363,7 @@ export default function ReceivingsPage() {
       {!showReceive && (<>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Receivings</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Deliveries</h1>
           <p className="mt-0.5 text-sm text-text-2">What arrived from suppliers, and whether it matched the order.</p>
         </div>
         <Button className="w-full bg-ink text-on-ink hover:bg-ink-hover sm:w-auto" onClick={() => openReceiveDialog()}>

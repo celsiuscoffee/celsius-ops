@@ -370,7 +370,7 @@ export default function StockCountPage() {
 
   return (
     <div className="px-4 pt-6 pb-10 md:px-8">
-      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Stock Count</h1>
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Counts</h1>
       <p className="mt-0.5 text-sm text-text-2">Whether outlets count, whether the shelf matches the system, and every gap explained.</p>
 
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
