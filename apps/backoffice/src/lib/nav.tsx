@@ -211,11 +211,18 @@ export const NAV_SECTIONS: NavSection[] = [
         items: [
           { label: "Messages",  href: "/loyalty/engage", icon: <MessageSquare className={ICON_SIZE} />, moduleKey: "loyalty:engage" },
           { label: "Campaigns", href: "/loyalty/loops",  icon: <Repeat className={ICON_SIZE} />,        moduleKey: "loyalty:campaigns" },
-          // Ads have no Gosamē home: hidden, still open by URL and ⌘K.
+        ],
+      },
+      {
+        // Ads have no Gosamē home, so the page is off the menu (every item
+        // hidden). Opened by URL or ⌘K, locate() still shows its views as tabs,
+        // so on a phone you can move between the ad pages.
+        label: "Ads",
+        items: [
           { label: "Ads",              href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:overview",  hidden: true },
           { label: "Google campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ads:campaigns", hidden: true },
-          { label: "Ads optimizer",    href: "/ads/optimizer", icon: <Scissors className={ICON_SIZE} />,        moduleKey: "ads:campaigns", hidden: true },
-          { label: "GrabFood ads",     href: "/ads/grab",      icon: <Megaphone className={ICON_SIZE} />,       moduleKey: "ads:grab",      hidden: true },
+          { label: "Optimizer",        href: "/ads/optimizer", icon: <Scissors className={ICON_SIZE} />,        moduleKey: "ads:campaigns", hidden: true },
+          { label: "GrabFood",         href: "/ads/grab",      icon: <Megaphone className={ICON_SIZE} />,       moduleKey: "ads:grab",      hidden: true },
           { label: "Ad invoices",      href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,         moduleKey: "ads:invoices",  hidden: true },
         ],
       },
@@ -707,6 +714,13 @@ export function locate(pathname: string, user: UserProfile | undefined): Placeme
   if (!section) return undefined;
   const pages = railPages(section, user);
   const href = longestMatch(pathname, getSectionHrefs(section));
-  const page = href ? pages.find((p) => p.hrefs.includes(href)) : undefined;
+  let page = href ? pages.find((p) => p.hrefs.includes(href)) : undefined;
+  // A page kept off the menu (every item hidden) is not in `pages`, but when
+  // you are on it you still get its name and its views as tabs.
+  if (!page && href && section.subgroups) {
+    const sg = section.subgroups.find((g) => g.items.some((i) => i.href === href));
+    const tabs = sg?.items.filter((i) => canAccess(user, i.moduleKey)) ?? [];
+    if (sg && tabs.length) page = { label: sg.label, href: tabs[0].href, hrefs: sg.items.map((i) => i.href), tabs };
+  }
   return { section, page, href, pages };
 }

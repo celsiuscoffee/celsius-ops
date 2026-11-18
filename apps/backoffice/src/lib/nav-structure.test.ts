@@ -99,8 +99,12 @@ describe("shell placement", () => {
     for (const href of ["/ads", "/ads/campaigns", "/ads/grab"]) {
       expect(locate(href, owner)?.section.label, href).toBe("Customers");
     }
-    const tabs = railPages(section("Customers"), owner).flatMap((p) => p.tabs.map((t) => t.label));
-    expect(tabs).not.toContain("Ads");
+    expect(railPages(section("Customers"), owner).map((p) => p.label)).toEqual(["Profiles", "Rewards", "Reviews", "Messages"]);
+    // On an ad page (e.g. from ⌘K) the title and tabs are the Ads ones, so a
+    // phone can move between them; it does not pretend to be Messages.
+    const p = locate("/ads/grab", owner);
+    expect(p?.page?.label).toBe("Ads");
+    expect(p?.page?.tabs.map((t) => t.label)).toEqual(["Ads", "Google campaigns", "Optimizer", "GrabFood", "Ad invoices"]);
   });
 
   it("the home page belongs to no section", () => {
