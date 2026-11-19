@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Pressable,
   RefreshControl,
   ScrollView,
   Text,
@@ -8,6 +9,8 @@ import {
 } from "react-native";
 import {
   BadgeCheck,
+  ChevronRight,
+  Star,
   ClipboardCheck,
   Smartphone,
   Timer,
@@ -21,6 +24,7 @@ import {
   type AllowanceBreakdown,
   type AllowanceLever,
 } from "../../../lib/hr/api";
+import { useCelsius, type ColorName } from "../../../lib/celsius-ui";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -45,27 +49,29 @@ const LEVER_META: Record<
   { icon: React.ComponentType<{ color?: string; size?: number }>; blurb: string }
 > = {
   checklist: { icon: ClipboardCheck, blurb: "Finish your shift SOPs on time" },
-  phone: { icon: Smartphone, blurb: "Ask every guest for their number" },
+  phone: { icon: Smartphone, blurb: "Ask every customer for their number" },
   serving: { icon: Timer, blurb: "Keep serve time under target" },
   audit: { icon: BadgeCheck, blurb: "Your outlet's audit score" },
 };
 
 // under / ok / perform -> label + colours (mirrors the allowance tier colours).
 const TIER = {
-  perform: { label: "Perform", color: "#F59E0B", bg: "bg-amber-50", text: "text-amber-700" },
-  ok: { label: "On track", color: "#3B82F6", bg: "bg-blue-50", text: "text-blue-700" },
-  under: { label: "Build up", color: "#9CA3AF", bg: "bg-surface", text: "text-muted-fg" },
-} as const;
+  perform: { label: "Perform", color: "ok", bg: "bg-ok-soft", text: "text-ok-text" },
+  ok: { label: "On track", color: "info", bg: "bg-info-soft", text: "text-info-text" },
+  under: { label: "Build up", color: "line-2", bg: "bg-sunken", text: "text-text-2" },
+} as const satisfies Record<string, { label: string; color: ColorName; bg: string; text: string }>;
 
 function tierOf(t: string) {
   return TIER[t as keyof typeof TIER] ?? TIER.under;
 }
 
 export default function ScoreboardScreen() {
+  const C = useCelsius().color;
   const [data, setData] = useState<AllowanceBreakdown | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deductionsOpen, setDeductionsOpen] = useState(false);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -103,7 +109,7 @@ export default function ScoreboardScreen() {
 
   return (
     <Screen edges={["top", "left", "right"]}>
-      <PageHeader title="My Scoreboard" back />
+      <PageHeader title="My scoreboard" back />
       <ScrollView
         contentContainerClassName="pb-8"
         showsVerticalScrollIndicator={false}
@@ -111,75 +117,75 @@ export default function ScoreboardScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#A2492C"
-            colors={["#A2492C"]}
+            tintColor={C["text-3"]}
+            colors={[C["text-3"]]}
           />
         }
       >
         {loading ? (
           <View className="flex-1 items-center justify-center py-24">
-            <ActivityIndicator color="#A2492C" />
+            <ActivityIndicator color={C["text-3"]} />
           </View>
         ) : error ? (
-          <View className="mt-6 rounded-3xl border border-danger/20 bg-danger/5 p-5">
-            <Text className="text-sm font-body text-danger">{error}</Text>
+          <View className="mt-6 rounded-2xl border border-danger bg-danger-soft p-5">
+            <Text className="text-sm font-body text-danger-text">{error}</Text>
           </View>
         ) : data && !data.eligible ? (
           <View className="mt-8 items-center px-6">
-            <View className="mb-3 h-14 w-14 items-center justify-center rounded-3xl bg-primary-50">
-              <Trophy color="#A2492C" size={26} />
+            <View className="mb-3 h-14 w-14 items-center justify-center rounded-2xl bg-sunken">
+              <Trophy color={C["text-2"]} size={26} />
             </View>
-            <Text className="text-center text-base font-display-medium text-espresso">
+            <Text className="text-center text-base font-display-medium text-text">
               No performance pool yet
             </Text>
-            <Text className="mt-1 text-center text-sm font-body text-muted-fg">
+            <Text className="mt-1 text-center text-sm font-body text-text-2">
               {data.tip || "The performance allowance is for full-time staff."}
             </Text>
           </View>
         ) : data ? (
           <>
             {/* Hero: the payoff. RM earned so far out of the monthly pool. */}
-            <View className="mt-4 rounded-3xl border border-primary/30 bg-primary-50/40 p-5">
+            <View className="mt-4 rounded-2xl border border-line-2 bg-sunken p-5">
               <View className="flex-row items-center gap-2">
-                <Trophy color="#A2492C" size={16} />
-                <Text className="text-xs font-body-semi uppercase tracking-wide text-primary">
+                <Trophy color={C["text-2"]} size={16} />
+                <Text className="text-xs font-body-semi text-text">
                   {monthLabel} performance
                 </Text>
               </View>
               <View className="mt-2 flex-row items-end gap-1.5">
-                <Text className="text-4xl font-display text-espresso">
+                <Text className="text-4xl font-display text-text">
                   {rm(earned)}
                 </Text>
-                <Text className="mb-1 text-sm font-body text-muted-fg">
+                <Text className="mb-1 text-sm font-body text-text-2">
                   of {rm(max)}
                 </Text>
               </View>
-              <View className="mt-3 h-2.5 overflow-hidden rounded-full bg-primary-50">
+              <View className="mt-3 h-2.5 overflow-hidden rounded-full bg-sunken">
                 <View
-                  className="h-full rounded-full bg-primary"
+                  className="h-full rounded-full bg-ink"
                   style={{ width: `${pct(progress)}%` }}
                 />
               </View>
               <View className="mt-2.5 flex-row items-center justify-between">
-                <Text className="text-xs font-body text-muted-fg">
+                <Text className="text-xs font-body text-text-2">
                   {performCount > 0
                     ? `Top tier on ${performCount} of ${levers.length} levers`
                     : "Push a lever to Perform to earn more"}
                 </Text>
-                <Text className="text-xs font-body-semi text-muted-fg">
+                <Text className="text-xs font-body-semi text-text-2">
                   {daysLeft} day{daysLeft === 1 ? "" : "s"} left
                 </Text>
               </View>
             </View>
 
             {/* The 4DX lead measures: the things you control this shift. */}
-            <Text className="mb-2 mt-6 text-base font-body-semi text-espresso">
+            <Text className="mb-2 mt-6 text-base font-body-semi text-text">
               What moves it
             </Text>
             <View className="gap-2.5">
               {levers.length === 0 ? (
-                <View className="rounded-3xl border border-border bg-surface p-4">
-                  <Text className="text-sm font-body text-muted-fg">
+                <View className="rounded-2xl border border-line bg-surface p-4">
+                  <Text className="text-sm font-body text-text-2">
                     No levers apply to your role yet. Check back after your next shift.
                   </Text>
                 </View>
@@ -188,15 +194,20 @@ export default function ScoreboardScreen() {
               )}
             </View>
 
-            {/* Deductions, only when there are any (lateness / absence / reviews). */}
+            {/* Deductions, only when there are any (lateness / absence /
+                reviews). Tap for the itemised reasons (moved here from the
+                old HR screen, which repeated this whole card). */}
             {deductionTotal > 0 ? (
-              <View className="mt-4 rounded-3xl border border-danger/20 bg-danger/5 p-4">
-                <View className="flex-row items-center justify-between">
+              <View className="mt-4 rounded-2xl border border-danger bg-surface p-4">
+                <Pressable
+                  onPress={() => setDeductionsOpen((v) => !v)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: deductionsOpen }}
+                  className="min-h-11 flex-row items-center justify-between active:opacity-70"
+                >
                   <View className="flex-1 pr-3">
-                    <Text className="text-sm font-body-semi text-espresso">
-                      Deductions
-                    </Text>
-                    <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                    <Text className="text-base font-body-semi text-text">Deductions</Text>
+                    <Text className="mt-0.5 text-sm font-body text-text-2">
                       {Number(data.attendance?.lateCount ?? 0)} late ·{" "}
                       {Number(data.attendance?.absentCount ?? 0)} absent
                       {(data.reviewPenalty?.entries?.length ?? 0) > 0
@@ -204,17 +215,58 @@ export default function ScoreboardScreen() {
                         : ""}
                     </Text>
                   </View>
-                  <Text className="text-base font-body-bold text-danger">
+                  <Text className="mr-2 text-base font-body-bold text-danger-text">
                     - {rm(deductionTotal)}
                   </Text>
-                </View>
+                  <ChevronRight
+                    color={C["text-3"]}
+                    size={18}
+                    style={{ transform: [{ rotate: deductionsOpen ? "90deg" : "0deg" }] }}
+                  />
+                </Pressable>
+                {deductionsOpen ? (
+                  <View className="mt-2 gap-2 border-t border-line pt-3">
+                    {(data.attendance?.deductions ?? []).map((d, i) => (
+                      <View key={`att-${i}`} className="flex-row items-start justify-between gap-2">
+                        <Text className="flex-1 text-sm font-body text-text">
+                          {d.date ? <Text className="text-text-3">{d.date}{"  "}</Text> : null}
+                          {d.label}
+                        </Text>
+                        <Text className="text-sm font-body-semi text-danger-text">- {rm(d.amount)}</Text>
+                      </View>
+                    ))}
+                    {(data.reviewPenalty?.entries ?? []).map((e) => (
+                      <View key={`rev-${e.id}`} className="gap-0.5">
+                        <View className="flex-row items-center justify-between gap-2">
+                          <View className="flex-row items-center">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                size={12}
+                                color={C.danger}
+                                fill={i < e.rating ? C.danger : "transparent"}
+                              />
+                            ))}
+                            <Text className="ml-1.5 text-xs font-body text-text-3">{e.reviewDate}</Text>
+                          </View>
+                          <Text className="text-sm font-body-semi text-danger-text">- {rm(e.amount)}</Text>
+                        </View>
+                        {e.reviewText ? (
+                          <Text className="text-sm font-body italic text-text-2" numberOfLines={2}>
+                            “{e.reviewText}”
+                          </Text>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
               </View>
             ) : null}
 
             {data.tip ? (
-              <View className="mt-4 flex-row items-start gap-2 rounded-3xl border border-border bg-surface p-4">
-                <TrendingUp color="#A2492C" size={16} />
-                <Text className="flex-1 text-xs font-body text-muted-fg">
+              <View className="mt-4 flex-row items-start gap-2 rounded-2xl border border-line bg-surface p-4">
+                <TrendingUp color={C["text-2"]} size={16} />
+                <Text className="flex-1 text-xs font-body text-text-2">
                   {data.tip}
                 </Text>
               </View>
@@ -227,43 +279,44 @@ export default function ScoreboardScreen() {
 }
 
 function LeverTile({ lever }: { lever: AllowanceLever }) {
+  const C = useCelsius().color;
   const meta = LEVER_META[lever.key] ?? { icon: TrendingUp, blurb: "" };
   const Icon = meta.icon;
   const tier = tierOf(lever.tier);
   const score = pct(lever.score);
   return (
-    <View className="rounded-3xl border border-border bg-surface p-4">
+    <View className="rounded-2xl border border-line bg-surface p-4">
       <View className="flex-row items-center gap-3">
-        <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
-          <Icon color="#A2492C" size={19} />
+        <View className="h-10 w-10 items-center justify-center rounded-2xl bg-sunken">
+          <Icon color={C["text-2"]} size={19} />
         </View>
         <View className="flex-1">
-          <Text className="text-base font-body-semi text-espresso">
+          <Text className="text-base font-body-semi text-text">
             {lever.label}
           </Text>
-          <Text className="text-xs font-body text-muted">{meta.blurb}</Text>
+          <Text className="text-xs font-body text-text-3">{meta.blurb}</Text>
         </View>
         <View className={`rounded-full px-2.5 py-1 ${tier.bg}`}>
-          <Text className={`text-[11px] font-body-bold ${tier.text}`}>
+          <Text className={`text-xs font-body-bold ${tier.text}`}>
             {tier.label}
           </Text>
         </View>
       </View>
 
-      <View className="mt-3 h-2 overflow-hidden rounded-full bg-primary-50">
+      <View className="mt-3 h-2 overflow-hidden rounded-full bg-sunken">
         <View
           className="h-full rounded-full"
-          style={{ width: `${score}%`, backgroundColor: tier.color }}
+          style={{ width: `${score}%`, backgroundColor: C[tier.color] }}
         />
       </View>
 
       <View className="mt-2 flex-row items-center justify-between">
-        <Text className="text-xs font-body text-muted-fg" numberOfLines={1}>
+        <Text className="text-xs font-body text-text-2" numberOfLines={1}>
           {lever.detail}
         </Text>
-        <Text className="text-xs font-body-bold text-espresso">
+        <Text className="text-xs font-body-bold text-text">
           {rm(lever.earned)}{" "}
-          <Text className="font-body text-muted">/ {rm(lever.slice)}</Text>
+          <Text className="font-body text-text-3">/ {rm(lever.slice)}</Text>
         </Text>
       </View>
     </View>
