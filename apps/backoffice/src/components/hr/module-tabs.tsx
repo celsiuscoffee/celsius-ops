@@ -28,14 +28,10 @@ export const TAB_GROUPS: { module: string; tabs: { href: string; label: string }
       { href: "/hr/overtime", label: "Overtime" },
       { href: "/hr/shift-swaps", label: "Shift swaps" },
       { href: "/hr/leave", label: "Leave" },
-    ],
-  },
-  {
-    // Hours worked, for pay: rostered vs clocked, and part-timers' hours.
-    module: "Hours",
-    tabs: [
-      { href: "/hr/roster-attendance", label: "Rostered vs clocked" },
+      // Hours worked, for pay. Was its own "Hours" strip, which no page linked
+      // to, so staff could not find the weekly PT sign-off (19 Nov 2026).
       { href: "/hr/pt-hours", label: "PT hours" },
+      { href: "/hr/roster-attendance", label: "Rostered vs clocked" },
     ],
   },
   {
