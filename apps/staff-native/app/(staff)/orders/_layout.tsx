@@ -1,9 +1,10 @@
 import { Stack } from "expo-router";
-import { stackScreenOptions } from "../../../lib/screen-options";
+import { useStackScreenOptions } from "../../../lib/screen-options";
 
 export default function OrdersLayout() {
+  const screenOptions = useStackScreenOptions();
   return (
-    <Stack screenOptions={{ ...stackScreenOptions, headerShown: false }}>
+    <Stack screenOptions={screenOptions}>
       <Stack.Screen name="index" />
       <Stack.Screen name="new" />
       <Stack.Screen name="[id]" />
