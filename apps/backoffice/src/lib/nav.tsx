@@ -214,16 +214,15 @@ export const NAV_SECTIONS: NavSection[] = [
         ],
       },
       {
-        // Ads have no Gosamē home, so the page is off the menu (every item
-        // hidden). Opened by URL or ⌘K, locate() still shows its views as tabs,
-        // so on a phone you can move between the ad pages.
+        // Ads have no Gosamē home, but the owner keeps them in the menu
+        // (19 Nov 2026: "ads: keep").
         label: "Ads",
         items: [
-          { label: "Ads",              href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:overview",  hidden: true },
-          { label: "Google campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ads:campaigns", hidden: true },
-          { label: "Optimizer",        href: "/ads/optimizer", icon: <Scissors className={ICON_SIZE} />,        moduleKey: "ads:campaigns", hidden: true },
-          { label: "GrabFood",         href: "/ads/grab",      icon: <Megaphone className={ICON_SIZE} />,       moduleKey: "ads:grab",      hidden: true },
-          { label: "Ad invoices",      href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,         moduleKey: "ads:invoices",  hidden: true },
+          { label: "Google",           href: "/ads",           icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "ads:overview" },
+          { label: "Google campaigns", href: "/ads/campaigns", icon: <BarChart3 className={ICON_SIZE} />,       moduleKey: "ads:campaigns" },
+          { label: "Optimizer",        href: "/ads/optimizer", icon: <Scissors className={ICON_SIZE} />,        moduleKey: "ads:campaigns" },
+          { label: "GrabFood",         href: "/ads/grab",      icon: <Megaphone className={ICON_SIZE} />,       moduleKey: "ads:grab" },
+          { label: "Ad invoices",      href: "/ads/invoices",  icon: <Receipt className={ICON_SIZE} />,         moduleKey: "ads:invoices" },
         ],
       },
     ],
@@ -405,17 +404,20 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Cash flow",
         items: [
           { label: "Cash flow",       href: "/finance/cashflow",           icon: <LineChart className={ICON_SIZE} />,       moduleKey: "finance:cashflow" },
-          { label: "Cash tracking",   href: "/finance/cash-tracking",      icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking" },
-          { label: "Monthly",         href: "/finance/monthly-cashflow",   icon: <CalendarDays className={ICON_SIZE} />,    moduleKey: "finance:cashflow" },
           { label: "Bank statements", href: "/finance/bank-statements",    icon: <FileText className={ICON_SIZE} />,        moduleKey: "finance:cashflow" },
           { label: "Regular bills",   href: "/finance/recurring-expenses", icon: <Repeat className={ICON_SIZE} />,          moduleKey: "finance:cashflow" },
+          // Not in Gosamē's Money (owner 19 Nov 2026: "follow exactly how
+          // gosame did"): off the menu, still open by URL and ⌘K.
+          { label: "Cash tracking",   href: "/finance/cash-tracking",      icon: <TableProperties className={ICON_SIZE} />, moduleKey: "finance:cash-tracking", hidden: true },
+          { label: "Monthly",         href: "/finance/monthly-cashflow",   icon: <CalendarDays className={ICON_SIZE} />,    moduleKey: "finance:cashflow", hidden: true },
         ],
       },
       {
-        // Gosamē: Bills → Staff claims, the same page.
-        label: "Payment requests",
+        // Gosamē: Bills (with Staff claims). Celsius has one page for both:
+        // supplier payment requests and staff claims.
+        label: "Bills",
         items: [
-          { label: "Payment requests", href: "/inventory/pay-and-claim", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "inventory:pay-and-claim" },
+          { label: "Bills", href: "/inventory/pay-and-claim", icon: <HandCoins className={ICON_SIZE} />, moduleKey: "inventory:pay-and-claim" },
         ],
       },
       {

@@ -771,7 +771,7 @@ export default function PayAndClaimPage() {
       {/* ── Header ── */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Payment requests</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Bills</h1>
           <p className="mt-0.5 text-sm text-text-2">What staff paid out of pocket or asked us to pay a vendor: what needs checking, what is waiting to be paid, and what is paid.</p>
         </div>
         <div className="flex items-center gap-2">
