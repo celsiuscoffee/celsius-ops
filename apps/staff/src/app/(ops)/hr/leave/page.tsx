@@ -2,8 +2,8 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import Link from "next/link";
-import { CalendarOff, CheckCircle2, XCircle, Clock, Loader2, Bot, Plus, ArrowLeft, Ban } from "lucide-react";
+import { HRPageHeader } from "@/components/hr-page-header";
+import { CalendarOff, CheckCircle2, XCircle, Clock, Loader2, Bot, Plus, Ban } from "lucide-react";
 import type { LeaveBalance, LeaveRequest } from "@/lib/hr/types";
 import { LEAVE_TYPES, leaveDays } from "@/lib/hr/constants";
 import { FetchError } from "@/components/fetch-error";
@@ -161,36 +161,32 @@ export default function LeavePage() {
   };
 
   const statusIcon = (status: string) => {
-    if (status === "ai_approved" || status === "approved") return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-    if (status === "rejected") return <XCircle className="h-4 w-4 text-red-500" />;
-    if (status === "cancelled") return <Ban className="h-4 w-4 text-gray-400" />;
-    if (status === "ai_escalated") return <Bot className="h-4 w-4 text-amber-500" />;
-    return <Clock className="h-4 w-4 text-gray-400" />;
+    if (status === "ai_approved" || status === "approved") return <CheckCircle2 className="h-4 w-4 text-ok" />;
+    if (status === "rejected") return <XCircle className="h-4 w-4 text-danger" />;
+    if (status === "cancelled") return <Ban className="h-4 w-4 text-text-3" />;
+    if (status === "ai_escalated") return <Bot className="h-4 w-4 text-warn" />;
+    return <Clock className="h-4 w-4 text-text-3" />;
   };
 
   return (
-    <div className="px-4 pt-6">
-      <div className="mb-6 flex items-center gap-3">
-        <Link
-          href="/hr"
-          aria-label="Back"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="flex-1 text-2xl font-bold">Leave</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-2 text-sm font-medium text-white"
-        >
-          <Plus className="h-4 w-4" /> Request
-        </button>
-      </div>
+    <div className="px-4 pb-6">
+      <HRPageHeader
+        title="Leave"
+        subtitle="Days you have left, and asking for time off."
+        right={
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="flex min-h-11 items-center gap-1 rounded-ctl bg-ink px-3.5 text-sm font-medium text-on-ink"
+          >
+            <Plus className="h-4 w-4" /> Ask for leave
+          </button>
+        }
+      />
 
       {/* Result feedback */}
       {result && (
         <div className={`mb-4 rounded-xl px-4 py-2.5 text-sm font-medium ${
-          result.success ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+          result.success ? "bg-ok-soft text-ok-text" : "bg-danger-soft text-danger-text"
         }`}>
           {result.message}
         </div>
@@ -198,15 +194,15 @@ export default function LeavePage() {
 
       {/* Leave Request Form */}
       {showForm && (
-        <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 font-semibold">New Leave Request</h2>
+        <div className="mb-6 rounded-2xl border border-line bg-surface p-4">
+          <h2 className="mb-3 font-semibold">New leave request</h2>
           <div className="space-y-3">
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-gray-500">Type</span>
+              <span className="mb-1 block text-xs font-medium text-text-3">Type</span>
               <select
                 value={form.leave_type}
                 onChange={(e) => setForm((f) => ({ ...f, leave_type: e.target.value }))}
-                className="w-full rounded-lg border bg-white px-3 py-2 text-sm"
+                className="w-full rounded-lg border bg-surface px-3 py-2 text-sm"
               >
                 {Object.entries(LEAVE_TYPES).map(([key, val]) => (
                   <option key={key} value={key}>{val.label}</option>
@@ -215,7 +211,7 @@ export default function LeavePage() {
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-gray-500">From</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">From</span>
                 <input
                   type="date"
                   value={form.start_date}
@@ -224,7 +220,7 @@ export default function LeavePage() {
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-gray-500">To</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">To</span>
                 <input
                   type="date"
                   value={form.end_date}
@@ -234,12 +230,12 @@ export default function LeavePage() {
               </label>
             </div>
             {totalDays > 0 && (
-              <p className="text-sm font-medium text-terracotta">{totalDays} day{totalDays !== 1 ? "s" : ""}</p>
+              <p className="text-sm font-medium text-brand-text">{totalDays} day{totalDays !== 1 ? "s" : ""}</p>
             )}
             {needsMc && (
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-gray-500">
-                  MC <span className="text-terracotta">*</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">
+                  MC <span className="text-brand-text">*</span>
                 </span>
                 {/* No `capture` attribute: it forced straight-to-camera on
                     phones, hiding the gallery/files option for an MC photo
@@ -249,24 +245,24 @@ export default function LeavePage() {
                   type="file"
                   accept="image/*,application/pdf"
                   onChange={(e) => onPickMc(e.target.files?.[0])}
-                  className="w-full rounded-lg border px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-1 file:text-xs"
+                  className="w-full rounded-lg border px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-sunken file:px-3 file:py-1 file:text-xs"
                 />
                 {mc && (
-                  <span className="mt-1 block truncate text-xs text-green-700">Attached: {mc.name}</span>
+                  <span className="mt-1 block truncate text-xs text-ok-text">Attached: {mc.name}</span>
                 )}
-                {mcError && <span className="mt-1 block text-xs text-red-600">{mcError}</span>}
+                {mcError && <span className="mt-1 block text-xs text-danger-text">{mcError}</span>}
                 {!mc && !mcError && (
-                  <span className="mt-1 block text-xs text-gray-500">
+                  <span className="mt-1 block text-xs text-text-3">
                     Photo or PDF of your medical certificate. Required for sick leave.
                   </span>
                 )}
               </label>
             )}
             {dateRangeInvalid && (
-              <p className="text-sm font-medium text-red-600">End date must be on or after start date.</p>
+              <p className="text-sm font-medium text-danger-text">End date must be on or after start date.</p>
             )}
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-gray-500">Reason (optional)</span>
+              <span className="mb-1 block text-xs font-medium text-text-3">Reason (optional)</span>
               <textarea
                 value={form.reason}
                 onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
@@ -278,10 +274,10 @@ export default function LeavePage() {
             <button
               onClick={handleSubmit}
               disabled={submitting || !form.start_date || !form.end_date || dateRangeInvalid}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-terracotta py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-ink py-2.5 text-sm font-medium text-on-ink disabled:opacity-50"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Submit Request
+              Send request
             </button>
           </div>
         </div>
@@ -290,7 +286,7 @@ export default function LeavePage() {
       {/* Leave Balances */}
       {balances.length > 0 && (
         <div className="mb-6">
-          <h2 className="mb-3 text-sm font-semibold text-gray-500">Balances</h2>
+          <h2 className="mb-3 text-sm font-semibold text-text-3">Balances</h2>
           <div className="grid grid-cols-2 gap-2">
             {balances.map((b) => {
               const typeInfo = LEAVE_TYPES[b.leave_type as keyof typeof LEAVE_TYPES];
@@ -300,10 +296,10 @@ export default function LeavePage() {
                 Number(b.entitled_days) + Number(b.carried_forward) - Number(b.used_days) - Number(b.pending_days),
               );
               return (
-                <div key={b.id} className="rounded-xl border border-gray-100 bg-white p-3">
-                  <p className="text-xs font-medium text-gray-500">{typeInfo?.label || b.leave_type}</p>
+                <div key={b.id} className="rounded-xl border border-line bg-surface p-3">
+                  <p className="text-xs font-medium text-text-3">{typeInfo?.label || b.leave_type}</p>
                   <p className="text-xl font-bold">{remaining}</p>
-                  <p className="text-[10px] text-gray-400">of {b.entitled_days} days</p>
+                  <p className="text-[10px] text-text-3">of {b.entitled_days} days</p>
                 </div>
               );
             })}
@@ -313,32 +309,32 @@ export default function LeavePage() {
 
       {/* Request History */}
       <div>
-        <h2 className="mb-3 text-sm font-semibold text-gray-500">History</h2>
+        <h2 className="mb-3 text-sm font-semibold text-text-3">History</h2>
         {!data && error ? (
           <FetchError error={error} onRetry={() => mutate()} what="your leave" />
         ) : requests.length === 0 ? (
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 py-10 text-center">
-            <CalendarOff className="mx-auto mb-2 h-8 w-8 text-gray-300" />
-            <p className="text-sm text-gray-400">No leave requests yet</p>
+          <div className="rounded-2xl border border-line bg-sunken/60 py-10 text-center">
+            <CalendarOff className="mx-auto mb-2 h-8 w-8 text-line-ctl" />
+            <p className="text-sm text-text-3">No leave requests yet</p>
           </div>
         ) : (
           <div className="space-y-2">
             {requests.map((req) => (
-              <div key={req.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3">
+              <div key={req.id} className="flex items-center gap-3 rounded-xl border border-line bg-surface p-3">
                 {statusIcon(req.status)}
                 <div className="flex-1">
                   <p className="text-sm font-medium">
                     {LEAVE_TYPES[req.leave_type as keyof typeof LEAVE_TYPES]?.label || req.leave_type}
                   </p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-text-3">
                     {req.start_date} → {req.end_date} · {req.total_days}d
                   </p>
                 </div>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  req.status.includes("approved") ? "bg-green-50 text-green-600" :
-                  req.status === "rejected" ? "bg-red-50 text-red-600" :
-                  req.status === "ai_escalated" ? "bg-amber-50 text-amber-600" :
-                  "bg-gray-50 text-gray-500"
+                  req.status.includes("approved") ? "bg-ok-soft text-ok-text" :
+                  req.status === "rejected" ? "bg-danger-soft text-danger-text" :
+                  req.status === "ai_escalated" ? "bg-warn-soft text-warn-text" :
+                  "bg-sunken/60 text-text-3"
                 }`}>
                   {req.status === "ai_escalated" ? "pending" : req.status.replace("ai_", "").replace("_", " ")}
                 </span>
@@ -348,7 +344,7 @@ export default function LeavePage() {
                     disabled={cancelling === req.id}
                     aria-label="Withdraw request"
                     title="Withdraw this request"
-                    className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 disabled:opacity-50"
+                    className="flex h-7 w-7 items-center justify-center rounded-full text-text-3 active:bg-sunken disabled:opacity-50"
                   >
                     {cancelling === req.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
                   </button>

@@ -2,8 +2,8 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import Link from "next/link";
-import { Receipt, ChevronDown, ChevronUp, ArrowLeft, Download } from "lucide-react";
+import { HRPageHeader } from "@/components/hr-page-header";
+import { Receipt, ChevronDown, ChevronUp, Download } from "lucide-react";
 import { PAYROLL_UI_ENABLED } from "@/lib/hr/constants";
 import { FetchError } from "@/components/fetch-error";
 import { earningsLines } from "@celsius/shared/src/hr/pay-lines";
@@ -79,46 +79,28 @@ export default function PayslipsPage() {
 
   if (!PAYROLL_UI_ENABLED) {
     return (
-      <div className="px-4 pt-6">
-        <div className="mb-6 flex items-center gap-3">
-          <Link
-            href="/hr"
-            aria-label="Back"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <h1 className="text-2xl font-bold">Payslips</h1>
-        </div>
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 py-16 text-center">
-          <Receipt className="mb-3 h-12 w-12 text-gray-300" />
-          <p className="font-semibold text-gray-500">Payslips coming soon</p>
-          <p className="text-sm text-gray-400">Your payslips will appear here once payroll goes live.</p>
+      <div className="px-4 pb-6">
+        <HRPageHeader title="Payslips" subtitle="Your pay, month by month." />
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-line bg-sunken/60 py-16 text-center">
+          <Receipt className="mb-3 h-12 w-12 text-line-ctl" />
+          <p className="font-semibold text-text-3">Payslips coming soon</p>
+          <p className="text-sm text-text-3">Your payslips will appear here once payroll goes live.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="px-4 pt-6">
-      <div className="mb-6 flex items-center gap-3">
-        <Link
-          href="/hr"
-          aria-label="Back"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="text-2xl font-bold">Payslips</h1>
-      </div>
+    <div className="px-4 pb-6">
+      <HRPageHeader title="Payslips" subtitle="Your pay, month by month." />
 
       {!data && error ? (
         <FetchError error={error} onRetry={() => mutate()} what="your payslips" />
       ) : payslips.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 py-16 text-center">
-          <Receipt className="mb-3 h-12 w-12 text-gray-300" />
-          <p className="font-semibold text-gray-500">No payslips yet</p>
-          <p className="text-sm text-gray-400">Payslips appear after payroll is confirmed</p>
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-line bg-sunken/60 py-16 text-center">
+          <Receipt className="mb-3 h-12 w-12 text-line-ctl" />
+          <p className="font-semibold text-text-3">No payslips yet</p>
+          <p className="text-sm text-text-3">Payslips appear after payroll is confirmed</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -141,22 +123,22 @@ export default function PayslipsPage() {
             const importedGross = Number(slip.computation_details?.gross_additions || 0);
 
             return (
-              <div key={slip.id} className="rounded-2xl border border-gray-100 bg-white shadow-sm">
+              <div key={slip.id} className="rounded-2xl border border-line bg-surface shadow-sm">
                 <button
                   onClick={() => setExpanded(isOpen ? null : slip.id)}
                   className="flex w-full items-center justify-between p-4 text-left"
                 >
                   <div>
                     <p className="font-semibold">{period}</p>
-                    <p className="text-2xl font-bold text-terracotta">{fmt(slip.net_pay)}</p>
+                    <p className="text-2xl font-bold text-brand-text">{fmt(slip.net_pay)}</p>
                   </div>
-                  {isOpen ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
+                  {isOpen ? <ChevronUp className="h-5 w-5 text-text-3" /> : <ChevronDown className="h-5 w-5 text-text-3" />}
                 </button>
 
                 {isOpen && (
                   <div className="border-t px-4 pb-4 pt-3 text-sm">
                     {/* Earnings */}
-                    <p className="mb-2 font-semibold text-green-700">Earnings</p>
+                    <p className="mb-2 font-semibold text-ok-text">Earnings</p>
                     {/* Basic + every OT / day-type line, derived once in
                         pay-lines.ts so this page, the run page, the PDF and the
                         manager app cannot drift apart again. */}
@@ -176,42 +158,42 @@ export default function PayslipsPage() {
                     {totalAllowances > 0 && allowanceEntries.map(([key, a]) => (
                       <Row
                         key={key}
-                        label={key === "attendance" ? "Attendance Allowance" : key === "performance" ? "Performance Allowance" : key.replace(/_/g, " ")}
+                        label={key === "attendance" ? "Attendance allowance" : key === "performance" ? "Performance allowance" : key.replace(/_/g, " ")}
                         value={fmt(Number(a.amount))}
                       />
                     ))}
                     {isImported && importedGross > 0 && (
-                      <Row label="Other Earnings (imported)" value={fmt(importedGross)} />
+                      <Row label="Other earnings (imported)" value={fmt(importedGross)} />
                     )}
-                    <Row label="Total Gross" value={fmt(slip.total_gross)} bold />
+                    <Row label="Total gross" value={fmt(slip.total_gross)} bold />
 
                     {/* Deductions */}
-                    <p className="mb-2 mt-4 font-semibold text-red-700">Deductions</p>
+                    <p className="mb-2 mt-4 font-semibold text-danger-text">Deductions</p>
                     <Row label="EPF (Employee)" value={`-${fmt(slip.epf_employee)}`} />
                     <Row label="SOCSO" value={`-${fmt(slip.socso_employee)}`} />
                     <Row label="EIS" value={`-${fmt(slip.eis_employee)}`} />
                     <Row label="PCB (Tax)" value={`-${fmt(slip.pcb_tax)}`} />
-                    {unpaidLeave > 0 && <Row label="Unpaid Leave" value={`-${fmt(unpaidLeave)}`} />}
+                    {unpaidLeave > 0 && <Row label="Unpaid leave" value={`-${fmt(unpaidLeave)}`} />}
                     {zakat > 0 && <Row label="Zakat" value={`-${fmt(zakat)}`} />}
-                    {reviewPenalty > 0 && <Row label="Review Penalty" value={`-${fmt(reviewPenalty)}`} />}
-                    <Row label="Total Deductions" value={`-${fmt(slip.total_deductions)}`} bold />
+                    {reviewPenalty > 0 && <Row label="Review penalty" value={`-${fmt(reviewPenalty)}`} />}
+                    <Row label="Total deductions" value={`-${fmt(slip.total_deductions)}`} bold />
 
                     {/* Net */}
-                    <div className="mt-4 rounded-xl bg-terracotta/10 p-3">
-                      <Row label="Net Pay" value={fmt(slip.net_pay)} bold />
+                    <div className="mt-4 rounded-xl bg-brand-soft p-3">
+                      <Row label="Net pay" value={fmt(slip.net_pay)} bold />
                     </div>
 
                     {/* Download — official PDF (company details, statutory numbers,
                         YTD) suitable for loan / financing applications. */}
                     <a
                       href={`/api/hr/payslips/pdf?item_id=${slip.id}`}
-                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-terracotta py-2.5 font-semibold text-white active:scale-95"
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-ink py-2.5 font-semibold text-on-ink active:scale-95"
                     >
                       <Download className="h-4 w-4" /> Download PDF
                     </a>
 
                     {/* Hours */}
-                    <p className="mt-4 text-xs text-gray-400">
+                    <p className="mt-4 text-xs text-text-3">
                       {slip.total_regular_hours}h {isWeekly ? "clocked" : "regular"}{Number(slip.total_ot_hours) > 0 ? ` + ${slip.total_ot_hours}h OT` : ""}
                       {isWeekly && " · from staff app clock-in/out"}
                       {isImported && " · imported from BrioHR"}
@@ -230,12 +212,12 @@ export default function PayslipsPage() {
 function Row({ label, value, detail, bold }: { label: string; value: string; detail?: string; bold?: boolean }) {
   return (
     <div className={`flex justify-between py-1 ${bold ? "font-semibold" : ""}`}>
-      <span className="text-gray-600">
+      <span className="text-text-2">
         {label}
         {/* Quantity and rate. The Employment Act wants the hours and the rate
             shown rather than a lump sum; at this width they read better under
             the description than as their own columns. */}
-        {detail ? <span className="ml-2 text-[11px] text-gray-400">{detail}</span> : null}
+        {detail ? <span className="ml-2 text-[11px] text-text-3">{detail}</span> : null}
       </span>
       <span>{value}</span>
     </div>

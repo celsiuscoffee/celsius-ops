@@ -2,8 +2,8 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, CalendarPlus, ChefHat, Coffee, Loader2 } from "lucide-react";
+import { HRPageHeader } from "@/components/hr-page-header";
+import { CalendarPlus, ChefHat, Coffee, Loader2 } from "lucide-react";
 
 type OpenShift = {
   id: string;
@@ -75,49 +75,40 @@ export default function OpenShiftsPage() {
   };
 
   return (
-    <div className="px-4 pt-6">
-      <div className="mb-4 flex items-center gap-3">
-        <Link
-          href="/hr"
-          aria-label="Back"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="text-2xl font-bold">Open Slots</h1>
-      </div>
-      <p className="mb-4 text-sm text-gray-500">
+    <div className="px-4 pb-6">
+      <HRPageHeader title="Open slots" />
+      <p className="mb-4 text-sm text-text-3">
         Extra shifts that still need someone. Tap <strong>Request</strong> to raise your hand — your manager picks who gets it.
       </p>
 
       {data && data.is_pt && (
-        <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-3 text-sm text-gray-600">
+        <div className="mb-4 rounded-2xl border border-line bg-surface p-3 text-sm text-text-2">
           This week: <strong>{data.week_hours}h</strong> across <strong>{data.week_days} day{data.week_days === 1 ? "" : "s"}</strong>
-          <span className="text-gray-400"> · cap 24h / 5 days</span>
+          <span className="text-text-3"> · cap 24h / 5 days</span>
         </div>
       )}
 
       {flash && (
-        <div className="mb-4 rounded-2xl border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800">
+        <div className="mb-4 rounded-2xl border border-ok/30 bg-ok-soft p-3 text-sm font-medium text-ok-text">
           {flash}
         </div>
       )}
 
       {!data ? (
         <div className="py-10 text-center">
-          <Loader2 className="mx-auto h-6 w-6 animate-spin text-gray-300" />
+          <Loader2 className="mx-auto h-6 w-6 animate-spin text-line-ctl" />
         </div>
       ) : shifts.length === 0 ? (
-        <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center">
-          <CalendarPlus className="mx-auto mb-2 h-8 w-8 text-gray-300" />
-          <p className="text-sm font-medium text-gray-600">No open slots right now</p>
-          <p className="mt-1 text-xs text-gray-400">New slots appear here when a schedule needs extra hands.</p>
+        <div className="rounded-2xl border border-line bg-surface p-8 text-center">
+          <CalendarPlus className="mx-auto mb-2 h-8 w-8 text-line-ctl" />
+          <p className="text-sm font-medium text-text-2">No open slots right now</p>
+          <p className="mt-1 text-xs text-text-3">New slots appear here when a schedule needs extra hands.</p>
         </div>
       ) : (
         <div className="space-y-4">
           {[...byDate.entries()].map(([date, dayShifts]) => (
             <div key={date}>
-              <h2 className="mb-2 text-sm font-semibold text-gray-500">
+              <h2 className="mb-2 text-sm font-semibold text-text-3">
                 {new Date(date + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "numeric", month: "short" })}
               </h2>
               <div className="space-y-2">
@@ -126,33 +117,33 @@ export default function OpenShiftsPage() {
                   return (
                     <div
                       key={s.id}
-                      className={`flex items-center gap-3 rounded-2xl border bg-white p-3 ${s.blocked && !requested ? "border-gray-100 opacity-60" : requested ? "border-amber-200 bg-amber-50/50" : "border-gray-100 shadow-sm"}`}
+                      className={`flex items-center gap-3 rounded-2xl border bg-surface p-3 ${s.blocked && !requested ? "border-line opacity-60" : requested ? "border-warn/30 bg-warn-soft/50" : "border-line shadow-sm"}`}
                     >
-                      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${s.station === "kitchen" ? "bg-amber-50 text-amber-600" : "bg-orange-50 text-terracotta"}`}>
+                      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${s.station === "kitchen" ? "bg-warn-soft text-warn-text" : "bg-warn-soft text-brand-text"}`}>
                         {s.station === "kitchen" ? <ChefHat className="h-5 w-5" /> : <Coffee className="h-5 w-5" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold">
                           {s.start_time}–{s.end_time}
-                          <span className="ml-1.5 font-normal text-gray-400">({s.hours}h)</span>
+                          <span className="ml-1.5 font-normal text-text-3">({s.hours}h)</span>
                         </p>
-                        <p className="truncate text-xs text-gray-500">
+                        <p className="truncate text-xs text-text-3">
                           {s.outlet_name} · {s.station === "kitchen" ? "Kitchen" : "Barista"}{s.role_type ? ` · ${s.role_type}` : ""}
                           {s.pending_requests > 0 && (
-                            <span className="ml-1.5 text-amber-600">· {s.pending_requests} asked</span>
+                            <span className="ml-1.5 text-warn-text">· {s.pending_requests} asked</span>
                           )}
                         </p>
                         {requested ? (
-                          <p className="mt-0.5 text-xs font-medium text-amber-600">Requested — waiting for your manager</p>
+                          <p className="mt-0.5 text-xs font-medium text-warn-text">Requested — waiting for your manager</p>
                         ) : s.blocked ? (
-                          <p className="mt-0.5 text-xs text-red-500">{s.blocked}</p>
+                          <p className="mt-0.5 text-xs text-danger">{s.blocked}</p>
                         ) : null}
                       </div>
                       {requested ? (
                         <button
                           onClick={() => withdraw(s)}
                           disabled={busy === s.id}
-                          className="shrink-0 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 active:scale-95 disabled:opacity-50"
+                          className="shrink-0 rounded-lg border border-line px-3 py-2 text-sm font-medium text-text-2 active:scale-95 disabled:opacity-50"
                         >
                           {busy === s.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Withdraw"}
                         </button>
@@ -160,7 +151,7 @@ export default function OpenShiftsPage() {
                         <button
                           onClick={() => { setError(null); setConfirming(s); }}
                           disabled={!!s.blocked}
-                          className="shrink-0 rounded-lg bg-terracotta px-3.5 py-2 text-sm font-medium text-white active:scale-95 disabled:bg-gray-200 disabled:text-gray-400"
+                          className="shrink-0 rounded-lg bg-ink px-3.5 py-2 text-sm font-medium text-on-ink active:scale-95 disabled:bg-line disabled:text-text-3"
                         >
                           Request
                         </button>
@@ -177,29 +168,29 @@ export default function OpenShiftsPage() {
       {/* Confirm sheet */}
       {confirming && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 pb-28">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5">
+          <div className="w-full max-w-md rounded-2xl bg-surface p-5">
             <h3 className="mb-1 text-lg font-semibold">Request this shift?</h3>
-            <p className="mb-1 text-base text-gray-600">
+            <p className="mb-1 text-base text-text-2">
               {new Date(confirming.shift_date + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "numeric", month: "long" })}
             </p>
-            <p className="mb-3 text-base text-gray-600">
+            <p className="mb-3 text-base text-text-2">
               {confirming.start_time}–{confirming.end_time} · {confirming.outlet_name} · {confirming.station === "kitchen" ? "Kitchen" : "Barista"}
             </p>
-            <p className="mb-3 text-xs text-gray-400">
+            <p className="mb-3 text-xs text-text-3">
               You&apos;re raising your hand — others can too. Your manager picks who gets the shift; it shows in My Shifts once assigned and published.
             </p>
-            {error && <p className="mb-3 text-xs text-red-600">{error}</p>}
+            {error && <p className="mb-3 text-xs text-danger-text">{error}</p>}
             <div className="flex gap-2">
               <button
                 onClick={() => setConfirming(null)}
-                className="min-h-12 flex-1 rounded-xl border border-gray-200 py-2.5 text-base font-medium text-gray-700"
+                className="min-h-12 flex-1 rounded-xl border border-line py-2.5 text-base font-medium text-text-2"
               >
                 Cancel
               </button>
               <button
                 onClick={request}
                 disabled={busy !== null}
-                className="min-h-12 flex-1 rounded-xl bg-terracotta py-2.5 text-base font-medium text-white disabled:opacity-50"
+                className="min-h-12 flex-1 rounded-xl bg-ink py-2.5 text-base font-medium text-on-ink disabled:opacity-50"
               >
                 {busy ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : "Request it"}
               </button>

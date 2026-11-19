@@ -2,8 +2,8 @@
 
 import { useFetch } from "@/lib/use-fetch";
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { CalendarX, X, Loader2, ChevronLeft, ChevronRight, ArrowLeft, CalendarClock } from "lucide-react";
+import { HRPageHeader } from "@/components/hr-page-header";
+import { CalendarX, X, Loader2, ChevronLeft, ChevronRight, CalendarClock } from "lucide-react";
 
 type Availability = {
   id: string;
@@ -105,19 +105,19 @@ function WeeklyPattern() {
 
   if (!days) {
     return (
-      <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4">
-        <Loader2 className="mx-auto h-5 w-5 animate-spin text-gray-300" />
+      <div className="mb-4 rounded-2xl border border-line bg-surface p-4">
+        <Loader2 className="mx-auto h-5 w-5 animate-spin text-line-ctl" />
       </div>
     );
   }
 
   return (
-    <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-4">
+    <div className="mb-4 rounded-2xl border border-line bg-surface p-4">
       <div className="mb-1 flex items-center gap-2">
-        <CalendarClock className="h-4 w-4 text-terracotta" />
+        <CalendarClock className="h-4 w-4 text-brand-text" />
         <h2 className="font-semibold">Weekly pattern</h2>
       </div>
-      <p className="mb-3 text-xs text-gray-500">
+      <p className="mb-3 text-xs text-text-3">
         {hasPattern
           ? "The AI scheduler only offers you shifts inside this pattern."
           : "No pattern saved — you're flexible, any day. Save one if you have fixed days (classes, another job)."}
@@ -137,7 +137,7 @@ function WeeklyPattern() {
               for (const dw of WEEK_ORDER) next[dw] = { ...next[dw], mode: (on as readonly number[]).includes(dw) ? "any" : "off" };
               setDays(next);
             }}
-            className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 active:scale-95"
+            className="rounded-xl border border-line bg-sunken/60 px-3 py-2 text-sm font-medium text-text-2 active:scale-95"
           >
             {label}
           </button>
@@ -148,9 +148,9 @@ function WeeklyPattern() {
         {WEEK_ORDER.map((dw) => {
           const d = days[dw];
           return (
-            <div key={dw} className={`rounded-xl ${d.mode === "custom" ? "bg-orange-50/60 p-2" : ""}`}>
+            <div key={dw} className={`rounded-xl ${d.mode === "custom" ? "bg-warn-soft/60 p-2" : ""}`}>
               <div className="flex items-center gap-2">
-                <span className="w-11 shrink-0 text-sm font-bold text-gray-600">{DAY_NAMES[dw]}</span>
+                <span className="w-11 shrink-0 text-sm font-bold text-text-2">{DAY_NAMES[dw]}</span>
                 <div className="grid flex-1 grid-cols-3 gap-1.5">
                   {(["off", "any", "custom"] as const).map((mode) => (
                     <button
@@ -159,9 +159,9 @@ function WeeklyPattern() {
                       className={`min-h-11 rounded-xl px-2 py-2.5 text-sm font-medium transition-colors ${
                         d.mode === mode
                           ? mode === "off"
-                            ? "bg-gray-700 text-white"
-                            : "bg-terracotta text-white"
-                          : "bg-gray-50 text-gray-500"
+                            ? "bg-ink text-on-ink"
+                            : "bg-ink text-on-ink"
+                          : "bg-sunken/60 text-text-3"
                       }`}
                     >
                       {mode === "off" ? "Off" : mode === "any" ? "Any time" : d.mode === "custom" ? `${d.from}–${d.until}` : "Hours…"}
@@ -179,7 +179,7 @@ function WeeklyPattern() {
                           key={p.label}
                           onClick={() => setDays({ ...days, [dw]: { ...d, from: p.from, until: p.until } })}
                           className={`rounded-xl px-3 py-2 text-sm font-medium ${
-                            active ? "bg-terracotta text-white" : "border border-gray-200 bg-white text-gray-700"
+                            active ? "bg-ink text-on-ink" : "border border-line bg-surface text-text-2"
                           }`}
                         >
                           {p.label} {p.from}–{p.until}
@@ -194,17 +194,17 @@ function WeeklyPattern() {
                         const from = e.target.value;
                         setDays({ ...days, [dw]: { ...d, from, until: d.until <= from ? (TIME_OPTIONS.find((t) => t > from) ?? "23:30") : d.until } });
                       }}
-                      className="min-h-11 flex-1 rounded-xl border border-gray-200 px-3 py-2 text-base"
+                      className="min-h-11 flex-1 rounded-xl border border-line px-3 py-2 text-base"
                     >
                       {TIME_OPTIONS.map((t) => (
                         <option key={t} value={t}>{t}</option>
                       ))}
                     </select>
-                    <span className="text-gray-400">–</span>
+                    <span className="text-text-3">–</span>
                     <select
                       value={d.until}
                       onChange={(e) => setDays({ ...days, [dw]: { ...d, until: e.target.value } })}
-                      className="min-h-11 flex-1 rounded-xl border border-gray-200 px-3 py-2 text-base"
+                      className="min-h-11 flex-1 rounded-xl border border-line px-3 py-2 text-base"
                     >
                       {TIME_OPTIONS.filter((t) => t > d.from).map((t) => (
                         <option key={t} value={t}>{t}</option>
@@ -219,14 +219,14 @@ function WeeklyPattern() {
       </div>
 
       <div className="mt-4">
-        <label className="text-sm font-semibold text-gray-600">Max shifts per week</label>
+        <label className="text-sm font-semibold text-text-2">Max shifts per week</label>
         <div className="mt-1.5 grid grid-cols-6 gap-1.5">
           {(["", 1, 2, 3, 4, 5] as const).map((n) => (
             <button
               key={String(n)}
               onClick={() => setMaxShifts(n === "" ? "" : n)}
               className={`min-h-11 rounded-xl py-2.5 text-base font-medium ${
-                maxShifts === n ? "bg-terracotta text-white" : "bg-gray-50 text-gray-500"
+                maxShifts === n ? "bg-ink text-on-ink" : "bg-sunken/60 text-text-3"
               }`}
             >
               {n === "" ? "Any" : n}
@@ -236,7 +236,7 @@ function WeeklyPattern() {
       </div>
 
       {/* Live summary of what will be saved */}
-      <p className="mt-3 text-sm text-gray-500">
+      <p className="mt-3 text-sm text-text-3">
         {(() => {
           const on = WEEK_ORDER.filter((dw) => days[dw].mode !== "off");
           if (on.length === 0) return "No days selected — you won't be offered any shifts.";
@@ -245,13 +245,13 @@ function WeeklyPattern() {
         })()}
       </p>
 
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-xs text-danger-text">{error}</p>}
 
       <div className="mt-3 flex gap-2">
         <button
           onClick={() => save(false)}
           disabled={saving}
-          className="min-h-12 flex-1 rounded-xl bg-terracotta py-3 text-base font-semibold text-white disabled:opacity-50"
+          className="min-h-12 flex-1 rounded-xl bg-ink py-3 text-base font-semibold text-on-ink disabled:opacity-50"
         >
           {saving ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : savedFlash ? "Saved ✓" : "Save pattern"}
         </button>
@@ -259,7 +259,7 @@ function WeeklyPattern() {
           <button
             onClick={() => save(true)}
             disabled={saving}
-            className="min-h-12 rounded-xl border border-gray-200 px-4 py-3 text-base font-medium text-gray-600"
+            className="min-h-12 rounded-xl border border-line px-4 py-3 text-base font-medium text-text-2"
           >
             Clear — I&apos;m flexible
           </button>
@@ -374,18 +374,9 @@ export default function AvailabilityPage() {
   };
 
   return (
-    <div className="px-4 pt-6">
-      <div className="mb-4 flex items-center gap-3">
-        <Link
-          href="/hr"
-          aria-label="Back"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="text-2xl font-bold">My Availability</h1>
-      </div>
-      <p className="mb-5 text-sm text-gray-500">
+    <div className="px-4 pb-6">
+      <HRPageHeader title="My availability" />
+      <p className="mb-5 text-sm text-text-3">
         Set your weekly pattern, then tap dates below to mark one-off <strong>blockouts</strong>. The AI scheduler won&apos;t assign shifts outside these.
       </p>
 
@@ -393,8 +384,8 @@ export default function AvailabilityPage() {
         <div
           className={`mb-4 rounded-xl px-4 py-3 text-sm ${
             blockNotice.kind === "error"
-              ? "border border-red-200 bg-red-50 text-red-700"
-              : "border border-amber-200 bg-amber-50 text-amber-800"
+              ? "border border-danger/30 bg-danger-soft text-danger-text"
+              : "border border-warn/30 bg-warn-soft text-warn-text"
           }`}
         >
           {blockNotice.text}
@@ -405,22 +396,22 @@ export default function AvailabilityPage() {
       <WeeklyPattern />
 
       {/* Month nav */}
-      <div className="mb-4 flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-3">
-        <button onClick={prevMonth} className="rounded-lg p-2 hover:bg-gray-100">
+      <div className="mb-4 flex items-center justify-between rounded-2xl border border-line bg-surface p-3">
+        <button onClick={prevMonth} className="rounded-lg p-2 hover:bg-sunken">
           <ChevronLeft className="h-5 w-5" />
         </button>
         <p className="font-semibold">{MONTHS[viewMonth.month]} {viewMonth.year}</p>
-        <button onClick={nextMonth} className="rounded-lg p-2 hover:bg-gray-100">
+        <button onClick={nextMonth} className="rounded-lg p-2 hover:bg-sunken">
           <ChevronRight className="h-5 w-5" />
         </button>
       </div>
 
       {/* Calendar grid */}
-      <div className="mb-4 rounded-2xl border border-gray-100 bg-white p-3">
+      <div className="mb-4 rounded-2xl border border-line bg-surface p-3">
         {/* Day headers */}
         <div className="mb-2 grid grid-cols-7 gap-1">
           {DAY_NAMES.map((day) => (
-            <div key={day} className="text-center text-[10px] font-bold uppercase text-gray-400">
+            <div key={day} className="text-center text-[10px] font-bold uppercase text-text-3">
               {day}
             </div>
           ))}
@@ -443,10 +434,10 @@ export default function AvailabilityPage() {
                 onClick={() => !isPast && handleToggle(dateStr)}
                 disabled={isPast || isSaving}
                 className={`relative aspect-square rounded-lg text-sm font-medium transition-all active:scale-95 ${
-                  isPast ? "cursor-not-allowed text-gray-300" :
-                  isBlocked ? "bg-red-500 text-white hover:bg-red-600" :
-                  isToday ? "border-2 border-terracotta bg-orange-50 text-terracotta hover:bg-orange-100" :
-                  "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                  isPast ? "cursor-not-allowed text-line-ctl" :
+                  isBlocked ? "bg-danger text-on-ink hover:bg-danger" :
+                  isToday ? "border-2 border-ink bg-warn-soft text-brand-text hover:bg-warn-soft" :
+                  "bg-sunken/60 text-text-2 hover:bg-sunken"
                 }`}
               >
                 {isSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : day}
@@ -462,23 +453,23 @@ export default function AvailabilityPage() {
       {/* Legend */}
       <div className="mb-4 flex flex-wrap gap-3 text-xs">
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded bg-red-500" />
-          <span className="text-gray-600">Unavailable</span>
+          <div className="h-3 w-3 rounded bg-danger" />
+          <span className="text-text-2">Unavailable</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded border-2 border-terracotta bg-orange-50" />
-          <span className="text-gray-600">Today</span>
+          <div className="h-3 w-3 rounded border-2 border-ink bg-warn-soft" />
+          <span className="text-text-2">Today</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded bg-gray-50 border border-gray-200" />
-          <span className="text-gray-600">Available</span>
+          <div className="h-3 w-3 rounded bg-sunken/60 border border-line" />
+          <span className="text-text-2">Available</span>
         </div>
       </div>
 
       {/* List of blockout dates */}
       {availability.filter((a) => a.availability === "unavailable" && a.date >= today).length > 0 && (
         <div>
-          <h2 className="mb-2 text-sm font-semibold text-gray-500">Upcoming Blockouts</h2>
+          <h2 className="mb-2 text-sm font-semibold text-text-3">Coming days off</h2>
           <div className="space-y-2">
             {availability
               .filter((a) => a.availability === "unavailable" && a.date >= today)
@@ -486,13 +477,13 @@ export default function AvailabilityPage() {
               .map((a) => {
                 const d = new Date(a.date + "T00:00:00");
                 return (
-                  <div key={a.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3">
-                    <CalendarX className="h-4 w-4 text-red-500" />
+                  <div key={a.id} className="flex items-center gap-3 rounded-xl border border-line bg-surface p-3">
+                    <CalendarX className="h-4 w-4 text-danger" />
                     <div className="flex-1">
                       <p className="text-sm font-medium">
                         {d.toLocaleDateString("en-MY", { weekday: "short", day: "numeric", month: "short" })}
                       </p>
-                      {a.reason && <p className="text-xs text-gray-400">{a.reason}</p>}
+                      {a.reason && <p className="text-xs text-text-3">{a.reason}</p>}
                     </div>
                   </div>
                 );
@@ -507,9 +498,9 @@ export default function AvailabilityPage() {
           text-base (16px) also stops iOS Safari's focus-zoom jump. */}
       {showReason && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 pb-28">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5">
-            <h3 className="mb-1 text-lg font-semibold">Mark Unavailable</h3>
-            <p className="mb-3 text-base text-gray-500">
+          <div className="w-full max-w-md rounded-2xl bg-surface p-5">
+            <h3 className="mb-1 text-lg font-semibold">Mark as unavailable</h3>
+            <p className="mb-3 text-base text-text-3">
               {new Date(showReason + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long", day: "numeric", month: "long" })}
             </p>
             <input
@@ -517,20 +508,20 @@ export default function AvailabilityPage() {
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Reason (optional, e.g. family event)"
-              className="mb-3 min-h-12 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base"
+              className="mb-3 min-h-12 w-full rounded-xl border border-line px-3 py-2.5 text-base"
               autoFocus
             />
             <div className="flex gap-2">
               <button
                 onClick={() => { setShowReason(null); setReason(""); }}
-                className="min-h-12 flex-1 rounded-xl border border-gray-200 py-2.5 text-base font-medium text-gray-700"
+                className="min-h-12 flex-1 rounded-xl border border-line py-2.5 text-base font-medium text-text-2"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmBlockout}
                 disabled={saving !== null}
-                className="min-h-12 flex-1 rounded-xl bg-red-500 py-2.5 text-base font-medium text-white disabled:opacity-50"
+                className="min-h-12 flex-1 rounded-xl bg-danger py-2.5 text-base font-medium text-on-ink disabled:opacity-50"
               >
                 {saving ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : "Confirm"}
               </button>

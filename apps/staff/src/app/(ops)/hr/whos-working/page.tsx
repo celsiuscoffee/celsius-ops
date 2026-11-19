@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { HRPageHeader } from "@/components/hr-page-header";
 import { useFetch } from "@/lib/use-fetch";
-import { ArrowLeft, Users, Loader2 } from "lucide-react";
+import { Users, Loader2 } from "lucide-react";
+import { formatClock } from "@/lib/format-time";
 
 // Mirrors the native "Who's Working" screen. Backend is the shared PWA endpoint
 // /api/hr/whos-working?date=YYYY-MM-DD → { date, team }, scoped to the caller's
@@ -51,9 +52,7 @@ function fmtTime(t: string | null | undefined): string {
   const hn = Number(h);
   const mn = Number(m);
   if (!Number.isFinite(hn) || !Number.isFinite(mn) || h === "" || m == null) return "-";
-  const d = new Date();
-  d.setHours(hn, mn, 0, 0);
-  return d.toLocaleTimeString("en-MY", { hour: "numeric", minute: "2-digit", hour12: true });
+  return formatClock(`${hn}:${String(mn).padStart(2, "0")}`);
 }
 
 export default function WhosWorkingPage() {
@@ -68,16 +67,7 @@ export default function WhosWorkingPage() {
   return (
     <div className="px-4 pt-6 pb-8">
       {/* Header */}
-      <div className="mb-5 flex items-center gap-3">
-        <Link
-          href="/hr"
-          aria-label="Back"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="text-2xl font-bold">Who&apos;s Working</h1>
-      </div>
+      <HRPageHeader title="Who's working" subtitle="Who is on shift with you each day." />
 
       {/* Day picker */}
       <div className="-mx-4 mb-4 overflow-x-auto px-4">
@@ -89,10 +79,10 @@ export default function WhosWorkingPage() {
                 key={x.key}
                 onClick={() => setSelected(x.key)}
                 className={`flex w-14 shrink-0 flex-col items-center rounded-2xl border py-2 transition-colors active:opacity-80 ${
-                  on ? "border-terracotta bg-terracotta text-white" : "border-gray-200 bg-white text-gray-700"
+                  on ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-text-2"
                 }`}
               >
-                <span className={`text-[11px] font-semibold uppercase ${on ? "text-white/90" : "text-gray-400"}`}>
+                <span className={`text-[11px] font-semibold uppercase ${on ? "text-on-ink/80" : "text-text-3"}`}>
                   {x.weekday}
                 </span>
                 <span className="text-lg font-bold">{x.day}</span>
@@ -105,21 +95,21 @@ export default function WhosWorkingPage() {
       {/* Content */}
       {isLoading ? (
         <div className="flex justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       ) : team.length === 0 ? (
         <div className="flex flex-col items-center py-16 text-center">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-terracotta/10">
-            <Users className="h-6 w-6 text-terracotta" />
+          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft">
+            <Users className="h-6 w-6 text-brand-text" />
           </div>
           <p className="font-semibold">No one scheduled{suffix}</p>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-text-3">
             Once the schedule is published, your team&apos;s shifts show up here.
           </p>
         </div>
       ) : (
         <>
-          <p className="mb-3 text-sm text-gray-500">
+          <p className="mb-3 text-sm text-text-3">
             {team.length} on shift{suffix}
           </p>
           <div className="space-y-2.5">
@@ -127,25 +117,25 @@ export default function WhosWorkingPage() {
               <div
                 key={`${m.user_id}-${i}`}
                 className={`flex items-center gap-3 rounded-2xl border p-4 ${
-                  m.is_me ? "border-terracotta/40 bg-terracotta/5" : "border-gray-100 bg-white"
+                  m.is_me ? "border-brand/40 bg-brand-soft" : "border-line bg-surface"
                 }`}
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-terracotta/10 text-base font-bold text-terracotta">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-base font-bold text-brand-text">
                   {initials(m.name)}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="truncate font-semibold">{m.name}</p>
                     {m.is_me && (
-                      <span className="rounded-full bg-gray-900 px-2 py-0.5 text-[10px] font-semibold text-white">You</span>
+                      <span className="rounded-full bg-ink px-2 py-0.5 text-[10px] font-semibold text-on-ink">You</span>
                     )}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium text-gray-500">
+                    <span className="text-sm font-medium text-text-3">
                       {fmtTime(m.start_time)} - {fmtTime(m.end_time)}
                     </span>
                     {m.position && (
-                      <span className="rounded-full bg-terracotta/10 px-2 py-0.5 text-[11px] font-semibold text-terracotta">
+                      <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-semibold text-brand-text">
                         {m.position}
                       </span>
                     )}
