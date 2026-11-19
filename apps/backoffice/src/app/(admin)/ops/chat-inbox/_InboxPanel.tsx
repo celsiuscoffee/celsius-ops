@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Loader2, AlertTriangle, ShieldAlert, RefreshCw, Clock } from "lucide-react";
+import { Send, Loader2, AlertTriangle, RefreshCw, Clock } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 type Thread = {
@@ -130,7 +130,7 @@ export default function InboxPanel() {
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-xs text-text-3">WhatsApp — ops-pulse digests &amp; staff replies</span>
+        <span className="text-xs text-text-3">WhatsApp conversations with staff</span>
         <select
           value={outletFilter}
           onChange={(e) => setOutletFilter(e.target.value)}
@@ -166,7 +166,7 @@ export default function InboxPanel() {
           ) : visibleThreads.length === 0 ? (
             <div className="p-6 text-center text-sm text-text-3">
               {outletFilter === "all"
-                ? "No conversations yet. Messages appear here as staff reply to ops-pulse digests, or message the WhatsApp number."
+                ? "No conversations yet. Messages appear here when staff message the WhatsApp number or reply to one."
                 : "No conversations for this outlet."}
             </div>
           ) : (
@@ -205,11 +205,6 @@ export default function InboxPanel() {
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         {t.awaitingReply && (
                           <Badge className="bg-info-soft text-[10px] text-info-text">New reply</Badge>
-                        )}
-                        {t.openAlerts > 0 && (
-                          <Badge className="bg-warn-soft text-[10px] text-warn-text">
-                            {t.openAlerts} open alert{t.openAlerts === 1 ? "" : "s"}
-                          </Badge>
                         )}
                         {!t.windowOpen && (
                           <Badge variant="secondary" className="text-[10px]">
@@ -253,12 +248,6 @@ export default function InboxPanel() {
                     {detail.outletName ? ` · ${detail.outletName}` : ""}
                   </div>
                 </div>
-                {detail.openAlerts.length > 0 && (
-                  <Badge className="ml-auto flex items-center gap-1 bg-warn-soft text-[10px] text-warn-text">
-                    <ShieldAlert className="h-3 w-3" />
-                    {detail.openAlerts.length} open alert{detail.openAlerts.length === 1 ? "" : "s"}
-                  </Badge>
-                )}
               </div>
 
               {/* messages */}
