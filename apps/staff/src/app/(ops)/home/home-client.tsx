@@ -1,19 +1,13 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element */
-
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Card } from "@/components/ui/card";
-import { hasAccess } from "@/lib/access";
+import { formatTime } from "@/lib/format-time";
 import {
   ClipboardCheck,
   ClipboardList,
   Package,
   ArrowRight,
-  Trash2,
-  ArrowLeftRight,
-  Receipt,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -87,12 +81,12 @@ const PRIORITY_ORDER: Record<TaskPriority, number> = {
 };
 
 const PRIORITY_CONFIG: Record<TaskPriority, {
-  label: string; color: string; borderColor: string; iconColor: string; Icon: typeof AlertCircle;
+  label: string; color: string; iconColor: string; Icon: typeof AlertCircle;
 }> = {
-  overdue: { label: "Overdue", color: "text-red-500", borderColor: "border-l-red-400", iconColor: "text-red-500", Icon: AlertCircle },
-  due_soon: { label: "Due Soon", color: "text-amber-600", borderColor: "border-l-amber-400", iconColor: "text-amber-500", Icon: Clock },
-  on_track: { label: "To Do", color: "text-gray-500", borderColor: "border-l-green-300", iconColor: "text-green-500", Icon: Clock },
-  done: { label: "Done", color: "text-gray-400", borderColor: "border-l-gray-200", iconColor: "text-green-400", Icon: CheckCircle2 },
+  overdue: { label: "Overdue", color: "text-danger-text", iconColor: "text-danger-text", Icon: AlertCircle },
+  due_soon: { label: "Due soon", color: "text-warn-text", iconColor: "text-warn-text", Icon: Clock },
+  on_track: { label: "To do", color: "text-text-2", iconColor: "text-text-3", Icon: Clock },
+  done: { label: "Done", color: "text-text-3", iconColor: "text-ok-text", Icon: CheckCircle2 },
 };
 
 function formatTimeAgo(iso: string | null) {
@@ -109,13 +103,11 @@ export function HomeClient({
   user,
   initialChecklists,
   initialDashboard,
-  showQuickActions = true,
   managerData = null,
 }: {
   user: UserProfile;
   initialChecklists: ChecklistSummary[];
   initialDashboard: DashboardData | null;
-  showQuickActions?: boolean;
   managerData?: ManagerData | null;
 }) {
   const [checklists, setChecklists] = useState(initialChecklists);
@@ -300,9 +292,9 @@ export function HomeClient({
       const isEndOfMonth = stockSchedule.endOfMonthDays.includes(dayOfMonth);
 
       const countLabel = isEndOfMonth
-        ? "Full Stock Count (End of Month)"
+        ? "Full stock count (end of month)"
         : isCountDay
-          ? "Stock Count"
+          ? "Stock count"
           : null;
 
       if (countLabel) {
@@ -313,7 +305,7 @@ export function HomeClient({
             subtitle: dashboard.lastCheckTime ? `Last: ${formatTimeAgo(dashboard.lastCheckTime)}` : "Never done",
             href: "/stock-count",
             priority: isAfternoon ? "overdue" : hour >= 10 ? "due_soon" : "on_track",
-            timeLabel: isAfternoon ? "Should be done by noon" : "Morning task",
+            timeLabel: isAfternoon ? "Due by 12:00 PM" : "Morning task",
             icon: ClipboardCheck,
           });
         } else {
@@ -326,7 +318,7 @@ export function HomeClient({
       if (dashboard.deliveriesExpected > 0) {
         list.push({
           id: "inv-deliveries",
-          title: `Receive ${dashboard.deliveriesExpected} ${dashboard.deliveriesExpected === 1 ? "Delivery" : "Deliveries"}`,
+          title: `Receive ${dashboard.deliveriesExpected} ${dashboard.deliveriesExpected === 1 ? "delivery" : "deliveries"}`,
           subtitle: dashboard.deliverySuppliers.slice(0, 3).join(", "),
           href: "/receiving", priority: "due_soon", timeLabel: "Awaiting arrival", icon: Package,
         });
@@ -338,7 +330,7 @@ export function HomeClient({
       if (managerData.auditInProgress) {
         list.push({
           id: "mgr-audit-in-progress",
-          title: "Resume Audit",
+          title: "Carry on with your audit",
           subtitle: "You have an audit in progress",
           href: `/audit/${managerData.auditInProgress}`,
           priority: "due_soon",
@@ -348,8 +340,8 @@ export function HomeClient({
       } else if (managerData.auditDoneToday) {
         list.push({
           id: "mgr-audit-today",
-          title: "Today's Audit",
-          subtitle: "Spot-check completed",
+          title: "Today's audit",
+          subtitle: "Spot check done",
           href: "/audit",
           priority: "done",
           timeLabel: "Done",
@@ -359,8 +351,8 @@ export function HomeClient({
         const isAfternoon = hour >= 14;
         list.push({
           id: "mgr-new-audit",
-          title: "Create New Audit",
-          subtitle: "Daily spot-check for your team",
+          title: "Start today's audit",
+          subtitle: "Daily spot check of your team",
           href: "/audit",
           priority: isAfternoon ? "due_soon" : "on_track",
           timeLabel: isAfternoon ? "Do before end of day" : "Today's task",
@@ -401,109 +393,77 @@ export function HomeClient({
         className="flex items-center justify-center overflow-hidden transition-all duration-200"
         style={{ height: pullDistance > 0 || refreshing ? Math.max(pullDistance, refreshing ? 48 : 0) : 0 }}
       >
-        <RefreshCw className={`h-5 w-5 text-terracotta transition-transform ${refreshing ? "animate-spin" : ""} ${pullDistance >= PULL_THRESHOLD ? "text-terracotta scale-110" : "text-gray-400"}`} />
+        <RefreshCw className={`h-5 w-5 transition-transform ${refreshing ? "animate-spin" : ""} ${pullDistance >= PULL_THRESHOLD ? "scale-110 text-text" : "text-text-3"}`} />
       </div>
 
-      <div className="px-4 py-4">
+      <div className="px-4 pb-6 pt-5">
         <div className="space-y-4">
-          {/* Header */}
+          {/* Header: who, where, when; Me opens from the button on the right */}
           <div className="flex items-center gap-3">
-            <img src="/images/celsius-logo-sm.jpg" alt="Celsius Coffee" width={40} height={40} className="rounded-lg" />
-            <div className="flex-1">
-              <h1 className="font-heading text-lg font-bold text-brand-dark">
-                {greeting}, {user.name || "there"}
-              </h1>
-              <p className="text-sm text-gray-500">
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] text-text-3">
                 {user.outletName && <>{user.outletName} &middot; </>}{dateStr}
               </p>
+              <h1 className="truncate font-heading text-[26px] font-semibold leading-8 text-text">
+                {greeting}, {user.name?.split(" ")[0] || "there"}
+              </h1>
             </div>
             <Link
               href="/profile"
-              aria-label="Profile"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
+              aria-label="Me: your profile"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-[13px] font-semibold text-text-2 active:bg-sunken"
             >
-              <User className="h-4 w-4" />
+              {initials(user.name) || <User className="h-5 w-5" />}
             </Link>
           </div>
 
-          {/* Clock-in card — primary daily action. Big, top of page, one
-              tap to /hr/clock. When clocked in, shows live elapsed time +
-              an obvious "Clock Out" CTA. Don't show for non-clock-in roles
-              (e.g. HQ-only staff with no outlet — they don't clock in). */}
+          {/* Clock in: the first thing on every shift. Ink while not clocked
+              in (the one main action), a quiet ok card with the running time
+              once in. No outlet (HQ-only staff): no clock. */}
           {user.outletId && (
             <Link
               href="/hr/clock"
               className={
-                "block rounded-2xl border-2 px-4 py-4 transition active:scale-[0.99] " +
-                (clockStatus?.activeLog
-                  ? "border-emerald-300 bg-emerald-50"
-                  : "border-terracotta bg-terracotta text-white shadow-md")
+                "block rounded-card border px-4 py-4 transition active:opacity-90 " +
+                (clockStatus?.activeLog ? "border-ok/30 bg-ok-soft" : "border-ink bg-ink text-on-ink")
               }
             >
               <div className="flex items-center gap-3">
-                <div className={
-                  "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl " +
-                  (clockStatus?.activeLog ? "bg-emerald-200/60 text-emerald-700" : "bg-white/20 text-white")
-                }>
-                  {clockStatus?.activeLog ? <Clock className="h-6 w-6" /> : <Clock className="h-6 w-6" />}
-                </div>
-                <div className="flex-1 min-w-0">
+                <Clock className={"h-7 w-7 shrink-0 " + (clockStatus?.activeLog ? "text-ok-text" : "text-on-ink")} />
+                <div className="min-w-0 flex-1">
                   {clockStatus?.activeLog ? (
                     <>
-                      <p className="text-xs font-medium uppercase tracking-wider text-emerald-700">
-                        Clocked in · {new Date(clockStatus.activeLog.clock_in).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}
+                      <p className="text-[13px] font-medium text-ok-text">
+                        Clocked in at {formatTime(clockStatus.activeLog.clock_in)}
                       </p>
-                      <p className="font-heading text-xl font-bold tabular-nums text-emerald-900">
-                        {clockElapsed || "—"}
-                      </p>
-                      <p className="text-xs text-emerald-700">
-                        Tap to clock out
-                      </p>
+                      <p className="text-[22px] font-semibold leading-7 text-text">{clockElapsed || "—"}</p>
+                      <p className="text-[12px] text-text-2">Tap to clock out</p>
                     </>
                   ) : (
                     <>
-                      <p className="text-xs font-medium uppercase tracking-wider text-white/80">
-                        Not clocked in
-                      </p>
-                      <p className="font-heading text-xl font-bold text-white">
-                        Clock in
-                      </p>
-                      <p className="text-xs text-white/90">
-                        Selfie + GPS · 5 seconds
-                      </p>
+                      <p className="text-[13px] text-on-ink/75">Not clocked in</p>
+                      <p className="text-[22px] font-semibold leading-7">Clock in</p>
+                      <p className="text-[12px] text-on-ink/75">Selfie and location, about 5 seconds</p>
                     </>
                   )}
                 </div>
-                <ArrowRight className={
-                  "h-5 w-5 shrink-0 " + (clockStatus?.activeLog ? "text-emerald-600" : "text-white")
-                } />
+                <ArrowRight className={"h-5 w-5 shrink-0 " + (clockStatus?.activeLog ? "text-ok-text" : "text-on-ink")} />
               </div>
             </Link>
           )}
 
-          {/* Profile completeness reminder — shown until either the staff
-              completes their profile or dismisses for the day. Lives at the
-              very top of home so onboarding hires see it the moment they
-              clock in for their first shift. */}
+          {/* Profile reminder: until the profile is complete or dismissed for the day. */}
           {profileReminder?.show && (
-            <Link
-              href="/profile/personal"
-              className="block rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5"
-            >
-              <div className="flex items-start gap-2.5">
-                <UserCircle2 className="h-5 w-5 shrink-0 text-amber-600" />
+            <Link href="/profile/personal" className="block rounded-card border border-warn/30 bg-warn-soft px-4 py-3">
+              <div className="flex items-start gap-3">
+                <UserCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-warn-text" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-amber-900">
-                    Complete your profile
+                  <p className="text-sm font-semibold text-text">Finish your profile</p>
+                  <p className="text-[12px] text-text-2">
+                    HR needs your address, IC and emergency contact for payslips and tax. It takes 2 minutes.
                   </p>
-                  <p className="text-[11px] text-amber-700">
-                    HR needs your address, IC, and emergency contact for payslips and tax. Takes 2 minutes.
-                  </p>
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-amber-100">
-                    <div
-                      className="h-full bg-amber-500 transition-all"
-                      style={{ width: `${profileReminder.percent}%` }}
-                    />
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface">
+                    <div className="h-full bg-warn transition-all" style={{ width: `${profileReminder.percent}%` }} />
                   </div>
                 </div>
                 <button
@@ -512,85 +472,78 @@ export function HomeClient({
                     e.stopPropagation();
                     dismissProfileReminder();
                   }}
-                  className="rounded-full p-1 text-amber-600 hover:bg-amber-100"
-                  aria-label="Dismiss"
+                  className="-mr-2 -mt-2 flex h-11 w-11 items-center justify-center rounded-full text-warn-text active:bg-surface"
+                  aria-label="Hide until tomorrow"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="h-4 w-4" />
                 </button>
               </div>
             </Link>
           )}
 
-          {/* Progress bar */}
-          <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-sm font-semibold text-gray-900">Today&apos;s Tasks</p>
-              <p className="text-xs font-bold text-gray-500">{doneCount}/{totalTasks} done</p>
+          {/* Today's tasks: one list across checklists, stock and audits, the most urgent first */}
+          <section>
+            <div className="mb-2 flex items-baseline justify-between">
+              <h2 className="text-[15px] font-semibold text-text">Today&apos;s tasks</h2>
+              <p className="text-[13px] text-text-3">{doneCount} of {totalTasks} done</p>
             </div>
-            <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-sunken">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${progressPct === 100 ? "bg-green-500" : progressPct >= 50 ? "bg-amber-400" : "bg-terracotta"}`}
+                className={`h-full rounded-full transition-all duration-500 ${progressPct === 100 ? "bg-ok" : "bg-ink"}`}
                 style={{ width: `${progressPct}%` }}
               />
             </div>
-          </div>
+          </section>
 
-          {/* All done banner */}
           {pendingTasks.length === 0 && totalTasks > 0 && (
-            <Card className="border-green-200 bg-green-50 px-4 py-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-green-100">
-                  <CheckCircle2 className="h-5 w-5 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-green-700">All tasks done!</p>
-                  <p className="text-xs text-green-500">{totalTasks} tasks completed today</p>
-                </div>
+            <div className="flex items-center gap-3 rounded-card border border-ok/30 bg-ok-soft px-4 py-3">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-ok-text" />
+              <div>
+                <p className="text-sm font-semibold text-text">All done for today</p>
+                <p className="text-[12px] text-text-2">{totalTasks} {totalTasks === 1 ? "task" : "tasks"} finished</p>
               </div>
-            </Card>
+            </div>
           )}
 
-          {/* Task list grouped by priority */}
+          {totalTasks === 0 && (
+            <p className="rounded-card border border-line bg-surface px-4 py-3 text-sm text-text-3">
+              Nothing on your list yet. Checklists appear once the shift&apos;s lists are made.
+            </p>
+          )}
+
           {pendingTasks.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {(["overdue", "due_soon", "on_track"] as TaskPriority[]).map((priority) => {
                 const group = grouped[priority];
                 if (!group || group.length === 0) return null;
                 const config = PRIORITY_CONFIG[priority];
                 return (
                   <div key={priority}>
-                    <h2 className={`mb-1.5 text-xs font-semibold uppercase tracking-wider ${config.color}`}>{config.label}</h2>
-                    <div className="space-y-2">
-                      {group.map((task) => {
+                    <h3 className={`mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold ${config.color}`}>
+                      <config.Icon className="h-3.5 w-3.5" /> {config.label}
+                    </h3>
+                    <div className="overflow-hidden rounded-card border border-line bg-surface">
+                      {group.map((task, i) => {
                         const Icon = task.icon;
                         return (
-                          <Link key={task.id} href={task.href}>
-                            <Card className={`px-3 py-2.5 border-l-3 ${config.borderColor} transition-all hover:shadow-sm ${priority === "overdue" ? "bg-red-50/50" : ""}`}>
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${priority === "overdue" ? "bg-red-100" : priority === "due_soon" ? "bg-amber-100" : "bg-gray-100"}`}>
-                                    <Icon className={`h-4 w-4 ${config.iconColor}`} />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium text-gray-900 truncate">{task.title}</p>
-                                    <div className="flex items-center gap-1.5">
-                                      <span className={`text-[10px] ${priority === "overdue" ? "text-red-400" : priority === "due_soon" ? "text-amber-500" : "text-gray-400"}`}>{task.timeLabel}</span>
-                                      {task.photoCount && (
-                                        <>
-                                          <span className="text-gray-300">·</span>
-                                          <span className="text-[10px] text-gray-400">{task.photoCount} photos</span>
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                                {task.progress !== undefined ? (
-                                  <span className={`text-xs font-bold shrink-0 ${priority === "overdue" ? "text-red-500" : priority === "due_soon" ? "text-amber-600" : "text-gray-500"}`}>{task.progress}%</span>
-                                ) : (
-                                  <ArrowRight className="h-3.5 w-3.5 text-gray-300 shrink-0" />
-                                )}
-                              </div>
-                            </Card>
+                          <Link
+                            key={task.id}
+                            href={task.href}
+                            className={`flex min-h-[56px] items-center gap-3 px-4 py-2.5 active:bg-sunken ${i > 0 ? "border-t border-line" : ""}`}
+                          >
+                            <Icon className={`h-5 w-5 shrink-0 ${config.iconColor}`} />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-text">{task.title}</p>
+                              <p className="truncate text-[12px] text-text-3">
+                                <span className={config.color}>{task.timeLabel}</span>
+                                {task.photoCount && <> · {task.photoCount} photos</>}
+                              </p>
+                            </div>
+                            {task.progress !== undefined ? (
+                              <span className="shrink-0 text-[13px] font-semibold text-text-2">{task.progress}%</span>
+                            ) : (
+                              <ArrowRight className="h-4 w-4 shrink-0 text-text-3" />
+                            )}
                           </Link>
                         );
                       })}
@@ -601,24 +554,27 @@ export function HomeClient({
             </div>
           )}
 
-          {/* Done section */}
           {doneTasks.length > 0 && (
             <div>
-              <button onClick={() => setShowDone((v) => !v)} className="flex w-full items-center justify-between mb-1.5">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Done ({doneTasks.length})</h2>
-                <ChevronDown className={`h-3.5 w-3.5 text-gray-400 transition-transform ${showDone ? "rotate-180" : ""}`} />
+              <button
+                onClick={() => setShowDone((v) => !v)}
+                className="flex min-h-11 w-full items-center justify-between text-[13px] font-semibold text-text-3"
+                aria-expanded={showDone}
+              >
+                <span>Done ({doneTasks.length})</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${showDone ? "rotate-180" : ""}`} />
               </button>
               {showDone && (
-                <div className="space-y-1.5">
-                  {doneTasks.map((task) => (
-                    <Link key={task.id} href={task.href}>
-                      <Card className="px-3 py-2 border-l-3 border-l-gray-200 opacity-60">
-                        <div className="flex items-center gap-2.5">
-                          <CheckCircle2 className="h-4 w-4 shrink-0 text-green-400" />
-                          <p className="text-sm text-gray-500 truncate line-through">{task.title}</p>
-                          {task.photoCount && <span className="text-[10px] text-gray-400 shrink-0 ml-auto">{task.photoCount}</span>}
-                        </div>
-                      </Card>
+                <div className="overflow-hidden rounded-card border border-line bg-surface">
+                  {doneTasks.map((task, i) => (
+                    <Link
+                      key={task.id}
+                      href={task.href}
+                      className={`flex min-h-11 items-center gap-3 px-4 py-2 active:bg-sunken ${i > 0 ? "border-t border-line" : ""}`}
+                    >
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-ok-text" />
+                      <p className="truncate text-sm text-text-3">{task.title}</p>
+                      {task.photoCount && <span className="ml-auto shrink-0 text-[12px] text-text-3">{task.photoCount}</span>}
                     </Link>
                   ))}
                 </div>
@@ -626,163 +582,98 @@ export function HomeClient({
             </div>
           )}
 
-          {/* Manager: Team compliance summary */}
+          {/* Managers: how the team is doing on today's checklists */}
           {managerData && managerData.teamChecklistsTotal > 0 && (
-            <div>
-              <h2 className="mb-2 text-sm font-semibold text-gray-900">Team Today</h2>
-              <Link href="/audit">
-                <Card className="px-4 py-3 transition-all active:bg-gray-50">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">Staff Checklists</p>
-                      <p className="text-[11px] text-gray-500 mt-0.5">
-                        {managerData.teamChecklistsDone} of {managerData.teamChecklistsTotal} completed
-                      </p>
-                    </div>
-                    <div className="text-right flex items-center gap-2">
-                      <span className="text-lg font-bold text-gray-700">
-                        {Math.round((managerData.teamChecklistsDone / managerData.teamChecklistsTotal) * 100)}%
-                      </span>
-                      <ArrowRight className="h-4 w-4 text-gray-300" />
-                    </div>
-                  </div>
-                  <div className="mt-2 rounded-full bg-gray-100 h-1.5 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-terracotta transition-all"
-                      style={{ width: `${(managerData.teamChecklistsDone / managerData.teamChecklistsTotal) * 100}%` }}
-                    />
-                  </div>
-                </Card>
-              </Link>
-            </div>
+            <Link href="/audit" className="block rounded-card border border-line bg-surface px-4 py-3 active:bg-sunken">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-text">Team checklists today</p>
+                  <p className="text-[12px] text-text-3">
+                    {managerData.teamChecklistsDone} of {managerData.teamChecklistsTotal} done
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-semibold text-text">
+                    {Math.round((managerData.teamChecklistsDone / managerData.teamChecklistsTotal) * 100)}%
+                  </span>
+                  <ArrowRight className="h-4 w-4 text-text-3" />
+                </div>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-sunken">
+                <div
+                  className="h-full rounded-full bg-ink transition-all"
+                  style={{ width: `${(managerData.teamChecklistsDone / managerData.teamChecklistsTotal) * 100}%` }}
+                />
+              </div>
+            </Link>
           )}
 
-          {/* Manager: Recent audits */}
+          {/* Managers: the last audits at this outlet */}
           {managerData && managerData.recentAudits.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold text-gray-900">Recent Audits</h2>
-                <Link href="/audit/history" className="text-[11px] text-terracotta">View all →</Link>
+            <section>
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-[15px] font-semibold text-text">Recent audits</h2>
+                <Link href="/audit/history" className="flex min-h-11 items-center text-[13px] font-medium text-text-2">See all</Link>
               </div>
-              <div className="space-y-1.5">
-                {managerData.recentAudits.map((audit) => (
-                  <Link key={audit.id} href={`/audit/${audit.id}`}>
-                    <Card className="px-3 py-2 transition-all active:bg-gray-50">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-100">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{audit.template}</p>
-                          <p className="text-[10px] text-gray-400">
-                            {audit.auditor} · {formatTimeAgo(audit.completedAt)}
-                          </p>
-                        </div>
-                        {audit.score !== null && (
-                          <span className={`text-xs font-bold shrink-0 ${
-                            audit.score >= 80 ? "text-green-600" : audit.score >= 60 ? "text-yellow-600" : "text-red-600"
-                          }`}>
-                            {Math.round(audit.score)}%
-                          </span>
-                        )}
-                      </div>
-                    </Card>
+              <div className="overflow-hidden rounded-card border border-line bg-surface">
+                {managerData.recentAudits.map((audit, i) => (
+                  <Link
+                    key={audit.id}
+                    href={`/audit/${audit.id}`}
+                    className={`flex min-h-[52px] items-center gap-3 px-4 py-2 active:bg-sunken ${i > 0 ? "border-t border-line" : ""}`}
+                  >
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-ok-text" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-text">{audit.template}</p>
+                      <p className="text-[12px] text-text-3">{audit.auditor} · {formatTimeAgo(audit.completedAt)}</p>
+                    </div>
+                    {audit.score !== null && (
+                      <span className={`shrink-0 text-[13px] font-semibold ${
+                        audit.score >= 80 ? "text-ok-text" : audit.score >= 60 ? "text-warn-text" : "text-danger-text"
+                      }`}>
+                        {Math.round(audit.score)}%
+                      </span>
+                    )}
                   </Link>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
-          {/* Quick actions — filtered by user's moduleAccess */}
-          {showQuickActions && (() => {
-            const allActions = [
-              { href: "/stock-count", icon: ClipboardCheck, label: "Count", moduleKey: "inventory:stock-count" },
-              { href: "/receiving", icon: Package, label: "Receive", moduleKey: "inventory:receivings" },
-              { href: "/wastage", icon: Trash2, label: "Wastage", moduleKey: "inventory:wastage" },
-              { href: "/transfers", icon: ArrowLeftRight, label: "Transfer", moduleKey: "inventory:transfers" },
-              { href: "/claims", icon: Receipt, label: "Claim", moduleKey: "inventory:pay-and-claim" },
-            ];
-            const visibleActions = allActions.filter((a) => hasAccess(user.role, user.moduleAccess, a.moduleKey));
-            if (visibleActions.length === 0) return null;
-            const gridCls = visibleActions.length >= 5 ? "grid-cols-5"
-              : visibleActions.length === 4 ? "grid-cols-4"
-              : visibleActions.length === 3 ? "grid-cols-3"
-              : visibleActions.length === 2 ? "grid-cols-2"
-              : "grid-cols-1";
-            return (
-              <div>
-                <h2 className="mb-2 text-sm font-semibold text-gray-900">Quick Actions</h2>
-                <div className={`grid gap-2 ${gridCls}`}>
-                  {visibleActions.map((action) => {
-                    const Icon = action.icon;
-                    return (
-                      <Link
-                        key={action.label}
-                        href={action.href}
-                        className="flex flex-col items-center gap-1 rounded-xl border border-gray-200 bg-white py-3 text-gray-600 transition-colors hover:bg-terracotta/5 hover:text-terracotta"
-                      >
-                        <Icon className="h-5 w-5" />
-                        <span className="text-[10px] font-medium">{action.label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Who's away today (and tomorrow) — quick visibility for the
-              shift, especially handy for kitchen/floor leads planning
-              coverage on the fly. Only renders when there's actually
-              someone on leave. */}
+          {/* Who's away today and tomorrow, for covering the shift. Only when someone is. */}
           {whosAway && (whosAway.today.length > 0 || whosAway.tomorrow.length > 0) && (
-            <div className="rounded-xl border bg-white px-4 py-3">
+            <section className="rounded-card border border-line bg-surface px-4 py-3">
               <div className="mb-2 flex items-center gap-2">
-                <CalendarOff className="h-4 w-4 text-amber-600" />
-                <p className="text-sm font-semibold text-gray-900">Who&apos;s away</p>
+                <CalendarOff className="h-4 w-4 text-text-3" />
+                <p className="text-sm font-semibold text-text">Who&apos;s away</p>
               </div>
-              {whosAway.today.length > 0 && (
-                <div className="mb-2">
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Today</p>
+              {(["today", "tomorrow"] as const).map((day) => whosAway[day].length > 0 && (
+                <div key={day} className="mb-2 last:mb-0">
+                  <p className="mb-1 text-[12px] font-medium text-text-3">{day === "today" ? "Today" : "Tomorrow"}</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {whosAway.today.map((p) => (
+                    {whosAway[day].map((p) => (
                       <span
-                        key={`today-${p.user_id}`}
+                        key={`${day}-${p.user_id}`}
                         title={`${p.leave_type.replace(/_/g, " ")} · ${p.start_date} → ${p.end_date}${p.outlet ? ` · ${p.outlet}` : ""}`}
-                        className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-sunken py-0.5 pl-0.5 pr-2.5 text-[12px] text-text-2"
                       >
-                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-200 text-[9px] font-semibold text-amber-900">
-                          {p.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-semibold text-text-2">
+                          {initials(p.name)}
                         </span>
                         {p.name.split(" ")[0]}
                       </span>
                     ))}
                   </div>
                 </div>
-              )}
-              {whosAway.tomorrow.length > 0 && (
-                <div>
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Tomorrow</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {whosAway.tomorrow.map((p) => (
-                      <span
-                        key={`tomorrow-${p.user_id}`}
-                        title={`${p.leave_type.replace(/_/g, " ")} · ${p.start_date} → ${p.end_date}${p.outlet ? ` · ${p.outlet}` : ""}`}
-                        className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-700"
-                      >
-                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-gray-300 text-[9px] font-semibold text-gray-700">
-                          {p.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
-                        </span>
-                        {p.name.split(" ")[0]}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+              ))}
+            </section>
           )}
         </div>
       </div>
     </div>
   );
+}
+
+function initials(name: string | null | undefined): string {
+  return (name ?? "").split(" ").filter(Boolean).map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 }

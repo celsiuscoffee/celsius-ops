@@ -17,14 +17,14 @@ export default function PrivacyPage() {
         padding: "48px 24px 96px",
         fontFamily:
           "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-        color: "#1A0200",
+        color: "var(--text)",
         lineHeight: 1.65,
       }}
     >
       <h1 style={{ fontSize: 30, fontWeight: 700, marginBottom: 4 }}>
-        Privacy Policy — Celsius Manager
+        Privacy policy: Celsius Manager
       </h1>
-      <p style={{ color: "#6B6B6B", marginTop: 0 }}>Last updated: 7 June 2026</p>
+      <p style={{ color: "var(--text-3)", marginTop: 0 }}>Last updated: 7 June 2026</p>
 
       <p>
         Celsius Coffee Sdn Bhd (&ldquo;we&rdquo;, &ldquo;us&rdquo;) operates the
@@ -94,7 +94,7 @@ export default function PrivacyPage() {
       <h2 style={h2}>Contact</h2>
       <p>
         Celsius Coffee Sdn Bhd —{" "}
-        <a href="mailto:barista@celsiuscoffee.com" style={{ color: "#A2492C" }}>
+        <a href="mailto:barista@celsiuscoffee.com" style={{ color: "var(--brand-text)" }}>
           barista@celsiuscoffee.com
         </a>
       </p>

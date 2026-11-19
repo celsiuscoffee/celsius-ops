@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarDays, CalendarOff, CalendarClock, ChevronRight, CheckCircle2, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star, Target, Users, Receipt } from "lucide-react";
+import { Clock, CalendarDays, CalendarOff, CalendarClock, ChevronRight, History, Wallet, Sparkles, AlertTriangle, MapPin, FileText, Star, Target, Users, Receipt } from "lucide-react";
 import { useLocationPing } from "@/lib/hr/use-location-ping";
+import { PageHeader } from "@/components/page-header";
+import { formatTime } from "@/lib/format-time";
 
 type HRStatus = {
   activeLog: {
@@ -60,160 +62,101 @@ export default function HRHomePage() {
   const ping = useLocationPing({ enabled: isClockedInForPing });
 
   const isClockedIn = !!clockStatus?.activeLog;
-  const clockedInSince = clockStatus?.activeLog
-    ? new Date(clockStatus.activeLog.clock_in).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })
-    : null;
+  const clockedInSince = clockStatus?.activeLog ? formatTime(clockStatus.activeLog.clock_in) : null;
 
-  const actions = [
+  // One question per section (docs/design/staff-app-structure.md). The clock
+  // row carries the on-shift status, so there is no separate status card.
+  type Row = { href: string; icon: typeof Clock; label: string; subtitle: string; tone?: "ok" | "danger" };
+  const sections: { title: string; rows: Row[] }[] = [
     {
-      href: "/hr/clock",
-      icon: Clock,
-      label: "Time Clock",
-      subtitle: isClockedIn ? `Clocked in since ${clockedInSince}` : "Not clocked in",
-      color: isClockedIn ? "text-green-600" : "text-gray-400",
-      bgColor: isClockedIn ? "bg-green-50" : "bg-gray-50",
+      title: "When I work",
+      rows: [
+        {
+          href: "/hr/clock",
+          icon: Clock,
+          label: isClockedIn ? "Clock out" : "Clock in",
+          subtitle: isClockedIn ? `On shift since ${clockedInSince}` : "Not clocked in",
+          tone: isClockedIn ? "ok" : undefined,
+        },
+        { href: "/hr/shifts", icon: CalendarDays, label: "My shifts", subtitle: "Your coming shifts, and swaps" },
+        { href: "/hr/whos-working", icon: Users, label: "Who's working", subtitle: "Who is on shift with you" },
+        // Open Slots hidden for now (owner 2026-07-22: slots logic removed). The
+        // booking route/page still exist — restore this entry to bring it back.
+        // Availability shows for part-timers/interns only.
+        ...(isPartTimer
+          ? [{ href: "/hr/availability", icon: CalendarClock, label: "My availability", subtitle: "Your weekly pattern and days you can't work" }]
+          : []),
+        { href: "/hr/attendance", icon: History, label: "Clock-in history", subtitle: "Your clock-ins and hours" },
+      ],
     },
     {
-      href: "/hr/shifts",
-      icon: CalendarDays,
-      label: "My Shifts",
-      subtitle: "View upcoming schedule",
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
+      title: "Time off and pay",
+      rows: [
+        { href: "/hr/leave", icon: CalendarOff, label: "Leave", subtitle: "Days left, and asking for leave" },
+        // The page existed and was reachable only by typing the URL — nothing in
+        // this app linked to it. The manager app has had the equivalent tile all
+        // along ((staff)/hr/index.tsx).
+        { href: "/hr/payslips", icon: Receipt, label: "Payslips", subtitle: "Your pay, month by month" },
+      ],
     },
     {
-      href: "/hr/whos-working",
-      icon: Users,
-      label: "Who's Working",
-      subtitle: "See who's on shift with you",
-      color: "text-cyan-600",
-      bgColor: "bg-cyan-50",
-    },
-    // Open Slots hidden for now (owner 2026-07-22: slots logic removed). The
-    // booking route/page still exist — restore this entry to bring it back.
-    // Availability shows for part-timers/interns only.
-    ...(isPartTimer
-      ? [{
-          href: "/hr/availability",
-          icon: CalendarClock,
-          label: "My Availability",
-          subtitle: "Weekly pattern & blockout dates",
-          color: "text-indigo-600",
-          bgColor: "bg-indigo-50",
-        }]
-      : []),
-    {
-      href: "/hr/attendance",
-      icon: History,
-      label: "Attendance",
-      subtitle: "My clock-in history",
-      color: "text-green-600",
-      bgColor: "bg-green-50",
-    },
-    {
-      href: "/hr/leave",
-      icon: CalendarOff,
-      label: "Leave",
-      subtitle: "Request & view balances",
-      color: "text-purple-600",
-      bgColor: "bg-purple-50",
-    },
-    {
-      href: "/hr/memos",
-      icon: FileText,
-      label: "Memos",
-      subtitle: unackMemos > 0 ? `${unackMemos} new · pending acknowledgement` : "Warnings & commendations",
-      color: unackMemos > 0 ? "text-red-600" : "text-gray-600",
-      bgColor: unackMemos > 0 ? "bg-red-50" : "bg-gray-50",
-    },
-    {
-      href: "/hr/reviews",
-      icon: Star,
-      label: "Feedback",
-      subtitle: reviewsCount > 0 ? `${reviewsCount} review${reviewsCount === 1 ? "" : "s"} during your shifts` : "Reviews during your shifts",
-      color: "text-amber-600",
-      bgColor: "bg-amber-50",
-    },
-    {
-      href: "/hr/my-skills",
-      icon: Target,
-      label: "My Skills",
-      subtitle: "Skill audit scores & progress over time",
-      color: "text-terracotta",
-      bgColor: "bg-terracotta/10",
-    },
-    // The page existed and was reachable only by typing the URL — nothing in
-    // this app linked to it. The manager app has had the equivalent tile all
-    // along ((staff)/hr/index.tsx).
-    {
-      href: "/hr/payslips",
-      icon: Receipt,
-      label: "Payslips",
-      subtitle: "Monthly & weekly pay history",
-      color: "text-emerald-600",
-      bgColor: "bg-emerald-50",
+      title: "How I'm doing",
+      rows: [
+        {
+          href: "/hr/memos",
+          icon: FileText,
+          label: "Memos",
+          subtitle: unackMemos > 0 ? `${unackMemos} new, waiting for you to read` : "Notes, warnings and thanks",
+          tone: unackMemos > 0 ? "danger" : undefined,
+        },
+        {
+          href: "/hr/reviews",
+          icon: Star,
+          label: "Customer feedback",
+          subtitle: reviewsCount > 0 ? `${reviewsCount} review${reviewsCount === 1 ? "" : "s"} during your shifts` : "Reviews during your shifts",
+        },
+        { href: "/hr/my-skills", icon: Target, label: "My skills", subtitle: "Your audit scores over time" },
+      ],
     },
   ];
 
   return (
-    <div className="px-4 pt-6">
-      <h1 className="mb-6 text-2xl font-bold">HR</h1>
-
-      {/* Clock-in status card */}
-      <div className={`mb-4 rounded-2xl p-4 ${isClockedIn ? "bg-green-50 border border-green-200" : "bg-gray-50 border border-gray-200"}`}>
-        <div className="flex items-center gap-3">
-          <div className={`rounded-full p-2 ${isClockedIn ? "bg-green-100" : "bg-gray-200"}`}>
-            <Clock className={`h-6 w-6 ${isClockedIn ? "text-green-600" : "text-gray-400"}`} />
-          </div>
-          <div className="flex-1">
-            <p className="font-semibold">{isClockedIn ? "On Shift" : "Off Shift"}</p>
-            <p className="text-sm text-gray-500">
-              {isClockedIn ? `Since ${clockedInSince}` : "Tap Time Clock to start"}
-            </p>
-          </div>
-          {isClockedIn && <CheckCircle2 className="h-6 w-6 text-green-500" />}
-        </div>
-      </div>
+    <div className="px-4 pb-6">
+      <PageHeader title="Shifts" description="When you work, your time off and your pay." />
 
       {/* Geofence exit warning */}
       {isClockedInForPing && (ping.status === "warning" || ping.status === "auto_close_pending" || ping.status === "out_of_zone") && (
         <div className={
-          "mb-4 rounded-2xl border p-4 " +
+          "mb-4 rounded-card border p-4 " +
           (ping.status === "auto_close_pending"
-            ? "border-red-200 bg-red-50"
+            ? "border-danger/30 bg-danger-soft"
             : ping.status === "warning"
-              ? "border-amber-200 bg-amber-50"
-              : "border-gray-200 bg-gray-50")
+              ? "border-warn/30 bg-warn-soft"
+              : "border-line bg-surface")
         }>
           <div className="flex items-start gap-3">
-            <div className={
-              "rounded-full p-2 " +
-              (ping.status === "auto_close_pending" ? "bg-red-100" :
-               ping.status === "warning" ? "bg-amber-100" : "bg-gray-200")
-            }>
-              {ping.status === "auto_close_pending"
-                ? <AlertTriangle className="h-5 w-5 text-red-600" />
-                : <MapPin className="h-5 w-5 text-amber-600" />}
-            </div>
+            {ping.status === "auto_close_pending"
+              ? <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger-text" />
+              : <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-warn-text" />}
             <div className="flex-1">
-              <p className="font-semibold">
+              <p className="font-semibold text-text">
                 {ping.status === "auto_close_pending"
-                  ? "Auto clock-out imminent"
+                  ? "You will be clocked out soon"
                   : ping.status === "warning"
                     ? "You're away from the outlet"
                     : "Out of zone"}
               </p>
-              <p className="mt-0.5 text-sm text-gray-600">
+              <p className="mt-0.5 text-sm text-text-2">
                 {ping.distance !== null && ping.zoneName ? (
-                  <>You&apos;re <strong>{ping.distance}m</strong> from {ping.zoneName} · out of zone for <strong>{ping.outOfZoneMinutes} min</strong></>
+                  <>You&apos;re <strong>{ping.distance} m</strong> from {ping.zoneName}, out of zone for <strong>{ping.outOfZoneMinutes} min</strong></>
                 ) : (
                   "Please confirm your location"
                 )}
               </p>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-text-3">
                 {ping.status === "auto_close_pending"
-                  ? `System will auto clock-out to your last in-zone time. Return to the outlet now or contact your manager.`
-                  : `Return to the outlet within ${Math.max(0, ping.grace - ping.outOfZoneMinutes)} min to avoid auto clock-out.`}
+                  ? `You will be clocked out at the last time you were in the zone. Go back to the outlet now or call your manager.`
+                  : `Go back to the outlet within ${Math.max(0, ping.grace - ping.outOfZoneMinutes)} min, or you will be clocked out.`}
               </p>
             </div>
           </div>
@@ -222,25 +165,23 @@ export default function HRHomePage() {
 
       {/* Allowances card — only for staff assigned to an outlet (not HQ / non-scheduled owners) */}
       {allowance && clockStatus?.outletId && (
-        <div className="mb-6 rounded-2xl border border-terracotta/30 bg-gradient-to-br from-orange-50 to-amber-50 p-4">
+        <div className="mb-5 rounded-card border border-line bg-surface p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="rounded-full bg-terracotta/15 p-2">
-                <Wallet className="h-5 w-5 text-terracotta" />
-              </div>
+              <Wallet className="h-5 w-5 shrink-0 text-text-3" />
               <div>
-                <p className="font-semibold">{MONTHS[allowance.period.month - 1]} Allowances</p>
-                <p className="text-xs text-gray-500">{allowance.period.daysRemaining} day{allowance.period.daysRemaining !== 1 ? "s" : ""} left · paid with salary</p>
+                <p className="font-semibold">{MONTHS[allowance.period.month - 1]} allowance</p>
+                <p className="text-xs text-text-3">{allowance.period.daysRemaining} day{allowance.period.daysRemaining !== 1 ? "s" : ""} left, paid with your salary</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-terracotta">RM {allowance.totalEarned}</p>
-              <p className="text-xs text-gray-500">of RM {allowance.totalMax}</p>
+              <p className="text-2xl font-semibold text-text">RM {allowance.totalEarned}</p>
+              <p className="text-xs text-text-3">of RM {allowance.totalMax}</p>
             </div>
           </div>
 
           {!allowance.eligible ? (
-            <div className="rounded-xl bg-white/70 p-3 text-sm text-gray-500">
+            <div className="rounded-xl bg-sunken p-3 text-sm text-text-3">
               <div className="flex items-center gap-1.5">
                 <Sparkles className="h-4 w-4" />
                 <span>{allowance.tip || "Performance allowance is for full-time staff only."}</span>
@@ -251,23 +192,23 @@ export default function HRHomePage() {
               {/* Earn levers — each scored on its own KPI */}
               <div className="mb-3 space-y-2">
                 {(allowance.levers ?? []).filter((l) => l.applicable).map((l) => {
-                  const barColor = l.tier === "perform" ? "bg-green-500" : l.tier === "ok" ? "bg-amber-500" : "bg-red-500";
+                  const barColor = l.tier === "perform" ? "bg-ok" : l.tier === "ok" ? "bg-warn" : "bg-danger";
                   const pct = l.slice > 0 ? Math.round((l.earned / l.slice) * 100) : 0;
                   return (
-                    <div key={l.key} className="rounded-xl bg-white/70 p-3">
+                    <div key={l.key} className="rounded-xl bg-sunken p-3">
                       <div className="mb-1 flex items-center justify-between text-sm">
                         <span className="font-medium">{l.label}</span>
                         <span className="font-semibold">RM {l.earned} / {l.slice}</span>
                       </div>
-                      <div className="mb-1.5 h-2 overflow-hidden rounded-full bg-gray-200">
+                      <div className="mb-1.5 h-2 overflow-hidden rounded-full bg-line">
                         <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
                       </div>
-                      <p className="text-[11px] text-gray-600">{l.detail}</p>
+                      <p className="text-[11px] text-text-2">{l.detail}</p>
                     </div>
                   );
                 })}
                 {(allowance.levers ?? []).some((l) => !l.applicable) && (
-                  <p className="px-1 text-[11px] text-gray-400">
+                  <p className="px-1 text-[11px] text-text-3">
                     Not counted for you: {(allowance.levers ?? []).filter((l) => !l.applicable).map((l) => l.label).join(", ")} (shared across your other areas).
                   </p>
                 )}
@@ -275,15 +216,15 @@ export default function HRHomePage() {
 
               {/* Deductions — itemized with reason, mirrors backoffice */}
               {((allowance.attendance?.total ?? 0) > 0 || (allowance.reviewPenalty?.total ?? 0) > 0) && (
-                <div className="rounded-xl bg-red-50 p-3">
+                <div className="rounded-xl bg-danger-soft p-3">
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <div className="flex items-center gap-1.5">
-                      <AlertTriangle className="h-4 w-4 text-red-600" />
-                      <span className="font-medium text-red-700">Deductions</span>
+                      <AlertTriangle className="h-4 w-4 text-danger-text" />
+                      <span className="font-medium text-danger-text">Deductions</span>
                     </div>
-                    <span className="font-semibold text-red-700">−RM {(allowance.attendance?.total ?? 0) + (allowance.reviewPenalty?.total ?? 0)}</span>
+                    <span className="font-semibold text-danger-text">−RM {(allowance.attendance?.total ?? 0) + (allowance.reviewPenalty?.total ?? 0)}</span>
                   </div>
-                  <div className="flex flex-wrap gap-3 text-[11px] text-red-600">
+                  <div className="flex flex-wrap gap-3 text-[11px] text-danger-text">
                     <span>Late {allowance.attendance?.lateCount ?? 0}</span>
                     <span>No-show {allowance.attendance?.absentCount ?? 0}</span>
                     {(allowance.reviewPenalty?.entries ?? []).length > 0 && (
@@ -294,14 +235,14 @@ export default function HRHomePage() {
                   {/* Itemized attendance deductions — date · reason · amount */}
                   {(allowance.attendance?.deductions ?? []).length > 0 && (
                     <details className="mt-2 text-xs">
-                      <summary className="cursor-pointer select-none text-red-700 hover:text-red-800">
-                        {(allowance.attendance?.deductions ?? []).length} deduction{(allowance.attendance?.deductions ?? []).length === 1 ? "" : "s"} — tap to view
+                      <summary className="cursor-pointer select-none text-danger-text hover:text-danger-text">
+                        {(allowance.attendance?.deductions ?? []).length} deduction{(allowance.attendance?.deductions ?? []).length === 1 ? "" : "s"} (tap to see)
                       </summary>
-                      <ul className="mt-1.5 space-y-1 text-red-700">
+                      <ul className="mt-1.5 space-y-1 text-danger-text">
                         {(allowance.attendance?.deductions ?? []).map((d, i) => (
                           <li key={i} className="flex items-start justify-between gap-2">
                             <span>
-                              {d.date ? <span className="mr-1 font-mono text-[10px] text-red-500">{d.date}</span> : null}
+                              {d.date ? <span className="mr-1 font-mono text-[10px] text-danger">{d.date}</span> : null}
                               {d.label}
                             </span>
                             <span className="shrink-0 font-semibold">−RM {d.amount}</span>
@@ -314,20 +255,20 @@ export default function HRHomePage() {
                   {/* Review penalties — stars · date · reason text */}
                   {(allowance.reviewPenalty?.entries ?? []).length > 0 && (
                     <details className="mt-2 text-xs">
-                      <summary className="cursor-pointer select-none text-red-700 hover:text-red-800">
-                        {(allowance.reviewPenalty?.entries ?? []).length} review penalt{(allowance.reviewPenalty?.entries ?? []).length === 1 ? "y" : "ies"} — tap to view
+                      <summary className="cursor-pointer select-none text-danger-text hover:text-danger-text">
+                        {(allowance.reviewPenalty?.entries ?? []).length} review penalt{(allowance.reviewPenalty?.entries ?? []).length === 1 ? "y" : "ies"} (tap to see)
                       </summary>
-                      <ul className="mt-1.5 space-y-1 text-red-700">
+                      <ul className="mt-1.5 space-y-1 text-danger-text">
                         {(allowance.reviewPenalty?.entries ?? []).map((e) => (
                           <li key={e.id} className="flex flex-wrap items-center gap-1.5">
                             <span className="flex shrink-0 items-center">
                               {Array.from({ length: 5 }).map((_, i) => (
-                                <Star key={i} className={`h-3 w-3 ${i < e.rating ? "fill-red-500 text-red-500" : "text-red-200"}`} />
+                                <Star key={i} className={`h-3 w-3 ${i < e.rating ? "fill-danger text-danger" : "text-danger"}`} />
                               ))}
                             </span>
-                            <span className="font-mono text-[10px] text-red-500">{e.reviewDate}</span>
+                            <span className="font-mono text-[10px] text-danger">{e.reviewDate}</span>
                             <span className="font-semibold">−RM {e.amount}</span>
-                            {e.reviewText && <span className="w-full truncate italic text-red-600">&ldquo;{e.reviewText}&rdquo;</span>}
+                            {e.reviewText && <span className="w-full truncate italic text-danger-text">&ldquo;{e.reviewText}&rdquo;</span>}
                           </li>
                         ))}
                       </ul>
@@ -336,33 +277,37 @@ export default function HRHomePage() {
                 </div>
               )}
 
-              <p className="mt-2 px-1 text-xs text-gray-600">{allowance.tip}</p>
+              <p className="mt-2 px-1 text-xs text-text-2">{allowance.tip}</p>
             </>
           )}
         </div>
       )}
 
-      {/* Quick Actions */}
-      <div className="space-y-3">
-        {actions.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-all active:scale-[0.98]"
-            >
-              <div className={`rounded-xl p-3 ${item.bgColor}`}>
-                <Icon className={`h-6 w-6 ${item.color}`} />
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold">{item.label}</p>
-                <p className="text-sm text-gray-500">{item.subtitle}</p>
-              </div>
-              <ChevronRight className="h-5 w-5 text-gray-300" />
-            </Link>
-          );
-        })}
+      <div className="space-y-5">
+        {sections.map((section) => (
+          <section key={section.title}>
+            <h2 className="mb-2 text-[13px] font-semibold text-text-2">{section.title}</h2>
+            <div className="overflow-hidden rounded-card border border-line bg-surface">
+              {section.rows.map((item, i) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex min-h-[60px] items-center gap-3 px-4 py-2.5 active:bg-sunken ${i > 0 ? "border-t border-line" : ""}`}
+                  >
+                    <Icon className={`h-5 w-5 shrink-0 ${item.tone === "ok" ? "text-ok-text" : item.tone === "danger" ? "text-danger-text" : "text-text-3"}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-text">{item.label}</p>
+                      <p className={`truncate text-[13px] ${item.tone === "ok" ? "text-ok-text" : item.tone === "danger" ? "text-danger-text" : "text-text-3"}`}>{item.subtitle}</p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 shrink-0 text-text-3" />
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );

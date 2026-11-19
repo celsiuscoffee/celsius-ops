@@ -161,7 +161,7 @@ export function CameraCaptureModal({
     <div className="fixed inset-0 z-[60] flex flex-col bg-black">
       {/* Header */}
       <div className="flex items-center justify-between bg-black/80 px-4 py-3 text-white">
-        <button onClick={onClose} className="rounded-full p-2 hover:bg-white/10" aria-label="Close camera">
+        <button onClick={onClose} className="rounded-full p-2 hover:bg-on-hero/10" aria-label="Close camera">
           <X className="h-5 w-5" />
         </button>
         <p className="text-sm font-medium">{title ?? "Take Photo"}</p>
@@ -172,11 +172,11 @@ export function CameraCaptureModal({
       <div className="relative flex flex-1 items-center justify-center overflow-hidden">
         {error && !previewUrl ? (
           <div className="flex max-w-sm flex-col items-center gap-3 px-6 text-center text-white">
-            <AlertTriangle className="h-10 w-10 text-amber-400" />
+            <AlertTriangle className="h-10 w-10 text-warn" />
             <p className="text-sm">{error}</p>
             <button
               onClick={onClose}
-              className="mt-2 rounded-md bg-white/10 px-4 py-2 text-sm font-medium hover:bg-white/20"
+              className="mt-2 rounded-md bg-on-hero/10 px-4 py-2 text-sm font-medium hover:bg-on-hero/20"
             >
               Close
             </button>
@@ -190,7 +190,7 @@ export function CameraCaptureModal({
                 upload instead of sending them back to the counter to shoot it
                 again. */}
             {error && (
-              <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-amber-500/90 px-4 py-3 text-sm text-black">
+              <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-warn/90 px-4 py-3 text-sm text-text">
                 <AlertTriangle className="h-5 w-5 shrink-0" />
                 <span>
                   <span className="font-medium">{error}</span>
@@ -227,7 +227,7 @@ export function CameraCaptureModal({
             <button
               onClick={accept}
               disabled={submitting}
-              className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500 text-white shadow-lg active:scale-95 disabled:opacity-50"
+              className="flex h-16 w-16 items-center justify-center rounded-full bg-ok text-on-ink shadow-lg active:scale-95 disabled:opacity-50"
               aria-label="Use photo"
             >
               <Check className="h-8 w-8" />
@@ -240,10 +240,10 @@ export function CameraCaptureModal({
             <button
               onClick={capture}
               disabled={!ready}
-              className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-white/10 active:scale-95 disabled:opacity-40"
+              className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-on-hero bg-on-hero/10 active:scale-95 disabled:opacity-40"
               aria-label="Capture photo"
             >
-              <div className="h-14 w-14 rounded-full bg-white" />
+              <div className="h-14 w-14 rounded-full bg-surface" />
             </button>
             <div className="flex h-16 w-16 items-center justify-center text-white/40">
               <Camera className="h-6 w-6" />

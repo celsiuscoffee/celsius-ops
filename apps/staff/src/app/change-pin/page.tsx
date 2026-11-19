@@ -103,7 +103,7 @@ export default function ChangePinPage() {
     autoComplete: string,
   ) => (
     <div>
-      <label className="mb-1.5 block text-sm font-medium text-gray-700">{label}</label>
+      <label className="mb-1.5 block text-sm font-medium text-text-2">{label}</label>
       <div className="flex gap-2">
         {value.map((digit, i) => (
           <input
@@ -116,7 +116,7 @@ export default function ChangePinPage() {
             value={digit}
             onChange={(e) => handleChange(e.target.value, i, value, setValue, refs)}
             onKeyDown={(e) => handleKeyDown(e, i, value, refs)}
-            className="h-12 w-full rounded-xl border border-gray-300 bg-white text-center text-xl font-bold focus:border-terracotta focus:outline-none focus:ring-2 focus:ring-terracotta/30"
+            className="h-12 w-full rounded-xl border border-line-2 bg-surface text-center text-xl font-bold focus:border-ink focus:outline-none focus:ring-2 focus:ring-text/30"
           />
         ))}
       </div>
@@ -124,38 +124,38 @@ export default function ChangePinPage() {
   );
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4 py-8">
+    <div className="flex min-h-dvh items-center justify-center bg-sunken/60 px-4 py-8">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-terracotta/10">
-            <ShieldCheck className="h-6 w-6 text-terracotta" />
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-brand-soft">
+            <ShieldCheck className="h-6 w-6 text-brand-text" />
           </div>
           <h1 className="text-xl font-bold">Set your own PIN</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-text-3">
             The PIN you were given is temporary and other people know it. Choose
             one only you know before you carry on.
           </p>
         </div>
 
-        <form onSubmit={submit} className="space-y-4 rounded-2xl bg-white p-5 shadow-sm">
+        <form onSubmit={submit} className="space-y-4 rounded-2xl bg-surface p-5 shadow-sm">
           {boxes(current, setCurrent, currentRefs, "PIN you were given", "current-password")}
           {boxes(next, setNext, nextRefs, "New PIN", "new-password")}
           {boxes(confirm, setConfirm, confirmRefs, "Confirm new PIN", "new-password")}
 
           {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+            <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-text">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={saving}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-terracotta py-3 font-semibold text-white active:scale-95 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-ink py-3 font-semibold text-on-ink active:scale-95 disabled:opacity-50"
           >
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
             Save new PIN
           </button>
 
-          <p className="text-center text-xs text-gray-400">
+          <p className="text-center text-xs text-text-3">
             Don&apos;t reuse your date of birth — that is what the temporary PIN was.
           </p>
         </form>
