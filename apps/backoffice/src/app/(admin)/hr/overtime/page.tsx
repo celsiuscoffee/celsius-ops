@@ -3,21 +3,19 @@
 import { useFetch } from "@/lib/use-fetch";
 import { useMemo, useState } from "react";
 import { Clock, CheckCircle2, XCircle, Loader2, Plus, AlertTriangle, Calendar, X, LogIn, LogOut, ClipboardCheck, UserRound, Hand } from "lucide-react";
-import { toast } from "@celsius/ui";
+import { toast, useConfirm } from "@celsius/ui";
 import { HrPageHeader } from "@/components/hr/page-header";
-import Link from "next/link";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Overtime = the LEDGER of OT decisions, not a second review queue.
+// Overtime: the one place OT is decided (owner 19 Nov 2026: "one is issues,
+// one is to approve ot"; Ariff and the outlet managers approve).
 //
-// Owner 2026-09-03: "only the OT Ariff approves in attendance will be counted
-// as OT on payroll" and "there is a lot of overlapping". Clocked overtime is
-// approved on the Attendance Review page — confirming the day files the
-// approved request. This page shows what landed (per person, per month, with
-// the day's clock-ins behind each line), and holds the two things that do NOT
-// come from a clock-in: staff pre-approval requests, and a manager's post-hoc
-// entry for OT that was never clocked. Nothing here syncs from attendance any
-// more; that generator now only runs from the attendance approval.
+// Pending is the queue: every clocked tail (filed by the daily sync, or as
+// soon as its day is confirmed on Clock-ins), staff pre-approval requests,
+// and a manager's entry for OT that was never clocked. Each row shows the
+// day's clock-in and clock-out so it can be decided without opening it;
+// Review is for approving fewer hours or rejecting. Only an approval here
+// reaches payroll. Approved shows what each person will be paid this month.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type AttendanceLog = {
@@ -53,7 +51,7 @@ type OTRequest = {
   attendance_logs?: AttendanceLog[];
 };
 
-type Tab = "pending" | "approved" | "rejected" | "all";
+type Tab = "pending" | "approved" | "all";
 type Employee = { id: string; name: string; fullName: string | null };
 
 // Requests the attendance approval files carry this prefix (lib/hr/ot-request-generator).
@@ -82,7 +80,7 @@ const monthRange = (key: string) => {
 };
 
 function sourceOf(r: OTRequest): { label: string; icon: typeof Hand; cls: string } {
-  if (r.reason?.startsWith(AUTO_PREFIX)) return { label: "Attendance approval", icon: ClipboardCheck, cls: "text-ok-text" };
+  if (r.reason?.startsWith(AUTO_PREFIX)) return { label: "Clocked", icon: ClipboardCheck, cls: "text-text-2" };
   if (r.request_type === "pre_approval") return { label: "Staff request", icon: UserRound, cls: "text-info-text" };
   return { label: "Manager post-hoc", icon: Hand, cls: "text-info-text" };
 }
@@ -115,12 +113,12 @@ export default function OvertimeLedgerPage() {
   const counts = {
     pending: all.filter((r) => r.status === "pending").length,
     approved: all.filter((r) => r.status === "approved" || r.status === "partial").length,
-    rejected: all.filter((r) => r.status === "rejected" || r.status === "cancelled").length,
   };
+  const pendingRows = all.filter((r) => r.status === "pending");
+  const pendingHours = pendingRows.reduce((s, r) => s + toHalf(r.hours_requested), 0);
   const rows = all.filter((r) =>
     tab === "all" ? true
     : tab === "approved" ? r.status === "approved" || r.status === "partial"
-    : tab === "rejected" ? r.status === "rejected" || r.status === "cancelled"
     : r.status === "pending",
   );
   const approvedHours = all.reduce((s, r) => s + ((r.status === "approved" || r.status === "partial") ? toHalf(r.hours_approved) : 0), 0);
@@ -142,27 +140,64 @@ export default function OvertimeLedgerPage() {
   const [newOT, setNewOT] = useState<{ user_id: string; date: string; hours: string; reason: string; ot_type: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const review = async (status: "approved" | "rejected" | "partial", hours?: number, reason?: string, notes?: string) => {
-    if (!reviewing) return;
-    setSaving(true);
+  const { confirm, ConfirmDialog } = useConfirm();
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+
+  // One decision → one PATCH. Returns a message on failure, null on success.
+  const decide = async (id: string, status: "approved" | "rejected" | "partial", hours?: number, reason?: string, notes?: string): Promise<string | null> => {
     try {
       const res = await fetch("/api/hr/overtime-requests", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: reviewing.id, status, hours_approved: hours, rejection_reason: reason, manager_notes: notes }),
+        body: JSON.stringify({ id, status, hours_approved: hours, rejection_reason: reason, manager_notes: notes }),
       });
       const j = await res.json().catch(() => null);
-      if (!res.ok) { toast.error(j?.error ?? `Failed (${res.status}) — nothing was changed.`); return; }
-      if (status === "rejected") toast.success("Rejected");
-      else if (j?.payrollSynced === false) toast.error(`Approved ${hours}h, but payroll did not pick it up — the day's attendance log is rejected. Clear that first.`);
-      else toast.success(`Approved ${hours}h · sent to payroll`);
-      mutate();
-      setReviewing(null);
+      if (!res.ok) return j?.error ?? `Failed (${res.status}) — nothing was changed.`;
+      if (status !== "rejected" && j?.payrollSynced === false) return "Approved, but payroll did not pick it up — the day's clock-in is rejected. Clear that on Clock-ins first.";
+      return null;
     } catch {
-      toast.error("Network error — nothing was changed.");
-    } finally {
-      setSaving(false);
+      return "Network error — nothing was changed.";
     }
+  };
+
+  const review = async (status: "approved" | "rejected" | "partial", hours?: number, reason?: string, notes?: string) => {
+    if (!reviewing) return;
+    setSaving(true);
+    const err = await decide(reviewing.id, status, hours, reason, notes);
+    setSaving(false);
+    if (err) { toast.error(err); return; }
+    toast.success(status === "rejected" ? "Rejected" : `Approved ${hours}h · sent to payroll`);
+    mutate();
+    setReviewing(null);
+  };
+
+  const approveOne = async (r: OTRequest) => {
+    const h = toHalf(r.hours_requested);
+    setBusyIds((p) => new Set(p).add(r.id));
+    const err = await decide(r.id, "approved", h);
+    setBusyIds((p) => { const n = new Set(p); n.delete(r.id); return n; });
+    if (err) { toast.error(err); return; }
+    toast.success(`Approved ${h}h for ${r.staff?.name ?? "staff"} · sent to payroll`);
+    mutate();
+  };
+
+  const approveAll = async () => {
+    const ok = await confirm({
+      title: `Approve all ${pendingRows.length} (${pendingHours}h)?`,
+      description: "Each is approved at the hours shown and sent to payroll. Use Review on a row first to approve fewer hours or reject.",
+      confirmLabel: `Approve ${pendingHours}h`,
+    });
+    if (!ok) return;
+    setBusyIds(new Set(pendingRows.map((r) => r.id)));
+    const errs: string[] = [];
+    for (const r of pendingRows) {
+      const err = await decide(r.id, "approved", toHalf(r.hours_requested));
+      if (err) errs.push(`${r.staff?.name ?? r.user_id.slice(0, 8)} ${r.date}: ${err}`);
+    }
+    setBusyIds(new Set());
+    if (errs.length) toast.error(`${pendingRows.length - errs.length} approved, ${errs.length} failed — ${errs[0]}`);
+    else toast.success(`Approved ${pendingRows.length} · ${pendingHours}h sent to payroll`);
+    mutate();
   };
 
   const createOT = async () => {
@@ -183,7 +218,7 @@ export default function OvertimeLedgerPage() {
       });
       const j = await res.json().catch(() => null);
       if (!res.ok) { toast.error(j?.error ?? `Failed (${res.status})`); return; }
-      toast.success("OT entry created — approve it from the Pending tab");
+      toast.success("Added to Pending — approve it there");
       if (newOT.date.slice(0, 7) !== month) setMonth(newOT.date.slice(0, 7));
       setTab("pending");
       mutate();
@@ -208,14 +243,13 @@ export default function OvertimeLedgerPage() {
 
   return (
     <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
+      <ConfirmDialog />
       <HrPageHeader
         title="Overtime"
         description={
           <>
-            {monthLabel(month)}: <strong>{approvedHours}h</strong> approved across {byPerson.length} staff
-            {counts.pending > 0 ? <> · <strong className="text-warn-text">{counts.pending} pending</strong></> : null}
-            . Clocked OT is approved on{" "}
-            <Link href="/hr/attendance" className="text-brand-text underline">Clock-ins</Link>; this is the ledger.
+            {counts.pending > 0 ? <><strong className="text-warn-text">{counts.pending} waiting ({pendingHours}h)</strong> · </> : null}
+            {monthLabel(month)}: <strong>{approvedHours}h</strong> approved across {byPerson.length} staff. Only OT approved here is paid.
           </>
         }
         action={
@@ -259,7 +293,6 @@ export default function OvertimeLedgerPage() {
         {([
           { k: "pending", l: `Pending (${counts.pending})`, icon: AlertTriangle },
           { k: "approved", l: `Approved (${counts.approved})`, icon: CheckCircle2 },
-          { k: "rejected", l: `Rejected (${counts.rejected})`, icon: XCircle },
           { k: "all", l: `All (${all.length})`, icon: Calendar },
         ] as const).map((t) => {
           const Ic = t.icon;
@@ -279,12 +312,20 @@ export default function OvertimeLedgerPage() {
 
       {/* List */}
       <div className="rounded-xl border bg-card p-4">
+        {tab === "pending" && pendingRows.length > 1 && (
+          <div className="mb-3 flex items-center justify-between gap-3 border-b border-line pb-3">
+            <span className="text-sm text-text-2">{pendingRows.length} waiting · {pendingHours}h</span>
+            <button onClick={approveAll} disabled={busyIds.size > 0} className="inline-flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Approve all
+            </button>
+          </div>
+        )}
         {isLoading && !data ? (
           <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-text-3" /></div>
         ) : rows.length === 0 ? (
           <div className="py-10 text-center text-sm text-text-3">
             <Clock className="mx-auto mb-2 h-8 w-8 opacity-30" />
-            {tab === "pending" ? "Nothing pending — clocked OT is approved on Attendance Review" : `No ${tab === "all" ? "" : tab} OT in ${monthLabel(month)}`}
+            {tab === "pending" ? "Nothing waiting. Clocked overtime shows up here the morning after the shift." : `No ${tab === "all" ? "" : tab} OT in ${monthLabel(month)}`}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -295,8 +336,8 @@ export default function OvertimeLedgerPage() {
                   <th className="py-2 pr-3">Date</th>
                   <th className="py-2 pr-3">Hours</th>
                   <th className="py-2 pr-3">Rate</th>
+                  <th className="py-2 pr-3">Clocked</th>
                   <th className="py-2 pr-3">Source</th>
-                  <th className="py-2 pr-3">Reason</th>
                   <th className="py-2 pr-3">Status</th>
                   <th className="py-2 pr-3"></th>
                 </tr>
@@ -314,18 +355,25 @@ export default function OvertimeLedgerPage() {
                         {r.status === "partial" && <span className="ml-1 text-xs text-text-2">of {fmtH(r.hours_requested)}</span>}
                       </td>
                       <td className="py-2.5 pr-3 font-mono text-xs">{r.ot_type}</td>
-                      <td className="py-2.5 pr-3 text-xs">
-                        <span className={`inline-flex items-center gap-1 ${src.cls}`}><Ic className="h-3.5 w-3.5" /> {src.label}</span>
+                      <td className="whitespace-nowrap py-2.5 pr-3 font-mono text-xs text-text-2">
+                        {r.attendance_logs?.length
+                          ? r.attendance_logs.map((l) => `${fmtMyt(l.clock_in)}–${fmtMyt(l.clock_out)}`).join(", ")
+                          : <span className="font-sans text-warn-text">Not clocked</span>}
                       </td>
-                      <td className="max-w-[260px] truncate py-2.5 pr-3 text-xs text-text-2" title={r.reason}>
-                        {r.reason?.startsWith(AUTO_PREFIX) ? r.reason.replace(/^.*?—\s*/, "") : r.reason}
+                      <td className="py-2.5 pr-3 text-xs" title={r.reason}>
+                        <span className={`inline-flex items-center gap-1 ${src.cls}`}><Ic className="h-3.5 w-3.5" /> {src.label}</span>
                       </td>
                       <td className="py-2.5 pr-3">{statusPill(r.status)}</td>
                       <td className="py-2.5 pr-3 text-right">
                         {r.status === "pending" ? (
-                          <button onClick={() => setReviewing(r)} className="rounded bg-ink px-3 py-1 text-xs font-medium text-on-ink hover:bg-ink-hover">
-                            Review
-                          </button>
+                          <div className="flex justify-end gap-1.5">
+                            <button onClick={() => setReviewing(r)} disabled={busyIds.has(r.id)} className="rounded border px-3 py-1 text-xs font-medium text-text-2 hover:bg-sunken disabled:opacity-50">
+                              Review
+                            </button>
+                            <button onClick={() => approveOne(r)} disabled={busyIds.has(r.id)} className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-ink px-3 py-1 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
+                              {busyIds.has(r.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />} Approve {fmtH(r.hours_requested)}
+                            </button>
+                          </div>
                         ) : (
                           <button onClick={() => setReviewing(r)} className="rounded border px-3 py-1 text-xs font-medium text-text-2 hover:bg-sunken">
                             Details
@@ -354,7 +402,7 @@ export default function OvertimeLedgerPage() {
               <button onClick={() => setNewOT(null)} className="rounded p-1 hover:bg-sunken"><X className="h-4 w-4" /></button>
             </div>
             <p className="mb-4 text-xs text-text-3">
-              For overtime with no clock-in behind it. If the person clocked in, approve the day on Attendance Review instead — that pays the clocked tail.
+              For overtime with no clock-in behind it. Clocked overtime shows up in Pending by itself.
             </p>
             <div className="space-y-3">
               <label className="block">

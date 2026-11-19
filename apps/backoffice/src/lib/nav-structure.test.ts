@@ -47,37 +47,37 @@ const section = (label: string) => NAV_SECTIONS.find((s) => s.label === label)!;
 describe("shell placement", () => {
   it("a tab URL lights up its page and section", () => {
     const p = locate("/inventory/reconciliation", owner);
-    expect(p?.section.label).toBe("Procurement");
+    expect(p?.section.label).toBe("Orders");
     expect(p?.page?.label).toBe("Invoices");
     expect(p?.page?.tabs.map((t) => t.label)).toEqual(["Invoices", "Invoice match"]);
   });
 
   it("a deep URL under a page still lands on that page", () => {
-    expect(locate("/inventory/orders/abc-123", owner)?.page?.label).toBe("Purchase orders");
+    expect(locate("/inventory/orders/abc-123", owner)?.page?.label).toBe("Supplier orders");
   });
 
   it("a page links to its first view the user can open", () => {
-    const pages = railPages(section("Procurement"), owner);
-    expect(pages.map((p) => p.label)).toEqual(["Supplier chats", "Purchase orders", "Invoices", "Payment requests", "Suppliers"]);
+    const pages = railPages(section("Orders"), owner);
+    expect(pages.map((p) => p.label)).toEqual(["Supplier chats", "Supplier orders", "Invoices", "Suppliers"]);
     expect(pages.find((p) => p.label === "Invoices")?.href).toBe("/inventory/invoices");
   });
 
   it("pages and tabs follow the user's grants", () => {
     const manager: UserProfile = { id: "m", name: "Mgr", role: "MANAGER", outletId: "x", moduleAccess: ["inventory:invoices"] };
-    const pages = railPages(section("Procurement"), manager);
+    const pages = railPages(section("Orders"), manager);
     expect(pages.map((p) => p.label)).toEqual(["Invoices"]);
     expect(railPages(section("Money"), manager)).toEqual([]); // finance:* is owner/admin only
   });
 
   it("the menu stays decluttered: one question per section, few pages each", () => {
-    // 17 Nov 2026 declutter (docs/design/backoffice-structure.md §2c): 87 menu
-    // links became 36 pages; the rest are views inside a page or set-up behind
-    // the gear. Adding a page means taking one away, or a reason here.
+    // 18 Nov 2026: the menu follows Gosamē Office's sections (owner: "only
+    // follow the ones gosame did"; docs/design/backoffice-structure.md §2f).
+    // Adding a page means taking one away, or a reason here.
     const rail = NAV_SECTIONS.filter((s) => s.placement !== "footer");
     const pages = rail.reduce((n, s) => n + railPages(s, owner).length, 0);
-    expect(pages).toBeLessThanOrEqual(36);
+    expect(pages).toBeLessThanOrEqual(30);
     expect(rail.map((s) => s.label)).toEqual([
-      "Sales", "Customers", "Marketing", "Menu", "Stock", "Procurement", "Team", "Money", "Standards", "Agents",
+      "Agents", "Sales", "Customers", "Food", "Stock", "Orders", "Team", "Money", "Standards",
     ]);
   });
 
@@ -89,10 +89,22 @@ describe("shell placement", () => {
 
   it("related views share one page", () => {
     expect(locate("/reviews/geogrid", owner)?.page?.label).toBe("Reviews");
-    expect(locate("/ads/grab", owner)?.page?.label).toBe("Ads");
+    expect(locate("/inventory/transfers", owner)?.page?.label).toBe("Items");
     expect(locate("/inventory/packaging", owner)?.page?.label).toBe("Recipes");
-    expect(locate("/inventory/perishables", owner)?.page?.label).toBe("Ingredients");
+    expect(locate("/inventory/perishables", owner)?.page?.label).toBe("Items");
     expect(locate("/finance/transactions", owner)?.page?.label).toBe("Reports");
+  });
+
+  it("pages with no Gosamē counterpart are hidden but still reachable", () => {
+    for (const href of ["/ads", "/ads/campaigns", "/ads/grab"]) {
+      expect(locate(href, owner)?.section.label, href).toBe("Customers");
+    }
+    expect(railPages(section("Customers"), owner).map((p) => p.label)).toEqual(["Profiles", "Rewards", "Reviews", "Messages"]);
+    // On an ad page (e.g. from ⌘K) the title and tabs are the Ads ones, so a
+    // phone can move between them; it does not pretend to be Messages.
+    const p = locate("/ads/grab", owner);
+    expect(p?.page?.label).toBe("Ads");
+    expect(p?.page?.tabs.map((t) => t.label)).toEqual(["Ads", "Google campaigns", "Optimizer", "GrabFood", "Ad invoices"]);
   });
 
   it("the home page belongs to no section", () => {

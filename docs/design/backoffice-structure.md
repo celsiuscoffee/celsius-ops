@@ -344,6 +344,42 @@ Still to do in step 6: page-by-page layout (title + one line, at most four key
 numbers each against a reference, one list), section by section, starting with
 the most-used pages once Office Usage has data.
 
+## 2f. Menu follows Gosamē Office (owner, 18 Nov 2026)
+
+Owner: "Can we only follow the ones that gosame did. Restructure everything back."
+The menu now uses Gosamē Office's sections, page names and order. Page URLs and
+access keys did not change, so bookmarks and staff grants still work.
+
+| Gosamē section | Celsius pages (tabs inside) |
+| --- | --- |
+| Today, Inbox, Agents (Gosamē: Colony) | home, inbox, AI agents |
+| Sell › Sales | Sales (Compare, Orders, Reports, Cashier performance, Pickup app) |
+| Sell › Customers | Profiles (Manual grant), Rewards (Redemptions), Reviews (Feedback, Search position, Scoreboard), Messages (Campaigns) |
+| Make and supply › Food | Menu (Menu status), Recipes (Prep recipes, Packaging) |
+| Make and supply › Stock | Food cost (Reports), Items (Reserve levels, Perishables, Transfers), Counts, Waste |
+| Make and supply › Orders | Supplier chats, Supplier orders (Deliveries), Invoices (Invoice match), Suppliers |
+| Run the business › Team | Roster, Payroll, Performance, People |
+| Run the business › Money | Overview (Tax & close), Bank inbox, Cash flow (Cash tracking, Monthly, Bank statements, Regular bills), Payment requests, Reports (Ledger, Fixed assets) |
+| Run the business › Standards | Checklists, What happened, Audits (Outlet scorecard, Area scorecard), SOPs |
+| Settings (gear) | Outlet, Company and people, Stock, Customers, Office |
+
+Where Celsius differs, and why:
+- No CK section: Celsius has no central kitchen. Gosamē's Service page (table
+  service timings) has no Celsius counterpart either.
+- Ads (Google, GrabFood, optimizer, ad invoices) have no Gosamē home: hidden
+  from the menu, still open by URL and ⌘K. Ads settings sit in Settings › Customers.
+- Kept Celsius-only views as tabs on the nearest Gosamē page: Menu status (Food ›
+  Menu), Transfers (Stock › Items), Campaigns (Customers › Messages), Pickup app
+  and Cashier performance (Sales).
+- Kept "Invoice match" (Gosamē says "Supplier statements" at the same URL, but the
+  Celsius page matches invoices to orders) and "Payment requests" (owner-approved
+  17 Nov; Gosamē says Bills › Staff claims).
+- Money gains Overview, Tax & close, Bank statements and Regular bills, which
+  Gosamē lists and Celsius had taken off the menu.
+- Page headings renamed to match: Bank inbox, Supplier orders, Deliveries,
+  Counts, Food cost, Reserve levels, Menu, Profiles, Rewards, Search position,
+  Scoreboard, Checklists.
+
 ## 3. Every page, sorted into its section
 
 Key: **Keep** = becomes a tab · **Merge** = folds into the named page · **Retire** = hide,

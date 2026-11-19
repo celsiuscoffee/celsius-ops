@@ -49,9 +49,9 @@ export default function ScoreboardPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 pt-6 pb-10 md:px-8">
       <Link href="/reviews/geogrid" className="mb-3 inline-flex items-center gap-1 text-sm text-text-2 hover:text-text">
-        <ArrowLeft className="h-4 w-4" /> Local rank
+        <ArrowLeft className="h-4 w-4" /> Search position
       </Link>
-      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Rank scoreboard</h1>
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Scoreboard</h1>
       <p className="mt-0.5 max-w-3xl text-sm text-text-2">
         Is each outlet getting enough new reviews a day to overtake the nearest competitor? When an outlet
         is behind, ask more happy customers to review (in-store QR and after an order).

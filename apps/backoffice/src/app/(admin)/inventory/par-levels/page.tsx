@@ -337,7 +337,7 @@ export default function ParLevelsPage() {
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Par levels</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Reserve levels</h1>
           <p className="mt-0.5 text-sm text-text-2">
             When each item should be reordered, and how much to keep on the shelf.
           </p>

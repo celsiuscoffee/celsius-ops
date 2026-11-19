@@ -65,7 +65,7 @@ export default function StockOverviewPage() {
   return (
     <div className="mx-auto max-w-[1240px] space-y-5 px-4 pt-6 pb-10 md:px-8">
       <div>
-        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Stock</h1>
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Food cost</h1>
         <p className="mt-1.5 text-sm text-text-2">What we hold, what it cost this month, and where it leaks.</p>
       </div>
 
@@ -77,7 +77,7 @@ export default function StockOverviewPage() {
         <KeyNumber href="/inventory/wastage" label="Waste, last 7 days" value={dash ? rm(dash.wasteTotal) : null}
           tone={wastePct !== null && wastePct > 3 ? "warn" : undefined}
           note={wastePct !== null ? <><b className="text-text-2">{wastePct.toFixed(1)}%</b> of {rm(dash?.weeklySpending)} bought in the same 7 days</> : "of the last 7 days' purchases"} />
-        <KeyNumber word href="/inventory/stock-count" label="Stock count, today" value={dash ? (dash.stockCheckDone ? "Done" : "Not yet") : null}
+        <KeyNumber word href="/inventory/stock-count" label="Count, today" value={dash ? (dash.stockCheckDone ? "Done" : "Not yet") : null}
           tone={dash && !dash.stockCheckDone ? "warn" : undefined}
           note={dash ? (dash.stockCheckDone ? "today's count is in" : "no outlet has counted today") : "—"} />
       </div>
@@ -109,7 +109,7 @@ export default function StockOverviewPage() {
         ) : dash.recentOrders.length === 0 ? (
           <div className="flex flex-col items-center gap-2 border-t border-line px-4 py-10 text-center">
             <ClipboardCheck className="size-6 text-text-3" aria-hidden />
-            <p className="text-sm text-text-2">No purchase orders yet. Raise one from Procurement › Purchase Orders.</p>
+            <p className="text-sm text-text-2">No purchase orders yet. Raise one from Orders › Supplier chats.</p>
           </div>
         ) : (
           <ul>

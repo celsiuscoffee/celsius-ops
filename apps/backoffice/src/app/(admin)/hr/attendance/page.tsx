@@ -11,23 +11,21 @@ import { HrPageHeader } from "@/components/hr/page-header";
 import type { AttendanceLog } from "@/lib/hr/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// One review queue for attendance AND overtime.
+// Clock-ins: is each clock-in a true record of the shift?
 //
-// Owner 2026-09-03: "currently when review, the ux is so bad and cannot filter
-// etc. also there is a lot of overlapping." The old page showed the 50 newest
-// flagged rows with an outlet + single-day filter and one-at-a-time buttons;
-// the OT page ran its own queue off the same logs. Here the manager picks a
-// period / outlet / person / flag, sees every log that still needs a decision,
-// ticks a batch and approves it — and approving the day IS the OT approval
-// (the API files the hr_overtime_requests row). The Overtime page is now just
-// the ledger of what was approved plus staff pre-approval requests.
+// Owner 19 Nov 2026: "clockin and overtime seems to overlap ... one is issues,
+// one is to approve ot". This page decides clock-in ISSUES only: late, left
+// early, missed or auto-closed clock-outs, off-site, no GPS. A day whose only
+// finding is overtime does not come here. Confirming a day never pays OT: it
+// sends any OT to the Overtime page, where Ariff or the outlet manager
+// approves it.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type EnrichedLog = AttendanceLog & {
   user_name: string | null;
   user_nickname: string | null;
   outlet_name: string | null;
-  /** Clocked OT (30-min brackets) that approving this log sends to payroll. Null = not applicable (PT / auto-close / already requested). */
+  /** Clocked OT (30-min brackets) beyond the roster. Decided on the Overtime page, not here. */
   ot_tail_hours: number | null;
   /** The tail is longer than any real shift — a missed tap-out. Fix the times before approving. */
   ot_tail_suspicious: boolean;
@@ -99,7 +97,6 @@ const CLOCK_METHOD: Record<string, { label: string; icon: typeof Smartphone; col
 const FLAGS: { key: string; label: string; color: string }[] = [
   { key: "late_arrival", label: "Late", color: "text-warn-text bg-warn-soft" },
   { key: "late_clock_in", label: "Late clock-in", color: "text-warn-text bg-warn-soft" },
-  { key: "overtime_detected", label: "OT", color: "text-info-text bg-info-soft" },
   { key: "early_clock_out", label: "Left early", color: "text-warn-text bg-warn-soft" },
   { key: "no_clock_out", label: "No clock-out", color: "text-danger-text bg-danger-soft" },
   { key: "auto_closed_forgot_clockout", label: "Auto-closed", color: "text-text-2 bg-sunken" },
@@ -165,7 +162,6 @@ export default function AttendanceReviewPage() {
   const [outletId, setOutletId] = useState("");
   const [userId, setUserId] = useState("");
   const [flag, setFlag] = useState("");
-  const [otOnly, setOtOnly] = useState(false);
 
   const { data: scheduleList } = useFetch<{ outlets: { id: string; name: string }[] }>("/api/hr/schedules");
   const outlets = scheduleList?.outlets ?? [];
@@ -180,14 +176,13 @@ export default function AttendanceReviewPage() {
   if (outletId) qs.set("outlet_id", outletId);
   if (userId) qs.set("user_id", userId);
   if (flag) qs.set("flag", flag);
-  if (otOnly) qs.set("has_ot", "1");
   const { data, mutate, isLoading } = useFetch<QueueResponse>(`/api/hr/attendance?${qs.toString()}`);
   const logs = useMemo(() => data?.logs ?? [], [data]);
   const summary = data?.summary;
 
-  const hasFilter = outletId || userId || flag || otOnly || period !== "30d" || review !== "pending";
+  const hasFilter = outletId || userId || flag || period !== "30d" || review !== "pending";
   const clearFilters = () => {
-    setReview("pending"); setPeriod("30d"); setOutletId(""); setUserId(""); setFlag(""); setOtOnly(false);
+    setReview("pending"); setPeriod("30d"); setOutletId(""); setUserId(""); setFlag("");
   };
 
   // ── Selection + actions ──────────────────────────────────────────────────
@@ -201,7 +196,6 @@ export default function AttendanceReviewPage() {
 
   const selectable = useMemo(() => logs.filter((l) => l.final_status == null), [logs]);
   const selectedLogs = useMemo(() => logs.filter((l) => selected.has(l.id)), [logs, selected]);
-  const selectedOt = selectedLogs.reduce((s, l) => s + (l.ot_tail_hours ?? 0), 0);
   const selectedSuspicious = selectedLogs.filter((l) => l.ot_tail_suspicious).length;
 
   const toggle = (id: string) =>
@@ -242,9 +236,9 @@ export default function AttendanceReviewPage() {
     const j = await patch({ id: log.id, action, excuseReason });
     setBusy([log.id], false);
     if (!j) return;
-    const ot = Number(j.otApprovedHours || 0);
+    const ot = Number(j.otFiledHours || 0);
     const msg = action === "reject" ? "Rejected — this day will not be paid" : action === "excuse" ? "Excused" : "Approved";
-    toast.success(ot > 0 ? `${msg} · ${ot}h OT sent to payroll` : msg);
+    toast.success(ot > 0 ? `${msg} · ${ot}h OT sent to Overtime for approval` : msg);
     setSelected((prev) => { const n = new Set(prev); n.delete(log.id); return n; });
     mutate();
   };
@@ -258,13 +252,13 @@ export default function AttendanceReviewPage() {
     if (!j) return;
     const done = Number(j.done || 0);
     const failed = Number(j.failed || 0);
-    const ot = Number(j.otApprovedHours || 0);
+    const ot = Number(j.otFiledHours || 0);
     const verb = action === "reject" ? "Rejected" : action === "excuse" ? "Excused" : "Approved";
     if (failed > 0) {
       const errs = (j.results as { ok: boolean; error?: string }[] | undefined)?.filter((r) => !r.ok).map((r) => r.error) ?? [];
       toast.error(`${verb} ${done}, ${failed} failed: ${Array.from(new Set(errs)).join("; ")}`);
     } else {
-      toast.success(ot > 0 ? `${verb} ${done} log${done === 1 ? "" : "s"} · ${ot}h OT sent to payroll` : `${verb} ${done} log${done === 1 ? "" : "s"}`);
+      toast.success(ot > 0 ? `${verb} ${done} log${done === 1 ? "" : "s"} · ${ot}h OT sent to Overtime for approval` : `${verb} ${done} log${done === 1 ? "" : "s"}`);
     }
     setSelected(new Set());
     mutate();
@@ -276,10 +270,8 @@ export default function AttendanceReviewPage() {
   const bulkApprove = async () => {
     const ok = await confirm({
       title: `Approve ${selectedLogs.length} log${selectedLogs.length === 1 ? "" : "s"}?`,
-      description: selectedOt > 0
-        ? `${selectedOt}h of overtime beyond the roster goes to payroll with this approval. Lateness penalties still apply as calculated.`
-        : "Lateness penalties still apply as calculated.",
-      confirmLabel: selectedOt > 0 ? `Approve + ${selectedOt}h OT` : "Approve",
+      description: "Lateness penalties still apply as calculated. Any overtime goes to the Overtime page for approval.",
+      confirmLabel: "Approve",
     });
     if (ok) await reviewMany("acknowledge");
   };
@@ -318,8 +310,8 @@ export default function AttendanceReviewPage() {
     const j = await patch({ id: editing.id, action: "set_times", clockIn: fromMytInput(editing.ci), clockOut });
     setBusy([editing.id], false);
     if (!j) return;
-    const ot = Number(j.otApprovedHours || 0);
-    toast.success(ot > 0 ? `Times updated · ${ot}h OT sent to payroll` : "Times updated");
+    const ot = Number(j.otFiledHours || 0);
+    toast.success(ot > 0 ? `Times updated · ${ot}h OT sent to Overtime for approval` : "Times updated");
     setEditing(null);
     mutate();
   };
@@ -336,10 +328,9 @@ export default function AttendanceReviewPage() {
     return Array.from(m.entries());
   }, [logs]);
 
-  const description = "Every clock-in checked before it reaches payroll: late, missed clock-outs and overtime. " + (summary
+  const description = "Clock-ins with a problem to settle: late, left early, missed clock-outs, off-site. Overtime is approved on Overtime. " + (summary
     ? review === "pending"
       ? `${summary.pending} log${summary.pending === 1 ? "" : "s"} waiting for a decision` +
-        (summary.pendingOtHours > 0 ? ` · ${summary.pendingOtHours}h OT to approve` : "") +
         (summary.suspicious > 0 ? ` · ${summary.suspicious} missed clock-out${summary.suspicious === 1 ? "" : "s"} to fix` : "")
       : `${logs.length} log${logs.length === 1 ? "" : "s"}` + (summary.pending > 0 ? ` · ${summary.pending} still need review in this period` : "")
     : "Loading…");
@@ -395,10 +386,6 @@ export default function AttendanceReviewPage() {
           <option value="">Any flag</option>
           {FLAGS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
         </select>
-        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-sm">
-          <input type="checkbox" checked={otOnly} onChange={(e) => setOtOnly(e.target.checked)} className="accent-ink" />
-          With OT
-        </label>
         {hasFilter && (
           <button onClick={clearFilters} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm text-text-2 hover:bg-sunken">
             <X className="h-3.5 w-3.5" /> Reset
@@ -421,18 +408,18 @@ export default function AttendanceReviewPage() {
               className="h-4 w-4 accent-ink"
             />
             {selected.size > 0
-              ? <span className="font-medium">{selected.size} selected{selectedOt > 0 ? ` · ${selectedOt}h OT` : ""}</span>
+              ? <span className="font-medium">{selected.size} selected</span>
               : <span className="text-text-3">Select all {selectable.length} on this page</span>}
           </label>
           {selectedSuspicious > 0 && (
             <span className="inline-flex items-center gap-1 text-xs text-danger-text">
-              <AlertTriangle className="h-3.5 w-3.5" /> {selectedSuspicious} with a missed clock-out — approving pays no OT for those until the times are fixed
+              <AlertTriangle className="h-3.5 w-3.5" /> {selectedSuspicious} with a clock-out that looks wrong — fix the times first
             </span>
           )}
           {selected.size > 0 && (
             <div className="ml-auto flex flex-wrap gap-2">
               <button onClick={bulkApprove} className="inline-flex items-center gap-1 rounded-lg bg-ok px-3 py-1.5 text-xs font-medium text-white hover:bg-ok">
-                <CheckCircle2 className="h-3.5 w-3.5" /> {selectedOt > 0 ? `Approve + ${selectedOt}h OT` : "Approve"}
+                <CheckCircle2 className="h-3.5 w-3.5" /> Approve
               </button>
               <button onClick={bulkExcuse} className="rounded-lg bg-info px-3 py-1.5 text-xs font-medium text-white hover:bg-info">Excuse</button>
               <button onClick={bulkReject} className="rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white hover:bg-danger">Reject</button>
@@ -457,7 +444,6 @@ export default function AttendanceReviewPage() {
         <div className="space-y-5">
           {groups.map(([day, dayLogs]) => {
             const dayPending = dayLogs.filter((l) => l.final_status == null);
-            const dayOt = dayPending.reduce((s, l) => s + (l.ot_tail_hours ?? 0), 0);
             return (
               <section key={day}>
                 <div className="mb-1.5 flex items-baseline gap-2 px-1">
@@ -465,7 +451,6 @@ export default function AttendanceReviewPage() {
                   <span className="text-xs text-text-3">
                     {dayLogs.length} log{dayLogs.length === 1 ? "" : "s"}
                     {dayPending.length > 0 && review !== "pending" ? ` · ${dayPending.length} to review` : ""}
-                    {dayOt > 0 ? ` · ${dayOt}h OT` : ""}
                   </span>
                 </div>
                 <div className="divide-y rounded-xl border bg-card">
@@ -473,7 +458,6 @@ export default function AttendanceReviewPage() {
                     const busy = busyIds.has(log.id);
                     const pending = log.final_status == null;
                     const open = expanded.has(log.id);
-                    const ot = log.ot_tail_hours ?? 0;
                     return (
                       <div key={log.id} className={`px-3 py-2.5 ${selected.has(log.id) ? "bg-warn-soft" : ""}`}>
                         <div className="flex items-start gap-3">
@@ -532,16 +516,11 @@ export default function AttendanceReviewPage() {
                                     : <span className="text-ok-text"> · on time</span>
                               )}
                             </p>
-                            {/* OT line — the thing approval decides */}
-                            {log.ot_tail_suspicious ? (
+                            {log.ot_tail_suspicious && (
                               <p className="mt-0.5 inline-flex items-center gap-1 text-sm font-medium text-danger-text">
-                                <AlertTriangle className="h-3.5 w-3.5" /> Clock-out looks wrong (a whole day past the roster) — fix the times before approving, or no OT is paid
+                                <AlertTriangle className="h-3.5 w-3.5" /> Clock-out looks wrong (a whole day past the roster) — fix the times
                               </p>
-                            ) : ot >= 0.5 && pending ? (
-                              <p className="mt-0.5 text-sm font-medium text-info-text">+{ot}h OT beyond roster — approving pays it</p>
-                            ) : (log.overtime_hours ?? 0) > 0 && log.ot_approval_id ? (
-                              <p className="mt-0.5 text-xs text-ok-text">{log.overtime_hours}h OT approved · in payroll</p>
-                            ) : null}
+                            )}
                             {log.excused && log.excused_reason && (
                               <p className="mt-0.5 text-xs text-text-3">Excused: {log.excused_reason}</p>
                             )}
@@ -554,11 +533,11 @@ export default function AttendanceReviewPage() {
                                 <button
                                   onClick={() => reviewOne(log, "acknowledge")}
                                   disabled={busy}
-                                  title={ot >= 0.5 ? `Approve the day AND its ${ot}h OT for payroll. Lateness penalty still applies as calculated.` : "Approve the day — lateness penalty applies as calculated"}
+                                  title="The clock-in is right. Lateness penalty applies as calculated; any OT goes to Overtime for approval."
                                   className="inline-flex items-center gap-1 rounded-lg bg-ok px-2.5 py-1.5 text-xs font-medium text-white hover:bg-ok disabled:opacity-50"
                                 >
                                   {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                                  {ot >= 0.5 && !log.ot_tail_suspicious ? `Approve + ${ot}h OT` : "Approve"}
+                                  Approve
                                 </button>
                                 <button
                                   onClick={async () => { const r = await askExcuse(); if (r !== null) reviewOne(log, "excuse", r || undefined); }}
@@ -653,7 +632,7 @@ export default function AttendanceReviewPage() {
                                   <button onClick={() => setEditing(null)} disabled={busy} className="rounded-lg border border-line-2 bg-surface px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-sunken disabled:opacity-50">
                                     Cancel
                                   </button>
-                                  <span className="text-[11px] text-text-3">Hours recompute automatically. Any OT in the new times is approved. Times are Malaysia time.</span>
+                                  <span className="text-[11px] text-text-3">Hours recompute automatically. Any OT in the new times goes to Overtime for approval. Times are Malaysia time.</span>
                                 </div>
                               </div>
                             )}

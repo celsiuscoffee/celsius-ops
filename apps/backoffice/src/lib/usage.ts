@@ -47,7 +47,7 @@ export function pageOf(path: string): string {
   return clean.split("/").map((seg) => (seg && ID_SEGMENT.test(seg) ? ":id" : seg)).join("/");
 }
 
-/** The menu's name for a page, with where it sits ("Procurement › Invoices"). */
+/** The menu's name for a page, with where it sits ("Orders › Invoices"). */
 export function pageLabel(page: string): { label: string; where: string } {
   const e = entries().find((x) => x.href === page);
   return e ? { label: e.label, where: e.where } : { label: page, where: "Off the menu" };

@@ -43,7 +43,7 @@ export default function ActiveVouchersPage() {
 
   return (
     <div className="px-4 pt-6 pb-10 md:px-8">
-      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Vouchers</h1>
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Rewards</h1>
       <p className="mt-0.5 text-sm text-text-2">Vouchers handed to customers by missions, birthdays, referrals and grants: are they being used?</p>
       <p className="mt-1 text-[12px] text-text-3">Points spent in the points shop are under Redemptions.</p>
 
