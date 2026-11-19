@@ -174,7 +174,6 @@ export default async function HomePage() {
       }}
       initialChecklists={checklistData}
       initialDashboard={dashboardData}
-      showQuickActions={canSeeInventory}
       managerData={managerData}
     />
   );

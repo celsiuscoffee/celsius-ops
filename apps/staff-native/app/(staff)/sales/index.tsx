@@ -14,11 +14,8 @@ import { fetchSalesDashboard, type Mode, type SalesDashboard } from "@/lib/sales
 import { AccumChart } from "@/components/sales/AccumChart";
 import { RangeSheet } from "@/components/sales/RangeSheet";
 import { OutletSheet } from "@/components/sales/OutletSheet";
+import { useCelsius, type ColorName } from "@/lib/celsius-ui";
 
-const CREAM = "#F5F3F0";
-const ESPRESSO = "#160800";
-const CARD = "#26130699";
-const ELEV = "#2a1508";
 
 function mytToday(): string { return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().split("T")[0]; }
 function addDays(s: string, n: number): string {
@@ -38,9 +35,10 @@ function rmDeltaStr(cur: number, prev: number): string {
 }
 
 const PAY_ICON: Record<string, any> = { cash: Banknote, card: CreditCard, duitnow_qr: QrCode, tng: Smartphone, grabpay: Bike, shopeepay: ShoppingBag, fpx: Landmark, wallet: Wallet };
-const PAY_COLOR: Record<string, string> = { cash: "#34d399", card: "#8FB3F0", duitnow_qr: "#FBBF24", tng: "#a78bfa", grabpay: "#34d399", shopeepay: "#fb923c", fpx: "#60a5fa", wallet: "#a78bfa" };
+// Series identity only (chart tokens c1–c6), the same in every card.
+const PAY_COLOR: Record<string, ColorName> = { cash: "c3", card: "c2", duitnow_qr: "c4", tng: "c5", grabpay: "c6", shopeepay: "c1", fpx: "c2", wallet: "c5" };
 const CHAN_ICON: Record<string, any> = { dine_in: Utensils, takeaway: ShoppingBag, pickup: Package, delivery: Bike };
-const CHAN_COLOR: Record<string, string> = { dine_in: "#E0875F", takeaway: "#FBBF24", pickup: "#a78bfa", delivery: "#34d399" };
+const CHAN_COLOR: Record<string, ColorName> = { dine_in: "c1", takeaway: "c4", pickup: "c5", delivery: "c3" };
 const ROUND_ICON: Record<string, any> = { breakfast: Sunrise, brunch: Coffee, lunch: Sandwich, midday: Sun, evening: Sunset, dinner: UtensilsCrossed, supper: Moon };
 
 const TABS: { key: Mode; label: string }[] = [
@@ -48,6 +46,7 @@ const TABS: { key: Mode; label: string }[] = [
 ];
 
 export default function SalesScreen() {
+  const C = useCelsius().color;
   const session = useStaff((s) => s.session);
   const canView = hasAccess(session?.role, session?.moduleAccess, "sales");
   const router = useRouter();
@@ -118,9 +117,9 @@ export default function SalesScreen() {
 
   if (!canView) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-[#160800] px-8">
-        <BarChart3 color="#F5F3F066" size={34} />
-        <Text className="mt-3 text-center font-body text-sm text-[#F5F3F08a]">You don&apos;t have access to Sales. Ask an admin to enable it.</Text>
+      <SafeAreaView className="flex-1 items-center justify-center bg-bg px-8">
+        <BarChart3 color={C["text-3"]} size={34} />
+        <Text className="mt-3 text-center font-body text-sm text-text-2">You don&apos;t have access to Sales. Ask an admin to enable it.</Text>
       </SafeAreaView>
     );
   }
@@ -133,43 +132,43 @@ export default function SalesScreen() {
   const maxRound = data?.rounds?.length ? Math.max(1, ...data.rounds.map((r) => r.revenue)) : 1;
 
   return (
-    <SafeAreaView className="flex-1 bg-[#160800]" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-bg" edges={["top", "left", "right"]}>
       {/* Fixed header, pinned at top while the content below scrolls */}
       <View className="px-4 pt-3">
         <View className="flex-row items-center gap-3 pb-4">
-          <View className="h-9 w-9 items-center justify-center rounded-xl bg-[#A2492C]">
-            <Text className="font-display text-base text-[#F5F3F0]">°C</Text>
+          <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand">
+            <Text className="font-display text-base text-on-brand">°C</Text>
           </View>
           <View className="flex-1">
             {isAdmin ? (
-              <Pressable onPress={() => setOutletSheet(true)} hitSlop={8} className="flex-row items-center gap-1.5 self-start">
-                <Text className="font-display text-2xl text-[#F5F3F0]">{data?.outletName ?? "Sales"}</Text>
-                <ChevronDown color="#F5F3F08a" size={18} />
+              <Pressable onPress={() => setOutletSheet(true)} hitSlop={8} className="min-h-11 flex-row items-center gap-1.5 self-start">
+                <Text className="font-display text-2xl text-text">{data?.outletName ?? "Sales"}</Text>
+                <ChevronDown color={C["text-2"]} size={18} />
               </Pressable>
             ) : (
-              <Text className="font-display text-2xl text-[#F5F3F0]">{data?.outletName ?? "Sales"}</Text>
+              <Text className="font-display text-2xl text-text">{data?.outletName ?? "Sales"}</Text>
             )}
-            <Text className="font-body text-sm text-[#F5F3F08a]">Live · POS + Pickup</Text>
+            <Text className="font-body text-sm text-text-2">Live · till and pickup app</Text>
           </View>
           {isAdmin ? (
             <Pressable
               onPress={() => router.push("/(staff)/profile")}
               hitSlop={10}
               accessibilityLabel="Settings"
-              className="h-9 w-9 items-center justify-center rounded-xl border border-[#F5F3F01a] bg-[#2a1508] active:opacity-80"
+              className="h-11 w-11 items-center justify-center rounded-full border border-line bg-surface active:bg-sunken"
             >
-              <Settings color="#F5F3F0" size={18} />
+              <Settings color={C.text} size={18} />
             </Pressable>
           ) : null}
         </View>
 
         {/* Period tabs */}
-        <View className="mb-4 flex-row gap-1.5 rounded-2xl border border-[#F5F3F01a] bg-[#2a1508] p-1.5">
+        <View accessibilityRole="tablist" className="mb-4 flex-row gap-1 rounded-xl bg-sunken p-1">
           {TABS.map((t) => {
             const on = mode === t.key;
             return (
-              <Pressable key={t.key} onPress={() => pressTab(t.key)} className={`flex-1 items-center rounded-xl py-2.5 ${on ? "bg-[#A2492C]" : ""}`}>
-                <Text className={`text-xs ${on ? "font-body-bold text-[#F5F3F0]" : "font-body-semi text-[#F5F3F08a]"}`}>{t.label}</Text>
+              <Pressable key={t.key} onPress={() => pressTab(t.key)} accessibilityRole="tab" accessibilityState={{ selected: on }} className={`h-11 flex-1 items-center justify-center rounded-lg ${on ? "bg-ink" : ""}`}>
+                <Text className={`text-sm ${on ? "font-body-semi text-on-ink" : "font-body-medium text-text-2"}`}>{t.label}</Text>
               </Pressable>
             );
           })}
@@ -184,7 +183,7 @@ export default function SalesScreen() {
             full-page spinner below instead. */}
         {(isFetching && !isLoading) || refreshing ? (
           <View className="mb-3 -mt-1 items-center">
-            <ActivityIndicator size="small" color="#FBBF24" />
+            <ActivityIndicator size="small" color={C["text-3"]} />
           </View>
         ) : null}
       </View>
@@ -212,38 +211,38 @@ export default function SalesScreen() {
             // inside the content instead (the 50e161f cream pull-well): content
             // layers ABOVE the native spinner, so it covers the spinner and
             // shows as a bare cream slab under the tabs while refreshing.
-            tintColor="#F5F3F0"
-            colors={["#A2492C"]}
-            progressBackgroundColor="#F5F1EA"
+            tintColor={C["text-3"]}
+            colors={[C["text-2"]]}
+            progressBackgroundColor={C.raised}
           />
         }
       >
         {isLoading ? (
-          <View className="items-center justify-center py-24"><ActivityIndicator color="#FBBF24" /></View>
+          <View className="items-center justify-center py-24"><ActivityIndicator color={C["text-3"]} /></View>
         ) : error ? (
-          <View className="rounded-2xl border border-[#F5F3F01a] bg-[#2a1508] p-5"><Text className="font-body text-sm text-[#f87171]">{error}</Text></View>
+          <View className="rounded-2xl border border-line bg-surface p-5"><Text className="font-body text-sm text-danger-text">{error}</Text></View>
         ) : data && !data.onPos ? (
           <View className="items-center px-8 py-24">
-            <View className="h-16 w-16 items-center justify-center rounded-3xl bg-[#2a1508]">
-              <Store color="#E0875F" size={28} />
+            <View className="h-16 w-16 items-center justify-center rounded-2xl bg-surface">
+              <Store color={C["text-3"]} size={28} />
             </View>
-            <Text className="mt-4 font-display text-lg text-[#F5F3F0]">Not on POS yet</Text>
-            <Text className="mt-2 text-center font-body text-sm leading-5 text-[#F5F3F08a]">
+            <Text className="mt-4 font-display text-lg text-text">Not on POS yet</Text>
+            <Text className="mt-2 text-center font-body text-sm leading-5 text-text-2">
               {data.outletName} isn't connected to the POS, so there's no sales data to show here yet.
             </Text>
           </View>
         ) : data && s && g ? (
           <View className="gap-3.5">
             {/* Hero */}
-            <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
-              <Text className="font-body text-sm text-[#F5F3F08a]">Net sales · {data.cur.label.toLowerCase()}</Text>
-              <Text className="mt-1 font-display text-4xl text-[#F5F3F0]">{rmF(s.revenue)}</Text>
-              <View className={`mt-2 flex-row items-center gap-1 self-start rounded-full px-2.5 py-1 ${deltaUp(s.revenueDelta) ? "bg-[#34d39920]" : "bg-[#f8717120]"}`}>
-                {deltaUp(s.revenueDelta) ? <TrendingUp color="#34d399" size={13} /> : <TrendingDown color="#f87171" size={13} />}
-                <Text className={`font-body-bold text-xs ${deltaUp(s.revenueDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{rmDeltaStr(s.revenue, s.prevRevenue)} · {deltaStr(s.revenueDelta)}</Text>
-                <Text className="font-body text-xs text-[#F5F3F08a]"> vs {data.prev.label.toLowerCase()}</Text>
+            <View className="rounded-2xl border border-line bg-surface p-5">
+              <Text className="font-body text-sm text-text-2">Net sales · {data.cur.label.toLowerCase()}</Text>
+              <Text className="mt-1 font-display text-4xl text-text" style={{ fontVariant: ["tabular-nums"] }}>{rmF(s.revenue)}</Text>
+              <View className={`mt-2 flex-row items-center gap-1 self-start rounded-full px-2.5 py-1 ${deltaUp(s.revenueDelta) ? "bg-ok-soft" : "bg-danger-soft"}`}>
+                {deltaUp(s.revenueDelta) ? <TrendingUp color={C["ok-text"]} size={14} /> : <TrendingDown color={C["danger-text"]} size={14} />}
+                <Text className={`font-body-bold text-xs ${deltaUp(s.revenueDelta) ? "text-ok-text" : "text-danger-text"}`}>{rmDeltaStr(s.revenue, s.prevRevenue)} · {deltaStr(s.revenueDelta)}</Text>
+                <Text className="font-body text-xs text-text-2"> vs {data.prev.label.toLowerCase()}</Text>
               </View>
-              <View className="mt-4 flex-row gap-3 border-t border-[#F5F3F00f] pt-4">
+              <View className="mt-4 flex-row gap-3 border-t border-line pt-4">
                 <Stat v={numF(s.orders)} k="Orders" />
                 <Stat v={rmF(s.aov)} k="Avg order" />
                 <Stat v={`${g.appSharePct}%`} k="Via app" />
@@ -251,58 +250,58 @@ export default function SalesScreen() {
             </View>
 
             {/* Comparison chart */}
-            <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
-              <Text className="font-display text-base text-[#F5F3F0]">Total Accumulative Sales <Text className="font-body text-[#F5F3F057]">(RM)</Text></Text>
-              <Text className="mb-2 mt-0.5 font-body text-[13px] text-[#F5F3F08a]">{data.cur.label} vs {data.prev.label} · running total</Text>
+            <View className="rounded-2xl border border-line bg-surface p-5">
+              <Text className="font-display text-base text-text">Running total <Text className="font-body text-text-3">(RM)</Text></Text>
+              <Text className="mb-2 mt-0.5 font-body text-sm text-text-2">{data.cur.label} vs {data.prev.label}</Text>
               <AccumChart series={data.series ?? []} curLabel={data.cur.label} prevLabel={data.prev.label} />
               <View className="mt-3 flex-row justify-center gap-4">
-                <Legend color="#FBBF24" label={data.cur.label} />
-                <Legend color="#8FB3F0" label={data.prev.label} />
+                <Legend color={C.c1} label={data.cur.label} />
+                <Legend color={C.c2} label={data.prev.label} />
               </View>
             </View>
 
             {/* Growth */}
-            <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
-              <Text className="font-display text-base text-[#F5F3F0]">Growth</Text>
-              <Text className="mt-0.5 font-body text-[13px] text-[#F5F3F08a]">New this period</Text>
+            <View className="rounded-2xl border border-line bg-surface p-5">
+              <Text className="font-display text-base text-text">Growth</Text>
+              <Text className="mt-0.5 font-body text-sm text-text-2">New this period</Text>
               <View className="mt-3 flex-row gap-3">
-                <Tile icon={UserPlus} color="#34d399" v={numF(g.newCustomers)} k="New customers" delta={g.newCustomersDelta} />
-                <Tile icon={Smartphone} color="#8FB3F0" v={numF(g.newAppCustomers)} k="New app customers" delta={g.newAppDelta} />
+                <Tile icon={UserPlus} color={C.c3} v={numF(g.newCustomers)} k="New customers" delta={g.newCustomersDelta} />
+                <Tile icon={Smartphone} color={C.c2} v={numF(g.newAppCustomers)} k="New app customers" delta={g.newAppDelta} />
               </View>
-              <View className="mt-3.5 border-t border-[#F5F3F00f] pt-3.5">
+              <View className="mt-3.5 border-t border-line pt-3.5">
                 <View className="flex-row items-center justify-between">
                   <View>
-                    <Text className="font-body-semi text-xs text-[#F5F3F08a]">Orders via app</Text>
-                    <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.appOrders)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {g.appSharePct}% of all</Text></Text>
+                    <Text className="font-body-semi text-xs text-text-2">Orders via app</Text>
+                    <Text className="mt-0.5 font-display text-lg text-text">{numF(g.appOrders)}<Text className="font-body text-sm text-text-2"> · {g.appSharePct}% of all</Text></Text>
                   </View>
-                  <Text className={`font-body-bold text-[13px] ${deltaUp(g.appOrdersDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.appOrdersDelta)}</Text>
+                  <Text className={`font-body-bold text-sm ${deltaUp(g.appOrdersDelta) ? "text-ok-text" : "text-danger-text"}`}>{deltaStr(g.appOrdersDelta)}</Text>
                 </View>
                 <View className="mt-2.5 flex-row gap-2">
                   <ChannelChip label="Native" v={g.appOrdersNative} />
                   <ChannelChip label="Web" v={g.appOrdersWeb} />
                 </View>
               </View>
-              <View className="mt-3.5 border-t border-[#F5F3F00f] pt-3.5">
+              <View className="mt-3.5 border-t border-line pt-3.5">
                 <View className="flex-row items-center justify-between">
                   <View>
-                    <Text className="font-body-semi text-xs text-[#F5F3F08a]">Collection rate</Text>
-                    <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{g.collectionRatePct}%<Text className="font-body text-[13px] text-[#F5F3F08a]"> · {numF(g.capturedOrders)} with phone</Text></Text>
+                    <Text className="font-body-semi text-xs text-text-2">Collection rate</Text>
+                    <Text className="mt-0.5 font-display text-lg text-text">{g.collectionRatePct}%<Text className="font-body text-sm text-text-2"> · {numF(g.capturedOrders)} with phone</Text></Text>
                   </View>
-                  <Text className={`font-body-bold text-[13px] ${g.collectionDeltaPts >= 0 ? "text-[#34d399]" : "text-[#f87171]"}`}>{g.collectionDeltaPts >= 0 ? "+" : ""}{g.collectionDeltaPts}%</Text>
+                  <Text className={`font-body-bold text-sm ${g.collectionDeltaPts >= 0 ? "text-ok-text" : "text-danger-text"}`}>{g.collectionDeltaPts >= 0 ? "+" : ""}{g.collectionDeltaPts}%</Text>
                 </View>
                 <View className="mt-2.5 flex-row gap-2">
-                  <ChannelChip label="In-store" v={g.collectionRatePos} suffix="%" sub={`${numF(g.capturedPos)} w/ phone`} />
-                  <ChannelChip label="Native" v={g.collectionRateNative} suffix="%" sub={`${numF(g.capturedNative)} w/ phone`} />
-                  <ChannelChip label="Web" v={g.collectionRateWeb} suffix="%" sub={`${numF(g.capturedWeb)} w/ phone`} />
+                  <ChannelChip label="In-store" v={g.collectionRatePos} suffix="%" sub={`${numF(g.capturedPos)} with phone`} />
+                  <ChannelChip label="Native" v={g.collectionRateNative} suffix="%" sub={`${numF(g.capturedNative)} with phone`} />
+                  <ChannelChip label="Web" v={g.collectionRateWeb} suffix="%" sub={`${numF(g.capturedWeb)} with phone`} />
                 </View>
               </View>
-              <View className="mt-3.5 border-t border-[#F5F3F00f] pt-3.5">
+              <View className="mt-3.5 border-t border-line pt-3.5">
                 <View className="flex-row items-center justify-between">
                   <View>
-                    <Text className="font-body-semi text-xs text-[#F5F3F08a]">Pair adds</Text>
-                    <Text className="mt-0.5 font-display text-lg text-[#F5F3F0]">{numF(g.pairAdds)}<Text className="font-body text-[13px] text-[#F5F3F08a]"> · upsells purchased</Text></Text>
+                    <Text className="font-body-semi text-xs text-text-2">Pair adds</Text>
+                    <Text className="mt-0.5 font-display text-lg text-text">{numF(g.pairAdds)}<Text className="font-body text-sm text-text-2"> · upsells purchased</Text></Text>
                   </View>
-                  <Text className={`font-body-bold text-[13px] ${deltaUp(g.pairAddsDelta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(g.pairAddsDelta)}</Text>
+                  <Text className={`font-body-bold text-sm ${deltaUp(g.pairAddsDelta) ? "text-ok-text" : "text-danger-text"}`}>{deltaStr(g.pairAddsDelta)}</Text>
                 </View>
                 <View className="mt-2.5 flex-row gap-2">
                   <ChannelChip label="In-store" v={g.pairInstore} />
@@ -313,33 +312,33 @@ export default function SalesScreen() {
             </View>
 
             {/* Payment methods */}
-            <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
-              <Text className="font-display text-base text-[#F5F3F0]">Payment methods</Text>
-              <Text className="mb-1 mt-0.5 font-body text-[13px] text-[#F5F3F08a]">How customers paid</Text>
-              {(data.payments?.length ?? 0) === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No payments in this period.</Text> :
+            <View className="rounded-2xl border border-line bg-surface p-5">
+              <Text className="font-display text-base text-text">Payment methods</Text>
+              <Text className="mb-1 mt-0.5 font-body text-sm text-text-2">How customers paid</Text>
+              {(data.payments?.length ?? 0) === 0 ? <Text className="py-3 font-body text-xs text-text-3">No payments in this period.</Text> :
                 data.payments.map((p) => (
-                  <Row key={p.key} icon={PAY_ICON[p.key] ?? Wallet} color={PAY_COLOR[p.key] ?? "#a78bfa"} name={p.label} pct={p.pct} amount={rmF(p.amount)} />
+                  <Row key={p.key} icon={PAY_ICON[p.key] ?? Wallet} color={C[PAY_COLOR[p.key] ?? "other"]} name={p.label} pct={p.pct} amount={rmF(p.amount)} />
                 ))}
             </View>
 
             {/* Channels / Dayparts */}
-            <View className="rounded-3xl border border-[#F5F3F01a] bg-[#2a1508] p-5">
-              <Text className="font-display text-base text-[#F5F3F0]">Sales breakdown</Text>
-              <View className="mb-1 mt-3 flex-row gap-1.5 rounded-xl border border-[#F5F3F01a] bg-[#160800] p-1">
+            <View className="rounded-2xl border border-line bg-surface p-5">
+              <Text className="font-display text-base text-text">Sales breakdown</Text>
+              <View accessibilityRole="tablist" className="mb-1 mt-3 flex-row gap-1 rounded-xl bg-sunken p-1">
                 {(["channel", "round"] as const).map((d) => (
-                  <Pressable key={d} onPress={() => setDim(d)} className={`flex-1 items-center rounded-lg py-2 ${dim === d ? "bg-[#A2492C40]" : ""}`}>
-                    <Text className={`text-xs ${dim === d ? "font-body-bold text-[#F5F3F0]" : "font-body-semi text-[#F5F3F08a]"}`}>{d === "channel" ? "Channels" : "Rounds"}</Text>
+                  <Pressable key={d} onPress={() => setDim(d)} accessibilityRole="tab" accessibilityState={{ selected: dim === d }} className={`h-11 flex-1 items-center justify-center rounded-lg ${dim === d ? "border border-line bg-surface" : ""}`}>
+                    <Text className={`text-sm ${dim === d ? "font-body-semi text-text" : "font-body-medium text-text-2"}`}>{d === "channel" ? "Channels" : "Rounds"}</Text>
                   </Pressable>
                 ))}
               </View>
               {dim === "channel"
-                ? ((data.channels?.length ?? 0) === 0 ? <Text className="py-3 font-body text-xs text-[#F5F3F057]">No sales in this period.</Text> :
-                    data.channels.map((c) => <Row key={c.key} icon={CHAN_ICON[c.key] ?? Utensils} color={CHAN_COLOR[c.key] ?? "#E0875F"} name={c.label} pct={c.pct} amount={rmF(c.revenue)} orders={c.orders} />))
-                : (data.rounds ?? []).map((r) => <Row key={r.key} icon={ROUND_ICON[r.key] ?? Coffee} color="#FBBF24" name={r.label} pct={Math.round((r.revenue / maxRound) * 100)} amount={rmF(r.revenue)} orders={r.orders} />)}
+                ? ((data.channels?.length ?? 0) === 0 ? <Text className="py-3 font-body text-xs text-text-3">No sales in this period.</Text> :
+                    data.channels.map((c) => <Row key={c.key} icon={CHAN_ICON[c.key] ?? Utensils} color={C[CHAN_COLOR[c.key] ?? "other"]} name={c.label} pct={c.pct} amount={rmF(c.revenue)} orders={c.orders} />))
+                : (data.rounds ?? []).map((r) => <Row key={r.key} icon={ROUND_ICON[r.key] ?? Coffee} color={C.c1} name={r.label} pct={Math.round((r.revenue / maxRound) * 100)} amount={rmF(r.revenue)} orders={r.orders} />)}
             </View>
 
             {data.warnings?.length ? (
-              <Text className="px-1 font-body text-[11px] text-[#F5F3F040]">{data.warnings.join(" · ")}</Text>
+              <Text className="px-1 font-body text-xs text-text-3">{data.warnings.join(" · ")}</Text>
             ) : null}
           </View>
         ) : null}
@@ -360,8 +359,8 @@ export default function SalesScreen() {
 function Stat({ v, k }: { v: string; k: string }) {
   return (
     <View className="flex-1">
-      <Text className="font-display text-lg text-[#F5F3F0]">{v}</Text>
-      <Text className="mt-0.5 font-body-semi text-[11px] uppercase tracking-wide text-[#F5F3F08a]">{k}</Text>
+      <Text className="font-display text-lg text-text">{v}</Text>
+      <Text className="mt-0.5 font-body text-xs text-text-2">{k}</Text>
     </View>
   );
 }
@@ -369,42 +368,42 @@ function Legend({ color, label }: { color: string; label: string }) {
   return (
     <View className="flex-row items-center gap-1.5">
       <View className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
-      <Text className="font-body-semi text-[13px] text-[#F5F3F08a]">{label}</Text>
+      <Text className="font-body-semi text-sm text-text-2">{label}</Text>
     </View>
   );
 }
 function Tile({ icon: Icon, color, v, k, delta }: { icon: any; color: string; v: string; k: string; delta: number | null }) {
   return (
-    <View className="flex-1 rounded-2xl border border-[#F5F3F01a] bg-[#160800] p-3.5">
-      <View className="mb-2.5 h-8 w-8 items-center justify-center rounded-xl bg-[#F5F3F00f]"><Icon color={color} size={17} /></View>
-      <Text className="font-display text-2xl text-[#F5F3F0]">{v}</Text>
-      <Text className="mt-1 font-body text-[13px] text-[#F5F3F08a]">{k}</Text>
-      <Text className={`mt-1.5 font-body-bold text-[13px] ${deltaUp(delta) ? "text-[#34d399]" : "text-[#f87171]"}`}>{deltaStr(delta)}</Text>
+    <View className="flex-1 rounded-xl bg-sunken p-3.5">
+      <View className="mb-2.5 h-8 w-8 items-center justify-center rounded-lg bg-surface"><Icon color={color} size={17} /></View>
+      <Text className="font-display text-2xl text-text">{v}</Text>
+      <Text className="mt-1 font-body text-sm text-text-2">{k}</Text>
+      <Text className={`mt-1.5 font-body-bold text-sm ${deltaUp(delta) ? "text-ok-text" : "text-danger-text"}`}>{deltaStr(delta)}</Text>
     </View>
   );
 }
 function ChannelChip({ label, v, suffix = "", sub }: { label: string; v: number; suffix?: string; sub?: string }) {
   return (
-    <View className="flex-1 rounded-xl border border-[#F5F3F01a] bg-[#160800] px-3 py-2">
-      <Text className="font-display text-base text-[#F5F3F0]">{numF(v)}{suffix}</Text>
-      {sub ? <Text className="font-body text-[11px] text-[#F5F3F057]">{sub}</Text> : null}
-      <Text className="mt-0.5 font-body-semi text-[11px] uppercase tracking-wide text-[#F5F3F08a]">{label}</Text>
+    <View className="flex-1 rounded-xl bg-sunken px-3 py-2">
+      <Text className="font-display text-base text-text">{numF(v)}{suffix}</Text>
+      {sub ? <Text className="font-body text-xs text-text-3">{sub}</Text> : null}
+      <Text className="mt-0.5 font-body text-xs text-text-2">{label}</Text>
     </View>
   );
 }
 function Row({ icon: Icon, color, name, pct, amount, orders }: { icon: any; color: string; name: string; pct: number; amount: string; orders?: number }) {
   return (
-    <View className="flex-row items-center gap-3 border-b border-[#F5F3F00f] py-3">
-      <View className="h-9 w-9 items-center justify-center rounded-xl bg-[#F5F3F00f]"><Icon color={color} size={18} /></View>
+    <View className="flex-row items-center gap-3 border-b border-line py-3">
+      <View className="h-9 w-9 items-center justify-center rounded-xl bg-sunken"><Icon color={color} size={18} /></View>
       <View className="flex-1">
-        <Text className="font-body-semi text-[15px] text-[#F5F3F0]">{name}{orders != null ? <Text className="font-body text-[13px] text-[#F5F3F057]">  ·  {numF(orders)} orders</Text> : null}</Text>
-        <View className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#F5F3F014]">
+        <Text className="font-body-semi text-[15px] text-text">{name}{orders != null ? <Text className="font-body text-sm text-text-3">  ·  {numF(orders)} orders</Text> : null}</Text>
+        <View className="mt-2 h-1.5 overflow-hidden rounded-full bg-sunken">
           <View className="h-full rounded-full" style={{ width: `${Math.max(2, pct)}%`, backgroundColor: color }} />
         </View>
       </View>
       <View className="items-end">
-        <Text className="font-display text-[15px] text-[#F5F3F0]">{amount}</Text>
-        <Text className="mt-0.5 font-body-semi text-[13px] text-[#F5F3F057]">{pct}%</Text>
+        <Text className="font-display text-[15px] text-text">{amount}</Text>
+        <Text className="mt-0.5 font-body-semi text-sm text-text-3">{pct}%</Text>
       </View>
     </View>
   );

@@ -11,6 +11,16 @@ current month.
 
 ## Verified facts
 
+- 2026-11-19 — **Staff web + manager app on Celsius UI** (branch claude/hopeful-heisenberg-9eub5y,
+  not merged). Web: tabs Today · Checklists · Shifts · Stock · Audit (managers), Me from the
+  initials button; /dashboard → /home; SOP editing/categories/schedules redirect to back office.
+  Audit: docs/design/staff-app-structure.md. Native: tabs Today · Sales · Checks · Stock · Me,
+  Audits inside Checks, open shifts under Me; JS-only (runtime 1.0.0). Audit:
+  docs/design/staff-native-structure.md. Merging staff-native is an OTA to managers' phones:
+  needs the owner's go after a look on a phone. Open owner questions: /hr/overtime (preview),
+  /hr/open-shifts (hidden since 22 Jul), POs/invoices on the phone.
+  Also 19 Nov: PT pay 9–15 Nov blocked on manager sign-off (1 of 48 shifts confirmed at 10:59 AM).
+
 - 2026-11-19 — **Clock-ins / Overtime split, Pulse scrapped, PT hours tab** (PR celsiuscoffee/celsius-ops#1280,
   not merged). Owner go: OT is approved ONLY on Overtime, by Ariff and managers; confirming a
   day on Clock-ins files OT as pending (`generateOtRequests` mode `refresh`; `approved` mode

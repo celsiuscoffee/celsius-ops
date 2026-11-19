@@ -14,6 +14,7 @@ import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Check, ChevronDown, Delete } from "lucide-react-native";
+import { useCelsius } from "../../lib/celsius-ui";
 import * as Updates from "expo-updates";
 import { fetchOutlets, type Outlet } from "../../lib/outlets";
 import { loginWithPin } from "../../lib/auth";
@@ -22,27 +23,37 @@ import { ApiError } from "../../lib/api";
 const LAST_OUTLET_KEY = "celsius_staff_last_outlet_v1";
 
 // Dark-themed login screen, matches the POS dark aesthetic so cashiers
-// on both apps see the same lock-screen vibe. Always dark regardless of
-// system/user color-scheme preference, since the brand mark reads
-// better on espresso.
+// on both apps see the same lock-screen layout.
 // Tuned contrast: previous surface (#2A1411) was only ~5 lumin steps
 // above the espresso bg, so the keypad buttons rendered invisibly on
 // device, only the digits appeared, "all over the place". Bumped
 // surface ≈ 3× brighter so buttons read as distinct rounded cards on
 // the dark background.
-const COLORS = {
-  bg: "#1A0200", // espresso
-  surface: "#5C3A30", // keypad button + outlet picker bg (visible on espresso)
-  surfaceHi: "#7A4D40", // pressed/hover
-  text: "#FAFAFA",
-  textMuted: "#C8B8B3",
-  brand: "#C2452D", // primary
-  brandSoft: "#F6E8E2", // primary-50, used as accent
-  danger: "#EF4444",
-  dotEmpty: "#5C3A30",
-};
+// Celsius UI tokens, so the sign-in screen follows light and dark like the
+// rest of the app. Keys and the outlet picker are surface cards with a
+// line-2 border, so they read as distinct buttons in both themes (the old
+// always-dark keypad needed a brighter fill to show at all).
+function useLoginColors() {
+  const { color: C, scheme } = useCelsius();
+  return {
+    scheme,
+    bg: C.bg,
+    surface: C.surface,
+    surfaceHi: C.sunken,
+    line: C["line-2"],
+    text: C.text,
+    textMuted: C["text-2"],
+    textFaint: C["text-3"],
+    ink: C.ink,
+    sel: C.sel,
+    danger: C["danger-text"],
+    dangerSoft: C["danger-soft"],
+    dotEmpty: C["line-2"],
+  };
+}
 
 export default function Login() {
+  const COLORS = useLoginColors();
   const router = useRouter();
   const [outlets, setOutlets] = useState<Outlet[] | null>(null);
   const [outletsError, setOutletsError] = useState<string | null>(null);
@@ -127,7 +138,7 @@ export default function Login() {
 
   return (
     <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
+      <StatusBar barStyle={COLORS.scheme === "dark" ? "light-content" : "dark-content"} backgroundColor={COLORS.bg} />
       <SafeAreaView style={{ flex: 1 }}>
         <View
           style={{
@@ -153,7 +164,7 @@ export default function Login() {
                 letterSpacing: 0.5,
               }}
             >
-              Manager Login
+              Manager sign-in
             </Text>
           </View>
 
@@ -173,7 +184,7 @@ export default function Login() {
                 const bg = error
                   ? COLORS.danger
                   : filled
-                    ? COLORS.brand
+                    ? COLORS.ink
                     : COLORS.dotEmpty;
                 return (
                   <View
@@ -213,7 +224,7 @@ export default function Login() {
           left: 0,
           right: 0,
           textAlign: "center",
-          color: "#FFFFFF33",
+          color: COLORS.textFaint,
           fontSize: 11,
           letterSpacing: 0.3,
         }}
@@ -235,6 +246,7 @@ function OutletPicker({
   onSelect: (id: string) => void;
   error: string | null;
 }) {
+  const COLORS = useLoginColors();
   const [open, setOpen] = useState(false);
 
   if (error) {
@@ -245,7 +257,7 @@ function OutletPicker({
     );
   }
   if (!outlets) {
-    return <ActivityIndicator color={COLORS.brandSoft} />;
+    return <ActivityIndicator color={COLORS.textMuted} />;
   }
 
   const selected = outlets.find((o) => o.id === selectedId) ?? null;
@@ -263,6 +275,8 @@ function OutletPicker({
           paddingHorizontal: 18,
           borderRadius: 16,
           backgroundColor: COLORS.surface,
+          borderWidth: 1,
+          borderColor: COLORS.line,
         }}
       >
         <Text
@@ -273,7 +287,7 @@ function OutletPicker({
           }}
           numberOfLines={1}
         >
-          {selected ? selected.name : "Select outlet"}
+          {selected ? selected.name : "Choose your outlet"}
         </Text>
         <ChevronDown color={COLORS.textMuted} size={20} />
       </Pressable>
@@ -293,7 +307,7 @@ function OutletPicker({
               paddingHorizontal: 20,
               paddingVertical: 16,
               borderBottomWidth: 1,
-              borderBottomColor: COLORS.surface,
+              borderBottomColor: COLORS.line,
             }}
           >
             <Text style={{ color: COLORS.text, fontSize: 18, fontWeight: "600" }}>
@@ -301,9 +315,10 @@ function OutletPicker({
             </Text>
             <Pressable
               onPress={() => setOpen(false)}
-              style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+              accessibilityRole="button"
+              style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 12 }}
             >
-              <Text style={{ color: COLORS.brandSoft, fontSize: 14, fontWeight: "700" }}>
+              <Text style={{ color: COLORS.textMuted, fontSize: 16, fontFamily: "SpaceGrotesk_600SemiBold" }}>
                 Close
               </Text>
             </Pressable>
@@ -328,9 +343,9 @@ function OutletPicker({
                     justifyContent: "space-between",
                     paddingHorizontal: 18,
                     borderRadius: 16,
-                    backgroundColor: active ? COLORS.brand + "22" : COLORS.surface,
-                    borderWidth: active ? 1 : 0,
-                    borderColor: COLORS.brand,
+                    backgroundColor: active ? COLORS.sel : COLORS.surface,
+                    borderWidth: 1,
+                    borderColor: active ? COLORS.ink : COLORS.line,
                   }}
                 >
                   <Text
@@ -339,7 +354,7 @@ function OutletPicker({
                   >
                     {o.name}
                   </Text>
-                  {active ? <Check color={COLORS.brand} size={20} /> : null}
+                  {active ? <Check color={COLORS.ink} size={20} /> : null}
                 </Pressable>
               );
             })}
@@ -365,6 +380,7 @@ function NumPad({
   onPress: (d: string) => void;
   disabled: boolean;
 }) {
+  const COLORS = useLoginColors();
   const rows: Array<Array<{ key: string; label: string; tone?: "digit" | "danger" | "icon" }>> = [
     [
       { key: "1", label: "1" },
@@ -406,7 +422,9 @@ function NumPad({
                   borderRadius: 20,
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: isDanger ? COLORS.danger + "22" : COLORS.surface,
+                  backgroundColor: isDanger ? COLORS.dangerSoft : COLORS.surface,
+                  borderWidth: isDanger ? 0 : 1,
+                  borderColor: COLORS.line,
                   opacity: disabled ? 0.5 : 1,
                 }}
               >

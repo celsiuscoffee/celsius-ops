@@ -73,11 +73,11 @@ export function PullToRefresh({ onRefresh, children }: PullToRefreshProps) {
         style={{ height: pullDistance > 0 ? `${pullDistance}px` : "0px" }}
       >
         <div
-          className="flex items-center gap-2 text-xs text-gray-400"
+          className="flex items-center gap-2 text-xs text-text-3"
           style={{ opacity: progress }}
         >
           <Loader2
-            className={`h-4 w-4 ${refreshing ? "animate-spin text-terracotta" : ""}`}
+            className={`h-4 w-4 ${refreshing ? "animate-spin text-brand-text" : ""}`}
             style={!refreshing ? { transform: `rotate(${progress * 360}deg)` } : undefined}
           />
           {refreshing ? "Refreshing..." : progress >= 1 ? "Release to refresh" : "Pull to refresh"}

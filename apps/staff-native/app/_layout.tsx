@@ -34,6 +34,7 @@ import { useOtaAutoUpdate } from "../lib/use-ota-auto-update";
 import { queryClient } from "../lib/queryClient";
 import { useColorScheme } from "nativewind";
 import { themes, loadColorSchemePref } from "../lib/theme";
+import { palette } from "../lib/celsius-ui";
 
 // Last notification tap we already routed for (survives OTA JS reloads, which
 // is exactly when getLastNotificationResponseAsync would otherwise replay it).
@@ -170,9 +171,7 @@ function RootLayout() {
   useEffect(() => {
     if (loaded) {
       applyDefaultFont();
-      SystemUI.setBackgroundColorAsync(
-        scheme === "dark" ? "#1A0200" : "#FFFFFF",
-      ).catch(() => {});
+      SystemUI.setBackgroundColorAsync(palette[scheme].bg).catch(() => {});
     }
   }, [loaded, scheme]);
 
@@ -253,7 +252,7 @@ function RootLayout() {
   }, []);
 
   if (!loaded || !sessionHydrated) {
-    return <View style={{ flex: 1, backgroundColor: "#1A0200" }} />;
+    return <View style={{ flex: 1, backgroundColor: palette[scheme].bg }} />;
   }
 
   return (
@@ -265,9 +264,7 @@ function RootLayout() {
             <Stack
               screenOptions={{
                 headerShown: false,
-                contentStyle: {
-                  backgroundColor: scheme === "dark" ? "#1A0200" : "#FFFFFF",
-                },
+                contentStyle: { backgroundColor: palette[scheme].bg },
                 animation: "slide_from_right",
               }}
             />

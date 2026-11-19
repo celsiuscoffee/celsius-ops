@@ -12,6 +12,7 @@ import { Users } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { fetchWhosWorking, type TeamMate } from "../../../lib/hr/api";
+import { hm12, useCelsius } from "../../../lib/celsius-ui";
 
 // Route-level boundary: a throw in THIS screen degrades to an inline retry
 // card instead of unmounting the whole HR stack (the original Who's Working
@@ -43,6 +44,7 @@ function buildDays() {
 }
 
 export default function WhosWorkingScreen() {
+  const C = useCelsius().color;
   const days = useMemo(buildDays, []);
   const [selected, setSelected] = useState(days[0].key);
 
@@ -57,10 +59,10 @@ export default function WhosWorkingScreen() {
 
   return (
     <Screen edges={["top", "left", "right"]}>
-      <PageHeader title="Who's Working" back />
+      <PageHeader title="Who's working" back />
 
       {/* Day picker */}
-      <View className="border-b border-border pb-3">
+      <View className="border-b border-line pb-3">
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -73,19 +75,19 @@ export default function WhosWorkingScreen() {
                 key={d.key}
                 onPress={() => setSelected(d.key)}
                 className={`w-14 items-center rounded-2xl border py-2 active:opacity-80 ${
-                  on ? "border-primary bg-primary" : "border-border bg-surface"
+                  on ? "border-ink bg-ink" : "border-line bg-surface"
                 }`}
               >
                 <Text
-                  className={`text-[11px] font-body-semi uppercase ${
-                    on ? "text-background" : "text-muted-fg"
+                  className={`text-xs font-body-semi ${
+                    on ? "text-on-ink" : "text-text-2"
                   }`}
                 >
                   {d.weekday}
                 </Text>
                 <Text
                   className={`text-lg font-display-medium ${
-                    on ? "text-background" : "text-espresso"
+                    on ? "text-on-ink" : "text-text"
                   }`}
                 >
                   {d.day}
@@ -102,19 +104,19 @@ export default function WhosWorkingScreen() {
         </View>
       ) : error ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-sm text-danger text-center">
+          <Text className="text-sm text-danger-text text-center">
             {(error as Error).message}
           </Text>
         </View>
       ) : team.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
-          <View className="mb-3 h-12 w-12 items-center justify-center rounded-2xl bg-primary-50">
-            <Users color="#A2492C" size={22} />
+          <View className="mb-3 h-12 w-12 items-center justify-center rounded-2xl bg-sunken">
+            <Users color={C["text-2"]} size={22} />
           </View>
-          <Text className="text-base font-display-medium text-espresso">
+          <Text className="text-base font-display-medium text-text">
             No one scheduled{suffix}
           </Text>
-          <Text className="mt-1 text-sm text-muted-fg text-center">
+          <Text className="mt-1 text-sm text-text-2 text-center">
             Once the schedule is published, your team's shifts show up here.
           </Text>
         </View>
@@ -128,7 +130,7 @@ export default function WhosWorkingScreen() {
           renderItem={({ item }) => <TeamRow member={item} />}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
-            <Text className="mb-3 text-sm font-body text-muted-fg">
+            <Text className="mb-3 text-sm font-body text-text-2">
               {team.length} on shift{suffix}
             </Text>
           }
@@ -141,31 +143,31 @@ export default function WhosWorkingScreen() {
 function TeamRow({ member }: { member: TeamMate }) {
   return (
     <View
-      className={`flex-row items-center gap-3 rounded-3xl border p-4 ${
-        member.is_me ? "border-primary/40 bg-primary-50" : "border-border bg-surface"
+      className={`flex-row items-center gap-3 rounded-2xl border p-4 ${
+        member.is_me ? "border-line-2 bg-sunken" : "border-line bg-surface"
       }`}
     >
-      <View className="h-11 w-11 items-center justify-center rounded-2xl bg-primary-50">
-        <Text className="text-base font-display-medium text-primary">
+      <View className="h-11 w-11 items-center justify-center rounded-2xl bg-sunken">
+        <Text className="text-base font-display-medium text-text">
           {initials(member.name)}
         </Text>
       </View>
       <View className="flex-1">
         <View className="flex-row items-center gap-2">
-          <Text className="text-base font-body-semi text-espresso">{member.name}</Text>
+          <Text className="text-base font-body-semi text-text">{member.name}</Text>
           {member.is_me ? (
-            <View className="rounded-full bg-espresso px-2 py-0.5">
-              <Text className="text-[10px] font-body-semi text-background">You</Text>
+            <View className="rounded-full bg-ink px-2 py-0.5">
+              <Text className="text-xs font-body-semi text-on-ink">You</Text>
             </View>
           ) : null}
         </View>
         <View className="mt-1 flex-row items-center gap-2">
-          <Text className="text-sm font-body-medium text-muted-fg">
-            {fmtTime(member.start_time)} - {fmtTime(member.end_time)}
+          <Text className="text-sm font-body-medium text-text-2">
+            {fmtTime(member.start_time)} – {fmtTime(member.end_time)}
           </Text>
           {member.position ? (
-            <View className="rounded-full bg-primary-100 px-2 py-0.5">
-              <Text className="text-[11px] font-body-semi text-primary-900">
+            <View className="rounded-full bg-sunken px-2 py-0.5">
+              <Text className="text-xs font-body-semi text-text-2">
                 {member.position}
               </Text>
             </View>
@@ -192,7 +194,5 @@ function fmtTime(t: string | null | undefined): string {
   if (!Number.isFinite(hn) || !Number.isFinite(mn) || h === "" || m == null) {
     return "-";
   }
-  const d = new Date();
-  d.setHours(hn, mn, 0, 0);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return hm12(`${hn}:${String(mn).padStart(2, "0")}`);
 }

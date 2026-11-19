@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { CheckCircle2, Clock, AlertCircle, Loader2, History } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
+import { PageHeader } from "@/components/page-header";
 
 type Outlet = { id: string; code: string; name: string; type: string };
 
@@ -31,9 +32,9 @@ const SHIFT_LABELS: Record<string, string> = {
 };
 
 const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle2; color: string; bg: string }> = {
-  PENDING: { icon: Clock, color: "text-yellow-600", bg: "bg-yellow-100" },
-  IN_PROGRESS: { icon: AlertCircle, color: "text-blue-600", bg: "bg-blue-100" },
-  COMPLETED: { icon: CheckCircle2, color: "text-green-600", bg: "bg-green-100" },
+  PENDING: { icon: Clock, color: "text-warn-text", bg: "bg-warn-soft" },
+  IN_PROGRESS: { icon: AlertCircle, color: "text-info-text", bg: "bg-info-soft" },
+  COMPLETED: { icon: CheckCircle2, color: "text-ok-text", bg: "bg-ok-soft" },
 };
 
 export default function ChecklistHistoryPage() {
@@ -66,11 +67,8 @@ export default function ChecklistHistoryPage() {
   const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
   return (
-    <div className="p-6 lg:p-8">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-foreground">Checklist History</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Review past checklist completions</p>
-      </div>
+    <div className="px-4 pb-6">
+      <PageHeader title="Past checklists" description="Checklists done on earlier days." backHref="/checklists" />
 
       {/* Filters */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
@@ -79,7 +77,7 @@ export default function ChecklistHistoryPage() {
           onChange={(e) => setSelectedOutlet(e.target.value)}
           className="rounded-md border border-input bg-background px-3 py-2 text-sm"
         >
-          <option value="">Select Outlet</option>
+          <option value="">Choose an outlet</option>
           {outlets?.map((o) => (
             <option key={o.id} value={o.id}>{o.name}</option>
           ))}
@@ -95,9 +93,9 @@ export default function ChecklistHistoryPage() {
           onChange={(e) => setStatusFilter(e.target.value)}
           className="rounded-md border border-input bg-background px-3 py-2 text-sm"
         >
-          <option value="ALL">All Status</option>
+          <option value="ALL">Any status</option>
           <option value="PENDING">Pending</option>
-          <option value="IN_PROGRESS">In Progress</option>
+          <option value="IN_PROGRESS">In progress</option>
           <option value="COMPLETED">Completed</option>
         </select>
         {selectedDate && (

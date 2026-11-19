@@ -32,21 +32,21 @@ export function SelfieCapture({
   if (!perm) return null;
   if (!perm.granted) {
     return (
-      <View className="flex-1 items-center justify-center bg-espresso px-6">
-        <Text className="text-base text-background text-center">
+      <View className="flex-1 items-center justify-center bg-ink px-6">
+        <Text className="text-base text-on-ink text-center">
           Camera access is needed to take a selfie for the attendance
           log.
         </Text>
         <Pressable
           onPress={requestPerm}
-          className="mt-4 h-12 items-center justify-center rounded-2xl bg-background px-6"
+          className="mt-4 h-12 items-center justify-center rounded-2xl bg-bg px-6"
         >
-          <Text className="text-base font-body-bold text-espresso">
+          <Text className="text-base font-body-bold text-text">
             Allow camera
           </Text>
         </Pressable>
         <Pressable onPress={onCancel} className="mt-3">
-          <Text className="text-sm text-background/80">Cancel</Text>
+          <Text className="text-sm text-on-ink">Cancel</Text>
         </Pressable>
       </View>
     );
@@ -79,7 +79,7 @@ export function SelfieCapture({
   }
 
   return (
-    <View className="flex-1 bg-espresso">
+    <View className="flex-1 bg-ink">
       <CameraView
         ref={cameraRef}
         style={{ flex: 1 }}

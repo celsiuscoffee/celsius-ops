@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 import { sessionExpiryHandled } from "@/lib/session-expiry";
+import { formatTime } from "@/lib/format-time";
 
 /* eslint-disable @next/next/no-img-element */
 
@@ -44,9 +45,9 @@ type ChecklistDetail = {
 
 const SHIFT_LABELS: Record<string, string> = { OPENING: "Opening", MIDDAY: "Midday", CLOSING: "Closing" };
 const STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-700",
-  IN_PROGRESS: "bg-blue-100 text-blue-700",
-  COMPLETED: "bg-green-100 text-green-700",
+  PENDING: "bg-warn-soft text-warn-text",
+  IN_PROGRESS: "bg-info-soft text-info-text",
+  COMPLETED: "bg-ok-soft text-ok-text",
 };
 
 export default function ChecklistDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -188,7 +189,7 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
     return (
       <div className="p-6 text-center">
         <p className="text-muted-foreground">Checklist not found</p>
-        <Link href="/checklists" className="mt-2 text-sm text-terracotta hover:underline">Back</Link>
+        <Link href="/checklists" className="mt-2 text-sm text-brand-text hover:underline">Back</Link>
       </div>
     );
   }
@@ -205,7 +206,7 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
       <CameraCaptureModal
         open={cameraOpenForItem !== null}
         facingMode="environment"
-        title="Photo Proof"
+        title="Photo proof"
         onCapture={handleCameraCapture}
         onClose={() => setCameraOpenForItem(null)}
       />
@@ -223,7 +224,7 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
       {/* Header */}
       <div className="mb-6">
         <Link href="/checklists" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3">
-          <ArrowLeft className="h-4 w-4" />Back to Checklists
+          <ArrowLeft className="h-4 w-4" />Checklists
         </Link>
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-foreground">{checklist.sop.title}</h1>
@@ -245,16 +246,16 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
           <div className="rounded-full bg-muted h-3 overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-500 ${
-                checklist.status === "COMPLETED" ? "bg-green-500" : "bg-terracotta"
+                checklist.status === "COMPLETED" ? "bg-ok" : "bg-ink"
               }`}
               style={{ width: `${progress}%` }}
             />
           </div>
           {checklist.status === "COMPLETED" && checklist.completedBy && (
-            <p className="mt-2 text-xs text-green-600 flex items-center gap-1">
+            <p className="mt-2 text-xs text-ok-text flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5" />
               Completed by {checklist.completedBy.name}
-              {checklist.completedAt && ` at ${new Date(checklist.completedAt).toLocaleTimeString()}`}
+              {checklist.completedAt && ` at ${formatTime(checklist.completedAt)}`}
             </p>
           )}
         </CardContent>
@@ -282,26 +283,26 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
                   className="mt-0.5 shrink-0 active:scale-90 transition-transform"
                 >
                   {item.isCompleted ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    <CheckCircle2 className="h-5 w-5 text-ok" />
                   ) : (
-                    <Circle className="h-5 w-5 text-muted-foreground/40 hover:text-terracotta transition-colors" />
+                    <Circle className="h-5 w-5 text-muted-foreground/40 hover:text-brand-text transition-colors" />
                   )}
                 </button>
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-terracotta/60">#{item.stepNumber}</span>
+                    <span className="text-xs font-medium text-brand-text/60">#{item.stepNumber}</span>
                     <h4 className={`text-sm font-medium ${item.isCompleted ? "line-through text-muted-foreground" : "text-foreground"}`}>
                       {item.title}
                     </h4>
                     {item.photoRequired && !item.photoUrl && (
-                      <span className="flex items-center gap-0.5 rounded-full bg-red-50 px-1.5 py-0.5 text-[9px] font-medium text-red-600">
+                      <span className="flex items-center gap-0.5 rounded-full bg-danger-soft px-1.5 py-0.5 text-[9px] font-medium text-danger-text">
                         <Camera className="h-2.5 w-2.5" />Required
                       </span>
                     )}
                     {item.photoRequired && item.photoUrl && (
-                      <span className="flex items-center gap-0.5 rounded-full bg-green-50 px-1.5 py-0.5 text-[9px] font-medium text-green-600">
+                      <span className="flex items-center gap-0.5 rounded-full bg-ok-soft px-1.5 py-0.5 text-[9px] font-medium text-ok-text">
                         <Camera className="h-2.5 w-2.5" />Done
                       </span>
                     )}
@@ -313,11 +314,11 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
                     <p className="mt-1 text-[10px] text-muted-foreground/50 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       {item.completedBy.name}
-                      {item.completedAt && ` · ${new Date(item.completedAt).toLocaleTimeString()}`}
+                      {item.completedAt && ` · ${formatTime(item.completedAt)}`}
                     </p>
                   )}
                   {item.notes && (
-                    <p className="mt-1 text-xs text-blue-600 bg-blue-50 rounded px-2 py-1">
+                    <p className="mt-1 text-xs text-info-text bg-info-soft rounded px-2 py-1">
                       {item.notes}
                     </p>
                   )}
@@ -335,7 +336,7 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
                         onClick={() => handleDeletePhoto(item.id)}
                         disabled={uploadingItem === item.id}
                         aria-label="Delete photo"
-                        className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white shadow-md hover:bg-red-700 disabled:opacity-50"
+                        className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-on-ink shadow-md hover:bg-danger disabled:opacity-50"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -344,7 +345,7 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
                         disabled={uploadingItem === item.id}
                         aria-label="Retake photo"
                         title="Retake"
-                        className="absolute -bottom-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-800 text-white shadow-md hover:bg-gray-900 disabled:opacity-50"
+                        className="absolute -bottom-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink text-on-ink shadow-md hover:bg-ink disabled:opacity-50"
                       >
                         <RotateCcw className="h-3 w-3" />
                       </button>
@@ -363,7 +364,7 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
                     {uploadingItem === item.id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : item.photoUrl ? (
-                      <ImageIcon className="h-3.5 w-3.5 text-green-500" />
+                      <ImageIcon className="h-3.5 w-3.5 text-ok" />
                     ) : (
                       <Camera className="h-3.5 w-3.5" />
                     )}
@@ -394,8 +395,8 @@ export default function ChecklistDetailPage({ params }: { params: Promise<{ id: 
                   />
                   <div className="mt-2 flex gap-2 justify-end">
                     <Button variant="outline" size="sm" onClick={() => setNotesOpen(null)}>Cancel</Button>
-                    <Button size="sm" onClick={() => saveNote(item.id)} className="bg-terracotta hover:bg-terracotta-dark">
-                      Save Note
+                    <Button size="sm" onClick={() => saveNote(item.id)} className="bg-ink hover:bg-ink-hover">
+                      Save note
                     </Button>
                   </div>
                 </div>

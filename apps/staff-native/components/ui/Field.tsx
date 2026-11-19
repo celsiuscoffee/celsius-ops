@@ -1,5 +1,6 @@
 import { Text, TextInput, View } from "react-native";
 import type { ComponentProps, ReactNode } from "react";
+import { useCelsius } from "../../lib/celsius-ui";
 
 type TextInputProps = ComponentProps<typeof TextInput>;
 
@@ -10,35 +11,27 @@ type Props = {
   children?: ReactNode;
 } & Omit<TextInputProps, "children">;
 
-// Labeled form input wrapper. Pass `children` to slot in a custom
-// control (picker, stepper, modal trigger); otherwise renders a
-// standard styled <TextInput /> using the remaining props.
-export function Field({
-  label,
-  hint,
-  error,
-  children,
-  ...inputProps
-}: Props) {
+// Labelled input. Pass `children` to slot in a custom control (picker,
+// stepper, modal trigger); otherwise renders a styled <TextInput />.
+export function Field({ label, hint, error, children, ...inputProps }: Props) {
+  const C = useCelsius().color;
   return (
     <View>
-      <Text className="mb-1.5 text-xs font-body-semi uppercase tracking-wide text-muted">
-        {label}
-      </Text>
+      <Text className="mb-1.5 text-sm font-body-semi text-text-2">{label}</Text>
       {children ?? (
         <TextInput
-          placeholderTextColor="#9B9B9B"
+          placeholderTextColor={C["text-3"]}
           {...inputProps}
           className={
-            "h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso " +
+            `h-12 rounded-xl border bg-surface px-4 text-base font-body text-text ${error ? "border-danger" : "border-line-2"} ` +
             (inputProps.className ?? "")
           }
         />
       )}
       {error ? (
-        <Text className="mt-1.5 text-xs font-body text-danger">{error}</Text>
+        <Text className="mt-1.5 text-sm font-body text-danger-text">{error}</Text>
       ) : hint ? (
-        <Text className="mt-1.5 text-xs font-body text-muted-fg">{hint}</Text>
+        <Text className="mt-1.5 text-sm font-body text-text-3">{hint}</Text>
       ) : null}
     </View>
   );

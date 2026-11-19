@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ClipboardCheck, Loader2, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
+import { PageHeader } from "@/components/page-header";
 
 type ChecklistSummary = {
   id: string;
@@ -24,9 +25,9 @@ type ChecklistSummary = {
 const SHIFT_LABELS: Record<string, string> = { OPENING: "Opening", MIDDAY: "Midday", CLOSING: "Closing" };
 
 const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle2; color: string; bg: string }> = {
-  PENDING: { icon: Clock, color: "text-yellow-600", bg: "bg-yellow-100" },
-  IN_PROGRESS: { icon: AlertCircle, color: "text-blue-600", bg: "bg-blue-100" },
-  COMPLETED: { icon: CheckCircle2, color: "text-green-600", bg: "bg-green-100" },
+  PENDING: { icon: Clock, color: "text-warn-text", bg: "bg-warn-soft" },
+  IN_PROGRESS: { icon: AlertCircle, color: "text-info-text", bg: "bg-info-soft" },
+  COMPLETED: { icon: CheckCircle2, color: "text-ok-text", bg: "bg-ok-soft" },
 };
 
 export default function ChecklistsPage() {
@@ -74,24 +75,24 @@ export default function ChecklistsPage() {
   }, {});
 
   return (
-    <div className="px-4 py-4">
+    <div className="px-4 pb-6">
       <div className="space-y-4">
         {/* Header */}
-        <div>
-          <h1 className="font-heading text-lg font-bold text-brand-dark">Checklists</h1>
-          <p className="text-sm text-gray-500">{today}</p>
-        </div>
+        <PageHeader
+          title="Checklists"
+          description={activeOutlet?.outletName ? `This shift's lists at ${activeOutlet.outletName}.` : "This shift's lists at your outlet."}
+        />
 
         {/* Progress */}
         {checklists && checklists.length > 0 && (
           <div className="flex items-center gap-3">
-            <div className="flex-1 rounded-full bg-gray-100 h-2 overflow-hidden">
+            <div className="flex-1 rounded-full bg-sunken h-2 overflow-hidden">
               <div
-                className="h-full bg-terracotta rounded-full transition-all"
+                className="h-full bg-ink rounded-full transition-all"
                 style={{ width: `${totalCount > 0 ? (completedCount / totalCount) * 100 : 0}%` }}
               />
             </div>
-            <span className="text-xs font-medium text-gray-500">
+            <span className="text-xs font-medium text-text-3">
               {completedCount}/{totalCount}
             </span>
           </div>
@@ -100,7 +101,7 @@ export default function ChecklistsPage() {
         {/* Loading (initial fetch or auto-generate in progress) */}
         {(isLoading || generating) && (
           <div className="flex justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+            <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
           </div>
         )}
 
@@ -108,18 +109,18 @@ export default function ChecklistsPage() {
             or assigned a home outlet today, so there's nothing to show. */}
         {!isLoading && !generating && !outletId && (
           <Card className="px-4 py-8 text-center">
-            <ClipboardCheck className="mx-auto h-10 w-10 text-gray-300" />
-            <p className="mt-3 text-sm text-gray-500">No outlet for today</p>
-            <p className="mt-1 text-xs text-gray-400">Clock in at your outlet to see its checklists</p>
+            <ClipboardCheck className="mx-auto h-10 w-10 text-line-ctl" />
+            <p className="mt-3 text-sm text-text-3">No outlet for today</p>
+            <p className="mt-1 text-xs text-text-3">Clock in at your outlet to see its checklists</p>
           </Card>
         )}
 
         {/* Empty state — outlet resolved but no SOPs scheduled today */}
         {!isLoading && !generating && outletId && (!checklists || checklists.length === 0) && (
           <Card className="px-4 py-8 text-center">
-            <ClipboardCheck className="mx-auto h-10 w-10 text-gray-300" />
-            <p className="mt-3 text-sm text-gray-500">No checklists today</p>
-            <p className="mt-1 text-xs text-gray-400">
+            <ClipboardCheck className="mx-auto h-10 w-10 text-line-ctl" />
+            <p className="mt-3 text-sm text-text-3">No checklists today</p>
+            <p className="mt-1 text-xs text-text-3">
               Nothing scheduled{activeOutlet?.outletName ? ` for ${activeOutlet.outletName}` : " for this outlet"}
             </p>
           </Card>
@@ -131,7 +132,7 @@ export default function ChecklistsPage() {
           if (!items || items.length === 0) return null;
           return (
             <div key={shift}>
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-3">
                 {SHIFT_LABELS[shift]} Shift
               </h2>
               <div className="space-y-2">
@@ -140,26 +141,26 @@ export default function ChecklistsPage() {
                   const Icon = config.icon;
                   return (
                     <Link key={cl.id} href={`/checklists/${cl.id}`}>
-                      <Card className="px-3 py-2.5 transition-all active:bg-gray-50">
+                      <Card className="px-3 py-2.5 transition-all active:bg-sunken/60">
                         <div className="flex items-center gap-3">
                           <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${config.bg}`}>
                             <Icon className={`h-4 w-4 ${config.color}`} />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{cl.sop.title}</p>
-                            <p className="text-[10px] text-gray-400">
+                            <p className="text-sm font-medium text-text truncate">{cl.sop.title}</p>
+                            <p className="text-[10px] text-text-3">
                               {cl.sop.category.name} · {cl.completedItems}/{cl.totalItems} items
                               {cl.assignedTo ? ` · ${cl.assignedTo.name}` : " · Anyone"}
                             </p>
                           </div>
                           <div className="shrink-0 text-right">
-                            <p className="text-sm font-bold text-gray-700">{cl.progress}%</p>
+                            <p className="text-sm font-bold text-text-2">{cl.progress}%</p>
                           </div>
                         </div>
                         {/* Mini progress bar */}
-                        <div className="mt-2 rounded-full bg-gray-100 h-1 overflow-hidden">
+                        <div className="mt-2 rounded-full bg-sunken h-1 overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all ${cl.status === "COMPLETED" ? "bg-green-500" : "bg-terracotta"}`}
+                            className={`h-full rounded-full transition-all ${cl.status === "COMPLETED" ? "bg-ok" : "bg-ink"}`}
                             style={{ width: `${cl.progress}%` }}
                           />
                         </div>
@@ -174,7 +175,7 @@ export default function ChecklistsPage() {
 
         {/* History link */}
         {checklists && checklists.length > 0 && (
-          <Link href="/checklists/history" className="block text-center text-xs text-terracotta py-2">
+          <Link href="/checklists/history" className="block text-center text-xs text-brand-text py-2">
             View history →
           </Link>
         )}

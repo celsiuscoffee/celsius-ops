@@ -10,8 +10,10 @@ import { Star, MessageSquare } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { fetchMyReviews, type MyReview } from "../../../lib/hr/api";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 export default function ReviewsScreen() {
+  const C = useCelsius().color;
   const [reviews, setReviews] = useState<MyReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -38,7 +40,7 @@ export default function ReviewsScreen() {
       <PageHeader title="Feedback" back />
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#A2492C" />
+          <ActivityIndicator color={C["text-3"]} />
         </View>
       ) : (
     <FlatList
@@ -53,46 +55,46 @@ export default function ReviewsScreen() {
             setRefreshing(true);
             load();
           }}
-          tintColor="#A2492C"
+          tintColor={C["text-3"]}
         />
       }
       ListEmptyComponent={
         <View className="mt-12 items-center px-6">
-          <View className="h-20 w-20 items-center justify-center rounded-3xl bg-primary-50">
-            <MessageSquare color="#A2492C" size={32} />
+          <View className="h-20 w-20 items-center justify-center rounded-2xl bg-sunken">
+            <MessageSquare color={C["text-2"]} size={32} />
           </View>
-          <Text className="mt-4 text-base font-display text-espresso">
+          <Text className="mt-4 text-base font-display text-text">
             No reviews yet
           </Text>
-          <Text className="mt-1 text-sm font-body text-muted-fg text-center">
+          <Text className="mt-1 text-sm font-body text-text-2 text-center">
             Customer reviews left during your shifts will show up here.
           </Text>
         </View>
       }
       ItemSeparatorComponent={() => <View className="h-2" />}
       renderItem={({ item: r }) => (
-        <View className="rounded-2xl border border-border bg-surface p-4">
+        <View className="rounded-2xl border border-line bg-surface p-4">
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center gap-1">
               {[1, 2, 3, 4, 5].map((n) => (
                 <Star
                   key={n}
-                  color={n <= r.rating ? "#FBBF24" : "#E5E7EB"}
-                  fill={n <= r.rating ? "#FBBF24" : "transparent"}
+                  color={n <= r.rating ? C.warn : C.line}
+                  fill={n <= r.rating ? C.warn : "transparent"}
                   size={16}
                 />
               ))}
             </View>
-            <Text className="text-xs font-body text-muted">
+            <Text className="text-xs font-body text-text-3">
               {fmt(r.review_date)}
             </Text>
           </View>
           {r.comment ? (
-            <Text className="mt-2 text-sm font-body text-espresso">
+            <Text className="mt-2 text-sm font-body text-text">
               {r.comment}
             </Text>
           ) : null}
-          <Text className="mt-2 text-xs font-body text-muted">
+          <Text className="mt-2 text-xs font-body text-text-3">
             {r.reviewer_name ?? "Anonymous"} · {r.source ?? "review"}
           </Text>
         </View>

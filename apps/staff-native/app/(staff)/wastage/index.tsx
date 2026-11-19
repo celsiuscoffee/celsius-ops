@@ -32,6 +32,7 @@ import {
   type Product,
   type WastageEntry,
 } from "../../../lib/ops/inventory";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 const REASONS = [
   "Expired",
@@ -44,6 +45,7 @@ const REASONS = [
 type Step = "product" | "quantity" | "reason";
 
 export default function WastagePage() {
+  const C = useCelsius().color;
   const session = useStaff((s) => s.session);
   const [entries, setEntries] = useState<WastageEntry[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -141,7 +143,7 @@ export default function WastagePage() {
       <Screen edges={["top", "left", "right"]}>
         <PageHeader title="Wastage" back />
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#A2492C" />
+          <ActivityIndicator color={C["text-3"]} />
         </View>
       </Screen>
     );
@@ -163,25 +165,25 @@ export default function WastagePage() {
               setRefreshing(true);
               load();
             }}
-            tintColor="#A2492C"
+            tintColor={C["text-3"]}
           />
         }
         ListHeaderComponent={
           <View>
-            <View className="flex-row items-center gap-3 rounded-3xl border border-danger/20 bg-danger/5 px-4 py-4">
-              <View className="h-12 w-12 items-center justify-center rounded-2xl bg-danger/10">
-                <AlertTriangle color="#B91C1C" size={22} />
+            <View className="flex-row items-center gap-3 rounded-2xl border border-danger bg-danger-soft px-4 py-4">
+              <View className="h-12 w-12 items-center justify-center rounded-2xl bg-danger-soft">
+                <AlertTriangle color={C.danger} size={22} />
               </View>
               <View>
-                <Text className="text-xs font-body text-danger">
+                <Text className="text-xs font-body text-danger-text">
                   Total waste cost
                 </Text>
-                <Text className="text-xl font-display text-danger">
+                <Text className="text-xl font-display text-danger-text">
                   RM {totalWaste.toFixed(2)}
                 </Text>
               </View>
             </View>
-            <Text className="mt-5 mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+            <Text className="mt-5 mb-2 text-sm font-body-semi text-text-2">
               Recent wastage
             </Text>
           </View>
@@ -190,43 +192,43 @@ export default function WastagePage() {
         ListEmptyComponent={
           error ? (
             <View className="mt-8 items-center px-6">
-              <Text className="text-center text-base font-body-bold text-espresso">
+              <Text className="text-center text-base font-body-bold text-text">
                 Couldn't load wastage
               </Text>
-              <Text className="mt-2 text-center text-sm font-body text-muted-fg">
+              <Text className="mt-2 text-center text-sm font-body text-text-2">
                 Something went wrong. Check your connection and try again.
               </Text>
               <Pressable
                 onPress={() => load()}
-                className="mt-6 h-12 items-center justify-center rounded-2xl bg-primary px-8 active:opacity-80"
+                className="mt-6 h-12 items-center justify-center rounded-2xl bg-ink px-8 active:opacity-80"
               >
-                <Text className="text-base font-body-bold text-white">
+                <Text className="text-base font-body-bold text-on-ink">
                   Retry
                 </Text>
               </Pressable>
             </View>
           ) : (
-            <Text className="mt-8 text-center text-sm font-body text-muted">
+            <Text className="mt-8 text-center text-sm font-body text-text-3">
               No wastage records yet
             </Text>
           )
         }
         renderItem={({ item: w }) => (
-          <View className="rounded-2xl border border-border bg-surface px-3 py-2.5">
+          <View className="rounded-2xl border border-line bg-surface px-3 py-2.5">
             <View className="flex-row items-start justify-between">
               <View className="flex-1 pr-3">
-                <Text className="text-base font-body-medium text-espresso">
+                <Text className="text-base font-body-medium text-text">
                   {w.product}
                 </Text>
-                <Text className="text-xs font-body text-muted">
+                <Text className="text-xs font-body text-text-3">
                   {w.quantity} · {w.reason ?? ", "} · {fmtDate(w.createdAt)}
                 </Text>
-                <Text className="text-xs font-body text-muted">
+                <Text className="text-xs font-body text-text-3">
                   by {w.adjustedBy}
                 </Text>
               </View>
               {w.costAmount != null ? (
-                <Text className="text-sm font-body-bold text-danger">
+                <Text className="text-sm font-body-bold text-danger-text">
                   −RM {w.costAmount.toFixed(2)}
                 </Text>
               ) : null}
@@ -239,14 +241,14 @@ export default function WastagePage() {
       {/* Pinned bottom CTA */}
       <View
         style={{ paddingBottom: 12 }}
-        className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
+        className="absolute inset-x-0 bottom-0 border-t border-line bg-bg px-5 pt-3"
       >
         <Pressable
           onPress={openSheet}
-          className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary active:opacity-80"
+          className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-ink active:opacity-80"
         >
-          <Plus color="#FFFFFF" size={20} />
-          <Text className="text-base font-body-bold text-white">
+          <Plus color={C["on-ink"]} size={20} />
+          <Text className="text-base font-body-bold text-on-ink">
             Record wastage
           </Text>
         </Pressable>
@@ -263,20 +265,20 @@ export default function WastagePage() {
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View className="flex-1 bg-background">
-            <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
+          <View className="flex-1 bg-bg">
+            <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
               <View className="flex-1 flex-row items-center gap-3">
                 {step !== "product" ? (
                   <Pressable
                     onPress={() =>
                       setStep(step === "reason" ? "quantity" : "product")
                     }
-                    className="h-9 w-9 items-center justify-center rounded-full bg-primary-50"
+                    className="h-11 w-11 items-center justify-center rounded-full bg-sunken"
                   >
-                    <ArrowLeft color="#A2492C" size={16} />
+                    <ArrowLeft color={C["text-2"]} size={16} />
                   </Pressable>
                 ) : null}
-                <Text className="text-xl font-display text-espresso">
+                <Text className="text-xl font-display text-text">
                   {step === "product"
                     ? "Pick product"
                     : step === "quantity"
@@ -286,9 +288,9 @@ export default function WastagePage() {
               </View>
               <Pressable
                 onPress={() => setSheetOpen(false)}
-                className="px-2 py-1"
+                className="min-h-11 justify-center px-3"
               >
-                <Text className="text-sm font-body-bold text-muted">
+                <Text className="text-sm font-body-bold text-text-3">
                   Cancel
                 </Text>
               </Pressable>
@@ -301,10 +303,10 @@ export default function WastagePage() {
                   key={s}
                   className={`h-1 flex-1 rounded-full ${
                     step === s
-                      ? "bg-primary"
+                      ? "bg-ink"
                       : i < ["product", "quantity", "reason"].indexOf(step)
-                        ? "bg-primary/60"
-                        : "bg-primary-50"
+                        ? "bg-ink opacity-60"
+                        : "bg-sunken"
                   }`}
                 />
               ))}
@@ -313,15 +315,15 @@ export default function WastagePage() {
             {/* Step content */}
             {step === "product" ? (
               <View className="flex-1 px-5 pt-4">
-                <View className="flex-row items-center gap-2 rounded-2xl border border-border bg-surface px-3 h-12">
-                  <Search color="#9CA3AF" size={16} />
+                <View className="flex-row items-center gap-2 rounded-2xl border border-line bg-surface px-3 h-12">
+                  <Search color={C["text-3"]} size={16} />
                   <TextInput
                     value={productSearch}
                     onChangeText={setProductSearch}
                     placeholder="Search product…"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={C["text-3"]}
                     autoFocus
-                    className="flex-1 text-base font-body text-espresso"
+                    className="flex-1 text-base font-body text-text"
                   />
                 </View>
                 <FlatList
@@ -335,12 +337,12 @@ export default function WastagePage() {
                         setSelectedProduct(p);
                         setStep("quantity");
                       }}
-                      className="rounded-2xl border border-border bg-surface px-3 py-3 active:bg-primary-50"
+                      className="rounded-2xl border border-line bg-surface px-3 py-3 active:bg-sunken"
                     >
-                      <Text className="text-base font-body-medium text-espresso">
+                      <Text className="text-base font-body-medium text-text">
                         {p.name}
                       </Text>
-                      <Text className="text-xs font-body text-muted">
+                      <Text className="text-xs font-body text-text-3">
                         {p.sku} · {p.baseUom}
                       </Text>
                     </Pressable>
@@ -350,7 +352,7 @@ export default function WastagePage() {
               </View>
             ) : step === "quantity" ? (
               <View className="flex-1 items-center justify-center px-5">
-                <Text className="text-sm font-body text-muted">
+                <Text className="text-sm font-body text-text-3">
                   {selectedProduct?.name}
                 </Text>
                 <View className="mt-4 flex-row items-center gap-3">
@@ -369,9 +371,9 @@ export default function WastagePage() {
                       value={qty}
                       onChangeText={setQty}
                       placeholder="0"
-                      placeholderTextColor="#D1D5DB"
+                      placeholderTextColor={C["text-3"]}
                       keyboardType="decimal-pad"
-                      className="text-7xl font-display text-espresso tabular-nums text-center"
+                      className="text-7xl font-display text-text tabular-nums text-center"
                       style={{ minWidth: 120 }}
                     />
                   </View>
@@ -386,7 +388,7 @@ export default function WastagePage() {
                     sign="+"
                   />
                 </View>
-                <Text className="mt-1 text-sm font-body text-muted">
+                <Text className="mt-1 text-sm font-body text-text-3">
                   {selectedProduct?.baseUom}
                 </Text>
                 <Pressable
@@ -394,11 +396,11 @@ export default function WastagePage() {
                   disabled={!qty || parseFloat(qty) <= 0}
                   className={`mt-10 h-14 w-full items-center justify-center rounded-2xl ${
                     qty && parseFloat(qty) > 0
-                      ? "bg-primary"
-                      : "bg-primary/40"
+                      ? "bg-ink"
+                      : "bg-ink opacity-40"
                   }`}
                 >
-                  <Text className="text-base font-body-bold text-white">
+                  <Text className="text-base font-body-bold text-on-ink">
                     Continue
                   </Text>
                 </Pressable>
@@ -410,7 +412,7 @@ export default function WastagePage() {
                 keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-                <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
+                <Text className="text-sm font-body-semi text-text-2">
                   Reason
                 </Text>
                 <View className="mt-2 flex-row flex-wrap gap-2">
@@ -421,14 +423,14 @@ export default function WastagePage() {
                         setReason(r);
                         Haptics.selectionAsync().catch(() => {});
                       }}
-                      className={`rounded-full border-2 px-4 py-2 ${
+                      className={`min-h-11 justify-center rounded-full border-2 px-4 py-2 ${
                         reason === r
-                          ? "border-primary bg-primary-50"
-                          : "border-border bg-surface"
+                          ? "border-ink bg-sunken"
+                          : "border-line bg-surface"
                       }`}
                     >
                       <Text
-                        className={`text-sm font-body-bold ${reason === r ? "text-primary" : "text-muted-fg"}`}
+                        className={`text-sm font-body-bold ${reason === r ? "text-text" : "text-text-2"}`}
                       >
                         {r}
                       </Text>
@@ -436,26 +438,26 @@ export default function WastagePage() {
                   ))}
                 </View>
 
-                <Text className="mt-5 text-xs font-body-semi uppercase tracking-wide text-muted">
+                <Text className="mt-5 text-sm font-body-semi text-text-2">
                   Notes (optional)
                 </Text>
                 <TextInput
                   value={notes}
                   onChangeText={setNotes}
                   placeholder="Additional details…"
-                  placeholderTextColor="#9B9B9B"
+                  placeholderTextColor={C["text-3"]}
                   multiline
-                  className="mt-2 min-h-16 rounded-2xl border border-border bg-surface px-4 py-3 text-base font-body text-espresso"
+                  className="mt-2 min-h-16 rounded-2xl border border-line bg-surface px-4 py-3 text-base font-body text-text"
                 />
 
-                <View className="mt-6 rounded-2xl border border-border bg-surface p-3">
-                  <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
+                <View className="mt-6 rounded-2xl border border-line bg-surface p-3">
+                  <Text className="text-sm font-body-semi text-text-2">
                     Summary
                   </Text>
-                  <Text className="mt-1 text-base font-body-bold text-espresso">
+                  <Text className="mt-1 text-base font-body-bold text-text">
                     {selectedProduct?.name}
                   </Text>
-                  <Text className="text-sm font-body text-muted-fg">
+                  <Text className="text-sm font-body text-text-2">
                     {qty} {selectedProduct?.baseUom} · {reason || ", "}
                   </Text>
                 </View>
@@ -464,15 +466,15 @@ export default function WastagePage() {
                   onPress={submit}
                   disabled={!reason || submitting}
                   className={`mt-6 h-16 flex-row items-center justify-center gap-2 rounded-2xl ${
-                    reason && !submitting ? "bg-primary" : "bg-primary/40"
+                    reason && !submitting ? "bg-ink" : "bg-ink opacity-40"
                   }`}
                 >
                   {submitting ? (
-                    <ActivityIndicator color="#FFFFFF" />
+                    <ActivityIndicator color={C["on-ink"]} />
                   ) : (
                     <>
-                      <Trash2 color="#FFFFFF" size={20} />
-                      <Text className="text-base font-body-bold text-white">
+                      <Trash2 color={C["on-ink"]} size={20} />
+                      <Text className="text-base font-body-bold text-on-ink">
                         Record wastage
                       </Text>
                     </>
@@ -500,9 +502,9 @@ function Stepper({
         onChange(sign === "+" ? 1 : -1);
         Haptics.selectionAsync().catch(() => {});
       }}
-      className="h-14 w-14 items-center justify-center rounded-2xl border-2 border-primary/40 active:bg-primary-50"
+      className="h-14 w-14 items-center justify-center rounded-2xl border-2 border-line-2 active:bg-sunken"
     >
-      <Text className="text-2xl font-display text-primary">{sign}</Text>
+      <Text className="text-2xl font-display text-text">{sign}</Text>
     </Pressable>
   );
 }

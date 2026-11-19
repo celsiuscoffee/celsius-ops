@@ -19,6 +19,7 @@ import {
   Users,
   AlertTriangle,
 } from "lucide-react";
+import { formatTime } from "@/lib/format-time";
 
 const STORAGE_AREA_LABELS: Record<string, string> = {
   FRIDGE: "Fridge",
@@ -206,7 +207,7 @@ export default function StockCheckPage() {
   useEffect(() => {
     if (Object.keys(counts).length > 0) {
       saveDraft(frequency, counts);
-      setLastSaved(new Date().toLocaleTimeString());
+      setLastSaved(formatTime(Date.now()));
     }
   }, [counts, frequency]);
 
@@ -752,10 +753,10 @@ export default function StockCheckPage() {
   if (loading) {
     return (
       <>
-        <TopBar title="Stock Count" />
+        <TopBar title="Stock count" />
         <div className="flex flex-col items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-terracotta" />
-          <p className="mt-3 text-sm text-gray-500">Loading products...</p>
+          <Loader2 className="h-8 w-8 animate-spin text-brand-text" />
+          <p className="mt-3 text-sm text-text-3">Loading products...</p>
         </div>
       </>
     );
@@ -764,9 +765,9 @@ export default function StockCheckPage() {
   if (error && products.length === 0) {
     return (
       <>
-        <TopBar title="Stock Count" />
+        <TopBar title="Stock count" />
         <div className="flex flex-col items-center justify-center py-20 px-4">
-          <p className="text-sm font-medium text-red-600">{error}</p>
+          <p className="text-sm font-medium text-danger-text">{error}</p>
           <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
             Retry
           </Button>
@@ -779,21 +780,21 @@ export default function StockCheckPage() {
   if (submitted) {
     return (
       <>
-        <TopBar title="Stock Count" />
+        <TopBar title="Stock count" />
         <div className="flex flex-col items-center justify-center py-20 px-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-            <Check className="h-8 w-8 text-green-600" />
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-ok-soft">
+            <Check className="h-8 w-8 text-ok-text" />
           </div>
-          <h2 className="mt-4 text-lg font-semibold text-gray-900">Stock Count Finalized</h2>
-          <p className="mt-1 text-sm text-gray-500">Your count has been recorded.</p>
+          <h2 className="mt-4 text-lg font-semibold text-text">Stock count finalised</h2>
+          <p className="mt-1 text-sm text-text-3">Your count has been recorded.</p>
           <Button
-            className="mt-6 bg-terracotta hover:bg-terracotta-dark"
+            className="mt-6 bg-ink hover:bg-ink-hover"
             onClick={() => {
               setSubmitted(false);
               setStartNewOverride((v) => !v); // toggle to retrigger fetchActive
             }}
           >
-            Start New Count
+            Start a new count
           </Button>
         </div>
       </>
@@ -809,23 +810,23 @@ export default function StockCheckPage() {
     const finalizerName = submittedToday.finalizedBy?.name || submittedToday.countedBy?.name || "Someone";
     return (
       <>
-        <TopBar title="Stock Count" />
+        <TopBar title="Stock count" />
         <div className="flex flex-col items-center justify-center py-20 px-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-            <Check className="h-8 w-8 text-green-600" />
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-ok-soft">
+            <Check className="h-8 w-8 text-ok-text" />
           </div>
-          <h2 className="mt-4 text-lg font-semibold text-gray-900">Today&apos;s {frequency} count is done</h2>
-          <p className="mt-1 text-sm text-gray-500 text-center">
+          <h2 className="mt-4 text-lg font-semibold text-text">Today&apos;s {frequency} count is done</h2>
+          <p className="mt-1 text-sm text-text-3 text-center">
             Finalized by {finalizerName}
-            {finalizedTime && <> at {new Date(finalizedTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</>}
+            {finalizedTime && <> at {formatTime(finalizedTime)}</>}
           </p>
           <Button
-            className="mt-6 bg-terracotta hover:bg-terracotta-dark"
+            className="mt-6 bg-ink hover:bg-ink-hover"
             onClick={() => setStartNewOverride(true)}
           >
-            Start New Count
+            Start a new count
           </Button>
-          <p className="mt-3 text-xs text-gray-400 text-center max-w-xs">
+          <p className="mt-3 text-xs text-text-3 text-center max-w-xs">
             Only start a new count if you need to re-count after a delivery or adjustment.
           </p>
         </div>
@@ -835,10 +836,10 @@ export default function StockCheckPage() {
 
   return (
     <>
-      <TopBar title="Stock Count" />
+      <TopBar title="Stock count" />
 
       {/* Frequency tabs + progress */}
-      <div className="sticky top-0 z-40 border-b border-gray-200 bg-white">
+      <div className="sticky top-0 z-40 border-b border-line bg-surface">
         <div className="px-4 pt-3 pb-2">
           <div className="mx-auto flex max-w-lg items-center gap-1">
             {(["daily", "weekly", "monthly"] as const).map((f) => (
@@ -847,8 +848,8 @@ export default function StockCheckPage() {
                 onClick={() => switchFrequency(f)}
                 className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors ${
                   frequency === f
-                    ? "bg-terracotta text-white"
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                    ? "bg-ink text-on-ink"
+                    : "bg-sunken text-text-3 hover:bg-line"
                 }`}
               >
                 {f}
@@ -857,7 +858,7 @@ export default function StockCheckPage() {
             {countedItems > 0 && (
               <button
                 onClick={resetCheck}
-                className="ml-auto flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                className="ml-auto flex items-center gap-1 text-xs text-text-3 hover:text-text-2"
               >
                 <RotateCcw className="h-3 w-3" />
                 Reset
@@ -867,19 +868,19 @@ export default function StockCheckPage() {
 
           {/* Progress */}
           <div className="mt-2 flex items-center justify-between text-xs">
-            <span className="text-gray-500">
-              <span className="font-semibold text-gray-900">{countedItems}/{totalItems}</span> counted
-              {lastSaved && <span className="ml-2 text-green-500">· saved {lastSaved}</span>}
+            <span className="text-text-3">
+              <span className="font-semibold text-text">{countedItems}/{totalItems}</span> counted
+              {lastSaved && <span className="ml-2 text-ok">· saved {lastSaved}</span>}
             </span>
             <Badge
               variant={countedItems === totalItems ? "default" : "secondary"}
-              className={countedItems === totalItems ? "bg-green-500" : ""}
+              className={countedItems === totalItems ? "bg-ok" : ""}
             >
               {progressPct}%
             </Badge>
           </div>
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100">
-            <div className="h-full rounded-full bg-terracotta transition-all duration-500" style={{ width: `${progressPct}%` }} />
+          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-sunken">
+            <div className="h-full rounded-full bg-ink transition-all duration-500" style={{ width: `${progressPct}%` }} />
           </div>
 
           {/* Collaborators strip — shows other people counting alongside you.
@@ -887,14 +888,14 @@ export default function StockCheckPage() {
               first-tapping the page doesn't show a stale "0 contributors". */}
           {contributors.length > 0 && (
             <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-0.5">
-              <Users className="h-3 w-3 shrink-0 text-gray-400" />
+              <Users className="h-3 w-3 shrink-0 text-text-3" />
               {contributors.map((c) => (
                 <span
                   key={c.id}
                   className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
                     c.id === user?.id
-                      ? "bg-terracotta/10 text-terracotta-dark"
-                      : "bg-blue-50 text-blue-700"
+                      ? "bg-brand-soft text-brand-text"
+                      : "bg-info-soft text-info-text"
                   }`}
                   title={`${c.itemCount} item${c.itemCount === 1 ? "" : "s"}`}
                 >
@@ -907,10 +908,10 @@ export default function StockCheckPage() {
       </div>
 
       {/* Search */}
-      <div className="sticky top-[105px] z-30 border-b border-gray-100 bg-white px-4 py-2">
+      <div className="sticky top-[105px] z-30 border-b border-line bg-surface px-4 py-2">
         <div className="mx-auto max-w-lg">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
             <Input
               placeholder="Search product..."
               value={search}
@@ -923,7 +924,7 @@ export default function StockCheckPage() {
 
       {error && (
         <div className="mx-4 mt-3">
-          <div className="mx-auto max-w-lg rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+          <div className="mx-auto max-w-lg rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-text">{error}</div>
         </div>
       )}
 
@@ -933,7 +934,7 @@ export default function StockCheckPage() {
           happens at finalize. */}
       {schedule?.offSchedule && (
         <div className="mx-4 mt-3">
-          <div className="mx-auto flex max-w-lg items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <div className="mx-auto flex max-w-lg items-start gap-2 rounded-lg border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn-text">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
               The {frequency} count is due <span className="font-medium">{schedule.expectedLabel}</span>.
@@ -947,7 +948,7 @@ export default function StockCheckPage() {
       <div className="px-4 py-3 pb-28">
         <div className="mx-auto max-w-lg space-y-3">
           {filteredData.length === 0 && (
-            <p className="py-8 text-center text-sm text-gray-400">
+            <p className="py-8 text-center text-sm text-text-3">
               {search ? "No products match your search." : "No products found."}
             </p>
           )}
@@ -970,16 +971,16 @@ export default function StockCheckPage() {
                     className="flex items-center gap-2"
                   >
                     {isCollapsed
-                      ? <ChevronRight className="h-4 w-4 text-gray-400" />
-                      : <ChevronDown className="h-4 w-4 text-gray-400" />}
-                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      ? <ChevronRight className="h-4 w-4 text-text-3" />
+                      : <ChevronDown className="h-4 w-4 text-text-3" />}
+                    <span className="text-xs font-semibold uppercase tracking-wide text-text-3">
                       {displayLabel(group.area)}
                     </span>
-                    <span className={`text-xs ${allCounted ? "text-green-500" : "text-gray-400"}`}>
+                    <span className={`text-xs ${allCounted ? "text-ok" : "text-text-3"}`}>
                       {groupCounted}/{groupTotal}
                     </span>
                   </button>
-                  {allCounted && <Check className="h-4 w-4 text-green-500" />}
+                  {allCounted && <Check className="h-4 w-4 text-ok" />}
                 </div>
 
                 {!isCollapsed && (
@@ -999,7 +1000,7 @@ export default function StockCheckPage() {
                       return (
                         <Card
                           key={item.id}
-                          className={`overflow-hidden transition-all active:scale-[0.98] ${isCounted ? "border-green-200 bg-green-50/30" : "bg-white"}`}
+                          className={`overflow-hidden transition-all active:scale-[0.98] ${isCounted ? "border-ok/30 bg-ok-soft/30" : "bg-surface"}`}
                           onClick={() => openKeypad(item)}
                         >
                           <div className="flex items-center gap-3 px-3 py-3 cursor-pointer">
@@ -1007,8 +1008,8 @@ export default function StockCheckPage() {
                             <div
                               className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
                                 isCounted
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-gray-100 text-gray-400"
+                                  ? "bg-ok-soft text-ok-text"
+                                  : "bg-sunken text-text-3"
                               }`}
                             >
                               {isCounted ? count.qty : "—"}
@@ -1016,19 +1017,19 @@ export default function StockCheckPage() {
 
                             {/* Product info — NO balance shown (blind count) */}
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-gray-900">{item.name}</p>
-                              <p className="flex items-center gap-1.5 text-xs text-gray-400">
+                              <p className="truncate text-sm font-medium text-text">{item.name}</p>
+                              <p className="flex items-center gap-1.5 text-xs text-text-3">
                                 <span>{uom}</span>
                                 {countedByOther && serverIt?.countedAt && (
-                                  <span className="rounded bg-blue-50 px-1.5 py-px text-[10px] font-medium text-blue-700">
-                                    {serverIt.countedBy!.name} {new Date(serverIt.countedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                  <span className="rounded bg-info-soft px-1.5 py-px text-[10px] font-medium text-info-text">
+                                    {serverIt.countedBy!.name} {formatTime(serverIt.countedAt)}
                                   </span>
                                 )}
                               </p>
                             </div>
 
                             {isCounted && (
-                              <Check className="h-4 w-4 shrink-0 text-green-500" />
+                              <Check className="h-4 w-4 shrink-0 text-ok" />
                             )}
                           </div>
                         </Card>
@@ -1044,10 +1045,10 @@ export default function StockCheckPage() {
 
       {/* Bottom submit bar — taller Finalize button for an obvious primary
           action at the bottom of long count lists. */}
-      <div className="fixed bottom-14 left-0 right-0 z-40 border-t border-gray-200 bg-white px-4 py-3">
+      <div className="fixed bottom-14 left-0 right-0 z-40 border-t border-line bg-surface px-4 py-3">
         <div className="mx-auto flex max-w-lg gap-2">
           <Button
-            className="flex-1 h-14 bg-terracotta hover:bg-terracotta-dark text-base font-semibold"
+            className="flex-1 h-14 bg-ink hover:bg-ink-hover text-base font-semibold"
             disabled={countedItems < totalItems || submitting}
             onClick={() => handleSubmit()}
           >
@@ -1067,16 +1068,16 @@ export default function StockCheckPage() {
           out; no way to carry on pretending it's the same date. */}
       {expiredCount && !expiredAction && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5">
+          <div className="w-full max-w-md rounded-t-2xl bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warn-soft">
+                <AlertTriangle className="h-5 w-5 text-warn-text" />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-base font-semibold text-gray-900">
+                <h3 className="text-base font-semibold text-text">
                   This count expired
                 </h3>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-text-3">
                   It was started {expiredCount.daysOpen === 1 ? "a day" : `${expiredCount.daysOpen} days`} ago
                   {expiredCount.countDate && (
                     <> and is dated {new Date(expiredCount.countDate).toLocaleDateString()}</>
@@ -1088,7 +1089,7 @@ export default function StockCheckPage() {
             </div>
             <div className="mt-5 grid gap-2">
               <Button
-                className="h-12 bg-terracotta hover:bg-terracotta-dark"
+                className="h-12 bg-ink hover:bg-ink-hover"
                 onClick={() => {
                   // Leave the old draft alone and count today from scratch.
                   setExpiredAction("new");
@@ -1115,7 +1116,7 @@ export default function StockCheckPage() {
                 Continue it (re-date to today)
               </Button>
             </div>
-            <p className="mt-3 text-center text-xs text-gray-400">
+            <p className="mt-3 text-center text-xs text-text-3">
               Nothing already counted is deleted either way.
             </p>
           </div>
@@ -1127,16 +1128,16 @@ export default function StockCheckPage() {
           count is then filed under the day it closes, with that answer on it. */}
       {stalePrompt && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5">
+          <div className="w-full max-w-md rounded-t-2xl bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warn-soft">
+                <AlertTriangle className="h-5 w-5 text-warn-text" />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-base font-semibold text-gray-900">
+                <h3 className="text-base font-semibold text-text">
                   Open {stalePrompt.daysOpen === 1 ? "a day" : `${stalePrompt.daysOpen} days`} — when was this counted?
                 </h3>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-text-3">
                   A manager will review it. Say which day(s) the stock was physically counted so the
                   numbers can be read correctly.
                 </p>
@@ -1154,7 +1155,7 @@ export default function StockCheckPage() {
                 Cancel
               </Button>
               <Button
-                className="bg-terracotta hover:bg-terracotta-dark"
+                className="bg-ink hover:bg-ink-hover"
                 disabled={stalePrompt.reason.trim().length < 3 || submitting}
                 onClick={() => void handleSubmit({ staleReason: stalePrompt.reason.trim() })}
               >
@@ -1170,16 +1171,16 @@ export default function StockCheckPage() {
           reviews it instead of it auto-approving. */}
       {schedulePrompt && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 sm:rounded-2xl">
+          <div className="w-full max-w-md rounded-t-2xl bg-surface p-5 sm:rounded-2xl">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warn-soft">
+                <AlertTriangle className="h-5 w-5 text-warn-text" />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-base font-semibold text-gray-900">
+                <h3 className="text-base font-semibold text-text">
                   This {frequency} count isn&apos;t due today
                 </h3>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-text-3">
                   It&apos;s due {schedulePrompt.expectedLabel}, and today is {schedulePrompt.actualLabel}.
                   Say why you&apos;re counting now and a manager will review it.
                 </p>
@@ -1197,7 +1198,7 @@ export default function StockCheckPage() {
                 Cancel
               </Button>
               <Button
-                className="bg-terracotta hover:bg-terracotta-dark"
+                className="bg-ink hover:bg-ink-hover"
                 disabled={schedulePrompt.reason.trim().length < 3 || submitting}
                 onClick={() => void handleSubmit({ scheduleReason: schedulePrompt.reason.trim() })}
               >
@@ -1212,18 +1213,18 @@ export default function StockCheckPage() {
           item with a different value. User picks: overwrite or keep theirs. */}
       {conflictPrompt && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-md rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5">
+          <div className="w-full max-w-md rounded-t-2xl bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warn-soft">
+                <AlertTriangle className="h-5 w-5 text-warn-text" />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-base font-semibold text-gray-900">
+                <h3 className="text-base font-semibold text-text">
                   {conflictPrompt.conflict.countedByName ?? "Someone"} already counted this
                 </h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  They saved <span className="font-medium text-gray-900">{conflictPrompt.conflict.countedQty ?? "—"}</span>.
-                  You&apos;re about to overwrite with <span className="font-medium text-gray-900">{conflictPrompt.pending.countedQty}</span>.
+                <p className="mt-1 text-sm text-text-3">
+                  They saved <span className="font-medium text-text">{conflictPrompt.conflict.countedQty ?? "—"}</span>.
+                  You&apos;re about to overwrite with <span className="font-medium text-text">{conflictPrompt.pending.countedQty}</span>.
                 </p>
               </div>
             </div>
@@ -1251,7 +1252,7 @@ export default function StockCheckPage() {
                 Keep theirs
               </Button>
               <Button
-                className="bg-terracotta hover:bg-terracotta-dark"
+                className="bg-ink hover:bg-ink-hover"
                 onClick={async () => {
                   const { productId, productPackageId, countedQty } = conflictPrompt.pending;
                   setConflictPrompt(null);
@@ -1267,17 +1268,17 @@ export default function StockCheckPage() {
 
       {/* ── Keypad overlay ── */}
       {keypadItem && (
-        <div className="fixed inset-0 z-[60] flex flex-col bg-white">
+        <div className="fixed inset-0 z-[60] flex flex-col bg-surface">
           {/* Header */}
-          <div className="border-b border-gray-200 px-4 py-3">
+          <div className="border-b border-line px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
-                <h3 className="truncate text-base font-semibold text-gray-900">{keypadItem.name}</h3>
-                <p className="text-xs text-gray-400">{keypadItem.sku}</p>
+                <h3 className="truncate text-base font-semibold text-text">{keypadItem.name}</h3>
+                <p className="text-xs text-text-3">{keypadItem.sku}</p>
               </div>
               <button
                 onClick={() => setKeypadItem(null)}
-                className="ml-3 rounded-lg p-2 text-gray-400 hover:bg-gray-100"
+                className="ml-3 rounded-lg p-2 text-text-3 hover:bg-sunken"
               >
                 <span className="text-sm font-medium">Cancel</span>
               </button>
@@ -1299,8 +1300,8 @@ export default function StockCheckPage() {
                     onClick={() => setKeypadPkgId(opt.id)}
                     className={`shrink-0 rounded-full border-2 px-4 py-2 text-sm font-semibold transition-colors active:scale-95 ${
                       keypadPkgId === opt.id
-                        ? "border-terracotta bg-terracotta/10 text-terracotta-dark"
-                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                        ? "border-ink bg-brand-soft text-brand-text"
+                        : "border-line bg-surface text-text-2 hover:border-line-2"
                     }`}
                   >
                     {opt.label}
@@ -1313,10 +1314,10 @@ export default function StockCheckPage() {
           {/* Display */}
           <div className="flex flex-1 flex-col items-center justify-center px-6">
             <div className="text-center">
-              <p className={`text-6xl font-bold tabular-nums ${keypadValue ? "text-gray-900" : "text-gray-300"}`}>
+              <p className={`text-6xl font-bold tabular-nums ${keypadValue ? "text-text" : "text-line-ctl"}`}>
                 {keypadValue || "0"}
               </p>
-              <p className="mt-2 text-sm text-gray-400">
+              <p className="mt-2 text-sm text-text-3">
                 {getUomLabel(keypadItem, keypadPkgId)}
               </p>
               {/* Conversion preview — shows the typed value translated into
@@ -1335,9 +1336,9 @@ export default function StockCheckPage() {
                 if (cf <= 1) return null;
                 const total = typed * cf;
                 return (
-                  <p className="mt-3 text-sm font-medium text-amber-700">
+                  <p className="mt-3 text-sm font-medium text-warn-text">
                     = <span className="font-bold">{total.toLocaleString()}</span> {keypadItem.baseUom}
-                    <span className="ml-1 font-normal text-amber-500/80">({typed} × {cf.toLocaleString()})</span>
+                    <span className="ml-1 font-normal text-warn/80">({typed} × {cf.toLocaleString()})</span>
                   </p>
                 );
               })()}
@@ -1347,7 +1348,7 @@ export default function StockCheckPage() {
           {/* Keypad grid — large tap targets so staff can count single-handed
               without misclicks. h-18 = 4.5rem, well above the 44px iOS
               accessibility minimum. */}
-          <div className="border-t border-gray-200 bg-gray-50 px-4 pb-24 pt-3">
+          <div className="border-t border-line bg-sunken/60 px-4 pb-24 pt-3">
             <div className="mx-auto grid max-w-sm grid-cols-3 gap-2.5">
               {["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "backspace"].map((key) => (
                 <button
@@ -1355,8 +1356,8 @@ export default function StockCheckPage() {
                   onClick={() => keypadPress(key)}
                   className={`flex h-[4.5rem] items-center justify-center rounded-2xl text-2xl font-semibold transition-colors active:scale-95 ${
                     key === "backspace"
-                      ? "bg-gray-200 text-gray-600 active:bg-gray-300"
-                      : "bg-white text-gray-900 shadow-sm active:bg-gray-100"
+                      ? "bg-line text-text-2 active:bg-line-2"
+                      : "bg-surface text-text shadow-sm active:bg-sunken"
                   }`}
                 >
                   {key === "backspace" ? <Delete className="h-6 w-6" /> : key}
@@ -1370,14 +1371,14 @@ export default function StockCheckPage() {
               {counts[keypadItem.id] != null && (
                 <Button
                   variant="outline"
-                  className="flex-1 h-14 text-base text-red-500 border-red-200 hover:bg-red-50"
+                  className="flex-1 h-14 text-base text-danger border-danger/30 hover:bg-danger-soft"
                   onClick={keypadClear}
                 >
                   Clear
                 </Button>
               )}
               <Button
-                className="flex-1 h-14 bg-terracotta hover:bg-terracotta-dark text-lg font-semibold"
+                className="flex-1 h-14 bg-ink hover:bg-ink-hover text-lg font-semibold"
                 onClick={keypadConfirm}
                 disabled={!keypadValue && !counts[keypadItem.id]}
               >
