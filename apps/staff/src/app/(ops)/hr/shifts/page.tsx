@@ -1,9 +1,10 @@
 "use client";
 
 import { useFetch } from "@/lib/use-fetch";
+import { formatClock } from "@/lib/format-time";
 import { useState } from "react";
-import Link from "next/link";
-import { CalendarDays, Clock, ArrowLeftRight, Loader2, CheckCircle2, XCircle, ArrowLeft, Sunrise, Sun, Moon, Coffee, MapPin } from "lucide-react";
+import { HRPageHeader } from "@/components/hr-page-header";
+import { CalendarDays, Clock, ArrowLeftRight, Loader2, CheckCircle2, XCircle, Sunrise, Sun, Moon, Coffee, MapPin } from "lucide-react";
 import { FetchError } from "@/components/fetch-error";
 import { SHIFT_SWAP_ENABLED } from "@/lib/hr/constants";
 
@@ -49,7 +50,8 @@ function dayLabel(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00Z");
   return `${DAY_NAMES[d.getUTCDay()]} ${d.getUTCDate()} ${d.toLocaleDateString("en-MY", { month: "short", timeZone: "UTC" })}`;
 }
-const hhmm = (t: string | null | undefined) => (t ?? "").slice(0, 5);
+// 12-hour times on screen (Celsius UI): "8:00 AM"
+const hhmm = (t: string | null | undefined) => formatClock(t);
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -67,50 +69,50 @@ const SHIFT_STYLE: Record<ShiftKind, {
   morning: {
     label: "Morning",
     icon: Sunrise,
-    card: "border-amber-200 bg-amber-50",
-    dateChip: "bg-amber-400 text-white",
-    dateText: "text-amber-900",
-    iconColor: "text-amber-600",
+    card: "border-warn/30 bg-warn-soft",
+    dateChip: "bg-warn text-on-ink",
+    dateText: "text-warn-text",
+    iconColor: "text-warn-text",
   },
   middle: {
     label: "Middle",
     icon: Sun,
-    card: "border-cyan-200 bg-cyan-50",
-    dateChip: "bg-cyan-500 text-white",
-    dateText: "text-cyan-900",
-    iconColor: "text-cyan-600",
+    card: "border-info/30 bg-info-soft",
+    dateChip: "bg-info text-on-ink",
+    dateText: "text-info-text",
+    iconColor: "text-info-text",
   },
   afternoon: {
     label: "Afternoon",
     icon: Sun,
-    card: "border-blue-200 bg-blue-50",
-    dateChip: "bg-blue-500 text-white",
-    dateText: "text-blue-900",
-    iconColor: "text-blue-600",
+    card: "border-info/30 bg-info-soft",
+    dateChip: "bg-info text-on-ink",
+    dateText: "text-info-text",
+    iconColor: "text-info-text",
   },
   evening: {
     label: "Evening",
     icon: Moon,
-    card: "border-indigo-200 bg-indigo-50",
-    dateChip: "bg-indigo-500 text-white",
-    dateText: "text-indigo-900",
-    iconColor: "text-indigo-600",
+    card: "border-info/30 bg-info-soft",
+    dateChip: "bg-info text-on-ink",
+    dateText: "text-info-text",
+    iconColor: "text-info-text",
   },
   full_day: {
     label: "Full day",
     icon: Clock,
-    card: "border-emerald-200 bg-emerald-50",
-    dateChip: "bg-emerald-500 text-white",
-    dateText: "text-emerald-900",
-    iconColor: "text-emerald-600",
+    card: "border-ok/30 bg-ok-soft",
+    dateChip: "bg-ok text-on-ink",
+    dateText: "text-ok-text",
+    iconColor: "text-ok-text",
   },
   rest_day: {
     label: "Rest day",
     icon: Coffee,
-    card: "border-gray-200 bg-gray-50",
-    dateChip: "bg-gray-300 text-gray-700",
-    dateText: "text-gray-700",
-    iconColor: "text-gray-500",
+    card: "border-line bg-sunken/60",
+    dateChip: "bg-line-2 text-text-2",
+    dateText: "text-text-2",
+    iconColor: "text-text-3",
   },
 };
 
@@ -185,33 +187,24 @@ export default function MyShiftsPage() {
 
   const statusBadge = (status: string) => {
     const map: Record<string, { label: string; color: string }> = {
-      pending_consent: { label: "Waiting for coworker", color: "bg-amber-50 text-amber-600" },
-      pending_approval: { label: "Waiting for manager", color: "bg-blue-50 text-blue-600" },
-      approved: { label: "Approved", color: "bg-green-50 text-green-600" },
-      rejected: { label: "Rejected", color: "bg-red-50 text-red-600" },
-      consent_declined: { label: "Declined", color: "bg-red-50 text-red-600" },
-      cancelled: { label: "Cancelled", color: "bg-gray-50 text-gray-500" },
+      pending_consent: { label: "Waiting for coworker", color: "bg-warn-soft text-warn-text" },
+      pending_approval: { label: "Waiting for manager", color: "bg-info-soft text-info-text" },
+      approved: { label: "Approved", color: "bg-ok-soft text-ok-text" },
+      rejected: { label: "Rejected", color: "bg-danger-soft text-danger-text" },
+      consent_declined: { label: "Declined", color: "bg-danger-soft text-danger-text" },
+      cancelled: { label: "Cancelled", color: "bg-sunken/60 text-text-3" },
     };
-    const s = map[status] || { label: status, color: "bg-gray-50 text-gray-500" };
+    const s = map[status] || { label: status, color: "bg-sunken/60 text-text-3" };
     return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${s.color}`}>{s.label}</span>;
   };
 
   return (
-    <div className="px-4 pt-6">
-      <div className="mb-6 flex items-center gap-3">
-        <Link
-          href="/hr"
-          aria-label="Back"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="text-2xl font-bold">My Shifts</h1>
-      </div>
+    <div className="px-4 pb-6">
+      <HRPageHeader title="My shifts" subtitle="When you work, and swapping a shift." />
 
       {swapNotice && (
         <div className={`mb-4 rounded-xl px-4 py-2.5 text-sm font-medium ${
-          swapNotice.ok ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+          swapNotice.ok ? "bg-ok-soft text-ok-text" : "bg-danger-soft text-danger-text"
         }`}>
           {swapNotice.text}
         </div>
@@ -220,21 +213,21 @@ export default function MyShiftsPage() {
       {/* Pending swap consent requests FROM coworkers */}
       {SHIFT_SWAP_ENABLED && pendingConsent.length > 0 && (
         <div className="mb-6">
-          <h2 className="mb-2 text-sm font-semibold text-amber-600">Swap Requests for You</h2>
+          <h2 className="mb-2 text-sm font-semibold text-warn-text">Swaps asked of you</h2>
           {pendingConsent.map((swap) => (
-            <div key={swap.id} className="mb-2 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <div key={swap.id} className="mb-2 rounded-2xl border border-warn/30 bg-warn-soft p-4">
               <p className="text-sm font-medium">
                 <strong>{swap.requester_name ?? "A coworker"}</strong> wants to swap your{" "}
                 <strong>{dayLabel(swap.target_shift.shift_date)} {hhmm(swap.target_shift.start_time)}-{hhmm(swap.target_shift.end_time)}</strong>
                 {" "}with their{" "}
                 <strong>{dayLabel(swap.requester_shift.shift_date)} {hhmm(swap.requester_shift.start_time)}-{hhmm(swap.requester_shift.end_time)}</strong>
               </p>
-              {swap.reason && <p className="mt-1 text-xs text-gray-500">{swap.reason}</p>}
+              {swap.reason && <p className="mt-1 text-xs text-text-3">{swap.reason}</p>}
               <div className="mt-3 flex gap-2">
                 <button
                   onClick={() => handleSwapResponse(swap.id, "consent")}
                   disabled={swapAction === swap.id}
-                  className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                  className="flex items-center gap-1 rounded-lg bg-ok px-3 py-1.5 text-xs font-medium text-on-ink disabled:opacity-50"
                 >
                   {swapAction === swap.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                   Accept
@@ -242,7 +235,7 @@ export default function MyShiftsPage() {
                 <button
                   onClick={() => handleSwapResponse(swap.id, "decline")}
                   disabled={swapAction === swap.id}
-                  className="flex items-center gap-1 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                  className="flex items-center gap-1 rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-on-ink disabled:opacity-50"
                 >
                   <XCircle className="h-3 w-3" /> Decline
                 </button>
@@ -283,10 +276,10 @@ export default function MyShiftsPage() {
 
         if (!hasAnyShift) {
           return (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-gray-50 py-16 text-center">
-              <CalendarDays className="mb-3 h-12 w-12 text-gray-300" />
-              <p className="font-semibold text-gray-500">No upcoming shifts</p>
-              <p className="text-sm text-gray-400">Schedule not published yet</p>
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-line bg-sunken/60 py-16 text-center">
+              <CalendarDays className="mb-3 h-12 w-12 text-line-ctl" />
+              <p className="font-semibold text-text-3">No upcoming shifts</p>
+              <p className="text-sm text-text-3">Schedule not published yet</p>
             </div>
           );
         }
@@ -314,25 +307,25 @@ export default function MyShiftsPage() {
                   <div
                     key={dateStr}
                     className={`flex items-center gap-4 rounded-2xl border border-dashed p-4 ${
-                      isToday ? "border-terracotta/60 bg-orange-50/40" : "border-gray-200 bg-gray-50/60"
+                      isToday ? "border-brand/60 bg-warn-soft/40" : "border-line bg-sunken/60"
                     }`}
                   >
                     <div className={`flex h-14 w-14 flex-col items-center justify-center rounded-xl ${
-                      isToday ? "bg-terracotta/90 text-white" : isWeekend ? "bg-gray-200 text-gray-600" : "bg-gray-100 text-gray-500"
+                      isToday ? "bg-brand/90 text-on-brand" : isWeekend ? "bg-line text-text-2" : "bg-sunken text-text-3"
                     }`}>
                       <span className="text-[10px] font-bold uppercase">{dayName}</span>
                       <span className="text-lg font-bold leading-tight">{dayNum}</span>
                       <span className="text-[10px]">{month}</span>
                     </div>
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 text-gray-500">
+                      <div className="flex items-center gap-2 text-text-3">
                         <Coffee className="h-4 w-4" />
                         <span className="text-sm font-medium">Rest day</span>
                       </div>
-                      <p className="text-xs text-gray-400">{subtitle}</p>
+                      <p className="text-xs text-text-3">{subtitle}</p>
                     </div>
                     {isToday && (
-                      <span className="rounded-full bg-terracotta px-2 py-0.5 text-[10px] font-bold text-white">
+                      <span className="rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold text-on-ink">
                         TODAY
                       </span>
                     )}
@@ -351,7 +344,7 @@ export default function MyShiftsPage() {
                       <div
                         key={shift.id}
                         className={`flex items-center gap-4 rounded-2xl border p-4 ${
-                          isToday ? "ring-2 ring-terracotta ring-offset-1" : ""
+                          isToday ? "ring-2 ring-text ring-offset-1" : ""
                         } ${style.card}`}
                       >
                         <div className={`flex h-14 w-14 flex-col items-center justify-center rounded-xl ${style.dateChip}`}>
@@ -363,7 +356,7 @@ export default function MyShiftsPage() {
                           <div className={`flex items-center gap-2 ${style.dateText}`}>
                             <Icon className={`h-4 w-4 ${style.iconColor}`} />
                             <span className="font-semibold">
-                              {shift.start_time.slice(0, 5)} — {shift.end_time.slice(0, 5)}
+                              {formatClock(shift.start_time)} – {formatClock(shift.end_time)}
                             </span>
                             <span className={`text-[10px] font-semibold uppercase tracking-wide ${style.iconColor}`}>
                               {style.label}
@@ -385,11 +378,11 @@ export default function MyShiftsPage() {
                           )}
                         </div>
                         {isToday ? (
-                          <span className="rounded-full bg-terracotta px-2 py-0.5 text-[10px] font-bold text-white">
+                          <span className="rounded-full bg-ink px-2 py-0.5 text-[10px] font-bold text-on-ink">
                             TODAY
                           </span>
                         ) : !SHIFT_SWAP_ENABLED ? null : shiftsInOpenSwap.has(shift.id) ? (
-                          <span className="rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold text-gray-500">
+                          <span className="rounded-full bg-surface/70 px-2 py-0.5 text-[10px] font-semibold text-text-3">
                             Swap pending
                           </span>
                         ) : (
@@ -397,7 +390,7 @@ export default function MyShiftsPage() {
                           <button
                             onClick={() => { setSwapNotice(null); setSwapFor(shift); }}
                             aria-label="Request a swap for this shift"
-                            className="flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-semibold text-gray-700 shadow-sm active:scale-95"
+                            className="flex items-center gap-1 rounded-full bg-surface/80 px-2.5 py-1 text-[11px] font-semibold text-text-2 shadow-sm active:scale-95"
                           >
                             <ArrowLeftRight className="h-3 w-3" /> Swap
                           </button>
@@ -427,23 +420,23 @@ export default function MyShiftsPage() {
       {/* My Sent Swap Requests */}
       {SHIFT_SWAP_ENABLED && sentSwaps.length > 0 && (
         <div className="mt-6">
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-500">
-            <ArrowLeftRight className="h-4 w-4" /> My Swap Requests
+          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-text-3">
+            <ArrowLeftRight className="h-4 w-4" /> My swap requests
           </h2>
           <div className="space-y-2">
             {sentSwaps.map((swap) => {
               const cancellable = swap.status === "pending_consent" || swap.status === "pending_approval";
               return (
-                <div key={swap.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-white p-3">
-                  <ArrowLeftRight className="h-4 w-4 shrink-0 text-gray-400" />
+                <div key={swap.id} className="flex items-center gap-3 rounded-xl border border-line bg-surface p-3">
+                  <ArrowLeftRight className="h-4 w-4 shrink-0 text-text-3" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm">
                       {swap.requester_shift ? dayLabel(swap.requester_shift.shift_date) : "?"}
                       {" ↔ "}
                       {swap.target_shift ? dayLabel(swap.target_shift.shift_date) : "?"}
-                      {swap.target_name ? <span className="text-gray-500"> with {swap.target_name}</span> : null}
+                      {swap.target_name ? <span className="text-text-3"> with {swap.target_name}</span> : null}
                     </p>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-text-3">
                       Sent {new Date(swap.created_at).toLocaleDateString("en-MY")}
                     </p>
                   </div>
@@ -454,7 +447,7 @@ export default function MyShiftsPage() {
                       disabled={swapAction === swap.id}
                       aria-label="Withdraw swap request"
                       title="Withdraw this request"
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-gray-400 active:bg-gray-100 disabled:opacity-50"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-text-3 active:bg-sunken disabled:opacity-50"
                     >
                       {swapAction === swap.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
                     </button>
@@ -539,43 +532,43 @@ function SwapPicker({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
       <div
-        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 pb-8"
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-surface p-5 pb-8"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Request a shift swap"
       >
         <div className="mb-1 flex items-center justify-between">
           <h2 className="text-base font-bold">Swap this shift</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded-full p-1 text-gray-400 active:bg-gray-100">
+          <button onClick={onClose} aria-label="Close" className="rounded-full p-1 text-text-3 active:bg-sunken">
             <XCircle className="h-5 w-5" />
           </button>
         </div>
-        <p className="mb-4 text-sm text-gray-600">
+        <p className="mb-4 text-sm text-text-2">
           Your <strong>{dayLabel(shift.shift_date)} {hhmm(shift.start_time)}–{hhmm(shift.end_time)}</strong>
           {shift.outlet_name ? <span> at {shift.outlet_name}</span> : null}
         </p>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-8 text-gray-400">
+          <div className="flex items-center justify-center py-8 text-text-3">
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         ) : fetchMessage ? (
-          <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">{fetchMessage}</p>
+          <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-text">{fetchMessage}</p>
         ) : data?.myShiftBusy ? (
-          <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          <p className="rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn-text">
             This shift already has a swap request in progress. Withdraw it first.
           </p>
         ) : candidates.length === 0 ? (
-          <p className="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-500">
+          <p className="rounded-xl bg-sunken/60 px-4 py-3 text-sm text-text-3">
             No coworker shifts to swap with in the two weeks around this one. Ask your manager instead.
           </p>
         ) : (
           <>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Take over a coworker&apos;s shift</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-3">Take over a coworker&apos;s shift</p>
             <div className="mb-4 max-h-[40vh] space-y-3 overflow-y-auto pr-1">
               {Array.from(byDate.entries()).map(([date, list]) => (
                 <div key={date}>
-                  <p className="mb-1 text-xs font-semibold text-gray-500">{dayLabel(date)}</p>
+                  <p className="mb-1 text-xs font-semibold text-text-3">{dayLabel(date)}</p>
                   <div className="space-y-1.5">
                     {list.map((c) => {
                       const selected = picked?.shift_id === c.shift_id;
@@ -584,16 +577,16 @@ function SwapPicker({
                           key={c.shift_id}
                           onClick={() => setPicked(c)}
                           className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left ${
-                            selected ? "border-terracotta bg-orange-50" : "border-gray-200 bg-white"
+                            selected ? "border-ink bg-warn-soft" : "border-line bg-surface"
                           }`}
                         >
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">{c.name}</p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-text-3">
                               {hhmm(c.start_time)}–{hhmm(c.end_time)}{c.role_type ? ` · ${c.role_type}` : ""}
                             </p>
                           </div>
-                          {selected && <CheckCircle2 className="h-4 w-4 shrink-0 text-terracotta" />}
+                          {selected && <CheckCircle2 className="h-4 w-4 shrink-0 text-brand-text" />}
                         </button>
                       );
                     })}
@@ -602,7 +595,7 @@ function SwapPicker({
               ))}
             </div>
             <label className="mb-3 block">
-              <span className="mb-1 block text-xs font-medium text-gray-500">Note to your coworker (optional)</span>
+              <span className="mb-1 block text-xs font-medium text-text-3">Note to your coworker (optional)</span>
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -612,16 +605,16 @@ function SwapPicker({
                 className="w-full rounded-lg border px-3 py-2 text-sm"
               />
             </label>
-            {err && <p className="mb-3 text-sm font-medium text-red-600">{err}</p>}
+            {err && <p className="mb-3 text-sm font-medium text-danger-text">{err}</p>}
             <button
               onClick={submit}
               disabled={!picked || submitting}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-terracotta py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-ink py-2.5 text-sm font-medium text-on-ink disabled:opacity-50"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
               {picked ? `Ask ${picked.name} to swap` : "Pick a shift"}
             </button>
-            <p className="mt-2 text-center text-[11px] text-gray-400">
+            <p className="mt-2 text-center text-[11px] text-text-3">
               They accept first, then your manager confirms. Nothing changes until then.
             </p>
           </>

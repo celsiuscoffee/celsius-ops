@@ -101,7 +101,7 @@ export function TopBar({ title, outlet, onOutletSwitch }: TopBarProps) {
   const showDropdown = outlets.length > 1;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-white px-4 py-3">
+    <header className="sticky top-0 z-40 border-b border-line bg-bg px-4 py-2.5">
       <div className="mx-auto flex max-w-lg items-center gap-3">
         <img
           src="/images/celsius-logo-sm.jpg"
@@ -111,12 +111,12 @@ export function TopBar({ title, outlet, onOutletSwitch }: TopBarProps) {
           className="rounded-md"
         />
         <div className="relative flex-1" ref={dropdownRef}>
-          <h1 className="font-heading text-lg font-semibold text-brand-dark">{title}</h1>
+          <h1 className="font-heading text-xl font-semibold text-text">{title}</h1>
           {showDropdown ? (
             <button
               ref={triggerRef}
               onClick={() => setOpen(!open)}
-              className="mt-0.5 -ml-1 flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-medium text-terracotta active:bg-terracotta/5"
+              className="-ml-1 flex min-h-8 items-center gap-1 rounded-ctl px-1 text-[13px] font-medium text-text-2 active:bg-sunken"
               aria-expanded={open}
               aria-haspopup="listbox"
             >
@@ -124,7 +124,7 @@ export function TopBar({ title, outlet, onOutletSwitch }: TopBarProps) {
               <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
             </button>
           ) : (
-            <p className="mt-0.5 text-sm text-terracotta">{currentOutlet}</p>
+            <p className="text-[13px] text-text-2">{currentOutlet}</p>
           )}
         </div>
       </div>
@@ -141,7 +141,7 @@ export function TopBar({ title, outlet, onOutletSwitch }: TopBarProps) {
             aria-hidden="true"
           />
           <div
-            className="fixed z-[101] min-w-[280px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl ring-1 ring-black/5 animate-in fade-in slide-in-from-top-2 duration-150"
+            className="fixed z-[101] min-w-[280px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl ring-1 ring-black/5 animate-in fade-in slide-in-from-top-2 duration-150"
             role="listbox"
             style={{
               top: panelPos?.top ?? 64,
@@ -162,15 +162,15 @@ export function TopBar({ title, outlet, onOutletSwitch }: TopBarProps) {
                     aria-selected={isActive}
                     className={`flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm transition-colors active:scale-[0.99] ${
                       isActive
-                        ? "bg-terracotta/5 text-terracotta-dark"
-                        : "text-gray-800 hover:bg-gray-50 active:bg-gray-100"
+                        ? "bg-brand-soft text-brand-text"
+                        : "text-text hover:bg-sunken/60 active:bg-sunken"
                     }`}
                   >
                     <div
                       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
                         isActive
-                          ? "bg-terracotta/15 text-terracotta-dark"
-                          : "bg-gray-100 text-gray-500"
+                          ? "bg-brand-soft text-brand-text"
+                          : "bg-sunken text-text-3"
                       }`}
                     >
                       <Building2 className="h-4 w-4" />
@@ -179,7 +179,7 @@ export function TopBar({ title, outlet, onOutletSwitch }: TopBarProps) {
                       {o.name}
                     </span>
                     {isActive && (
-                      <Check className="h-5 w-5 shrink-0 text-terracotta" />
+                      <Check className="h-5 w-5 shrink-0 text-brand-text" />
                     )}
                   </button>
                 );

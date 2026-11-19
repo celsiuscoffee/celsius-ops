@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { formatTime } from "@/lib/format-time";
 
 // Self-editable profile fields. Mirrors the SELF_EDITABLE_FIELDS allowlist
 // in /api/hr/profile/route.ts — keep them in sync.
@@ -92,45 +93,38 @@ export default function PersonalProfilePage() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
 
   return (
-    <div className="px-4 py-4 pb-32">
+    <div className="px-4 pb-32">
       {/* Top bar with back link + completeness gauge */}
-      <div className="mb-4 flex items-center gap-3">
-        <Link href="/profile" className="rounded-lg p-1.5 hover:bg-gray-100">
-          <ArrowLeft className="h-5 w-5 text-gray-500" />
-        </Link>
-        <div className="flex-1">
-          <h1 className="font-heading text-lg font-bold text-brand-dark">Personal info</h1>
-          <p className="text-xs text-gray-500">
-            Used for payslips, statutory filings, and emergencies. Your salary
-            and login info are managed by HR — you can&apos;t edit those here.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Personal info"
+        description="For payslips, government filings and emergencies. HR looks after your salary and sign-in."
+        backHref="/profile"
+      />
 
       {/* Completeness bar */}
       <div className="mb-4 rounded-xl border bg-card p-3">
         <div className="mb-1.5 flex items-center justify-between text-xs">
-          <span className="font-medium text-gray-700">
+          <span className="font-medium text-text-2">
             Profile {completeness.percent}% complete
           </span>
-          <span className="text-gray-400">{completeness.filled} of {completeness.total} required</span>
+          <span className="text-text-3">{completeness.filled} of {completeness.total} required</span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+        <div className="h-2 overflow-hidden rounded-full bg-sunken">
           <div
             className={`h-full transition-all ${
-              completeness.percent === 100 ? "bg-emerald-500" : "bg-terracotta"
+              completeness.percent === 100 ? "bg-ok" : "bg-ink"
             }`}
             style={{ width: `${completeness.percent}%` }}
           />
         </div>
         {completeness.complete && (
-          <p className="mt-2 flex items-center gap-1 text-[11px] text-emerald-600">
+          <p className="mt-2 flex items-center gap-1 text-[11px] text-ok-text">
             <CheckCircle2 className="h-3 w-3" />
             Marked complete — thank you!
           </p>
@@ -145,14 +139,14 @@ export default function PersonalProfilePage() {
               type="date"
               value={profile.date_of_birth || ""}
               onChange={(e) => update("date_of_birth", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             />
           </Row>
           <Row label="Gender">
             <select
               value={profile.gender || ""}
               onChange={(e) => update("gender", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             >
               <option value="">Select…</option>
               <option value="M">Male</option>
@@ -163,7 +157,7 @@ export default function PersonalProfilePage() {
             <select
               value={profile.race || ""}
               onChange={(e) => update("race", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             >
               <option value="">Select…</option>
               <option value="malay">Malay</option>
@@ -177,7 +171,7 @@ export default function PersonalProfilePage() {
             <select
               value={profile.religion || ""}
               onChange={(e) => update("religion", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             >
               <option value="">Select…</option>
               <option value="islam">Islam</option>
@@ -198,7 +192,7 @@ export default function PersonalProfilePage() {
               type="text"
               value={profile.address_line1 || ""}
               onChange={(e) => update("address_line1", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
               placeholder="Street + house no."
             />
           </Row>
@@ -207,7 +201,7 @@ export default function PersonalProfilePage() {
               type="text"
               value={profile.address_line2 || ""}
               onChange={(e) => update("address_line2", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
               placeholder="Taman / area"
             />
           </Row>
@@ -216,14 +210,14 @@ export default function PersonalProfilePage() {
               type="text"
               value={profile.address_city || ""}
               onChange={(e) => update("address_city", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             />
           </Row>
           <Row label="State">
             <select
               value={profile.address_state || ""}
               onChange={(e) => update("address_state", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             >
               <option value="">Select…</option>
               {MY_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -236,7 +230,7 @@ export default function PersonalProfilePage() {
               maxLength={5}
               value={profile.address_postcode || ""}
               onChange={(e) => update("address_postcode", e.target.value.replace(/\D/g, ""))}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
               placeholder="5 digits"
             />
           </Row>
@@ -251,7 +245,7 @@ export default function PersonalProfilePage() {
             <select
               value={profile.marital_status || ""}
               onChange={(e) => update("marital_status", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             >
               <option value="">Select…</option>
               <option value="single">Single</option>
@@ -267,7 +261,7 @@ export default function PersonalProfilePage() {
                   type="text"
                   value={profile.spouse_name || ""}
                   onChange={(e) => update("spouse_name", e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
                 />
               </Row>
               <Row label="Is your spouse working?">
@@ -275,14 +269,14 @@ export default function PersonalProfilePage() {
                   <button
                     type="button"
                     onClick={() => update("spouse_working", true)}
-                    className={`flex-1 rounded-lg border px-3 py-2 text-sm ${profile.spouse_working === true ? "border-terracotta bg-terracotta/10 text-terracotta" : "bg-background"}`}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-sm ${profile.spouse_working === true ? "border-ink bg-brand-soft text-brand-text" : "bg-background"}`}
                   >
                     Yes
                   </button>
                   <button
                     type="button"
                     onClick={() => update("spouse_working", false)}
-                    className={`flex-1 rounded-lg border px-3 py-2 text-sm ${profile.spouse_working === false ? "border-terracotta bg-terracotta/10 text-terracotta" : "bg-background"}`}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-sm ${profile.spouse_working === false ? "border-ink bg-brand-soft text-brand-text" : "bg-background"}`}
                   >
                     No
                   </button>
@@ -297,7 +291,7 @@ export default function PersonalProfilePage() {
               max={20}
               value={profile.num_children ?? ""}
               onChange={(e) => update("num_children", e.target.value ? Number(e.target.value) : null)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
               placeholder="0"
             />
           </Row>
@@ -310,7 +304,7 @@ export default function PersonalProfilePage() {
               type="email"
               value={profile.personal_email || ""}
               onChange={(e) => update("personal_email", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
               placeholder="me@example.com"
             />
           </Row>
@@ -319,7 +313,7 @@ export default function PersonalProfilePage() {
               type="tel"
               value={profile.secondary_phone || ""}
               onChange={(e) => update("secondary_phone", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
               placeholder="+60…"
             />
           </Row>
@@ -332,7 +326,7 @@ export default function PersonalProfilePage() {
               type="text"
               value={profile.emergency_contact_name || ""}
               onChange={(e) => update("emergency_contact_name", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             />
           </Row>
           <Row label="Phone">
@@ -340,7 +334,7 @@ export default function PersonalProfilePage() {
               type="tel"
               value={profile.emergency_contact_phone || ""}
               onChange={(e) => update("emergency_contact_phone", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
               placeholder="+60…"
             />
           </Row>
@@ -352,7 +346,7 @@ export default function PersonalProfilePage() {
             <select
               value={profile.education_level || ""}
               onChange={(e) => update("education_level", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             >
               <option value="">Select…</option>
               <option value="spm">SPM</option>
@@ -368,7 +362,7 @@ export default function PersonalProfilePage() {
             <select
               value={profile.t_shirt_size || ""}
               onChange={(e) => update("t_shirt_size", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
             >
               <option value="">Select…</option>
               {["XS", "S", "M", "L", "XL", "XXL", "XXXL"].map((s) => <option key={s} value={s}>{s}</option>)}
@@ -379,14 +373,14 @@ export default function PersonalProfilePage() {
               type="text"
               value={profile.dietary_restrictions || ""}
               onChange={(e) => update("dietary_restrictions", e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
               placeholder="e.g. halal, vegetarian, no nuts"
             />
           </Row>
         </Section>
 
         {error && (
-          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="flex items-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-text">
             <AlertCircle className="h-4 w-4" />
             {error}
           </div>
@@ -400,7 +394,7 @@ export default function PersonalProfilePage() {
           <button
             onClick={() => save(true)}
             disabled={saving || completeness.percent < 100}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-terracotta px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-medium text-on-ink disabled:opacity-50"
             title={completeness.percent < 100 ? "Fill all required fields first" : "Mark profile as complete"}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -409,17 +403,17 @@ export default function PersonalProfilePage() {
           <button
             onClick={() => save(false)}
             disabled={saving}
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-line-2 bg-surface px-4 py-3 text-sm font-medium text-text-2 disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save without marking complete"}
           </button>
           {savedAt && (
-            <p className="text-center text-[11px] text-gray-400">
-              Last saved {savedAt.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}
+            <p className="text-center text-[11px] text-text-3">
+              Last saved {formatTime(savedAt)}
             </p>
           )}
           {completeness.percent < 100 && (
-            <p className="text-center text-[11px] text-gray-500">
+            <p className="text-center text-[11px] text-text-3">
               Fill all {completeness.total} required fields to enable &ldquo;Save &amp; mark complete&rdquo;.
             </p>
           )}
@@ -432,8 +426,8 @@ export default function PersonalProfilePage() {
 function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border bg-card p-4">
-      <h2 className="font-semibold text-gray-900">{title}</h2>
-      {subtitle && <p className="mt-0.5 text-xs text-gray-500">{subtitle}</p>}
+      <h2 className="font-semibold text-text">{title}</h2>
+      {subtitle && <p className="mt-0.5 text-xs text-text-3">{subtitle}</p>}
       <div className="mt-3 space-y-3">{children}</div>
     </div>
   );
@@ -442,7 +436,7 @@ function Section({ title, subtitle, children }: { title: string; subtitle?: stri
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-gray-600">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-text-2">{label}</span>
       {children}
     </label>
   );

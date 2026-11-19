@@ -21,6 +21,7 @@ import {
   Trash2,
   Package,
 } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 
 type SupplierProduct = { id: string; name: string; sku: string; uom: string };
 type Supplier = { id: string; name: string; products: SupplierProduct[] };
@@ -332,65 +333,62 @@ export default function ClaimsPage() {
   if (submitted && result) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 py-8">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
-          <Check className="h-10 w-10 text-green-600" />
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-ok-soft">
+          <Check className="h-10 w-10 text-ok-text" />
         </div>
-        <h1 className="mt-4 text-xl font-bold text-gray-900">Claim Submitted!</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="mt-4 text-xl font-bold text-text">Claim sent</h1>
+        <p className="mt-1 text-sm text-text-3">
           Order {result.orderNumber}
         </p>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-text-3">
           Invoice {result.invoiceNumber}
         </p>
-        <p className="mt-3 text-center text-xs text-gray-400">
+        <p className="mt-3 text-center text-xs text-text-3">
           Your claim is saved as a draft. The procurement officer will review it.
         </p>
         <Button
           onClick={resetForm}
-          className="mt-6 bg-terracotta hover:bg-terracotta/90"
+          className="mt-6 bg-ink hover:bg-brand/90"
         >
           <Receipt className="mr-2 h-4 w-4" />
-          Submit Another
+          Send another
         </Button>
       </div>
     );
   }
 
   return (
-    <div className="px-4 py-4 pb-32">
+    <div className="px-4 pb-32">
       <div className="space-y-4">
         {/* Header */}
-        <div>
-          <h1 className="font-heading text-lg font-bold text-brand-dark">
-            Submit Claim
-          </h1>
-          <p className="text-sm text-gray-500">
-            Upload receipt, we&apos;ll extract the details
-          </p>
-        </div>
+        <PageHeader
+          title="Pay and claim"
+          description="Photograph the receipt and we fill in the details."
+          backHref="/inventory"
+        />
 
         {/* Hero Upload Zone — opens fullscreen camera modal */}
         <Card
-          className="relative cursor-pointer border-2 border-dashed border-terracotta/30 bg-terracotta/5 transition-colors hover:border-terracotta/50 hover:bg-terracotta/10 active:scale-[0.98]"
+          className="relative cursor-pointer border-2 border-dashed border-brand/30 bg-brand-soft transition-colors hover:border-brand/50 hover:bg-brand-soft active:scale-[0.98]"
           onClick={() => setCameraOpen(true)}
         >
           <div className="flex flex-col items-center justify-center py-10">
             {uploading ? (
               <>
-                <Loader2 className="h-12 w-12 animate-spin text-terracotta" />
-                <p className="mt-3 text-sm font-medium text-terracotta">
+                <Loader2 className="h-12 w-12 animate-spin text-brand-text" />
+                <p className="mt-3 text-sm font-medium text-brand-text">
                   Uploading...
                 </p>
               </>
             ) : (
               <>
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-terracotta/10">
-                  <Camera className="h-8 w-8 text-terracotta" />
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-soft">
+                  <Camera className="h-8 w-8 text-brand-text" />
                 </div>
-                <p className="mt-3 text-sm font-semibold text-terracotta-dark">
-                  {photos.length > 0 ? "Add Another Photo" : "Take Photo of Receipt"}
+                <p className="mt-3 text-sm font-semibold text-brand-text">
+                  {photos.length > 0 ? "Add another photo" : "Take a photo of the receipt"}
                 </p>
-                <p className="mt-1 text-xs text-gray-400">
+                <p className="mt-1 text-xs text-text-3">
                   Tap to open camera
                 </p>
               </>
@@ -412,14 +410,14 @@ export default function ClaimsPage() {
                 <img
                   src={url}
                   alt={`Receipt ${i + 1}`}
-                  className="h-20 w-20 rounded-lg border border-gray-200 object-cover"
+                  className="h-20 w-20 rounded-lg border border-line object-cover"
                 />
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     removePhoto(i);
                   }}
-                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-800 text-white shadow"
+                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink text-on-ink shadow"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -430,21 +428,21 @@ export default function ClaimsPage() {
 
         {/* AI Extraction Status */}
         {photos.length > 0 && (
-          <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+          <div className="flex items-center gap-2 rounded-lg bg-sunken/60 px-3 py-2">
             {extracting ? (
               <>
-                <Sparkles className="h-4 w-4 animate-pulse text-amber-500" />
-                <span className="text-xs text-gray-600">
+                <Sparkles className="h-4 w-4 animate-pulse text-warn" />
+                <span className="text-xs text-text-2">
                   AI reading receipt...
                 </span>
               </>
             ) : extracted ? (
               <>
-                <Check className="h-4 w-4 text-green-500" />
-                <span className="text-xs text-gray-600">
+                <Check className="h-4 w-4 text-ok" />
+                <span className="text-xs text-text-2">
                   Details extracted
                   {extracted.confidence && (
-                    <span className="ml-1 text-gray-400">
+                    <span className="ml-1 text-text-3">
                       ({extracted.confidence} confidence)
                     </span>
                   )}
@@ -452,8 +450,8 @@ export default function ClaimsPage() {
               </>
             ) : (
               <>
-                <Upload className="h-4 w-4 text-gray-400" />
-                <span className="text-xs text-gray-400">
+                <Upload className="h-4 w-4 text-text-3" />
+                <span className="text-xs text-text-3">
                   Upload complete
                 </span>
               </>
@@ -466,25 +464,25 @@ export default function ClaimsPage() {
           <div className="space-y-3">
             {/* Outlet — auto-detected from logged-in user */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">
+              <label className="mb-1 block text-xs font-medium text-text-3">
                 Outlet
               </label>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900">
+              <div className="rounded-lg border border-line bg-sunken/60 px-3 py-2.5 text-sm text-text">
                 {outletName || "Loading..."}
               </div>
             </div>
 
             {/* Supplier */}
             <div>
-              <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+              <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-text-3">
                 Supplier
                 {extracted?.supplierName && supplierId && (
-                  <span className="rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-600">
+                  <span className="rounded bg-ok-soft px-1.5 py-0.5 text-[10px] font-medium text-ok-text">
                     AI matched
                   </span>
                 )}
                 {extracted?.supplierName && !supplierId && (
-                  <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+                  <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-medium text-warn-text">
                     AI: {extracted.supplierName}
                   </span>
                 )}
@@ -497,7 +495,7 @@ export default function ClaimsPage() {
                     const s = suppliers.find((s) => s.id === e.target.value);
                     if (s) setSupplierName(s.name);
                   }}
-                  className="w-full appearance-none rounded-lg border border-gray-200 bg-white px-3 py-2.5 pr-8 text-sm text-gray-900 focus:border-terracotta focus:outline-none focus:ring-1 focus:ring-terracotta"
+                  className="w-full appearance-none rounded-lg border border-line bg-surface px-3 py-2.5 pr-8 text-sm text-text focus:border-ink focus:outline-none focus:ring-1 focus:ring-text"
                 >
                   <option value="">Select supplier</option>
                   {suppliers.map((s) => (
@@ -506,17 +504,17 @@ export default function ClaimsPage() {
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-3 h-4 w-4 text-gray-400" />
+                <ChevronDown className="pointer-events-none absolute right-2.5 top-3 h-4 w-4 text-text-3" />
               </div>
             </div>
 
             {/* Items */}
             <div>
-              <label className="mb-1 flex items-center justify-between text-xs font-medium text-gray-500">
+              <label className="mb-1 flex items-center justify-between text-xs font-medium text-text-3">
                 <span className="flex items-center gap-1.5">
                   Items
                   {cartItems.length > 0 && cartItems.some((i) => i.matched) && (
-                    <span className="rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-600">
+                    <span className="rounded bg-ok-soft px-1.5 py-0.5 text-[10px] font-medium text-ok-text">
                       {cartItems.filter((i) => i.matched).length} AI matched
                     </span>
                   )}
@@ -524,7 +522,7 @@ export default function ClaimsPage() {
                 <button
                   type="button"
                   onClick={() => setShowProductPicker(!showProductPicker)}
-                  className="flex items-center gap-1 rounded-md bg-terracotta/10 px-2 py-1 text-[10px] font-medium text-terracotta hover:bg-terracotta/20"
+                  className="flex items-center gap-1 rounded-md bg-brand-soft px-2 py-1 text-[10px] font-medium text-brand-text hover:bg-brand-soft"
                 >
                   <Plus className="h-3 w-3" /> Add Item
                 </button>
@@ -547,7 +545,7 @@ export default function ClaimsPage() {
                   p.sku.toLowerCase().includes(productSearch.toLowerCase())
                 );
                 return (
-                  <div className="mb-2 rounded-lg border border-gray-200 bg-white p-2">
+                  <div className="mb-2 rounded-lg border border-line bg-surface p-2">
                     <Input
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
@@ -578,19 +576,19 @@ export default function ClaimsPage() {
                             setShowProductPicker(false);
                             setProductSearch("");
                           }}
-                          className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs hover:bg-gray-50"
+                          className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs hover:bg-sunken/60"
                         >
-                          <span className="font-medium text-gray-900">
+                          <span className="font-medium text-text">
                             {p.name}
                             {supplierProductIds.has(p.id) && (
-                              <span className="ml-1.5 text-[9px] text-green-600">● supplier</span>
+                              <span className="ml-1.5 text-[9px] text-ok-text">● supplier</span>
                             )}
                           </span>
-                          <span className="text-gray-400">{p.sku}</span>
+                          <span className="text-text-3">{p.sku}</span>
                         </button>
                       ))}
                       {filtered.length === 0 && (
-                        <p className="px-2 py-2 text-center text-xs text-gray-400">No products found</p>
+                        <p className="px-2 py-2 text-center text-xs text-text-3">No products found</p>
                       )}
                     </div>
                   </div>
@@ -605,21 +603,21 @@ export default function ClaimsPage() {
                       key={idx}
                       className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${
                         item.matched
-                          ? "border-green-200 bg-green-50/50"
+                          ? "border-ok/30 bg-ok-soft/50"
                           : item.productId
-                            ? "border-gray-200 bg-white"
-                            : "border-amber-200 bg-amber-50/50"
+                            ? "border-line bg-surface"
+                            : "border-warn/30 bg-warn-soft/50"
                       }`}
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-900 truncate">
+                        <p className="text-xs font-medium text-text truncate">
                           {item.productName}
                           {!item.productId && (
-                            <span className="ml-1 text-[10px] text-amber-600">(unmatched)</span>
+                            <span className="ml-1 text-[10px] text-warn-text">(unmatched)</span>
                           )}
                         </p>
                         <div className="mt-1 flex items-center gap-2">
-                          <div className="flex items-center rounded border border-gray-200 bg-white">
+                          <div className="flex items-center rounded border border-line bg-surface">
                             <button
                               type="button"
                               onClick={() => {
@@ -629,7 +627,7 @@ export default function ClaimsPage() {
                                   setCartItems(cartItems.map((c, i) => i === idx ? { ...c, quantity: c.quantity - 1 } : c));
                                 }
                               }}
-                              className="px-1.5 py-0.5 text-gray-400 hover:text-gray-600"
+                              className="px-1.5 py-0.5 text-text-3 hover:text-text-2"
                             >
                               <Minus className="h-3 w-3" />
                             </button>
@@ -637,38 +635,38 @@ export default function ClaimsPage() {
                             <button
                               type="button"
                               onClick={() => setCartItems(cartItems.map((c, i) => i === idx ? { ...c, quantity: c.quantity + 1 } : c))}
-                              className="px-1.5 py-0.5 text-gray-400 hover:text-gray-600"
+                              className="px-1.5 py-0.5 text-text-3 hover:text-text-2"
                             >
                               <Plus className="h-3 w-3" />
                             </button>
                           </div>
-                          <span className="text-[10px] text-gray-400">×</span>
+                          <span className="text-[10px] text-text-3">×</span>
                           <input
                             type="number"
                             value={item.unitPrice || ""}
                             onChange={(e) => setCartItems(cartItems.map((c, i) => i === idx ? { ...c, unitPrice: parseFloat(e.target.value) || 0 } : c))}
                             placeholder="Price"
-                            className="w-16 rounded border border-gray-200 px-1.5 py-0.5 text-xs text-right"
+                            className="w-16 rounded border border-line px-1.5 py-0.5 text-xs text-right"
                           />
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs font-medium text-gray-700">
+                        <p className="text-xs font-medium text-text-2">
                           {(item.quantity * item.unitPrice).toFixed(2)}
                         </p>
                         <button
                           type="button"
                           onClick={() => setCartItems(cartItems.filter((_, i) => i !== idx))}
-                          className="mt-1 text-gray-300 hover:text-red-500"
+                          className="mt-1 text-line-ctl hover:text-danger"
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
                       </div>
                     </div>
                   ))}
-                  <div className="flex justify-between rounded-lg bg-gray-50 px-3 py-1.5 text-xs">
-                    <span className="text-gray-500">{cartItems.length} items</span>
-                    <span className="font-medium text-gray-700">
+                  <div className="flex justify-between rounded-lg bg-sunken/60 px-3 py-1.5 text-xs">
+                    <span className="text-text-3">{cartItems.length} items</span>
+                    <span className="font-medium text-text-2">
                       RM {cartItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0).toFixed(2)}
                     </span>
                   </div>
@@ -676,7 +674,7 @@ export default function ClaimsPage() {
               )}
 
               {cartItems.length === 0 && !extracting && (
-                <p className="rounded-lg border border-dashed border-gray-200 px-3 py-3 text-center text-xs text-gray-400">
+                <p className="rounded-lg border border-dashed border-line px-3 py-3 text-center text-xs text-text-3">
                   <Package className="mx-auto mb-1 h-4 w-4" />
                   AI will auto-detect items, or add manually
                 </p>
@@ -685,7 +683,7 @@ export default function ClaimsPage() {
 
             {/* Amount */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">
+              <label className="mb-1 block text-xs font-medium text-text-3">
                 Amount (RM)
               </label>
               <Input
@@ -701,8 +699,8 @@ export default function ClaimsPage() {
 
             {/* Purchase Date */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">
-                Purchase Date
+              <label className="mb-1 block text-xs font-medium text-text-3">
+                Purchase date
               </label>
               <Input
                 type="date"
@@ -714,17 +712,17 @@ export default function ClaimsPage() {
 
             {/* Who Paid — auto-set to logged-in user */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">
-                Submitted By
+              <label className="mb-1 block text-xs font-medium text-text-3">
+                Sent by
               </label>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900">
+              <div className="rounded-lg border border-line bg-sunken/60 px-3 py-2.5 text-sm text-text">
                 {userName || "Loading..."}
               </div>
             </div>
 
             {/* Notes */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-500">
+              <label className="mb-1 block text-xs font-medium text-text-3">
                 Notes (optional)
               </label>
               <Input
@@ -737,14 +735,14 @@ export default function ClaimsPage() {
 
             {/* Error */}
             {error && (
-              <p className="text-xs text-red-500">{error}</p>
+              <p className="text-xs text-danger">{error}</p>
             )}
 
             {/* Submit */}
             <Button
               onClick={handleSubmit}
               disabled={submitting || !selectedOutletId || !amount}
-              className="w-full bg-terracotta py-3 text-sm font-semibold hover:bg-terracotta/90 disabled:opacity-50"
+              className="w-full bg-ink py-3 text-sm font-semibold hover:bg-brand/90 disabled:opacity-50"
             >
               {submitting ? (
                 <>
@@ -754,7 +752,7 @@ export default function ClaimsPage() {
               ) : (
                 <>
                   <Receipt className="mr-2 h-4 w-4" />
-                  Submit Claim
+                  Send claim
                 </>
               )}
             </Button>
@@ -767,7 +765,7 @@ export default function ClaimsPage() {
       <CameraCaptureModal
         open={cameraOpen}
         facingMode="environment"
-        title={photos.length > 0 ? "Add Another Receipt Photo" : "Photograph Receipt"}
+        title={photos.length > 0 ? "Add another receipt photo" : "Photograph the receipt"}
         onCapture={handleCameraCapture}
         onClose={() => setCameraOpen(false)}
       />

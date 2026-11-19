@@ -10,6 +10,7 @@ import {
   ClipboardCheck, Loader2, CheckCircle2, Clock, Plus, ChevronRight, Building2, Trash2,
 } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
+import { PageHeader } from "@/components/page-header";
 
 type UserProfile = { id: string; name: string; role: string; outletId: string | null; moduleAccess?: Record<string, boolean> };
 type Outlet = { id: string; name: string; code: string };
@@ -121,32 +122,32 @@ export default function AuditPage() {
   const totalItems = (t: Template) => t.sections.reduce((s, sec) => s + sec._count.items, 0);
 
   return (
-    <div className="px-4 py-4 space-y-4">
+    <div className="px-4 pb-6 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-heading text-lg font-bold text-brand-dark">Audits</h1>
-          <p className="text-sm text-gray-500">Spot checks & quality audits</p>
-        </div>
-        <Button size="sm" onClick={() => setShowNew(!showNew)} className="bg-terracotta hover:bg-terracotta-dark text-xs">
-          <Plus className="mr-1 h-3.5 w-3.5" /> New Audit
-        </Button>
-      </div>
+      <PageHeader
+        title="Audit"
+        description="Spot checks of your team and outlet."
+        right={
+          <Button onClick={() => setShowNew(!showNew)} className="min-h-11 bg-ink px-3.5 text-sm hover:bg-ink-hover">
+            <Plus className="mr-1 h-4 w-4" /> New audit
+          </Button>
+        }
+      />
 
 
 
       {/* New Audit Form */}
       {showNew && (
-        <Card className="p-4 space-y-3 border-terracotta/30">
-          <h3 className="text-sm font-semibold text-gray-900">Start New Audit</h3>
+        <Card className="p-4 space-y-3 border-brand/30">
+          <h3 className="text-sm font-semibold text-text">Start a new audit</h3>
 
           {/* Select Template */}
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Template</label>
+            <label className="text-xs font-medium text-text-3 mb-1 block">Template</label>
             <select
               value={selectedTemplate}
               onChange={(e) => setSelectedTemplate(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm bg-surface"
             >
               <option value="">Select template...</option>
               {templates?.map((t) => (
@@ -159,9 +160,9 @@ export default function AuditPage() {
 
           {/* Select Outlet — scoped server-side to the caller's assignments */}
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Outlet</label>
+            <label className="text-xs font-medium text-text-3 mb-1 block">Outlet</label>
             {visibleOutlets.length === 0 ? (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <p className="rounded-lg border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn-text">
                 You&apos;re not assigned to any outlet. Ask an admin to add you to an outlet before starting an audit.
               </p>
             ) : (
@@ -169,7 +170,7 @@ export default function AuditPage() {
                 value={selectedOutlet}
                 onChange={(e) => { setSelectedOutlet(e.target.value); setSelectedAuditee(""); }}
                 disabled={singleOutlet}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white disabled:bg-gray-50"
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm bg-surface disabled:bg-sunken/60"
               >
                 <option value="">Select outlet...</option>
                 {visibleOutlets.map((o) => (
@@ -182,22 +183,22 @@ export default function AuditPage() {
           {/* Staff picker — only for STAFF templates */}
           {isStaffTemplate && selectedOutlet && (
             <div>
-              <label className="text-xs font-medium text-gray-500 mb-1 block">
+              <label className="text-xs font-medium text-text-3 mb-1 block">
                 Staff to audit{(tpl?.jobRoleFilter ?? []).length > 0 ? ` (${(tpl?.jobRoleFilter ?? []).join(", ")})` : ""}
               </label>
               {loadingAuditees ? (
-                <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
+                <div className="flex items-center gap-2 text-xs text-text-3 py-2">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading staff…
                 </div>
               ) : (auditees ?? []).length === 0 ? (
-                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                <p className="rounded-lg border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn-text">
                   No staff at this outlet match{(tpl?.jobRoleFilter ?? []).length === 1 ? ` the role "${(tpl?.jobRoleFilter ?? [])[0]}"` : ` any of: ${(tpl?.jobRoleFilter ?? []).join(", ")}`}. Check HR profiles.
                 </p>
               ) : (
                 <select
                   value={selectedAuditee}
                   onChange={(e) => setSelectedAuditee(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm bg-white"
+                  className="w-full rounded-lg border border-line px-3 py-2 text-sm bg-surface"
                 >
                   <option value="">Select staff...</option>
                   {(auditees ?? []).map((a) => (
@@ -216,10 +217,10 @@ export default function AuditPage() {
               size="sm"
               onClick={handleCreate}
               disabled={!selectedTemplate || !selectedOutlet || (isStaffTemplate && !selectedAuditee) || creating}
-              className="bg-terracotta hover:bg-terracotta-dark text-xs flex-1"
+              className="bg-ink hover:bg-ink-hover text-xs flex-1"
             >
               {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-              Start Audit
+              Start audit
             </Button>
           </div>
         </Card>
@@ -228,49 +229,49 @@ export default function AuditPage() {
       {/* Loading */}
       {isLoading && (
         <div className="flex justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       )}
 
       {/* In Progress */}
       {inProgress.length > 0 && (
         <div>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">In Progress</h2>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-3">In progress</h2>
           <div className="space-y-2">
             {inProgress.map((audit) => (
               <Link key={audit.id} href={`/audit/${audit.id}`}>
-                <Card className="px-3 py-2.5 transition-all active:bg-gray-50">
+                <Card className="px-3 py-2.5 transition-all active:bg-sunken/60">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100">
-                      <Clock className="h-4 w-4 text-blue-600" />
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info-soft">
+                      <Clock className="h-4 w-4 text-info-text" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-medium text-gray-900 truncate">{audit.template.name}</p>
+                        <p className="text-sm font-medium text-text truncate">{audit.template.name}</p>
                         {audit.isMine && (
-                          <Badge className="text-[9px] bg-terracotta/10 text-terracotta border-none shrink-0">You</Badge>
+                          <Badge className="text-[9px] bg-brand-soft text-brand-text border-none shrink-0">You</Badge>
                         )}
                       </div>
-                      <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
+                      <p className="text-[10px] text-text-3 flex items-center gap-1 mt-0.5">
                         <Building2 className="h-2.5 w-2.5" />
                         <span className="truncate">{audit.auditor.name} · {audit.date} · {audit.completedItems}/{audit.totalItems}</span>
                       </p>
                     </div>
                     <div className="shrink-0 text-right flex items-center gap-2">
-                      <span className="text-sm font-bold text-gray-700">{audit.progress}%</span>
+                      <span className="text-sm font-bold text-text-2">{audit.progress}%</span>
                       <button
                         onClick={(e) => handleDelete(e, audit.id, audit.template.name)}
                         disabled={deletingId === audit.id}
                         aria-label="Delete audit"
-                        className="rounded p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        className="rounded p-1 text-line-ctl hover:text-danger-text hover:bg-danger-soft disabled:opacity-50"
                       >
                         {deletingId === audit.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                       </button>
-                      <ChevronRight className="h-4 w-4 text-gray-300" />
+                      <ChevronRight className="h-4 w-4 text-line-ctl" />
                     </div>
                   </div>
-                  <div className="mt-2 rounded-full bg-gray-100 h-1 overflow-hidden">
-                    <div className="h-full rounded-full bg-terracotta transition-all" style={{ width: `${audit.progress}%` }} />
+                  <div className="mt-2 rounded-full bg-sunken h-1 overflow-hidden">
+                    <div className="h-full rounded-full bg-ink transition-all" style={{ width: `${audit.progress}%` }} />
                   </div>
                 </Card>
               </Link>
@@ -282,40 +283,40 @@ export default function AuditPage() {
       {/* Completed (recent) */}
       {completed.length > 0 && (
         <div>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Completed</h2>
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-3">Completed</h2>
           <div className="space-y-2">
             {completed.slice(0, 5).map((audit) => (
               <Link key={audit.id} href={`/audit/${audit.id}`}>
-                <Card className="px-3 py-2.5 transition-all active:bg-gray-50 opacity-80">
+                <Card className="px-3 py-2.5 transition-all active:bg-sunken/60 opacity-80">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-green-100">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-ok-soft">
+                      <CheckCircle2 className="h-4 w-4 text-ok-text" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-medium text-gray-900 truncate">{audit.template.name}</p>
+                        <p className="text-sm font-medium text-text truncate">{audit.template.name}</p>
                         {audit.isMine && (
-                          <Badge className="text-[9px] bg-terracotta/10 text-terracotta border-none shrink-0">You</Badge>
+                          <Badge className="text-[9px] bg-brand-soft text-brand-text border-none shrink-0">You</Badge>
                         )}
                       </div>
-                      <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
+                      <p className="text-[10px] text-text-3 flex items-center gap-1 mt-0.5">
                         <Building2 className="h-2.5 w-2.5" />
                         <span className="truncate">{audit.auditor.name} · {audit.date}</span>
                       </p>
                     </div>
                     <div className="shrink-0 text-right flex items-center gap-2">
-                      <Badge className={`text-[10px] ${(audit.overallScore ?? 0) >= 80 ? "bg-green-100 text-green-700" : (audit.overallScore ?? 0) >= 60 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
+                      <Badge className={`text-[10px] ${(audit.overallScore ?? 0) >= 80 ? "bg-ok-soft text-ok-text" : (audit.overallScore ?? 0) >= 60 ? "bg-warn-soft text-warn-text" : "bg-danger-soft text-danger-text"}`}>
                         {audit.overallScore ?? 0}%
                       </Badge>
                       <button
                         onClick={(e) => handleDelete(e, audit.id, audit.template.name)}
                         disabled={deletingId === audit.id}
                         aria-label="Delete audit"
-                        className="rounded p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        className="rounded p-1 text-line-ctl hover:text-danger-text hover:bg-danger-soft disabled:opacity-50"
                       >
                         {deletingId === audit.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                       </button>
-                      <ChevronRight className="h-4 w-4 text-gray-300" />
+                      <ChevronRight className="h-4 w-4 text-line-ctl" />
                     </div>
                   </div>
                 </Card>
@@ -328,15 +329,15 @@ export default function AuditPage() {
       {/* Empty state */}
       {!isLoading && (!audits || audits.length === 0) && !showNew && (
         <Card className="px-4 py-8 text-center">
-          <ClipboardCheck className="mx-auto h-10 w-10 text-gray-300" />
-          <p className="mt-3 text-sm text-gray-500">No audits yet</p>
-          <p className="mt-1 text-xs text-gray-400">Tap &quot;New Audit&quot; to start a spot check</p>
+          <ClipboardCheck className="mx-auto h-10 w-10 text-line-ctl" />
+          <p className="mt-3 text-sm text-text-3">No audits yet</p>
+          <p className="mt-1 text-xs text-text-3">Tap &quot;New audit&quot; to start a spot check</p>
         </Card>
       )}
 
       {/* History link */}
       {completed.length > 5 && (
-        <Link href="/audit/history" className="block text-center text-xs text-terracotta py-2">
+        <Link href="/audit/history" className="block text-center text-xs text-brand-text py-2">
           View all history →
         </Link>
       )}

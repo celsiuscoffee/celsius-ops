@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { HRPageHeader } from "@/components/hr-page-header";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Loader2, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Target } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Target } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 type Me = { id: string; name: string };
@@ -37,10 +37,10 @@ type Response = {
 
 function DeltaBadge({ delta, suffix = "" }: { delta: number | null; suffix?: string }) {
   if (delta === null)
-    return <span className="text-[10px] text-gray-400">—</span>;
+    return <span className="text-[10px] text-text-3">—</span>;
   if (delta === 0)
     return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-500">
+      <span className="inline-flex items-center gap-0.5 text-[10px] text-text-3">
         <Minus className="h-2.5 w-2.5" />0{suffix}
       </span>
     );
@@ -48,7 +48,7 @@ function DeltaBadge({ delta, suffix = "" }: { delta: number | null; suffix?: str
   return (
     <span
       className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${
-        positive ? "text-green-600" : "text-red-600"
+        positive ? "text-ok-text" : "text-danger-text"
       }`}
     >
       {positive ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
@@ -74,7 +74,7 @@ function Sparkline({ values }: { values: (number | null)[] }) {
   const lastX = (points.length - 1) * stepX;
   const lastY = h - (last / 100) * h;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full text-terracotta">
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full text-brand-text">
       <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
       <circle cx={lastX} cy={lastY} r="3" fill="currentColor" />
     </svg>
@@ -87,29 +87,20 @@ export default function MySkillsPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   return (
-    <div className="px-4 py-4 space-y-4">
-      <div>
-        <Link
-          href="/hr"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3"
-        >
-          <ArrowLeft className="h-4 w-4" />Back to HR
-        </Link>
-        <h1 className="font-heading text-lg font-bold text-brand-dark">My Skills</h1>
-        <p className="text-sm text-gray-500">Your audit scores and how you&apos;re tracking over time.</p>
-      </div>
+    <div className="px-4 pb-6 space-y-4">
+      <HRPageHeader title="My skills" subtitle="Your audit scores, and how they move over time." />
 
       {isLoading && (
         <div className="flex justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       )}
 
       {data && data.templates.length === 0 && (
         <Card className="px-4 py-8 text-center">
-          <Target className="mx-auto h-10 w-10 text-gray-300" />
-          <p className="mt-3 text-sm text-gray-500">No skill audits yet</p>
-          <p className="mt-1 text-xs text-gray-400">
+          <Target className="mx-auto h-10 w-10 text-line-ctl" />
+          <p className="mt-3 text-sm text-text-3">No skill audits yet</p>
+          <p className="mt-1 text-xs text-text-3">
             Once a manager audits you, your scores will show up here.
           </p>
         </Card>
@@ -128,15 +119,15 @@ export default function MySkillsPage() {
           <Card key={template.id} className="px-3 py-3 space-y-2">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">{template.name}</p>
-                <p className="text-[10px] text-gray-400">
+                <p className="text-sm font-semibold text-text truncate">{template.name}</p>
+                <p className="text-[10px] text-text-3">
                   {audits.length} audit{audits.length !== 1 ? "s" : ""}
                   {(template.jobRoleFilter ?? []).length > 0 ? ` · ${(template.jobRoleFilter ?? []).join(", ")}` : ""}
                 </p>
               </div>
               <div className="text-right shrink-0">
-                <p className="text-xl font-semibold text-gray-900">
-                  {latest?.overallScore ?? 0}<span className="text-xs text-gray-400">%</span>
+                <p className="text-xl font-semibold text-text">
+                  {latest?.overallScore ?? 0}<span className="text-xs text-text-3">%</span>
                 </p>
                 {overallChange !== null && audits.length > 1 && (
                   <DeltaBadge delta={overallChange} suffix="% overall" />
@@ -146,18 +137,18 @@ export default function MySkillsPage() {
 
             <Sparkline values={audits.map((a) => a.overallScore)} />
 
-            <div className="border-t border-gray-100 pt-2 space-y-1">
+            <div className="border-t border-line pt-2 space-y-1">
               {[...audits].reverse().slice(0, 4).map((a) => (
                 <div key={a.id} className="flex items-center gap-2 text-[11px]">
-                  <span className="text-gray-500 w-16 shrink-0">{a.date}</span>
-                  <span className="text-gray-600 flex-1 truncate">{a.auditor.name}</span>
+                  <span className="text-text-3 w-16 shrink-0">{a.date}</span>
+                  <span className="text-text-2 flex-1 truncate">{a.auditor.name}</span>
                   <Badge
                     className={`text-[9px] ${
                       (a.overallScore ?? 0) >= 80
-                        ? "bg-green-100 text-green-700"
+                        ? "bg-ok-soft text-ok-text"
                         : (a.overallScore ?? 0) >= 60
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-red-100 text-red-700"
+                          ? "bg-warn-soft text-warn-text"
+                          : "bg-danger-soft text-danger-text"
                     }`}
                   >
                     {a.overallScore ?? 0}%
@@ -170,7 +161,7 @@ export default function MySkillsPage() {
             <button
               type="button"
               onClick={() => setExpanded({ ...expanded, [template.id]: !isExpanded })}
-              className="flex items-center gap-1 text-[11px] font-medium text-gray-600 active:text-terracotta border-t border-gray-100 pt-2 w-full"
+              className="flex items-center gap-1 text-[11px] font-medium text-text-2 active:text-brand-text border-t border-line pt-2 w-full"
             >
               {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
               Latest audit per-item breakdown
@@ -180,8 +171,8 @@ export default function MySkillsPage() {
               <div className="space-y-1">
                 {latest.items.map((it, i) => (
                   <div key={i} className="flex items-center gap-2 text-[11px]">
-                    <span className="text-gray-700 flex-1 truncate">{it.itemTitle}</span>
-                    <span className="font-medium text-gray-900 w-8 text-right">{it.rating ?? "—"}</span>
+                    <span className="text-text-2 flex-1 truncate">{it.itemTitle}</span>
+                    <span className="font-medium text-text w-8 text-right">{it.rating ?? "—"}</span>
                     <DeltaBadge delta={it.ratingDelta} />
                   </div>
                 ))}
