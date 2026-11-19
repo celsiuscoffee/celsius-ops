@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import type { ErrorBoundaryProps } from "expo-router";
 import { AlertTriangle } from "lucide-react-native";
 import { Sentry } from "../lib/sentry";
+import { useCelsius } from "../lib/celsius-ui";
 
 /**
  * Per-route error boundary, re-exported as `ErrorBoundary` from route files:
@@ -17,6 +18,7 @@ import { Sentry } from "../lib/sentry";
  * the tab keeps working and the user gets an inline retry instead.
  */
 export function RouteErrorFallback({ error, retry }: ErrorBoundaryProps) {
+  const C = useCelsius().color;
   useEffect(() => {
     try {
       Sentry.captureException(error, { tags: { boundary: "route" } });
@@ -27,14 +29,14 @@ export function RouteErrorFallback({ error, retry }: ErrorBoundaryProps) {
   }, [error]);
 
   return (
-    <View className="flex-1 items-center justify-center bg-background px-8">
-      <View className="mb-3 h-12 w-12 items-center justify-center rounded-2xl bg-danger/10">
-        <AlertTriangle color="#B91C1C" size={22} />
+    <View className="flex-1 items-center justify-center bg-bg px-8">
+      <View className="mb-3 h-12 w-12 items-center justify-center rounded-2xl bg-danger-soft">
+        <AlertTriangle color={C.danger} size={22} />
       </View>
-      <Text className="text-base font-display-medium text-espresso text-center">
+      <Text className="text-base font-display-medium text-text text-center">
         This screen hit a problem
       </Text>
-      <Text className="mt-1 text-sm font-body text-muted-fg text-center">
+      <Text className="mt-1 text-sm font-body text-text-2 text-center">
         The rest of the app still works. Tap to try this screen again.
       </Text>
       <Pressable
@@ -42,9 +44,9 @@ export function RouteErrorFallback({ error, retry }: ErrorBoundaryProps) {
           retry().catch(() => {});
         }}
         accessibilityRole="button"
-        className="mt-5 rounded-2xl bg-primary px-8 py-3 active:opacity-80"
+        className="mt-5 rounded-2xl bg-ink px-8 py-3 active:opacity-80"
       >
-        <Text className="text-sm font-body-semi text-white">Try again</Text>
+        <Text className="text-sm font-body-semi text-on-ink">Try again</Text>
       </Pressable>
     </View>
   );

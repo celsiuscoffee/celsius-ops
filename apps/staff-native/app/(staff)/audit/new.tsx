@@ -21,8 +21,10 @@ import {
   type AuditOutlet,
   type AuditTemplate,
 } from "../../../lib/ops/audits";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 export default function NewAudit() {
+  const C = useCelsius().color;
   const router = useRouter();
   // Coverage cards on /audit pass `?templateId=...&auditeeId=...` so
   // the form opens pre-filled, one tap from "this staff needs audit"
@@ -113,8 +115,8 @@ export default function NewAudit() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#A2492C" />
+      <View className="flex-1 items-center justify-center bg-bg">
+        <ActivityIndicator color={C["text-3"]} />
       </View>
     );
   }
@@ -161,19 +163,19 @@ export default function NewAudit() {
 
       <View
         style={{ paddingBottom: 12 }}
-        className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
+        className="absolute inset-x-0 bottom-0 border-t border-line bg-bg px-5 pt-3"
       >
         <Pressable
           onPress={handleCreate}
           disabled={!canCreate || creating}
           className={`h-14 items-center justify-center rounded-2xl ${
-            canCreate && !creating ? "bg-primary" : "bg-primary/40"
+            canCreate && !creating ? "bg-ink" : "bg-ink opacity-40"
           }`}
         >
           {creating ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={C["on-ink"]} />
           ) : (
-            <Text className="text-base font-body-bold text-white">
+            <Text className="text-base font-body-bold text-on-ink">
               Start audit
             </Text>
           )}
@@ -187,17 +189,17 @@ export default function NewAudit() {
         presentationStyle="pageSheet"
         onRequestClose={() => setPicker(null)}
       >
-        <View className="flex-1 bg-background">
-          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-xl font-display text-espresso">
+        <View className="flex-1 bg-bg">
+          <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+            <Text className="text-xl font-display text-text">
               {picker === "template"
                 ? "Templates"
                 : picker === "outlet"
                   ? "Outlets"
                   : "Staff"}
             </Text>
-            <Pressable onPress={() => setPicker(null)} className="px-2 py-1">
-              <Text className="text-sm font-body-bold text-muted">Close</Text>
+            <Pressable onPress={() => setPicker(null)} className="min-h-11 justify-center px-3">
+              <Text className="text-sm font-body-bold text-text-3">Close</Text>
             </Pressable>
           </View>
           <ScrollView contentContainerClassName="px-5 py-4 gap-2"
@@ -262,23 +264,24 @@ function SelectorField({
   onPress: () => void;
   disabled?: boolean;
 }) {
+  const C = useCelsius().color;
   return (
     <View className="mt-5">
-      <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+      <Text className="mb-2 text-sm font-body-semi text-text-2">
         {label}
       </Text>
       <Pressable
         onPress={onPress}
         disabled={disabled}
-        className={`h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50 ${disabled ? "opacity-60" : ""}`}
+        className={`h-14 flex-row items-center justify-between rounded-2xl border border-line bg-surface px-4 active:bg-sunken ${disabled ? "opacity-60" : ""}`}
       >
         <Text
-          className={`flex-1 text-base font-body ${value ? "text-espresso" : "text-muted"}`}
+          className={`flex-1 text-base font-body ${value ? "text-text" : "text-text-3"}`}
           numberOfLines={1}
         >
           {value || placeholder}
         </Text>
-        <ChevronDown color="#9CA3AF" size={18} />
+        <ChevronDown color={C["text-3"]} size={18} />
       </Pressable>
     </View>
   );
@@ -295,20 +298,21 @@ function PickerRow({
   selected: boolean;
   onPress: () => void;
 }) {
+  const C = useCelsius().color;
   return (
     <Pressable
       onPress={onPress}
-      className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 active:bg-primary-50 ${
-        selected ? "border-primary bg-primary-50" : "border-border bg-surface"
+      className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 active:bg-sunken ${
+        selected ? "border-ink bg-sunken" : "border-line bg-surface"
       }`}
     >
       <View className="flex-1">
-        <Text className="text-base font-body-semi text-espresso">{label}</Text>
+        <Text className="text-base font-body-semi text-text">{label}</Text>
         {sub ? (
-          <Text className="text-xs font-body text-muted">{sub}</Text>
+          <Text className="text-xs font-body text-text-3">{sub}</Text>
         ) : null}
       </View>
-      {selected ? <Check color="#A2492C" size={18} /> : null}
+      {selected ? <Check color={C["text-2"]} size={18} /> : null}
     </Pressable>
   );
 }

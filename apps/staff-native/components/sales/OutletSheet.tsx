@@ -1,5 +1,6 @@
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { Check, Store } from "lucide-react-native";
+import { useCelsius } from "@/lib/celsius-ui";
 
 type Props = {
   visible: boolean;
@@ -10,12 +11,13 @@ type Props = {
 };
 
 export function OutletSheet({ visible, outlets, selected, onSelect, onClose }: Props) {
+  const C = useCelsius().color;
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} className="flex-1 bg-black/55" />
-      <View className="absolute bottom-0 left-0 right-0 rounded-t-[26px] border-t border-[#F5F3F01a] bg-[#1c0d04] px-5 pb-9 pt-2">
-        <View className="mx-auto mb-4 mt-1.5 h-1 w-10 rounded-full bg-[#F5F3F03a]" />
-        <Text className="mb-2 font-display text-base text-[#F5F3F0]">Select outlet</Text>
+      <Pressable onPress={onClose} className="flex-1 bg-scrim" />
+      <View className="absolute bottom-0 left-0 right-0 rounded-t-[28px] border-t border-line bg-raised px-5 pb-9 pt-2">
+        <View className="mx-auto mb-4 mt-1.5 h-1 w-10 rounded-full bg-line-2" />
+        <Text className="mb-2 font-display text-base text-text">Choose an outlet</Text>
         <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
           {outlets.map((o) => {
             const on = selected === o.id;
@@ -23,13 +25,15 @@ export function OutletSheet({ visible, outlets, selected, onSelect, onClose }: P
               <Pressable
                 key={o.id}
                 onPress={() => onSelect(o.id)}
-                className="flex-row items-center gap-3 border-b border-[#F5F3F00f] py-3.5"
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                className="min-h-14 flex-row items-center gap-3 border-b border-line py-3 active:bg-sunken"
               >
-                <View className={`h-9 w-9 items-center justify-center rounded-xl ${on ? "bg-[#A2492C]" : "bg-[#F5F3F00f]"}`}>
-                  <Store color={on ? "#F5F3F0" : "#F5F3F08a"} size={17} />
+                <View className={`h-10 w-10 items-center justify-center rounded-xl ${on ? "bg-ink" : "bg-sunken"}`}>
+                  <Store color={on ? C["on-ink"] : C["text-2"]} size={18} />
                 </View>
-                <Text className={`flex-1 text-[14px] ${on ? "font-body-bold text-[#F5F3F0]" : "font-body-semi text-[#F5F3F0]"}`}>{o.name}</Text>
-                {on ? <Check color="#FBBF24" size={18} /> : null}
+                <Text className={`flex-1 text-base ${on ? "font-body-bold text-text" : "font-body-semi text-text"}`}>{o.name}</Text>
+                {on ? <Check color={C.text} size={20} /> : null}
               </Pressable>
             );
           })}

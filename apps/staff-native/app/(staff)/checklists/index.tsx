@@ -15,15 +15,19 @@ import {
   CheckCircle2,
   ChevronRight,
   ClipboardCheck,
+  ClipboardList,
   Clock,
 } from "lucide-react-native";
 import { useStaff } from "../../../lib/store";
+import { hasAccess } from "../../../lib/access";
+import { List, ListRow, Segmented } from "../../../components/ui";
 import {
   generateChecklists,
   listChecklists,
   type ChecklistShift,
   type ChecklistSummary,
 } from "../../../lib/ops/checklists";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 const SHIFT_LABEL: Record<ChecklistShift, string> = {
   OPENING: "Opening",
@@ -34,6 +38,7 @@ const SHIFT_LABEL: Record<ChecklistShift, string> = {
 const SHIFT_ORDER: ChecklistShift[] = ["OPENING", "MIDDAY", "CLOSING"];
 
 export default function ChecklistsList() {
+  const C = useCelsius().color;
   const router = useRouter();
   const session = useStaff((s) => s.session);
   const [items, setItems] = useState<ChecklistSummary[]>([]);
@@ -123,16 +128,32 @@ export default function ChecklistsList() {
   const myItems = items.reduce((s, c) => s + (c.myCompletedItems ?? 0), 0);
   const totalItemCount = items.reduce((s, c) => s + c.totalItems, 0);
 
+  // Checks = today's checklists, with audits one row away (the old Audit tab
+  // repeated this screen's job for the same people).
+  const canAudit = hasAccess(session?.role, session?.moduleAccess, "ops:audit");
+  const auditsRow = canAudit ? (
+    <View className="mb-4">
+      <List>
+        <ListRow
+          icon={ClipboardList}
+          title="Audits"
+          meta="Spot checks and quality audits"
+          onPress={() => router.push("/audit")}
+        />
+      </List>
+    </View>
+  ) : null;
+
   return (
     <Screen edges={["top", "left", "right"]}>
-      <PageHeader title="Checklists" />
+      <PageHeader title="Checks" subtitle={dateLabel()} />
       {loading && items.length === 0 ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#A2492C" />
+          <ActivityIndicator color={C["text-3"]} />
         </View>
       ) : error ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-sm text-danger text-center">{error}</Text>
+          <Text className="text-sm text-danger-text text-center">{error}</Text>
         </View>
       ) : (
         <FlatList
@@ -146,7 +167,7 @@ export default function ChecklistsList() {
                 setRefreshing(true);
                 load(true);
               }}
-              tintColor="#A2492C"
+              tintColor={C["text-3"]}
             />
           }
           ListHeaderComponent={
@@ -155,87 +176,65 @@ export default function ChecklistsList() {
                   fully completed) + personal contribution below
                   (items the calling user has ticked off across every
                   checklist today). */}
+              {auditsRow}
               {total > 0 ? (
-                <View className="mb-5 rounded-3xl border border-border bg-surface px-4 py-3.5">
+                <View className="mb-4 rounded-2xl border border-line bg-surface px-4 py-3.5">
                   <View className="flex-row items-center justify-between">
-                    <Text className="text-xs font-body-semi text-muted uppercase tracking-wide">
-                      {dateLabel()}
-                    </Text>
-                    <Text className="text-xs font-body-bold text-muted-fg">
-                      Team {completed} / {total}
+                    <Text className="text-base font-body-semi text-text">Team progress</Text>
+                    <Text className="text-sm font-body-semi text-text-2" style={{ fontVariant: ["tabular-nums"] }}>
+                      {completed} of {total} done
                     </Text>
                   </View>
-                  <View className="mt-2 h-2 overflow-hidden rounded-full bg-primary-50">
+                  <View className="mt-2 h-2 overflow-hidden rounded-full bg-sunken">
                     <View
-                      className={`h-full ${pct === 100 ? "bg-success" : "bg-primary"}`}
+                      className={`h-full ${pct === 100 ? "bg-ok" : "bg-ink"}`}
                       style={{ width: `${pct}%` }}
                     />
                   </View>
-                  <View className="mt-3 flex-row items-center justify-between border-t border-border pt-3">
-                    <Text className="text-xs font-body-semi text-muted uppercase tracking-wide">
-                      Your contribution
-                    </Text>
-                    <Text className="text-sm font-body-bold text-primary tabular-nums">
+                  <View className="mt-3 flex-row items-center justify-between border-t border-line pt-3">
+                    <Text className="text-sm font-body text-text-2">Your part</Text>
+                    <Text className="text-sm font-body-semi text-text" style={{ fontVariant: ["tabular-nums"] }}>
                       {myItems} of {totalItemCount} items
                     </Text>
                   </View>
                 </View>
               ) : null}
               {total > 0 ? (
-                <View className="mb-4 flex-row rounded-full bg-primary-50 p-1">
-                  <Pressable
-                    onPress={() => setScope("mine")}
-                    className={`flex-1 items-center rounded-full py-2 ${
-                      scope === "mine" ? "bg-surface" : ""
-                    }`}
-                  >
-                    <Text
-                      className={`text-xs font-body-semi ${
-                        scope === "mine" ? "text-espresso" : "text-muted"
-                      }`}
-                    >
-                      Mine ({mineCount})
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setScope("all")}
-                    className={`flex-1 items-center rounded-full py-2 ${
-                      scope === "all" ? "bg-surface" : ""
-                    }`}
-                  >
-                    <Text
-                      className={`text-xs font-body-semi ${
-                        scope === "all" ? "text-espresso" : "text-muted"
-                      }`}
-                    >
-                      All ({total})
-                    </Text>
-                  </Pressable>
+                <View className="mb-4">
+                  <Segmented
+                    options={[
+                      { key: "mine", label: `Mine · ${mineCount}` },
+                      { key: "all", label: `All · ${total}` },
+                    ]}
+                    value={scope}
+                    onChange={setScope}
+                  />
                 </View>
               ) : null}
             </View>
           }
           ListEmptyComponent={
             <View className="mt-12 items-center px-6">
-              <View className="h-20 w-20 items-center justify-center rounded-3xl bg-primary-50">
-                <ClipboardCheck color="#A2492C" size={32} />
+              <View className="h-20 w-20 items-center justify-center rounded-2xl bg-sunken">
+                <ClipboardCheck color={C["text-2"]} size={32} />
               </View>
-              <Text className="mt-4 text-base font-display text-espresso">
+              <Text className="mt-4 text-base font-display text-text">
                 {total > 0 && scope === "mine"
                   ? "Nothing assigned to you"
                   : "No checklists today"}
               </Text>
-              <Text className="mt-1 text-sm font-body text-muted-fg text-center">
+              <Text className="mt-1 text-sm font-body text-text-2 text-center">
                 {total > 0 && scope === "mine"
                   ? "Tap All to see the team's checklists."
-                  : "Nothing scheduled for this outlet."}
+                  : "Checklists scheduled for this outlet show here."}
               </Text>
               {total > 0 && scope === "mine" ? (
                 <Pressable
                   onPress={() => setScope("all")}
-                  className="mt-4 rounded-full bg-primary px-5 py-2 active:opacity-80"
+                  accessibilityRole="button"
+                  className="mt-4 h-11 justify-center rounded-xl bg-ink px-5 active:opacity-80"
                 >
-                  <Text className="text-sm font-body-semi text-white">
+                  <Text className="text-sm font-body-semi text-on-ink">
                     Show all
                   </Text>
                 </Pressable>
@@ -245,7 +244,7 @@ export default function ChecklistsList() {
           ItemSeparatorComponent={() => <View className="h-4" />}
           renderItem={({ item: group }) => (
             <View>
-              <Text className="mb-2 text-[10px] font-body-bold uppercase tracking-wide text-muted">
+              <Text accessibilityRole="header" className="mb-2 text-sm font-body-semi text-text-2">
                 {SHIFT_LABEL[group.shift]} shift
               </Text>
               <View className="gap-2">
@@ -273,6 +272,7 @@ function ChecklistRow({
   cl: ChecklistSummary;
   onPress: () => void;
 }) {
+  const C = useCelsius().color;
   const Icon =
     cl.status === "COMPLETED"
       ? CheckCircle2
@@ -281,37 +281,38 @@ function ChecklistRow({
         : Clock;
   const iconColor =
     cl.status === "COMPLETED"
-      ? "#15803D"
+      ? C["ok-text"]
       : cl.status === "IN_PROGRESS"
-        ? "#2563EB"
-        : "#F59E0B";
+        ? C["info-text"]
+        : C["warn-text"];
   const bg =
     cl.status === "COMPLETED"
-      ? "bg-success/10"
+      ? "bg-ok-soft"
       : cl.status === "IN_PROGRESS"
-        ? "bg-blue-500/10"
-        : "bg-amber-500/10";
+        ? "bg-info-soft"
+        : "bg-warn-soft";
 
   return (
     <Pressable
       onPress={onPress}
-      className="rounded-2xl border border-border bg-surface px-3 py-2.5 active:bg-primary-50"
+      accessibilityRole="button"
+      className="min-h-[60px] rounded-2xl border border-line bg-surface px-3 py-2.5 active:bg-sunken"
     >
       <View className="flex-row items-center gap-3">
         <View
-          className={`h-9 w-9 items-center justify-center rounded-xl ${bg}`}
+          className={`h-10 w-10 items-center justify-center rounded-xl ${bg}`}
         >
           <Icon color={iconColor} size={16} />
         </View>
         <View className="flex-1">
           <Text
-            className="text-base font-body-medium text-espresso"
+            className="text-base font-body-medium text-text"
             numberOfLines={1}
           >
             {cl.sop.title}
           </Text>
-          <Text className="text-[10px] font-body text-muted">
-            {cl.sop.category.name} · {cl.completedItems}/{cl.totalItems} items
+          <Text className="text-sm font-body text-text-3" numberOfLines={1}>
+            {cl.sop.category.name} · {cl.completedItems} of {cl.totalItems}
             {cl.myCompletedItems > 0 ? ` · ${cl.myCompletedItems} by you` : ""}
             {cl.shared
               ? " · Shared"
@@ -321,15 +322,15 @@ function ChecklistRow({
           </Text>
         </View>
         <View className="items-end">
-          <Text className="text-base font-body-bold text-espresso">
+          <Text className="text-base font-body-bold text-text">
             {cl.progress}%
           </Text>
         </View>
-        <ChevronRight color="#D1D5DB" size={16} />
+        <ChevronRight color={C["text-3"]} size={16} />
       </View>
-      <View className="mt-2 h-1 overflow-hidden rounded-full bg-primary-50">
+      <View className="mt-2 h-1 overflow-hidden rounded-full bg-sunken">
         <View
-          className={`h-full ${cl.status === "COMPLETED" ? "bg-success" : "bg-primary"}`}
+          className={`h-full ${cl.status === "COMPLETED" ? "bg-ok" : "bg-ink"}`}
           style={{ width: `${cl.progress}%` }}
         />
       </View>

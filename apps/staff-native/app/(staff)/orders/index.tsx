@@ -21,6 +21,7 @@ import {
   type OrderListItem,
   type OrderStatus,
 } from "../../../lib/ops/orders";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 type TabKey = "active" | "completed";
 
@@ -48,6 +49,7 @@ const STATUS_TONE: Record<
 };
 
 export default function OrdersList() {
+  const C = useCelsius().color;
   const router = useRouter();
   const [items, setItems] = useState<OrderListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,17 +97,17 @@ export default function OrdersList() {
     <Screen edges={["top", "left", "right"]}>
       {/* Sticky header with inline "+ New PO" */}
               <PageHeader
-          title="Purchase Orders"
+          title="Purchase orders"
           subtitle="Order stock from suppliers"
           back
           right={
             <Pressable
               onPress={() => router.push("/(staff)/orders/new" as never)}
               accessibilityLabel="New PO"
-              className="h-9 flex-row items-center gap-1 rounded-lg bg-primary px-3 active:opacity-90"
+              className="h-11 flex-row items-center gap-1 rounded-lg bg-ink px-3 active:opacity-90"
             >
-              <Plus color="#FFFFFF" size={14} />
-              <Text className="text-xs font-body-bold text-white">New PO</Text>
+              <Plus color={C["on-ink"]} size={14} />
+              <Text className="text-xs font-body-bold text-on-ink">New order</Text>
             </Pressable>
           }
         />
@@ -116,13 +118,13 @@ export default function OrdersList() {
           <Pressable
             key={t}
             onPress={() => setTab(t)}
-            className={`rounded-full px-3 py-1.5 ${
-              tab === t ? "bg-primary" : "bg-primary-50"
+            className={`h-11 justify-center rounded-full px-4 ${
+              tab === t ? "bg-ink" : "bg-sunken"
             }`}
           >
             <Text
               className={`text-xs font-body-bold capitalize ${
-                tab === t ? "text-white" : "text-primary"
+                tab === t ? "text-on-ink" : "text-text-2"
               }`}
             >
               {t}
@@ -144,8 +146,8 @@ export default function OrdersList() {
                 setRefreshing(true);
                 load(true);
               }}
-              tintColor="#C2452D"
-              colors={["#C2452D"]}
+              tintColor={C["text-3"]}
+              colors={[C["text-3"]]}
             />
           }
         >
@@ -183,6 +185,7 @@ function OrderCard({
   order: OrderListItem;
   onPress: () => void;
 }) {
+  const C = useCelsius().color;
   const tone = STATUS_TONE[order.status] ?? {
     label: order.status,
     tone: "muted" as const,
@@ -191,16 +194,16 @@ function OrderCard({
     <Pressable
       onPress={onPress}
       accessibilityLabel={order.orderNumber}
-      className="rounded-3xl border border-border bg-surface px-4 py-3.5 active:bg-primary-50"
+      className="rounded-2xl border border-line bg-surface px-4 py-3.5 active:bg-sunken"
     >
       <View className="flex-row items-start gap-3">
-        <View className="h-11 w-11 items-center justify-center rounded-2xl bg-primary-50">
-          <Truck color="#C2452D" size={20} />
+        <View className="h-11 w-11 items-center justify-center rounded-2xl bg-sunken">
+          <Truck color={C["text-2"]} size={20} />
         </View>
         <View className="flex-1">
           <View className="flex-row items-start justify-between gap-2">
             <Text
-              className="flex-1 text-base font-body-bold text-espresso"
+              className="flex-1 text-base font-body-bold text-text"
               numberOfLines={1}
             >
               {order.supplier}
@@ -208,17 +211,17 @@ function OrderCard({
             <Pill label={tone.label} tone={tone.tone} />
           </View>
           <Text
-            className="mt-0.5 text-xs font-body text-muted-fg"
+            className="mt-0.5 text-xs font-body text-text-2"
             numberOfLines={1}
           >
             {order.orderNumber} · {order.outletCode} · {order.items.length} item
             {order.items.length === 1 ? "" : "s"}
           </Text>
           <View className="mt-1 flex-row items-center justify-between">
-            <Text className="text-base font-body-bold text-espresso tabular-nums">
+            <Text className="text-base font-body-bold text-text tabular-nums">
               RM {Number(order.totalAmount ?? 0).toFixed(2)}
             </Text>
-            <ChevronRight color="#9CA3AF" size={16} />
+            <ChevronRight color={C["text-3"]} size={16} />
           </View>
         </View>
       </View>

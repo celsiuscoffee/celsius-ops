@@ -37,6 +37,7 @@ import {
   getInvoice,
 } from "../../../lib/ops/invoices";
 import { uploadPhoto } from "../../../lib/upload";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 type Invoice = {
   id: string;
@@ -82,6 +83,7 @@ const STATUS_TONE: Record<
 };
 
 export default function InvoiceDetailScreen() {
+  const C = useCelsius().color;
   const { id } = useLocalSearchParams<{ id: string }>();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -193,7 +195,7 @@ export default function InvoiceDetailScreen() {
     return (
       <Screen edges={["top", "left", "right"]}>
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#C2452D" />
+          <ActivityIndicator color={C["text-3"]} />
         </View>
       </Screen>
     );
@@ -204,7 +206,7 @@ export default function InvoiceDetailScreen() {
       <Screen edges={["top", "left", "right"]}>
         <PageHeader title="Invoice" back />
         <View className="flex-1 items-center justify-center">
-          <Text className="text-sm font-body text-muted-fg">Not found</Text>
+          <Text className="text-sm font-body text-text-2">Not found</Text>
         </View>
       </Screen>
     );
@@ -242,22 +244,22 @@ export default function InvoiceDetailScreen() {
         contentContainerStyle={{ paddingBottom: 96 }}
       >
         {/* Summary card */}
-        <View className="rounded-3xl border border-border bg-surface px-4 py-3.5">
+        <View className="rounded-2xl border border-line bg-surface px-4 py-3.5">
           <View className="flex-row items-start justify-between">
             <View className="flex-1">
-              <Text className="text-xs font-body-bold uppercase tracking-wider text-muted">
+              <Text className="text-sm font-body-semi text-text-2">
                 Amount
               </Text>
-              <Text className="mt-1 text-2xl font-body-bold text-espresso tabular-nums">
+              <Text className="mt-1 text-2xl font-body-bold text-text tabular-nums">
                 RM {amount.toFixed(2)}
               </Text>
             </View>
             <Pill label={tone.label} tone={tone.tone} />
           </View>
           {invoice.dueDate ? (
-            <View className="mt-3 flex-row items-center justify-between border-t border-border pt-3">
-              <Text className="text-xs font-body text-muted-fg">Due</Text>
-              <Text className="text-base font-body-bold text-espresso">
+            <View className="mt-3 flex-row items-center justify-between border-t border-line pt-3">
+              <Text className="text-xs font-body text-text-2">Due</Text>
+              <Text className="text-base font-body-bold text-text">
                 {new Date(invoice.dueDate).toLocaleDateString([], {
                   weekday: "short",
                   day: "numeric",
@@ -269,8 +271,8 @@ export default function InvoiceDetailScreen() {
           ) : null}
           {invoice.paidAt ? (
             <View className="mt-2 flex-row items-center justify-between">
-              <Text className="text-xs font-body text-muted-fg">Paid</Text>
-              <Text className="text-sm font-body-bold text-success">
+              <Text className="text-xs font-body text-text-2">Paid</Text>
+              <Text className="text-sm font-body-bold text-ok-text">
                 {new Date(invoice.paidAt).toLocaleDateString([], {
                   day: "numeric",
                   month: "short",
@@ -283,14 +285,14 @@ export default function InvoiceDetailScreen() {
 
         {/* PO link */}
         {invoice.order ? (
-          <View className="mt-3 rounded-3xl border border-border bg-surface px-4 py-3.5">
-            <Text className="text-xs font-body-bold uppercase tracking-wider text-muted">
+          <View className="mt-3 rounded-2xl border border-line bg-surface px-4 py-3.5">
+            <Text className="text-sm font-body-semi text-text-2">
               Purchase order
             </Text>
-            <Text className="mt-1 text-base font-body-bold text-espresso">
+            <Text className="mt-1 text-base font-body-bold text-text">
               {invoice.order.orderNumber}
             </Text>
-            <Text className="text-xs font-body text-muted-fg">
+            <Text className="text-xs font-body text-text-2">
               {invoice.order.outlet?.name} · {invoice.order.status}
             </Text>
           </View>
@@ -299,7 +301,7 @@ export default function InvoiceDetailScreen() {
         {/* Photos */}
         {invoice.photos && invoice.photos.length > 0 ? (
           <>
-            <Text className="mt-5 mb-2 text-xs font-body-semi uppercase tracking-wider text-muted">
+            <Text className="mt-5 mb-2 text-sm font-body-semi text-text-2">
               Photos ({invoice.photos.length})
             </Text>
             <ScrollView
@@ -326,11 +328,11 @@ export default function InvoiceDetailScreen() {
         {/* Notes */}
         {invoice.notes ? (
           <>
-            <Text className="mt-5 mb-2 text-xs font-body-semi uppercase tracking-wider text-muted">
+            <Text className="mt-5 mb-2 text-sm font-body-semi text-text-2">
               Notes
             </Text>
-            <View className="rounded-3xl border border-border bg-surface px-4 py-3">
-              <Text className="text-sm font-body text-espresso">
+            <View className="rounded-2xl border border-line bg-surface px-4 py-3">
+              <Text className="text-sm font-body text-text">
                 {invoice.notes}
               </Text>
             </View>
@@ -339,14 +341,14 @@ export default function InvoiceDetailScreen() {
 
         {/* GRNI explainer */}
         {isPlaceholder ? (
-          <View className="mt-5 rounded-3xl border border-amber-500/30 bg-amber-50 px-4 py-3.5">
+          <View className="mt-5 rounded-2xl border border-warn bg-warn-soft px-4 py-3.5">
             <View className="flex-row items-center gap-2">
-              <FileText color="#D97706" size={18} />
-              <Text className="text-sm font-body-bold text-amber-700">
+              <FileText color={C.warn} size={18} />
+              <Text className="text-sm font-body-bold text-warn-text">
                 Goods received, waiting for invoice
               </Text>
             </View>
-            <Text className="mt-2 text-xs font-body text-amber-700/80">
+            <Text className="mt-2 text-xs font-body text-warn-text">
               This is an auto-created placeholder from a receiving. Tap
               "Attach invoice" below to record the supplier's invoice
               number, due date, and snap a photo.
@@ -365,26 +367,26 @@ export default function InvoiceDetailScreen() {
         <View
           style={{
             paddingBottom: 12,
-            shadowColor: "#160800",
+            shadowColor: C.text,
             shadowOffset: { width: 0, height: -4 },
             shadowOpacity: 0.06,
             shadowRadius: 12,
           }}
-          className="absolute inset-x-0 bottom-0 bg-background px-4 pt-3 pb-3"
+          className="absolute inset-x-0 bottom-0 bg-bg px-4 pt-3 pb-3"
         >
           <Pressable
             onPress={sendPop}
             disabled={sendingPop}
             className={`h-14 flex-row items-center justify-center gap-2 rounded-2xl ${
-              sendingPop ? "bg-primary/50" : "bg-primary active:opacity-90"
+              sendingPop ? "bg-ink opacity-50" : "bg-ink active:opacity-90"
             }`}
           >
             {sendingPop ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={C["on-ink"]} />
             ) : (
               <>
-                <MessageCircle color="#FFFFFF" size={18} />
-                <Text className="text-base font-body-bold text-white">
+                <MessageCircle color={C["on-ink"]} size={18} />
+                <Text className="text-base font-body-bold text-on-ink">
                   Send POP via WhatsApp
                 </Text>
               </>
@@ -397,19 +399,19 @@ export default function InvoiceDetailScreen() {
         <View
           style={{
             paddingBottom: 12,
-            shadowColor: "#160800",
+            shadowColor: C.text,
             shadowOffset: { width: 0, height: -4 },
             shadowOpacity: 0.06,
             shadowRadius: 12,
           }}
-          className="absolute inset-x-0 bottom-0 bg-background px-4 pt-3 pb-3"
+          className="absolute inset-x-0 bottom-0 bg-bg px-4 pt-3 pb-3"
         >
           <Pressable
             onPress={() => setAttachOpen(true)}
-            className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary active:opacity-90"
+            className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-ink active:opacity-90"
           >
-            <Paperclip color="#FFFFFF" size={18} />
-            <Text className="text-base font-body-bold text-white">
+            <Paperclip color={C["on-ink"]} size={18} />
+            <Text className="text-base font-body-bold text-on-ink">
               Attach invoice
             </Text>
           </Pressable>
@@ -488,6 +490,7 @@ function AttachSheet({
   defaultAmount: number;
   existingPhotos: string[];
 }) {
+  const C = useCelsius().color;
   const [invNum, setInvNum] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState(String(defaultAmount.toFixed(2)));
@@ -516,13 +519,13 @@ function AttachSheet({
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View className="flex-1 bg-background">
-          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-base font-display text-espresso">
+        <View className="flex-1 bg-bg">
+          <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+            <Text className="text-base font-display text-text">
               Attach invoice
             </Text>
-            <Pressable onPress={onClose} className="px-2 py-1">
-              <XIcon color="#9CA3AF" size={20} />
+            <Pressable onPress={onClose} className="min-h-11 justify-center px-3">
+              <XIcon color={C["text-3"]} size={20} />
             </Pressable>
           </View>
           <ScrollView
@@ -530,31 +533,31 @@ function AttachSheet({
             keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-            <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+            <Text className="mb-2 text-sm font-body-semi text-text-2">
               Invoice number
             </Text>
             <TextInput
               value={invNum}
               onChangeText={setInvNum}
               placeholder="INV-12345"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={C["text-3"]}
               autoCapitalize="characters"
-              className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso"
+              className="h-14 rounded-2xl border border-line bg-surface px-4 text-base font-body text-text"
             />
 
-            <Text className="mt-4 mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+            <Text className="mt-4 mb-2 text-sm font-body-semi text-text-2">
               Due date
             </Text>
             <TextInput
               value={dueDate}
               onChangeText={setDueDate}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={C["text-3"]}
               autoCapitalize="none"
-              className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso"
+              className="h-14 rounded-2xl border border-line bg-surface px-4 text-base font-body text-text"
             />
 
-            <Text className="mt-4 mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+            <Text className="mt-4 mb-2 text-sm font-body-semi text-text-2">
               Amount (RM)
             </Text>
             <TextInput
@@ -562,11 +565,11 @@ function AttachSheet({
               onChangeText={setAmount}
               keyboardType="decimal-pad"
               placeholder="0.00"
-              placeholderTextColor="#9CA3AF"
-              className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body-bold text-espresso tabular-nums"
+              placeholderTextColor={C["text-3"]}
+              className="h-14 rounded-2xl border border-line bg-surface px-4 text-base font-body-bold text-text tabular-nums"
             />
 
-            <Text className="mt-4 mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+            <Text className="mt-4 mb-2 text-sm font-body-semi text-text-2">
               Photos
             </Text>
             <View className="flex-row gap-2 flex-wrap">
@@ -583,13 +586,13 @@ function AttachSheet({
               ))}
               <Pressable
                 onPress={onOpenCamera}
-                className="h-20 w-20 items-center justify-center rounded-xl border-2 border-dashed border-primary/40 bg-primary-50 active:opacity-80"
+                className="h-20 w-20 items-center justify-center rounded-xl border-2 border-dashed border-line-2 bg-sunken active:opacity-80"
               >
-                <Camera color="#C2452D" size={20} />
+                <Camera color={C["text-2"]} size={20} />
               </Pressable>
             </View>
           </ScrollView>
-          <View className="border-t border-border p-4">
+          <View className="border-t border-line p-4">
             <Pressable
               onPress={async () => {
                 if (!canSubmit || submitting) return;
@@ -609,14 +612,14 @@ function AttachSheet({
               disabled={!canSubmit || submitting}
               className={`h-14 items-center justify-center rounded-2xl ${
                 canSubmit && !submitting
-                  ? "bg-primary active:opacity-90"
-                  : "bg-primary/40"
+                  ? "bg-ink active:opacity-90"
+                  : "bg-ink opacity-40"
               }`}
             >
               {submitting ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color={C["on-ink"]} />
               ) : (
-                <Text className="text-base font-body-bold text-white">
+                <Text className="text-base font-body-bold text-on-ink">
                   Attach
                 </Text>
               )}

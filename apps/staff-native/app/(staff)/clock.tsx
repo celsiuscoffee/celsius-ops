@@ -32,6 +32,7 @@ import {
   authenticate as biometricAuth,
   getBiometricRequired,
 } from "../../lib/biometric";
+import { clock12, useCelsius } from "../../lib/celsius-ui";
 
 type GpsState =
   | { kind: "idle" }
@@ -41,6 +42,7 @@ type GpsState =
   | { kind: "error"; message: string };
 
 export default function ClockScreen() {
+  const C = useCelsius().color;
   const [status, setStatus] = useState<ClockStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [gps, setGps] = useState<GpsState>({ kind: "idle" });
@@ -226,7 +228,7 @@ export default function ClockScreen() {
   return (
     <Screen edges={["top", "left", "right"]}>
       <PageHeader
-        title="Clock"
+        title="Clock in and out"
         subtitle={
           status?.activeLog
             ? `Clocked in at ${formatTime(status.activeLog.clock_in)}`
@@ -236,60 +238,60 @@ export default function ClockScreen() {
       />
 
       {!permsReady ? (
-        <View className="mt-8 rounded-3xl border border-border bg-surface p-5">
-          <Text className="text-base font-display-medium text-espresso">
+        <View className="mt-8 rounded-2xl border border-line bg-surface p-5">
+          <Text className="text-base font-display-medium text-text">
             Enable location for auto clock-in
           </Text>
-          <Text className="mt-2 text-sm font-body text-muted-fg">
+          <Text className="mt-2 text-sm font-body text-text-2">
             We'll notify you to clock in when you arrive at your outlet, and
             to clock out when you leave. Location is checked at the outlet
             boundary only, never tracked continuously.
           </Text>
           <Pressable
             onPress={enableLocation}
-            className="mt-5 h-12 items-center justify-center rounded-2xl bg-primary"
+            className="mt-5 h-12 items-center justify-center rounded-2xl bg-ink"
           >
-            <Text className="text-base font-body-bold text-white">
+            <Text className="text-base font-body-bold text-on-ink">
               Enable location
             </Text>
           </Pressable>
         </View>
       ) : (
-        <View className="mt-6 rounded-3xl border border-border bg-surface p-5">
+        <View className="mt-6 rounded-2xl border border-line bg-surface p-5">
           {gps.kind === "loading" ? (
             <View className="flex-row items-center gap-3">
               <ActivityIndicator />
-              <Text className="text-sm text-muted-fg">Locating you…</Text>
+              <Text className="text-sm text-text-2">Locating you…</Text>
             </View>
           ) : gps.kind === "ok" ? (
             <View>
               {zone ? (
                 <View className="flex-row items-center justify-between">
-                  <Text className="text-sm font-body-semi text-muted">
+                  <Text className="text-sm font-body-semi text-text-3">
                     Distance to {zone.name}
                   </Text>
                   <Text
                     className={`text-base font-display-medium ${
-                      inZone ? "text-success" : "text-espresso"
+                      inZone ? "text-ok-text" : "text-text"
                     }`}
                   >
                     {distance != null ? `${distance}m` : "-"}
                   </Text>
                 </View>
               ) : (
-                <Text className="text-sm text-muted-fg">
+                <Text className="text-sm text-text-2">
                   No geofence configured for your outlet. Ask your manager to
-                  set one in BackOffice → HR → Geofence.
+                  set one in the back office.
                 </Text>
               )}
               {gps.accuracy ? (
-                <Text className="mt-2 text-xs text-muted">
+                <Text className="mt-2 text-xs text-text-3">
                   GPS accuracy ±{Math.round(gps.accuracy)}m
                 </Text>
               ) : null}
             </View>
           ) : (
-            <Text className="text-sm text-danger">
+            <Text className="text-sm text-danger-text">
               {gps.kind === "denied"
                 ? "Location permission denied."
                 : `GPS error: ${gps.kind === "error" ? gps.message : ""}`}
@@ -299,7 +301,7 @@ export default function ClockScreen() {
       )}
 
       {statusError ? (
-        <Text className="mt-3 text-sm text-danger">{statusError}</Text>
+        <Text className="mt-3 text-sm text-danger-text">{statusError}</Text>
       ) : null}
 
       <View className="mt-auto pb-4">
@@ -308,13 +310,13 @@ export default function ClockScreen() {
             onPress={() => startClockAction("clock_out")}
             disabled={busy}
             className={`h-16 items-center justify-center rounded-2xl ${
-              busy ? "bg-espresso/50" : "bg-espresso"
+              busy ? "bg-ink opacity-50" : "bg-ink"
             }`}
           >
             {busy ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={C["on-ink"]} />
             ) : (
-              <Text className="text-lg font-body-bold text-white">
+              <Text className="text-lg font-body-bold text-on-ink">
                 Clock out
               </Text>
             )}
@@ -326,32 +328,32 @@ export default function ClockScreen() {
               disabled={busy || !canClockIn || gps.kind === "loading"}
               className={`h-16 items-center justify-center rounded-2xl ${
                 busy || !canClockIn || gps.kind === "loading"
-                  ? "bg-primary/40"
-                  : "bg-primary"
+                  ? "bg-ink opacity-40"
+                  : "bg-ink"
               }`}
             >
               {busy ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color={C["on-ink"]} />
               ) : (
-                <Text className="text-lg font-body-bold text-white">
+                <Text className="text-lg font-body-bold text-on-ink">
                   Clock in
                 </Text>
               )}
             </Pressable>
             {zone && gps.kind === "ok" && !inZone ? (
-              <Text className="mt-2 text-center text-xs text-muted">
+              <Text className="mt-2 text-center text-xs text-text-3">
                 You read {distance}m from {zone.name} — you can still clock
                 in, but it will be flagged for your manager to review.
               </Text>
             ) : gps.kind !== "ok" && gps.kind !== "loading" ? (
-              <Text className="mt-2 text-center text-xs text-muted">
+              <Text className="mt-2 text-center text-xs text-text-3">
                 No location — you can still clock in, but it will be flagged
                 for your manager to review.
               </Text>
             ) : null}
           </>
         )}
-        <Text className="mt-3 text-center text-xs text-muted">
+        <Text className="mt-3 text-center text-xs text-text-3">
           Auto clock-in is {permsReady ? "on" : "off"}. We'll notify you at the
           outlet boundary.
         </Text>
@@ -383,8 +385,7 @@ export default function ClockScreen() {
 }
 
 function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return clock12(iso);
 }
 
 function haversineDistance(

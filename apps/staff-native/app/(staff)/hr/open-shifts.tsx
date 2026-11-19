@@ -20,8 +20,10 @@ import {
   type OpenSlot,
   type OpenSlotsResponse,
 } from "../../../lib/hr/api";
+import { hm12, useCelsius } from "../../../lib/celsius-ui";
 
 export default function OpenShiftsScreen() {
+  const C = useCelsius().color;
   const [data, setData] = useState<OpenSlotsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,7 +57,7 @@ export default function OpenShiftsScreen() {
     });
     Alert.alert(
       "Request this shift?",
-      `${when}\n${slot.start_time}–${slot.end_time} · ${slot.outlet_name} · ${slot.station === "kitchen" ? "Kitchen" : "Barista"}\n\nYou're raising your hand — your manager picks who gets it.`,
+      `${when}\n${hm12(slot.start_time)} – ${hm12(slot.end_time)} · ${slot.outlet_name} · ${slot.station === "kitchen" ? "Kitchen" : "Barista"}\n\nYou're raising your hand — your manager picks who gets it.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -102,7 +104,7 @@ export default function OpenShiftsScreen() {
 
   return (
     <Screen edges={["top", "left", "right"]}>
-      <PageHeader title="Open Slots" back />
+      <PageHeader title="Open shifts" back />
       <ScrollView
         contentContainerClassName="pb-10"
         refreshControl={
@@ -112,46 +114,46 @@ export default function OpenShiftsScreen() {
               setRefreshing(true);
               load();
             }}
-            tintColor="#A2492C"
+            tintColor={C["text-3"]}
           />
         }
         showsVerticalScrollIndicator={false}
       >
-        <Text className="mt-4 text-sm font-body text-muted-fg">
+        <Text className="mt-4 text-sm font-body text-text-2">
           Extra shifts that still need someone. Request one — your manager picks who gets it.
         </Text>
 
         {data?.is_pt ? (
-          <View className="mt-4 rounded-3xl border border-border bg-surface px-4 py-3">
-            <Text className="text-sm font-body text-espresso">
+          <View className="mt-4 rounded-2xl border border-line bg-surface px-4 py-3">
+            <Text className="text-sm font-body text-text">
               This week:{" "}
               <Text className="font-body-bold">{data.week_hours}h</Text> across{" "}
               <Text className="font-body-bold">
                 {data.week_days} day{data.week_days === 1 ? "" : "s"}
               </Text>
-              <Text className="text-muted"> · cap 24h / 5 days</Text>
+              <Text className="text-text-3"> · cap 24h / 5 days</Text>
             </Text>
           </View>
         ) : null}
 
         {loading ? (
           <View className="items-center py-10">
-            <ActivityIndicator color="#A2492C" />
+            <ActivityIndicator color={C["text-3"]} />
           </View>
         ) : shifts.length === 0 ? (
-          <View className="mt-5 items-center rounded-3xl border border-border bg-surface p-8">
-            <CalendarPlus color="#D1D5DB" size={32} />
-            <Text className="mt-2 text-sm font-body-semi text-espresso">
-              No open slots right now
+          <View className="mt-5 items-center rounded-2xl border border-line bg-surface p-8">
+            <CalendarPlus color={C["text-3"]} size={32} />
+            <Text className="mt-2 text-sm font-body-semi text-text">
+              No open shifts right now
             </Text>
-            <Text className="mt-1 text-center text-xs font-body text-muted-fg">
-              New slots appear here when a schedule needs extra hands.
+            <Text className="mt-1 text-center text-xs font-body text-text-2">
+              New ones show here when a schedule needs extra hands.
             </Text>
           </View>
         ) : (
           byDate.map(([date, dayShifts]) => (
             <View key={date} className="mt-5">
-              <Text className="mb-2 text-sm font-body-semi text-muted-fg">
+              <Text className="mb-2 text-sm font-body-semi text-text-2">
                 {new Date(date + "T00:00:00").toLocaleDateString("en-MY", {
                   weekday: "long",
                   day: "numeric",
@@ -166,56 +168,56 @@ export default function OpenShiftsScreen() {
                   return (
                     <View
                       key={s.id}
-                      className={`flex-row items-center gap-3 rounded-3xl border p-4 ${requested ? "border-warning/40 bg-warning/5" : s.blocked ? "border-border bg-surface opacity-60" : "border-border bg-surface"}`}
+                      className={`flex-row items-center gap-3 rounded-2xl border p-4 ${requested ? "border-warn bg-warn-soft" : s.blocked ? "border-line bg-surface opacity-60" : "border-line bg-surface"}`}
                     >
                       <View
-                        className={`h-11 w-11 items-center justify-center rounded-2xl ${isKitchen ? "bg-warning/10" : "bg-primary-50"}`}
+                        className={`h-11 w-11 items-center justify-center rounded-2xl ${isKitchen ? "bg-warn-soft" : "bg-sunken"}`}
                       >
                         {isKitchen ? (
-                          <ChefHat color="#D97706" size={20} />
+                          <ChefHat color={C.warn} size={20} />
                         ) : (
-                          <Coffee color="#A2492C" size={20} />
+                          <Coffee color={C["text-2"]} size={20} />
                         )}
                       </View>
                       <View className="flex-1">
-                        <Text className="text-base font-body-semi text-espresso">
-                          {s.start_time}–{s.end_time}
-                          <Text className="font-body text-muted"> ({s.hours}h)</Text>
+                        <Text className="text-base font-body-semi text-text">
+                          {hm12(s.start_time)} – {hm12(s.end_time)}
+                          <Text className="font-body text-text-3"> ({s.hours}h)</Text>
                         </Text>
-                        <Text className="text-xs font-body text-muted-fg" numberOfLines={1}>
+                        <Text className="text-xs font-body text-text-2" numberOfLines={1}>
                           {s.outlet_name} · {isKitchen ? "Kitchen" : "Barista"}
                           {s.role_type ? ` · ${s.role_type}` : ""}
                           {s.pending_requests > 0 ? ` · ${s.pending_requests} asked` : ""}
                         </Text>
                         {requested ? (
-                          <Text className="mt-0.5 text-xs font-body-semi text-warning">Requested — waiting for your manager</Text>
+                          <Text className="mt-0.5 text-xs font-body-semi text-warn-text">Asked · waiting for your manager</Text>
                         ) : s.blocked ? (
-                          <Text className="mt-0.5 text-xs font-body text-danger">{s.blocked}</Text>
+                          <Text className="mt-0.5 text-xs font-body text-danger-text">{s.blocked}</Text>
                         ) : null}
                       </View>
                       {requested ? (
                         <Pressable
                           onPress={() => withdraw(s)}
                           disabled={busy}
-                          className="rounded-2xl border border-border px-3.5 py-2.5 active:opacity-90"
+                          className="rounded-2xl border border-line px-3.5 py-2.5 active:opacity-90"
                         >
                           {busy ? (
-                            <ActivityIndicator color="#A2492C" size="small" />
+                            <ActivityIndicator color={C["text-3"]} size="small" />
                           ) : (
-                            <Text className="text-sm font-body-semi text-muted-fg">Withdraw</Text>
+                            <Text className="text-sm font-body-semi text-text-2">Withdraw</Text>
                           )}
                         </Pressable>
                       ) : (
                         <Pressable
                           onPress={() => confirmRequest(s)}
                           disabled={!!s.blocked || busy}
-                          className={`rounded-2xl px-4 py-2.5 ${s.blocked ? "bg-border" : "bg-primary active:opacity-90"}`}
+                          className={`rounded-2xl px-4 py-2.5 ${s.blocked ? "bg-line" : "bg-ink active:opacity-90"}`}
                         >
                           {busy ? (
-                            <ActivityIndicator color="#fff" size="small" />
+                            <ActivityIndicator color={C["on-ink"]} size="small" />
                           ) : (
                             <Text
-                              className={`text-sm font-body-semi ${s.blocked ? "text-muted" : "text-white"}`}
+                              className={`text-sm font-body-semi ${s.blocked ? "text-text-3" : "text-on-ink"}`}
                             >
                               Request
                             </Text>

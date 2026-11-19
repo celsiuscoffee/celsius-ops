@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react-native";
+import { useCelsius } from "@/lib/celsius-ui";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const WK = ["S", "M", "T", "W", "T", "F", "S"];
@@ -26,6 +27,7 @@ type Props = {
 };
 
 export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
+  const C = useCelsius().color;
   const [dStart, setDStart] = useState(from);
   const [dEnd, setDEnd] = useState<string | null>(to);
   const [calY, setCalY] = useState(2026);
@@ -77,15 +79,15 @@ export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable onPress={onClose} className="flex-1 bg-black/55" />
-      <View className="absolute bottom-0 left-0 right-0 rounded-t-[26px] border-t border-[#F5F3F01a] bg-[#1c0d04] px-5 pb-9 pt-2">
-        <View className="mx-auto mb-4 mt-1.5 h-1 w-10 rounded-full bg-[#F5F3F03a]" />
-        <Text className="mb-4 font-display text-base text-[#F5F3F0]">Select date range</Text>
+      <Pressable onPress={onClose} className="flex-1 bg-scrim" />
+      <View className="absolute bottom-0 left-0 right-0 rounded-t-[28px] border-t border-line bg-raised px-5 pb-9 pt-2">
+        <View className="mx-auto mb-4 mt-1.5 h-1 w-10 rounded-full bg-line-2" />
+        <Text className="mb-4 font-display text-base text-text">Choose dates</Text>
 
         <View className="mb-4 flex-row flex-wrap gap-2">
           {PRESETS.map((p) => (
-            <Pressable key={p.r} onPress={() => preset(p.r)} className="rounded-full border border-[#F5F3F01a] bg-[#160800] px-3 py-2 active:bg-[#A2492C]">
-              <Text className="font-body-semi text-xs text-[#F5F3F0b3]">{p.label}</Text>
+            <Pressable key={p.r} onPress={() => preset(p.r)} className="h-11 justify-center rounded-full border border-line bg-sunken px-3.5 active:bg-line-2">
+              <Text className="font-body-semi text-sm text-text-2">{p.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -94,18 +96,18 @@ export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
           <Pressable hitSlop={10} onPress={() => {
             if (pickMonth) { setCalY(calY - 1); return; }
             const m = calM - 1; if (m < 0) { setCalM(11); setCalY(calY - 1); } else setCalM(m);
-          }} className="p-1">
-            <ChevronLeft color="#F5F3F0b3" size={18} />
+          }} className="h-11 w-11 items-center justify-center">
+            <ChevronLeft color={C["text-2"]} size={20} />
           </Pressable>
-          <Pressable hitSlop={8} onPress={() => setPickMonth((v) => !v)} className="flex-row items-center gap-1 px-2 py-1">
-            <Text className="font-display text-sm text-[#F5F3F0]">{pickMonth ? `${calY}` : `${MON[calM]} ${calY}`}</Text>
-            <ChevronDown color="#F5F3F08a" size={14} />
+          <Pressable hitSlop={8} onPress={() => setPickMonth((v) => !v)} className="min-h-11 flex-row items-center gap-1 px-2">
+            <Text className="font-display text-sm text-text">{pickMonth ? `${calY}` : `${MON[calM]} ${calY}`}</Text>
+            <ChevronDown color={C["text-2"]} size={16} />
           </Pressable>
           <Pressable hitSlop={10} onPress={() => {
             if (pickMonth) { setCalY(calY + 1); return; }
             const m = calM + 1; if (m > 11) { setCalM(0); setCalY(calY + 1); } else setCalM(m);
-          }} className="p-1">
-            <ChevronRight color="#F5F3F0b3" size={18} />
+          }} className="h-11 w-11 items-center justify-center">
+            <ChevronRight color={C["text-2"]} size={20} />
           </Pressable>
         </View>
 
@@ -113,8 +115,8 @@ export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
           <View className="flex-row flex-wrap py-1">
             {MON.map((m, i) => (
               <Pressable key={m} onPress={() => { setCalM(i); setPickMonth(false); }} style={{ width: `${100 / 3}%` }} className="px-1 py-1.5">
-                <View className={`items-center rounded-xl py-3 ${i === calM ? "bg-[#A2492C]" : "bg-[#160800]"}`}>
-                  <Text className={`text-[13px] ${i === calM ? "font-body-bold text-[#F5F3F0]" : "font-body text-[#F5F3F0]"}`}>{m}</Text>
+                <View className={`items-center rounded-xl py-3 ${i === calM ? "bg-ink" : "bg-sunken"}`}>
+                  <Text className={`text-sm ${i === calM ? "font-body-bold text-on-ink" : "font-body text-text"}`}>{m}</Text>
                 </View>
               </Pressable>
             ))}
@@ -123,7 +125,7 @@ export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
           <View className="flex-row flex-wrap">
             {WK.map((d, i) => (
               <View key={`w${i}`} style={{ width: `${100 / 7}%` }} className="py-1">
-                <Text className="text-center text-[10px] font-body-semi text-[#F5F3F057]">{d}</Text>
+                <Text className="text-center text-xs font-body-semi text-text-3">{d}</Text>
               </View>
             ))}
             {cells.map((d, i) => {
@@ -133,8 +135,8 @@ export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
               const isEnd = ds === dStart || ds === dEnd;
               return (
                 <Pressable key={`d${i}`} onPress={() => pick(ds)} style={{ width: `${100 / 7}%` }} className="items-center py-1">
-                  <View className={`h-9 w-9 items-center justify-center rounded-xl ${isEnd ? "bg-[#A2492C]" : inRange ? "bg-[#A2492C40]" : ""}`}>
-                    <Text className={`text-[13px] ${isEnd ? "font-body-bold text-[#F5F3F0]" : "font-body text-[#F5F3F0]"}`}>{d}</Text>
+                  <View className={`h-9 w-9 items-center justify-center rounded-xl ${isEnd ? "bg-ink" : inRange ? "bg-sunken" : ""}`}>
+                    <Text className={`text-sm ${isEnd ? "font-body-bold text-on-ink" : "font-body text-text"}`}>{d}</Text>
                   </View>
                 </Pressable>
               );
@@ -142,16 +144,16 @@ export function RangeSheet({ visible, from, to, onApply, onClose }: Props) {
           </View>
         )}
 
-        <Text className="mt-3 text-center text-xs font-body-semi text-[#F5F3F08a]">
+        <Text className="mt-3 text-center text-xs font-body-semi text-text-2">
           {dEnd ? `${fmtD(dStart)} to ${fmtD(dEnd)}` : dStart ? `${fmtD(dStart)} to tap end date…` : "Tap a start date…"}
         </Text>
 
         <Pressable
           disabled={!dStart || !dEnd}
           onPress={() => dStart && dEnd && onApply(dStart, dEnd)}
-          className={`mt-4 items-center rounded-2xl py-3.5 ${dStart && dEnd ? "bg-[#A2492C]" : "bg-[#A2492C66]"}`}
+          className={`mt-4 h-[52px] items-center justify-center rounded-xl ${dStart && dEnd ? "bg-ink" : "bg-ink opacity-40"}`}
         >
-          <Text className="font-display text-sm text-[#F5F3F0]">Apply</Text>
+          <Text className="font-body-semi text-base text-on-ink">Apply</Text>
         </Pressable>
       </View>
     </Modal>

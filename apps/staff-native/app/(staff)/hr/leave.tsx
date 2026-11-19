@@ -31,6 +31,7 @@ import {
   type LeaveRequest,
 } from "../../../lib/hr/api";
 import { calendarDayParts } from "../../../lib/hr/myt";
+import { sentence, useCelsius } from "../../../lib/celsius-ui";
 
 // The system's leave types (apps/staff/src/lib/hr/constants.ts LEAVE_TYPES).
 // "emergency" was offered here but is not a type the balances or the web app
@@ -56,6 +57,7 @@ function prettyDate(iso: string): string {
 }
 
 export default function LeaveScreen() {
+  const C = useCelsius().color;
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -189,7 +191,7 @@ export default function LeaveScreen() {
       <Screen edges={["top", "left", "right"]}>
         <PageHeader title="Leave" back />
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#A2492C" />
+          <ActivityIndicator color={C["text-3"]} />
         </View>
       </Screen>
     );
@@ -209,17 +211,17 @@ export default function LeaveScreen() {
               setRefreshing(true);
               load();
             }}
-            tintColor="#A2492C"
+            tintColor={C["text-3"]}
           />
         }
         showsVerticalScrollIndicator={false}
       >
         {/* Balances */}
-        <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
+        <Text className="text-sm font-body-semi text-text-2">
           Balances ({new Date().getFullYear()})
         </Text>
         {balances.length === 0 ? (
-          <Text className="mt-2 text-sm font-body text-muted-fg">
+          <Text className="mt-2 text-sm font-body text-text-2">
             No leave balances assigned yet.
           </Text>
         ) : (
@@ -227,15 +229,15 @@ export default function LeaveScreen() {
             {balances.map((b) => (
               <View
                 key={b.id}
-                className="flex-1 min-w-[45%] rounded-2xl border border-border bg-surface p-3"
+                className="flex-1 min-w-[45%] rounded-2xl border border-line bg-surface p-3"
               >
-                <Text className="text-xs font-body text-muted">
+                <Text className="text-xs font-body text-text-3">
                   {b.leave_type}
                 </Text>
-                <Text className="text-2xl font-display text-primary">
+                <Text className="text-2xl font-display text-text">
                   {b.remaining_days}
                 </Text>
-                <Text className="text-[10px] font-body text-muted">
+                <Text className="text-xs font-body text-text-3">
                   of {b.entitled_days} days
                 </Text>
               </View>
@@ -244,11 +246,11 @@ export default function LeaveScreen() {
         )}
 
         {/* History */}
-        <Text className="mt-5 text-xs font-body-semi uppercase tracking-wide text-muted">
+        <Text className="mt-5 text-sm font-body-semi text-text-2">
           History
         </Text>
         {requests.length === 0 ? (
-          <Text className="mt-2 text-sm font-body text-muted-fg">
+          <Text className="mt-2 text-sm font-body text-text-2">
             No leave requests yet.
           </Text>
         ) : (
@@ -263,14 +265,14 @@ export default function LeaveScreen() {
       {/* Pinned bottom CTA */}
       <View
         style={{ paddingBottom: 12 }}
-        className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
+        className="absolute inset-x-0 bottom-0 border-t border-line bg-bg px-5 pt-3"
       >
         <Pressable
           onPress={() => setSheetOpen(true)}
-          className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary active:opacity-80"
+          className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-ink active:opacity-80"
         >
-          <Plus color="#FFFFFF" size={20} />
-          <Text className="text-base font-body-bold text-white">
+          <Plus color={C["on-ink"]} size={20} />
+          <Text className="text-base font-body-bold text-on-ink">
             Request leave
           </Text>
         </Pressable>
@@ -287,16 +289,16 @@ export default function LeaveScreen() {
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View className="flex-1 bg-background">
-            <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-              <Text className="text-xl font-display text-espresso">
+          <View className="flex-1 bg-bg">
+            <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+              <Text className="text-xl font-display text-text">
                 Request leave
               </Text>
               <Pressable
                 onPress={() => setSheetOpen(false)}
-                className="px-2 py-1"
+                className="min-h-11 justify-center px-3"
               >
-                <Text className="text-sm font-body-bold text-muted">
+                <Text className="text-sm font-body-bold text-text-3">
                   Cancel
                 </Text>
               </Pressable>
@@ -308,7 +310,7 @@ export default function LeaveScreen() {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
+              <Text className="text-sm font-body-semi text-text-2">
                 Type
               </Text>
               <View className="mt-2 flex-row flex-wrap gap-2">
@@ -316,14 +318,14 @@ export default function LeaveScreen() {
                   <Pressable
                     key={t.key}
                     onPress={() => setType(t.key)}
-                    className={`rounded-full border-2 px-4 py-2 ${
+                    className={`min-h-11 justify-center rounded-full border-2 px-4 py-2 ${
                       type === t.key
-                        ? "border-primary bg-primary-50"
-                        : "border-border bg-surface"
+                        ? "border-ink bg-sunken"
+                        : "border-line bg-surface"
                     }`}
                   >
                     <Text
-                      className={`text-sm font-body-bold ${type === t.key ? "text-primary" : "text-muted-fg"}`}
+                      className={`text-sm font-body-bold ${type === t.key ? "text-text" : "text-text-2"}`}
                     >
                       {t.label}
                     </Text>
@@ -333,82 +335,82 @@ export default function LeaveScreen() {
 
               {needsMc && (
                 <View className="mt-5">
-                  <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
-                    Medical certificate <Text className="text-primary">*</Text>
+                  <Text className="mb-2 text-sm font-body-semi text-text-2">
+                    Medical certificate <Text className="text-danger-text">*</Text>
                   </Text>
                   <Pressable
                     onPress={() => setMcCaptureOpen(true)}
                     className={`h-14 flex-row items-center justify-center gap-2 rounded-2xl border-2 ${
                       mc
-                        ? "border-primary bg-primary-50"
-                        : "border-dashed border-border bg-surface"
+                        ? "border-ink bg-sunken"
+                        : "border-dashed border-line bg-surface"
                     }`}
                   >
                     {mc ? (
                       <>
-                        <CheckCircle2 color="#A2492C" size={18} />
-                        <Text className="text-sm font-body-bold text-primary">
+                        <CheckCircle2 color={C["text-2"]} size={18} />
+                        <Text className="text-sm font-body-bold text-text">
                           MC attached — tap to retake
                         </Text>
                       </>
                     ) : (
-                      <Text className="text-sm font-body-bold text-muted-fg">
+                      <Text className="text-sm font-body-bold text-text-2">
                         Take a photo of your MC
                       </Text>
                     )}
                   </Pressable>
-                  <Text className="mt-1 text-[11px] font-body text-muted">
+                  <Text className="mt-1 text-xs font-body text-text-3">
                     Required for sick leave.
                   </Text>
                 </View>
               )}
 
               {/* Dates — one calendar, tap a start day then an end day. */}
-              <Text className="mt-5 mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
-                Dates <Text className="text-primary">*</Text>
+              <Text className="mt-5 mb-2 text-sm font-body-semi text-text-2">
+                Dates <Text className="text-danger-text">*</Text>
               </Text>
               <DateRangeCalendar value={range} onChange={setRange} />
               {totalDays > 0 ? (
-                <Text className="mt-2 text-sm font-body-bold text-primary">
+                <Text className="mt-2 text-sm font-body-bold text-text">
                   {prettyDate(startISO!)}
                   {endISO !== startISO ? ` → ${prettyDate(endISO!)}` : ""} ·{" "}
                   {totalDays} day{totalDays === 1 ? "" : "s"}
                 </Text>
               ) : (
-                <Text className="mt-2 text-sm font-body text-muted">
+                <Text className="mt-2 text-sm font-body text-text-3">
                   Tap a day, or a start and end day for a range.
                 </Text>
               )}
 
-              <Text className="mt-5 text-xs font-body-semi uppercase tracking-wide text-muted">
-                Reason <Text className="text-primary">*</Text>
+              <Text className="mt-5 text-sm font-body-semi text-text-2">
+                Reason <Text className="text-danger-text">*</Text>
               </Text>
               <TextInput
                 value={reason}
                 onChangeText={setReason}
                 placeholder="Why are you taking leave?"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={C["text-3"]}
                 multiline
-                className="mt-2 min-h-20 rounded-2xl border border-border bg-surface px-4 py-3 text-base font-body text-espresso"
+                className="mt-2 min-h-20 rounded-2xl border border-line bg-surface px-4 py-3 text-base font-body text-text"
               />
               {!reasonOk && (
-                <Text className="mt-1 text-[11px] font-body text-muted">
+                <Text className="mt-1 text-xs font-body text-text-3">
                   A reason is required.
                 </Text>
               )}
             </ScrollView>
-            <View className="border-t border-border p-5">
+            <View className="border-t border-line p-5">
               <Pressable
                 onPress={submit}
                 disabled={!canSubmit}
                 className={`h-14 items-center justify-center rounded-2xl ${
-                  canSubmit ? "bg-primary" : "bg-primary/40"
+                  canSubmit ? "bg-ink" : "bg-ink opacity-40"
                 }`}
               >
                 {submitting ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color={C["on-ink"]} />
                 ) : (
-                  <Text className="text-base font-body-bold text-white">
+                  <Text className="text-base font-body-bold text-on-ink">
                     Submit request
                   </Text>
                 )}
@@ -422,48 +424,49 @@ export default function LeaveScreen() {
 }
 
 function RequestCard({ request }: { request: LeaveRequest }) {
+  const C = useCelsius().color;
   // ai_approved is the MOST COMMON approval path (the AI leave manager writes
   // it), but the card treated only "approved" as approved — so auto-approved
   // leave showed a grey pending clock, and staff chased managers to confirm.
   const isApproved = request.status === "approved" || request.status === "ai_approved";
   const icon =
     isApproved ? (
-      <CheckCircle2 color="#15803D" size={16} />
+      <CheckCircle2 color={C["ok-text"]} size={16} />
     ) : request.status === "rejected" ? (
-      <XCircle color="#B91C1C" size={16} />
+      <XCircle color={C.danger} size={16} />
     ) : (request.status as string) === "ai_escalated" ? (
-      <Bot color="#F59E0B" size={16} />
+      <Bot color={C.warn} size={16} />
     ) : (
-      <Clock color="#9CA3AF" size={16} />
+      <Clock color={C["text-3"]} size={16} />
     );
   const labelColor =
     isApproved
-      ? "text-success"
+      ? "text-ok-text"
       : request.status === "rejected"
-        ? "text-danger"
+        ? "text-danger-text"
         : (request.status as string) === "ai_escalated"
-          ? "text-amber-700"
-          : "text-muted-fg";
+          ? "text-warn-text"
+          : "text-text-2";
 
   return (
-    <View className="flex-row items-center gap-3 rounded-2xl border border-border bg-surface px-3 py-2.5">
+    <View className="flex-row items-center gap-3 rounded-2xl border border-line bg-surface px-3 py-2.5">
       {icon}
       <View className="flex-1">
-        <Text className="text-base font-body-semi text-espresso">
+        <Text className="text-base font-body-semi text-text">
           {request.leave_type}
         </Text>
-        <Text className="text-xs font-body text-muted">
+        <Text className="text-xs font-body text-text-3">
           {fmt(request.start_date)} → {fmt(request.end_date)} ·{" "}
-          {request.total_days}d
+          {request.total_days} {Number(request.total_days) === 1 ? "day" : "days"}
         </Text>
         {request.rejection_reason ? (
-          <Text className="mt-1 text-xs font-body text-danger">
+          <Text className="mt-1 text-xs font-body text-danger-text">
             {request.rejection_reason}
           </Text>
         ) : null}
       </View>
-      <Text className={`text-[10px] font-body-bold uppercase ${labelColor}`}>
-        {String(request.status).replace("ai_", "").replace("_", " ")}
+      <Text className={`text-xs font-body-bold ${labelColor}`}>
+        {sentence(String(request.status))}
       </Text>
     </View>
   );

@@ -1,19 +1,21 @@
 import type { NativeStackNavigationOptions } from "@react-navigation/native-stack";
+import { useCelsius } from "./celsius-ui";
 
-// Standard Stack screenOptions for every inner-page layout. Peachi Bold
-// (the brand display face) carries the title text both here and in
-// `components/PageHeader.tsx`, so the small nav-bar title and the big
-// hero PageHeader read as the same voice.
-export const stackScreenOptions = {
-  headerStyle: { backgroundColor: "#FFFFFF" },
-  headerTintColor: "#1A0200",
-  // Peachi Bold per CC Brand System v2026, display face also used
-  // in PageHeader so the title voice is consistent at every scale.
-  headerTitleStyle: { fontFamily: "Peachi-Bold", fontSize: 18 },
-  headerShadowVisible: false,
-  // Chevron-only back button. `headerBackTitle: ""` was ignored on newer
-  // @react-navigation/native-stack (v7+) and the previous screen's title
-  // kept rendering in the pill. `minimal` is the correct API and matches
-  // the brand's restrained chrome.
-  headerBackButtonDisplayMode: "minimal",
-} satisfies NativeStackNavigationOptions;
+// Stack screenOptions for every inner layout. Screens draw their own title
+// with components/PageHeader (one title style app-wide), so the native header
+// stays hidden; when a screen does turn it on, it reads the Celsius UI tokens
+// so it follows light and dark. contentStyle paints the page colour behind
+// every push, so a transition never flashes white in dark mode.
+export function useStackScreenOptions(): NativeStackNavigationOptions {
+  const C = useCelsius().color;
+  return {
+    headerShown: false,
+    headerStyle: { backgroundColor: C.bg },
+    headerTintColor: C.text,
+    headerTitleStyle: { fontFamily: "Peachi-Bold", fontSize: 18, color: C.text },
+    headerShadowVisible: false,
+    // Chevron-only back button (`headerBackTitle: ""` is ignored on v7+).
+    headerBackButtonDisplayMode: "minimal",
+    contentStyle: { backgroundColor: C.bg },
+  };
+}

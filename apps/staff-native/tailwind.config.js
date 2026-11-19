@@ -4,31 +4,54 @@ module.exports = {
   presets: [require("nativewind/preset")],
   theme: {
     extend: {
+      // Celsius UI tokens (lib/celsius-ui/tokens.ts, the same names and values
+      // as the back office). Each reads the CSS variable the root layout sets
+      // for light or dark; the fallback is the light value. Opacity modifiers
+      // (bg-ok/10) do not work on variables: use the -soft tokens instead.
       colors: {
-        // Themeable tokens resolve against CSS vars set by lib/theme.ts
-        // at the root. Fallback = the light value, so if the theme
-        // wrapper is ever missing the app still renders correctly (light).
-        background: "var(--color-background, #FFFFFF)",
-        surface: "var(--color-surface, #FFFFFF)",
-        espresso: "var(--color-espresso, #1A0200)",
-        primary: {
-          DEFAULT: "#A2492C", // brand — same in both modes
-          50: "var(--color-primary-50, #F6E8E2)",
-          100: "var(--color-primary-100, #EBD0C2)",
-          900: "#4E1F12",
-        },
-        muted: {
-          DEFAULT: "var(--color-muted, #6B6B6B)",
-          fg: "var(--color-muted-fg, #4A4A4A)",
-        },
-        border: "var(--color-border, rgba(26, 2, 0, 0.10))",
-        // Accents read well on both light & dark — kept constant.
-        amber: {
-          400: "#FBBF24",
-          500: "#F59E0B",
-        },
-        success: "#15803D",
-        danger: "#B91C1C",
+        "bg": "var(--bg, #F5F3F0)",
+        "surface": "var(--surface, #FBFAF8)",
+        "raised": "var(--raised, #FFFEFC)",
+        "sunken": "var(--sunken, #ECE8E2)",
+        "line": "var(--line, #E5E0D9)",
+        "line-2": "var(--line-2, #D3CCC2)",
+        "line-ctl": "var(--line-ctl, #8C8178)",
+        "text": "var(--text, #160800)",
+        "text-2": "var(--text-2, #5A4E46)",
+        "text-3": "var(--text-3, #6E6259)",
+        "ink": "var(--ink, #160800)",
+        "on-ink": "var(--on-ink, #F7F3EE)",
+        "ink-hover": "var(--ink-hover, #33241B)",
+        "hero": "var(--hero, #160800)",
+        "on-hero": "var(--on-hero, #F7F3EE)",
+        "brand-glow": "var(--brand-glow, #E9A08F)",
+        "brand": "var(--brand, #C2452D)",
+        "on-brand": "var(--on-brand, #FFFFFF)",
+        "brand-soft": "var(--brand-soft, #F6E2DC)",
+        "brand-text": "var(--brand-text, #A33822)",
+        "danger": "var(--danger, #B4442A)",
+        "danger-soft": "var(--danger-soft, #F5DFD6)",
+        "danger-text": "var(--danger-text, #9E3A22)",
+        "warn": "var(--warn, #B8862B)",
+        "warn-soft": "var(--warn-soft, #F3E6C6)",
+        "warn-text": "var(--warn-text, #7A5813)",
+        "ok": "var(--ok, #5F7F4E)",
+        "ok-soft": "var(--ok-soft, #E1E8D5)",
+        "ok-text": "var(--ok-text, #46653A)",
+        "info": "var(--info, #4A688A)",
+        "info-soft": "var(--info-soft, #DEE4EA)",
+        "info-text": "var(--info-text, #3B5878)",
+        "c1": "var(--c1, #C2452D)",
+        "c2": "var(--c2, #41629F)",
+        "c3": "var(--c3, #299A8B)",
+        "c4": "var(--c4, #B5841D)",
+        "c5": "var(--c5, #965582)",
+        "c6": "var(--c6, #6C853B)",
+        "other": "var(--other, #B9AFA4)",
+        "grid": "var(--grid, #E7E2DA)",
+        "sel": "var(--sel, #F7E9E4)",
+        "tab": "var(--tab, #FBFAF8)",
+        "scrim": "var(--scrim, rgba(22, 8, 0, 0.45))",
       },
       fontFamily: {
         sans: ["System"],

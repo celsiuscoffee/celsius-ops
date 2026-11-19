@@ -1,7 +1,8 @@
 import { Component, type ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Appearance, Pressable, Text, View } from "react-native";
 import * as Updates from "expo-updates";
 import { Sentry } from "../lib/sentry";
+import { palette } from "../lib/celsius-ui/tokens";
 
 type Props = { children: ReactNode };
 type State = { error: Error | null };
@@ -48,11 +49,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (!this.state.error) return this.props.children;
+    // The outermost boundary sits above the theme wrapper, so read the
+    // Celsius UI palette for the device's scheme directly.
+    const C = palette[Appearance.getColorScheme() === "dark" ? "dark" : "light"];
     return (
       <View
         style={{
           flex: 1,
-          backgroundColor: "#1A0200",
+          backgroundColor: C.bg,
           alignItems: "center",
           justifyContent: "center",
           padding: 32,
@@ -60,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
       >
         <Text
           style={{
-            color: "#F5F3F0",
+            color: C.text,
             fontSize: 20,
             fontWeight: "700",
             marginBottom: 10,
@@ -71,7 +75,7 @@ export class ErrorBoundary extends Component<Props, State> {
         </Text>
         <Text
           style={{
-            color: "rgba(245,243,240,0.6)",
+            color: C["text-2"],
             fontSize: 14,
             lineHeight: 20,
             textAlign: "center",
@@ -84,13 +88,14 @@ export class ErrorBoundary extends Component<Props, State> {
         <Pressable
           onPress={this.reload}
           style={{
-            backgroundColor: "#A2492C",
-            borderRadius: 14,
-            paddingVertical: 13,
+            backgroundColor: C.ink,
+            borderRadius: 12,
+            minHeight: 52,
+            justifyContent: "center",
             paddingHorizontal: 30,
           }}
         >
-          <Text style={{ color: "#F5F3F0", fontSize: 15, fontWeight: "600" }}>
+          <Text style={{ color: C["on-ink"], fontSize: 16, fontFamily: "SpaceGrotesk_600SemiBold" }}>
             Reload app
           </Text>
         </Pressable>

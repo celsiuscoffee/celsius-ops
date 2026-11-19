@@ -10,30 +10,20 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import {
   AlertCircle,
-  ArrowLeftRight,
   ArrowRight,
   Camera,
   CheckCircle2,
   ChevronDown,
-  ClipboardCheck,
-  ClipboardList,
   Clock,
-  Package,
-  Receipt,
-  Settings,
-  Trash2,
-  Trophy,
 } from "lucide-react-native";
-import * as Updates from "expo-updates";
 import { Screen } from "../../components/Screen";
 import { listChecklists, type ChecklistSummary } from "../../lib/ops/checklists";
 import { getClockStatus, type ClockStatus } from "../../lib/hr/clock";
 import { fetchShifts, type Shift } from "../../lib/hr/api";
 import { pickTodayShift, shiftLine } from "../../lib/hr/shift-card";
 import { useStaff } from "../../lib/store";
-import { hasAccess } from "../../lib/access";
-import { ApiError } from "../../lib/api";
 import SalesScreen from "./sales";
+import { clock12, hm12, useCelsius } from "../../lib/celsius-ui";
 
 type TaskPriority = "overdue" | "due_soon" | "on_track" | "done";
 
@@ -70,6 +60,7 @@ export default function Home() {
 }
 
 function StaffHome() {
+  const C = useCelsius().color;
   const router = useRouter();
   const session = useStaff((s) => s.session);
   const [checklists, setChecklists] = useState<ChecklistSummary[]>([]);
@@ -167,16 +158,16 @@ function StaffHome() {
           priority = "overdue";
           const ago = Math.abs(diffMin);
           timeLabel =
-            ago < 60 ? `${ago}m overdue` : `${Math.floor(ago / 60)}h overdue`;
+            ago < 60 ? `${ago} min overdue` : `${Math.floor(ago / 60)} h overdue`;
         } else if (diffMin <= 30) {
           priority = "due_soon";
-          timeLabel = `${diffMin}m left`;
+          timeLabel = `${diffMin} min left`;
         } else {
           timeLabel = cl.timeSlot
-            ? `Due ${cl.timeSlot}`
+            ? `Due ${hm12(cl.timeSlot)}`
             : diffMin < 120
-              ? `${diffMin}m left`
-              : `${Math.floor(diffMin / 60)}h left`;
+              ? `${diffMin} min left`
+              : `${Math.floor(diffMin / 60)} h left`;
         }
       }
 
@@ -212,56 +203,35 @@ function StaffHome() {
 
   const isClockedIn = !!clock?.activeLog;
   const shiftInfo = todayShift ? shiftLine(todayShift, nowMs, isClockedIn) : null;
-  const clockedSince = clock?.activeLog
-    ? new Date(clock.activeLog.clock_in).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : null;
+  const clockedSince = clock?.activeLog ? clock12(clock.activeLog.clock_in) : null;
 
   return (
     // edges without "bottom": the tab bar is opaque + in-flow, so a bottom
-    // safe-area inset would clip the scroll ~34px above the tab bar and leave a
-    // white gap. Dropping it lets the task list run flush to the tab bar.
+    // safe-area inset would clip the scroll ~34px above the tab bar.
     <Screen edges={["top", "left", "right"]}>
-      {/* Frozen header, sits OUTSIDE the ScrollView so the avatar +
-          gear icon stay tappable while you scroll the task list. */}
-      <View className="flex-row items-center gap-3 pt-3 pb-3">
-        <Pressable
-          onPress={() => router.push("/(staff)/profile")}
-          accessibilityRole="button"
-          accessibilityLabel="Open profile"
-          hitSlop={8}
-          className="flex-1 flex-row items-center gap-3 active:opacity-80"
-        >
-          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
-            <Text className="text-base font-display text-primary">
-              {session?.name?.charAt(0)?.toUpperCase() ?? "?"}
-            </Text>
-          </View>
-          <View className="flex-1">
-            {/* Greeting matches the standard page-title size (24px
-                Peachi-Bold), same anchor weight as every other screen
-                so Home doesn't feel like a different app. */}
-            <Text className="text-2xl font-display text-espresso">
-              {greeting()}, {firstName(session?.name)}
-            </Text>
-            <Text className="text-xs font-body text-muted-fg">
-              {session?.outletName ? `${session.outletName} · ` : ""}
-              {dateLabel()}
-            </Text>
-          </View>
-        </Pressable>
-        <Pressable
-          onPress={() => router.push("/(staff)/profile")}
-          accessibilityRole="button"
-          accessibilityLabel="Settings"
-          hitSlop={10}
-          className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50 active:opacity-80"
-        >
-          <Settings color="#A2492C" size={20} />
-        </Pressable>
-      </View>
+      {/* Frozen header: who and where. Tapping it opens Profile; everything
+          else personal (shifts, pay, scoreboard) is on the Me tab. */}
+      <Pressable
+        onPress={() => router.push("/(staff)/profile")}
+        accessibilityRole="button"
+        accessibilityLabel="Open profile and settings"
+        className="flex-row items-center gap-3 pt-2 pb-3 active:opacity-80"
+      >
+        <View className="h-11 w-11 items-center justify-center rounded-full bg-sunken">
+          <Text className="text-base font-display text-text">
+            {session?.name?.charAt(0)?.toUpperCase() ?? "?"}
+          </Text>
+        </View>
+        <View className="flex-1">
+          <Text accessibilityRole="header" className="text-2xl font-display text-text" numberOfLines={1}>
+            {greeting()}, {firstName(session?.name)}
+          </Text>
+          <Text className="text-sm font-body text-text-2" numberOfLines={1}>
+            {session?.outletName ? `${session.outletName} · ` : ""}
+            {dateLabel()}
+          </Text>
+        </View>
+      </Pressable>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -270,181 +240,136 @@ function StaffHome() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#A2492C"
-            colors={["#A2492C"]}
+            tintColor={C["text-3"]}
+            colors={[C["text-2"]]}
           />
         }
       >
-        {/* Clock card, biggest CTA on the page (matches web behavior). */}
+        {/* Clock card: the screen's main action. */}
         {session?.outletId ? (
           <Pressable
             onPress={() => router.push("/(staff)/clock")}
-            className={`mt-4 rounded-3xl border-2 px-4 py-4 active:opacity-90 ${
-              isClockedIn
-                ? "border-success/40 bg-success/5"
-                : "border-primary bg-primary"
+            accessibilityRole="button"
+            accessibilityLabel={isClockedIn ? "Clock out" : "Clock in"}
+            className={`mt-2 rounded-2xl px-4 py-4 active:opacity-90 ${
+              isClockedIn ? "border border-ok bg-ok-soft" : "bg-ink"
             }`}
           >
             <View className="flex-row items-center gap-3">
               <View
-                className={`h-12 w-12 items-center justify-center rounded-2xl ${
-                  isClockedIn ? "bg-success/10" : "bg-white/20"
+                className={`h-12 w-12 items-center justify-center rounded-xl ${
+                  isClockedIn ? "bg-surface" : "bg-ink-hover"
                 }`}
               >
-                <Clock
-                  color={isClockedIn ? "#15803D" : "#FFFFFF"}
-                  size={24}
-                />
+                <Clock color={isClockedIn ? C["ok-text"] : C["on-ink"]} size={24} />
               </View>
               <View className="flex-1">
                 {isClockedIn ? (
                   <>
-                    <Text className="text-[10px] font-body-bold uppercase tracking-wide text-success">
-                      Clocked in · {clockedSince}
+                    <Text className="text-sm font-body-semi text-ok-text">
+                      Clocked in at {clockedSince}
                     </Text>
-                    <Text className="mt-0.5 text-xl font-display text-success tabular-nums">
+                    <Text className="mt-0.5 text-xl font-display text-ok-text" style={{ fontVariant: ["tabular-nums"] }}>
                       {elapsed || "-"}
                     </Text>
-                    <Text className="text-xs font-body text-success/80">
+                    <Text className="text-sm font-body text-ok-text">
                       {shiftInfo ? `${shiftInfo.hint} · tap to clock out` : "Tap to clock out"}
                     </Text>
                   </>
                 ) : (
                   <>
-                    <Text className="text-[10px] font-body-bold uppercase tracking-wide text-white/80">
+                    <Text className="text-sm font-body-semi text-on-ink" numberOfLines={2}>
                       {shiftInfo
                         ? `Your shift · ${shiftInfo.times}${todayShift?.outlet_name ? ` · ${todayShift.outlet_name}` : ""}`
                         : "No shift rostered today"}
                     </Text>
-                    <Text className="mt-0.5 text-xl font-display text-white">
-                      Clock in
-                    </Text>
-                    <Text className="text-xs font-body text-white/80">
-                      {shiftInfo ? `${shiftInfo.hint} · selfie + location` : "Selfie + location · 5 seconds"}
+                    <Text className="mt-0.5 text-xl font-display text-on-ink">Clock in</Text>
+                    <Text className="text-sm font-body text-on-ink">
+                      {shiftInfo ? `${shiftInfo.hint} · selfie and location` : "Selfie and location, about 5 seconds"}
                     </Text>
                   </>
                 )}
               </View>
-              <ArrowRight
-                color={isClockedIn ? "#15803D" : "#FFFFFF"}
-                size={20}
-              />
+              <ArrowRight color={isClockedIn ? C["ok-text"] : C["on-ink"]} size={20} />
             </View>
           </Pressable>
         ) : null}
 
-        {/* Personal 4DX scoreboard: your KPI levers + allowance this month.
-            A daily hook into the full breakdown (hr/scoreboard). */}
-        <Pressable
-          onPress={() => router.push("/(staff)/hr/scoreboard")}
-          className="mt-4 flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
-        >
-          <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
-            <Trophy color="#A2492C" size={20} />
-          </View>
-          <View className="flex-1">
-            <Text className="text-base font-body-semi text-espresso">
-              My Scoreboard
-            </Text>
-            <Text className="text-xs font-body text-muted-fg">
-              Your KPIs and allowance this month
-            </Text>
-          </View>
-          <ArrowRight color="#9CA3AF" size={16} />
-        </Pressable>
-
-        {/* Progress card */}
+        {/* Today's tasks: progress, then what is late, due soon, to do. */}
         {totalCount > 0 ? (
-          <View className="mt-4 rounded-3xl border border-border bg-surface px-4 py-3">
+          <View className="mt-4 rounded-2xl border border-line bg-surface px-4 py-3">
             <View className="flex-row items-center justify-between">
-              <Text className="text-base font-body-semi text-espresso">
-                Today's tasks
-              </Text>
-              <Text className="text-xs font-body-bold text-muted-fg">
-                {doneCount}/{totalCount} done
+              <Text className="text-base font-body-semi text-text">Today's tasks</Text>
+              <Text className="text-sm font-body-semi text-text-2" style={{ fontVariant: ["tabular-nums"] }}>
+                {doneCount} of {totalCount} done
               </Text>
             </View>
-            <View className="mt-2 h-2 overflow-hidden rounded-full bg-primary-50">
+            <View className="mt-2 h-2 overflow-hidden rounded-full bg-sunken">
               <View
-                className={`h-full rounded-full ${
-                  pct === 100
-                    ? "bg-success"
-                    : pct >= 50
-                      ? "bg-amber-500"
-                      : "bg-primary"
-                }`}
+                className={`h-full rounded-full ${pct === 100 ? "bg-ok" : "bg-ink"}`}
                 style={{ width: `${pct}%` }}
               />
             </View>
           </View>
         ) : null}
 
-        {/* All-done banner */}
         {totalCount > 0 && pending.length === 0 ? (
-          <View className="mt-4 flex-row items-center gap-3 rounded-3xl border border-success/30 bg-success/5 p-4">
-            <View className="h-10 w-10 items-center justify-center rounded-2xl bg-success/10">
-              <CheckCircle2 color="#15803D" size={20} />
-            </View>
-            <View>
-              <Text className="text-sm font-body-semi text-success">
-                All tasks done!
-              </Text>
-              <Text className="text-xs font-body text-success/80">
-                {totalCount} tasks completed today
+          <View className="mt-4 flex-row items-center gap-3 rounded-2xl border border-ok bg-ok-soft p-4">
+            <CheckCircle2 color={C["ok-text"]} size={22} />
+            <View className="flex-1">
+              <Text className="text-base font-body-semi text-ok-text">All tasks done</Text>
+              <Text className="text-sm font-body text-ok-text">
+                {totalCount} {totalCount === 1 ? "task" : "tasks"} completed today
               </Text>
             </View>
           </View>
         ) : null}
 
-        {/* Loading skeleton */}
         {loading && totalCount === 0 ? (
           <View className="mt-4 items-center justify-center py-8">
-            <ActivityIndicator color="#A2492C" />
+            <ActivityIndicator color={C["text-3"]} />
           </View>
         ) : null}
 
-        {/* Task groups */}
-        {(["overdue", "due_soon", "on_track"] as TaskPriority[]).map(
-          (priority) => {
-            const group = grouped[priority];
-            if (!group || group.length === 0) return null;
-            return (
-              <View key={priority} className="mt-4">
-                <Text
-                  className={`mb-2 text-[10px] font-body-bold uppercase tracking-wide ${groupColor(priority)}`}
-                >
-                  {PRIORITY_COPY[priority]}
-                </Text>
-                <View className="gap-2">
-                  {group.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onPress={() => router.push(task.href)}
-                    />
-                  ))}
-                </View>
-              </View>
-            );
-          },
-        )}
+        {!loading && totalCount === 0 && session?.outletId ? (
+          <View className="mt-4 rounded-2xl border border-line bg-surface p-4">
+            <Text className="text-base font-body-semi text-text">No tasks today</Text>
+            <Text className="mt-0.5 text-sm font-body text-text-2">
+              Checklists scheduled for {session?.outletName ?? "your outlet"} show here.
+            </Text>
+          </View>
+        ) : null}
 
-        {/* Done collapsible */}
+        {(["overdue", "due_soon", "on_track"] as TaskPriority[]).map((priority) => {
+          const group = grouped[priority];
+          if (!group || group.length === 0) return null;
+          return (
+            <View key={priority} className="mt-5">
+              <Text accessibilityRole="header" className={`mb-2 text-sm font-body-semi ${groupColor(priority)}`}>
+                {PRIORITY_COPY[priority]} · {group.length}
+              </Text>
+              <View className="gap-2">
+                {group.map((task) => (
+                  <TaskCard key={task.id} task={task} onPress={() => router.push(task.href)} />
+                ))}
+              </View>
+            </View>
+          );
+        })}
+
         {done.length > 0 ? (
-          <View className="mt-4">
+          <View className="mt-5">
             <Pressable
               onPress={() => setShowDone((v) => !v)}
-              className="flex-row items-center justify-between py-1.5"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showDone }}
+              className="min-h-11 flex-row items-center justify-between"
             >
-              <Text className="text-[10px] font-body-bold uppercase tracking-wide text-muted">
-                Done ({done.length})
-              </Text>
+              <Text className="text-sm font-body-semi text-text-2">Done · {done.length}</Text>
               <ChevronDown
-                color="#6B6B6B"
-                size={14}
-                style={{
-                  transform: [{ rotate: showDone ? "180deg" : "0deg" }],
-                }}
+                color={C["text-2"]}
+                size={18}
+                style={{ transform: [{ rotate: showDone ? "180deg" : "0deg" }] }}
               />
             </Pressable>
             {showDone ? (
@@ -453,19 +378,15 @@ function StaffHome() {
                   <Pressable
                     key={task.id}
                     onPress={() => router.push(task.href)}
-                    className="flex-row items-center gap-2.5 rounded-2xl border border-border bg-surface px-3 py-2 opacity-70"
+                    accessibilityRole="button"
+                    className="min-h-11 flex-row items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2 active:bg-sunken"
                   >
-                    <CheckCircle2 color="#15803D" size={16} />
-                    <Text
-                      className="flex-1 text-sm font-body text-muted-fg line-through"
-                      numberOfLines={1}
-                    >
+                    <CheckCircle2 color={C["ok-text"]} size={16} />
+                    <Text className="flex-1 text-sm font-body text-text-2" numberOfLines={1}>
                       {task.title}
                     </Text>
                     {task.photoCount ? (
-                      <Text className="text-[10px] font-body text-muted">
-                        {task.photoCount}
-                      </Text>
+                      <Text className="text-xs font-body text-text-3">{task.photoCount}</Text>
                     ) : null}
                   </Pressable>
                 ))}
@@ -473,204 +394,69 @@ function StaffHome() {
             ) : null}
           </View>
         ) : null}
-
-        {/* Quick actions — gated per inventory sub-module, mirroring the
-            Inventory hub, so a staffer without inventory access doesn't see
-            buttons that would only error server-side. */}
-        {(() => {
-          const can = (k: string) => hasAccess(session?.role, session?.moduleAccess, k);
-          if (
-            !(
-              can("inventory:stock-count") ||
-              can("inventory:receivings") ||
-              can("inventory:wastage") ||
-              can("inventory:transfers") ||
-              can("inventory:pay-and-claim")
-            )
-          ) {
-            return null;
-          }
-          return (
-            <View className="mt-6">
-              <Text className="mb-2 text-base font-body-semi text-espresso">
-                Quick actions
-              </Text>
-              <View className="flex-row flex-wrap gap-2">
-                {can("inventory:stock-count") && (
-                  <QuickAction icon={ClipboardCheck} label="Count" onPress={() => router.push("/stock-count")} />
-                )}
-                {can("inventory:receivings") && (
-                  <QuickAction icon={Package} label="Receive" onPress={() => router.push("/receiving")} />
-                )}
-                {can("inventory:wastage") && (
-                  <QuickAction icon={Trash2} label="Wastage" onPress={() => router.push("/wastage")} />
-                )}
-                {can("inventory:transfers") && (
-                  <QuickAction icon={ArrowLeftRight} label="Transfer" onPress={() => router.push("/transfers")} />
-                )}
-                {can("inventory:pay-and-claim") && (
-                  <QuickAction icon={Receipt} label="Claim" onPress={() => router.push("/(staff)/claims/new")} />
-                )}
-              </View>
-            </View>
-          );
-        })()}
-
-        {/* Checklists + audits hub entry — gated like the tab bar so a staffer
-            without the module doesn't land on a screen that 401s. */}
-        {(() => {
-          const can = (k: string) => hasAccess(session?.role, session?.moduleAccess, k);
-          const showChecklists = can("ops:checklists");
-          const showAudit = can("ops:audit");
-          if (!showChecklists && !showAudit) return null;
-          return (
-            <View className="mt-6 gap-2">
-              {showChecklists && (
-                <Pressable
-                  onPress={() => router.push("/checklists")}
-                  className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
-                >
-                  <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
-                    <ClipboardCheck color="#A2492C" size={20} />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-base font-body-semi text-espresso">Checklists</Text>
-                    <Text className="text-xs font-body text-muted-fg">Today's SOPs to complete</Text>
-                  </View>
-                  <ArrowRight color="#9CA3AF" size={16} />
-                </Pressable>
-              )}
-              {showAudit && (
-                <Pressable
-                  onPress={() => router.push("/audit")}
-                  className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface p-4 active:bg-primary-50"
-                >
-                  <View className="h-10 w-10 items-center justify-center rounded-2xl bg-primary-50">
-                    <ClipboardList color="#A2492C" size={20} />
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-base font-body-semi text-espresso">Audits</Text>
-                    <Text className="text-xs font-body text-muted-fg">Spot checks & quality audits</Text>
-                  </View>
-                  <ArrowRight color="#9CA3AF" size={16} />
-                </Pressable>
-              )}
-            </View>
-          );
-        })()}
       </ScrollView>
     </Screen>
   );
 }
 
-function TaskCard({
-  task,
-  onPress,
-}: {
-  task: UnifiedTask;
-  onPress: () => void;
-}) {
+function TaskCard({ task, onPress }: { task: UnifiedTask; onPress: () => void }) {
+  const C = useCelsius().color;
   const isOverdue = task.priority === "overdue";
   const isDueSoon = task.priority === "due_soon";
   return (
     <Pressable
       onPress={onPress}
-      className={`rounded-3xl border bg-surface px-3 py-2.5 active:opacity-90 ${
-        isOverdue
-          ? "border-danger/20 bg-danger/5"
-          : isDueSoon
-            ? "border-amber-500/30 bg-amber-50/40"
-            : "border-border"
+      accessibilityRole="button"
+      accessibilityLabel={`${task.title}, ${task.timeLabel ?? ""}`}
+      className={`min-h-[60px] flex-row items-center gap-3 rounded-2xl border px-3 py-2.5 active:bg-sunken ${
+        isOverdue ? "border-danger bg-surface" : isDueSoon ? "border-warn bg-surface" : "border-line bg-surface"
       }`}
     >
-      <View className="flex-row items-center gap-2.5">
-        <View
-          className={`h-8 w-8 items-center justify-center rounded-xl ${
-            isOverdue
-              ? "bg-danger/10"
-              : isDueSoon
-                ? "bg-amber-500/10"
-                : "bg-primary-50"
-          }`}
-        >
-          {isOverdue ? (
-            <AlertCircle color="#B91C1C" size={16} />
-          ) : (
-            <Camera
-              color={isDueSoon ? "#F59E0B" : "#A2492C"}
-              size={16}
-            />
-          )}
-        </View>
-        <View className="flex-1">
-          <Text
-            className="text-base font-body-medium text-espresso"
-            numberOfLines={1}
-          >
-            {task.title}
-          </Text>
-          <View className="flex-row items-center gap-1.5">
-            <Text
-              className={`text-[10px] font-body ${
-                isOverdue
-                  ? "text-danger/70"
-                  : isDueSoon
-                    ? "text-amber-700"
-                    : "text-muted"
-              }`}
-            >
-              {task.timeLabel}
-            </Text>
-            {task.photoCount ? (
-              <>
-                <Text className="text-[10px] text-muted">·</Text>
-                <Text className="text-[10px] font-body text-muted">
-                  {task.photoCount} photos
-                </Text>
-              </>
-            ) : null}
-          </View>
-        </View>
-        {task.progress !== undefined ? (
-          <Text
-            className={`text-xs font-body-bold ${
-              isOverdue ? "text-danger" : isDueSoon ? "text-amber-700" : "text-muted"
-            }`}
-          >
-            {task.progress}%
-          </Text>
+      <View
+        className={`h-10 w-10 items-center justify-center rounded-xl ${
+          isOverdue ? "bg-danger-soft" : isDueSoon ? "bg-warn-soft" : "bg-sunken"
+        }`}
+      >
+        {isOverdue ? (
+          <AlertCircle color={C["danger-text"]} size={18} />
         ) : (
-          <ArrowRight color="#D1D5DB" size={14} />
+          <Camera color={isDueSoon ? C["warn-text"] : C["text-2"]} size={18} />
         )}
       </View>
-    </Pressable>
-  );
-}
-
-function QuickAction({
-  icon: Icon,
-  label,
-  onPress,
-}: {
-  icon: React.ComponentType<{ color?: string; size?: number }>;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      className="w-[18%] min-w-16 flex-grow basis-[18%] items-center gap-1 rounded-2xl border border-border bg-surface py-3 active:bg-primary-50"
-    >
-      <Icon color="#4A4A4A" size={20} />
-      <Text className="text-[10px] font-body-semi text-muted-fg">{label}</Text>
+      <View className="flex-1">
+        <Text className="text-base font-body-medium text-text" numberOfLines={1}>
+          {task.title}
+        </Text>
+        <Text
+          className={`text-sm font-body ${
+            isOverdue ? "text-danger-text" : isDueSoon ? "text-warn-text" : "text-text-3"
+          }`}
+          numberOfLines={1}
+        >
+          {task.timeLabel}
+          {task.photoCount ? ` · ${task.photoCount} photos` : ""}
+        </Text>
+      </View>
+      {task.progress !== undefined ? (
+        <Text
+          className={`text-sm font-body-semi ${
+            isOverdue ? "text-danger-text" : isDueSoon ? "text-warn-text" : "text-text-2"
+          }`}
+          style={{ fontVariant: ["tabular-nums"] }}
+        >
+          {task.progress}%
+        </Text>
+      ) : (
+        <ArrowRight color={C["text-3"]} size={16} />
+      )}
     </Pressable>
   );
 }
 
 function groupColor(p: TaskPriority): string {
-  if (p === "overdue") return "text-danger";
-  if (p === "due_soon") return "text-amber-700";
-  return "text-muted";
+  if (p === "overdue") return "text-danger-text";
+  if (p === "due_soon") return "text-warn-text";
+  return "text-text-2";
 }
 
 function greeting(): string {

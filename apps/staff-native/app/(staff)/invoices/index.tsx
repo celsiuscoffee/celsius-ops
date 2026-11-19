@@ -22,7 +22,6 @@ import {
   MessageCircle,
   X as XIcon,
 } from "lucide-react-native";
-import { useColorScheme } from "nativewind";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { EmptyState, Pill, SkeletonList } from "../../../components/ui";
@@ -36,6 +35,7 @@ import {
   type InvoiceListItem,
   type InvoiceStatus,
 } from "../../../lib/ops/invoices";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 type Supplier = { id: string; name: string };
 type Outlet = { id: string; name: string };
@@ -92,10 +92,10 @@ const STATUS_TONE: Record<
 };
 
 export default function InvoicesList() {
+  const C = useCelsius().color;
   const router = useRouter();
   const session = useStaff((s) => s.session);
-  const { colorScheme } = useColorScheme();
-  const iconColor = colorScheme === "dark" ? "#FAFAFA" : "#160800";
+  const iconColor = C.text;
   const isManager =
     session?.role === "OWNER" ||
     session?.role === "ADMIN" ||
@@ -279,7 +279,7 @@ export default function InvoicesList() {
     <Screen edges={["top", "left", "right"]}>
       <PageHeader
           title="Invoices"
-          subtitle="Supplier invoices & payment status"
+          subtitle="Supplier invoices and payment status"
           back
         />
 
@@ -293,8 +293,8 @@ export default function InvoicesList() {
               setRefreshing(true);
               load(true);
             }}
-            tintColor="#C2452D"
-            colors={["#C2452D"]}
+            tintColor={C["text-3"]}
+            colors={[C["text-3"]]}
           />
         }
       >
@@ -302,20 +302,20 @@ export default function InvoicesList() {
         {grniCount > 0 && tab !== "pending_invoice" ? (
           <Pressable
             onPress={() => setTab("pending_invoice")}
-            className="mb-3 flex-row items-center gap-3 rounded-3xl border border-amber-500/30 bg-amber-50 px-4 py-3.5 active:opacity-90"
+            className="mb-3 flex-row items-center gap-3 rounded-2xl border border-warn bg-warn-soft px-4 py-3.5 active:opacity-90"
           >
-            <View className="h-11 w-11 items-center justify-center rounded-2xl bg-amber-500/15">
-              <FileText color="#D97706" size={20} />
+            <View className="h-11 w-11 items-center justify-center rounded-2xl bg-warn-soft">
+              <FileText color={C.warn} size={20} />
             </View>
             <View className="flex-1">
-              <Text className="text-base font-body-bold text-amber-700">
+              <Text className="text-base font-body-bold text-warn-text">
                 {grniCount} invoice{grniCount === 1 ? "" : "s"} to attach
               </Text>
-              <Text className="mt-0.5 text-xs font-body text-amber-700/80">
+              <Text className="mt-0.5 text-xs font-body text-warn-text">
                 Goods received, waiting for the real supplier invoice
               </Text>
             </View>
-            <ChevronRight color="#D97706" size={16} />
+            <ChevronRight color={C.warn} size={16} />
           </Pressable>
         ) : null}
 
@@ -333,13 +333,13 @@ export default function InvoicesList() {
                 <Pressable
                   key={t}
                   onPress={() => setTab(t)}
-                  className={`rounded-full px-3 py-1.5 ${
-                    tab === t ? "bg-primary" : "bg-primary-50"
+                  className={`h-11 justify-center rounded-full px-4 ${
+                    tab === t ? "bg-ink" : "bg-sunken"
                   }`}
                 >
                   <Text
                     className={`text-xs font-body-bold ${
-                      tab === t ? "text-white" : "text-primary"
+                      tab === t ? "text-on-ink" : "text-text-2"
                     }`}
                   >
                     {TAB_LABEL[t]}
@@ -357,19 +357,19 @@ export default function InvoicesList() {
               setPendingFilters(filters);
               setFilterSheet(true);
             }}
-            className={`h-9 flex-row items-center gap-1.5 rounded-full px-3 ${
+            className={`h-11 flex-row items-center gap-1.5 rounded-full px-3 ${
               activeFilterCount(filters) > 0
-                ? "bg-primary"
-                : "border border-border bg-surface"
+                ? "bg-ink"
+                : "border border-line bg-surface"
             }`}
           >
             <FilterIcon
-              color={activeFilterCount(filters) > 0 ? "#FFFFFF" : iconColor}
+              color={activeFilterCount(filters) > 0 ? C["on-ink"] : iconColor}
               size={14}
             />
             <Text
               className={`text-xs font-body-bold ${
-                activeFilterCount(filters) > 0 ? "text-white" : "text-espresso"
+                activeFilterCount(filters) > 0 ? "text-on-ink" : "text-text"
               }`}
             >
               {activeFilterCount(filters) > 0
@@ -432,9 +432,9 @@ export default function InvoicesList() {
             ) : null}
             <Pressable
               onPress={() => setFilters(EMPTY_FILTERS)}
-              className="rounded-full bg-primary-50 px-3 py-1.5 active:opacity-80"
+              className="h-11 justify-center rounded-full bg-sunken px-4 active:opacity-80"
             >
-              <Text className="text-xs font-body-bold text-primary">
+              <Text className="text-xs font-body-bold text-text">
                 Clear all
               </Text>
             </Pressable>
@@ -451,9 +451,9 @@ export default function InvoicesList() {
             action={
               <Pressable
                 onPress={() => load()}
-                className="h-14 items-center justify-center rounded-2xl bg-primary active:opacity-90"
+                className="h-14 items-center justify-center rounded-2xl bg-ink active:opacity-90"
               >
-                <Text className="text-base font-body-bold text-white">
+                <Text className="text-base font-body-bold text-on-ink">
                   Retry
                 </Text>
               </Pressable>
@@ -503,14 +503,14 @@ export default function InvoicesList() {
         presentationStyle="pageSheet"
         onRequestClose={() => setFilterSheet(false)}
       >
-        <View className="flex-1 bg-background">
-          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-base font-display text-espresso">
+        <View className="flex-1 bg-bg">
+          <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+            <Text className="text-base font-display text-text">
               Filter invoices
             </Text>
             <Pressable
               onPress={() => setFilterSheet(false)}
-              className="px-2 py-1"
+              className="min-h-11 justify-center px-3"
             >
               <XIcon color={iconColor} size={20} />
             </Pressable>
@@ -520,7 +520,7 @@ export default function InvoicesList() {
     >
             {/* POP status, paid-only meaning. Three-state segmented. */}
             <View>
-              <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
+              <Text className="mb-2 text-xs font-body-semi text-text-3">
                 POP status
               </Text>
               <View className="flex-row gap-2">
@@ -543,13 +543,13 @@ export default function InvoicesList() {
                       }
                       className={`flex-1 items-center rounded-2xl border px-3 py-2.5 ${
                         selected
-                          ? "border-primary bg-primary-50"
-                          : "border-border bg-surface"
+                          ? "border-ink bg-sunken"
+                          : "border-line bg-surface"
                       }`}
                     >
                       <Text
                         className={`text-xs font-body-bold ${
-                          selected ? "text-primary" : "text-espresso"
+                          selected ? "text-text" : "text-text"
                         }`}
                       >
                         {opt.l}
@@ -562,16 +562,16 @@ export default function InvoicesList() {
 
             {/* Supplier */}
             <View>
-              <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
+              <Text className="mb-2 text-xs font-body-semi text-text-3">
                 Supplier
               </Text>
               <Pressable
                 onPress={() => setSupplierPicker(true)}
-                className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50"
+                className="h-14 flex-row items-center justify-between rounded-2xl border border-line bg-surface px-4 active:bg-sunken"
               >
                 <Text
                   className={`flex-1 text-base font-body ${
-                    pendingFilters.supplierId ? "text-espresso" : "text-muted"
+                    pendingFilters.supplierId ? "text-text" : "text-text-3"
                   }`}
                   numberOfLines={1}
                 >
@@ -589,7 +589,7 @@ export default function InvoicesList() {
                     <XIcon color={iconColor} size={16} />
                   </Pressable>
                 ) : (
-                  <Text className="text-xs font-body-bold text-primary">
+                  <Text className="text-xs font-body-bold text-text">
                     Pick
                   </Text>
                 )}
@@ -599,16 +599,16 @@ export default function InvoicesList() {
             {/* Outlet, manager only */}
             {isManager ? (
               <View>
-                <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
+                <Text className="mb-2 text-xs font-body-semi text-text-3">
                   Outlet
                 </Text>
                 <Pressable
                   onPress={() => setOutletPicker(true)}
-                  className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50"
+                  className="h-14 flex-row items-center justify-between rounded-2xl border border-line bg-surface px-4 active:bg-sunken"
                 >
                   <Text
                     className={`flex-1 text-base font-body ${
-                      pendingFilters.outletId ? "text-espresso" : "text-muted"
+                      pendingFilters.outletId ? "text-text" : "text-text-3"
                     }`}
                     numberOfLines={1}
                   >
@@ -626,7 +626,7 @@ export default function InvoicesList() {
                       <XIcon color={iconColor} size={16} />
                     </Pressable>
                   ) : (
-                    <Text className="text-xs font-body-bold text-primary">
+                    <Text className="text-xs font-body-bold text-text">
                       Pick
                     </Text>
                   )}
@@ -637,7 +637,7 @@ export default function InvoicesList() {
             {/* Date range, issueDate. Plain text inputs to keep this
                 screen lean; we can swap in a date picker later. */}
             <View>
-              <Text className="mb-2 text-[11px] font-body-semi uppercase tracking-wide text-muted">
+              <Text className="mb-2 text-xs font-body-semi text-text-3">
                 Date range (issue date)
               </Text>
               <View className="flex-row gap-2">
@@ -647,9 +647,9 @@ export default function InvoicesList() {
                     setPendingFilters((p) => ({ ...p, dateFrom: t }))
                   }
                   placeholder="From YYYY-MM-DD"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={C["text-3"]}
                   autoCapitalize="none"
-                  className="h-14 flex-1 rounded-2xl border border-border bg-surface px-3 text-sm font-body text-espresso"
+                  className="h-14 flex-1 rounded-2xl border border-line bg-surface px-3 text-sm font-body text-text"
                 />
                 <TextInput
                   value={pendingFilters.dateTo}
@@ -657,9 +657,9 @@ export default function InvoicesList() {
                     setPendingFilters((p) => ({ ...p, dateTo: t }))
                   }
                   placeholder="To YYYY-MM-DD"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={C["text-3"]}
                   autoCapitalize="none"
-                  className="h-14 flex-1 rounded-2xl border border-border bg-surface px-3 text-sm font-body text-espresso"
+                  className="h-14 flex-1 rounded-2xl border border-line bg-surface px-3 text-sm font-body text-text"
                 />
               </View>
             </View>
@@ -667,22 +667,22 @@ export default function InvoicesList() {
             {/* Reset all */}
             <Pressable
               onPress={() => setPendingFilters(EMPTY_FILTERS)}
-              className="mt-2 items-center rounded-2xl border border-border bg-surface py-3 active:bg-primary-50"
+              className="mt-2 items-center rounded-2xl border border-line bg-surface py-3 active:bg-sunken"
             >
-              <Text className="text-sm font-body-bold text-primary">
+              <Text className="text-sm font-body-bold text-text">
                 Reset filters
               </Text>
             </Pressable>
           </ScrollView>
 
           {/* Apply / Cancel pinned at the bottom */}
-          <View className="border-t border-border bg-background px-4 py-3">
+          <View className="border-t border-line bg-bg px-4 py-3">
             <View className="flex-row gap-2">
               <Pressable
                 onPress={() => setFilterSheet(false)}
-                className="h-14 flex-1 items-center justify-center rounded-2xl border border-border active:bg-primary-50"
+                className="h-14 flex-1 items-center justify-center rounded-2xl border border-line active:bg-sunken"
               >
-                <Text className="text-base font-body-bold text-espresso">
+                <Text className="text-base font-body-bold text-text">
                   Cancel
                 </Text>
               </Pressable>
@@ -691,9 +691,9 @@ export default function InvoicesList() {
                   setFilters(pendingFilters);
                   setFilterSheet(false);
                 }}
-                className="h-14 flex-1 items-center justify-center rounded-2xl bg-primary active:opacity-90"
+                className="h-14 flex-1 items-center justify-center rounded-2xl bg-ink active:opacity-90"
               >
-                <Text className="text-sm font-body-bold text-white">
+                <Text className="text-sm font-body-bold text-on-ink">
                   Apply
                 </Text>
               </Pressable>
@@ -709,16 +709,16 @@ export default function InvoicesList() {
         presentationStyle="pageSheet"
         onRequestClose={() => setSupplierPicker(false)}
       >
-        <View className="flex-1 bg-background">
-          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-base font-display text-espresso">
+        <View className="flex-1 bg-bg">
+          <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+            <Text className="text-base font-display text-text">
               Pick supplier
             </Text>
             <Pressable
               onPress={() => setSupplierPicker(false)}
-              className="px-2 py-1"
+              className="min-h-11 justify-center px-3"
             >
-              <Text className="text-sm font-body-bold text-muted">Close</Text>
+              <Text className="text-sm font-body-bold text-text-3">Close</Text>
             </Pressable>
           </View>
           <ScrollView contentContainerClassName="px-4 py-4 gap-2"
@@ -733,16 +733,16 @@ export default function InvoicesList() {
                     setPendingFilters((p) => ({ ...p, supplierId: s.id }));
                     setSupplierPicker(false);
                   }}
-                  className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 active:bg-primary-50 ${
+                  className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 active:bg-sunken ${
                     selected
-                      ? "border-primary bg-primary-50"
-                      : "border-border bg-surface"
+                      ? "border-ink bg-sunken"
+                      : "border-line bg-surface"
                   }`}
                 >
-                  <Text className="text-base font-body-bold text-espresso">
+                  <Text className="text-base font-body-bold text-text">
                     {s.name}
                   </Text>
-                  {selected ? <Check color="#C2452D" size={20} /> : null}
+                  {selected ? <Check color={C["text-2"]} size={20} /> : null}
                 </Pressable>
               );
             })}
@@ -757,16 +757,16 @@ export default function InvoicesList() {
         presentationStyle="pageSheet"
         onRequestClose={() => setOutletPicker(false)}
       >
-        <View className="flex-1 bg-background">
-          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-base font-display text-espresso">
+        <View className="flex-1 bg-bg">
+          <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+            <Text className="text-base font-display text-text">
               Pick outlet
             </Text>
             <Pressable
               onPress={() => setOutletPicker(false)}
-              className="px-2 py-1"
+              className="min-h-11 justify-center px-3"
             >
-              <Text className="text-sm font-body-bold text-muted">Close</Text>
+              <Text className="text-sm font-body-bold text-text-3">Close</Text>
             </Pressable>
           </View>
           <ScrollView contentContainerClassName="px-4 py-4 gap-2"
@@ -781,16 +781,16 @@ export default function InvoicesList() {
                     setPendingFilters((p) => ({ ...p, outletId: o.id }));
                     setOutletPicker(false);
                   }}
-                  className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 active:bg-primary-50 ${
+                  className={`flex-row items-center justify-between rounded-2xl border px-4 py-3 active:bg-sunken ${
                     selected
-                      ? "border-primary bg-primary-50"
-                      : "border-border bg-surface"
+                      ? "border-ink bg-sunken"
+                      : "border-line bg-surface"
                   }`}
                 >
-                  <Text className="text-base font-body-bold text-espresso">
+                  <Text className="text-base font-body-bold text-text">
                     {o.name}
                   </Text>
-                  {selected ? <Check color="#C2452D" size={20} /> : null}
+                  {selected ? <Check color={C["text-2"]} size={20} /> : null}
                 </Pressable>
               );
             })}
@@ -808,13 +808,14 @@ function FilterChip({
   label: string;
   onClear: () => void;
 }) {
+  const C = useCelsius().color;
   return (
     <Pressable
       onPress={onClear}
-      className="flex-row items-center gap-1.5 rounded-full border border-primary/30 bg-primary-50 px-3 py-1.5 active:opacity-80"
+      className="flex-row items-center gap-1.5 h-11 rounded-full border border-line-2 bg-sunken px-4 active:opacity-80"
     >
-      <Text className="text-xs font-body-bold text-primary">{label}</Text>
-      <XIcon color="#C2452D" size={12} />
+      <Text className="text-xs font-body-bold text-text">{label}</Text>
+      <XIcon color={C["text-2"]} size={12} />
     </Pressable>
   );
 }
@@ -832,6 +833,7 @@ function InvoiceCard({
   onSendPop: () => void;
   sendingPop: boolean;
 }) {
+  const C = useCelsius().color;
   const tone = STATUS_TONE[invoice.status] ?? {
     label: invoice.status,
     tone: "muted" as const,
@@ -853,18 +855,18 @@ function InvoiceCard({
     <Pressable
       onPress={onPress}
       accessibilityLabel={invoice.invoiceNumber}
-      className="rounded-3xl border border-border bg-surface px-4 py-3.5 active:bg-primary-50"
+      className="rounded-2xl border border-line bg-surface px-4 py-3.5 active:bg-sunken"
     >
       <View className="flex-row items-start justify-between gap-2">
         <View className="flex-1">
           <Text
-            className="text-base font-body-bold text-espresso"
+            className="text-base font-body-bold text-text"
             numberOfLines={1}
           >
             {invoice.supplierName ?? "Unknown supplier"}
           </Text>
           <Text
-            className="mt-0.5 text-xs font-body text-muted-fg"
+            className="mt-0.5 text-xs font-body text-text-2"
             numberOfLines={1}
           >
             {display}
@@ -882,9 +884,9 @@ function InvoiceCard({
             tone={isOverdue ? "danger" : tone.tone}
           />
           {canSendPop && invoice.popSentAt ? (
-            <View className="flex-row items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5">
-              <CheckCircle2 color="#10B981" size={10} />
-              <Text className="text-[10px] font-body-bold text-emerald-700">
+            <View className="flex-row items-center gap-1 rounded-full bg-ok-soft px-2 py-0.5">
+              <CheckCircle2 color={C["ok-text"]} size={12} />
+              <Text className="text-xs font-body-bold text-ok-text">
                 POP sent
               </Text>
             </View>
@@ -892,7 +894,7 @@ function InvoiceCard({
         </View>
       </View>
       <View className="mt-2 flex-row items-center justify-between">
-        <Text className="text-xs font-body text-muted-fg">
+        <Text className="text-xs font-body text-text-2">
           {invoice.dueDate
             ? `Due ${new Date(invoice.dueDate).toLocaleDateString([], {
                 day: "numeric",
@@ -905,7 +907,7 @@ function InvoiceCard({
                   month: "short",
                 })}`}
         </Text>
-        <Text className="text-base font-body-bold text-espresso tabular-nums">
+        <Text className="text-base font-body-bold text-text tabular-nums">
           RM {Number(invoice.amount ?? 0).toFixed(2)}
         </Text>
       </View>
@@ -921,14 +923,14 @@ function InvoiceCard({
             onSendPop();
           }}
           disabled={sendingPop}
-          className="mt-2.5 h-9 flex-row items-center justify-center gap-1.5 rounded-xl bg-primary-50 active:bg-primary-100"
+          className="mt-2.5 h-11 flex-row items-center justify-center gap-1.5 rounded-xl bg-sunken active:bg-sunken"
         >
           {sendingPop ? (
-            <ActivityIndicator color="#C2452D" size="small" />
+            <ActivityIndicator color={C["text-3"]} size="small" />
           ) : (
             <>
-              <MessageCircle color="#C2452D" size={14} />
-              <Text className="text-xs font-body-bold text-primary">
+              <MessageCircle color={C["text-2"]} size={14} />
+              <Text className="text-xs font-body-bold text-text">
                 {invoice.popSentAt ? "Resend POP" : "Send POP"}
               </Text>
             </>

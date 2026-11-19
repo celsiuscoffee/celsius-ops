@@ -17,6 +17,7 @@ import {
   fetchStockLevels,
   type StockItem,
 } from "../../../lib/ops/stock-levels";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -28,6 +29,7 @@ const STATUS_FILTERS = [
 type StatusFilter = (typeof STATUS_FILTERS)[number]["key"];
 
 export default function StockLevelsScreen() {
+  const C = useCelsius().color;
   const session = useStaff((s) => s.session);
   const [items, setItems] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,31 +109,31 @@ export default function StockLevelsScreen() {
               setRefreshing(true);
               load();
             }}
-            tintColor="#C2452D"
-            colors={["#C2452D"]}
+            tintColor={C["text-3"]}
+            colors={[C["text-3"]]}
           />
         }
       >
         {counts.critical + counts.low > 0 ? (
-          <View className="mt-4 flex-row items-center gap-3 rounded-3xl border border-danger/30 bg-danger/5 p-4">
-            <View className="h-10 w-10 items-center justify-center rounded-2xl bg-danger/10">
-              <AlertTriangle color="#B91C1C" size={18} />
+          <View className="mt-4 flex-row items-center gap-3 rounded-2xl border border-danger bg-danger-soft p-4">
+            <View className="h-10 w-10 items-center justify-center rounded-2xl bg-danger-soft">
+              <AlertTriangle color={C.danger} size={18} />
             </View>
-            <Text className="flex-1 text-base font-display text-danger">
+            <Text className="flex-1 text-base font-display text-danger-text">
               {counts.critical} out, {counts.low} low on stock
             </Text>
           </View>
         ) : null}
 
         {/* Search */}
-        <View className="mt-4 flex-row items-center gap-2 rounded-2xl border border-border bg-surface px-3">
-          <Search color="#9CA3AF" size={18} />
+        <View className="mt-4 flex-row items-center gap-2 rounded-2xl border border-line bg-surface px-3">
+          <Search color={C["text-3"]} size={18} />
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Search products, SKU, category"
-            placeholderTextColor="#9B9B9B"
-            className="h-12 flex-1 text-base font-body text-espresso"
+            placeholderTextColor={C["text-3"]}
+            className="h-12 flex-1 text-base font-body text-text"
           />
         </View>
 
@@ -152,15 +154,15 @@ export default function StockLevelsScreen() {
                 key={f.key}
                 onPress={() => setStatus(f.key)}
                 accessibilityLabel={`${f.label} filter`}
-                className={`rounded-full border-2 px-3 py-1.5 ${
+                className={`min-h-11 justify-center rounded-full border-2 px-4 ${
                   active
-                    ? "border-primary bg-primary-50"
-                    : "border-border bg-surface"
+                    ? "border-ink bg-sunken"
+                    : "border-line bg-surface"
                 }`}
               >
                 <Text
                   className={`text-xs font-body-bold ${
-                    active ? "text-primary" : "text-muted-fg"
+                    active ? "text-text" : "text-text-2"
                   }`}
                 >
                   {f.label} · {count}
@@ -194,11 +196,11 @@ export default function StockLevelsScreen() {
           grouped.map(([area, list]) => (
             <View key={area} className="mt-6">
               <View className="mb-3 flex-row items-center gap-2">
-                <View className="h-1.5 w-1.5 rounded-full bg-primary" />
-                <Text className="text-xs font-body-bold uppercase tracking-wider text-muted">
+                <View className="h-1.5 w-1.5 rounded-full bg-ink" />
+                <Text className="text-sm font-body-semi text-text-2">
                   {area}
                 </Text>
-                <Text className="text-xs font-body text-muted">
+                <Text className="text-xs font-body text-text-3">
                   · {list.length}
                 </Text>
               </View>
@@ -218,30 +220,30 @@ export default function StockLevelsScreen() {
 function Row({ item }: { item: StockItem }) {
   const { tint, bg, label } = statusStyle(item.status);
   return (
-    <View className="flex-row items-center justify-between rounded-3xl border border-border bg-surface p-4">
+    <View className="flex-row items-center justify-between rounded-2xl border border-line bg-surface p-4">
       <View className="flex-1 pr-3">
         <Text
-          className="text-base font-display text-espresso"
+          className="text-base font-display text-text"
           numberOfLines={1}
         >
           {item.name}
         </Text>
-        <Text className="mt-0.5 text-xs font-body text-muted-fg">
+        <Text className="mt-0.5 text-xs font-body text-text-2">
           {item.category} · {item.baseUom}
         </Text>
       </View>
       <View className="items-end">
-        <Text className="text-lg font-body-bold text-espresso tabular-nums">
+        <Text className="text-lg font-body-bold text-text tabular-nums">
           {item.quantity}
         </Text>
         {item.parLevel != null ? (
-          <Text className="text-[10px] font-body text-muted tabular-nums">
+          <Text className="text-xs font-body text-text-3 tabular-nums">
             par {item.parLevel}
           </Text>
         ) : null}
         <View className={`mt-1 rounded-full px-2 py-0.5 ${bg}`}>
           <Text
-            className={`text-[10px] font-body-bold uppercase tracking-wider ${tint}`}
+            className={`text-xs font-body-bold ${tint}`}
           >
             {label}
           </Text>
@@ -253,14 +255,14 @@ function Row({ item }: { item: StockItem }) {
 
 function statusStyle(s: StockItem["status"]) {
   if (s === "critical")
-    return { tint: "text-danger", bg: "bg-danger/10", label: "Out" };
+    return { tint: "text-danger-text", bg: "bg-danger-soft", label: "Out" };
   if (s === "low")
     return {
-      tint: "text-amber-700",
-      bg: "bg-amber-400/10",
+      tint: "text-warn-text",
+      bg: "bg-warn-soft",
       label: "Low",
     };
   if (s === "ok")
-    return { tint: "text-success", bg: "bg-success/10", label: "OK" };
-  return { tint: "text-muted-fg", bg: "bg-muted/10", label: "-" };
+    return { tint: "text-ok-text", bg: "bg-ok-soft", label: "OK" };
+  return { tint: "text-text-2", bg: "bg-sunken", label: "-" };
 }
