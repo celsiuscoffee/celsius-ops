@@ -41,8 +41,10 @@ import {
   type CapturedPhoto,
 } from "../../../components/ReceiptCapture";
 import { uploadPhoto } from "../../../lib/upload";
+import { useCelsius, type ColorName } from "../../../lib/celsius-ui";
 
 export default function AuditDetail() {
+  const C = useCelsius().color;
   const params = useLocalSearchParams<{ id: string }>();
   const id = params.id;
   const router = useRouter();
@@ -246,16 +248,16 @@ export default function AuditDetail() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#A2492C" />
+      <View className="flex-1 items-center justify-center bg-bg">
+        <ActivityIndicator color={C["text-3"]} />
       </View>
     );
   }
 
   if (error || !audit) {
     return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <Text className="text-sm text-danger text-center">
+      <View className="flex-1 items-center justify-center bg-bg px-6">
+        <Text className="text-sm text-danger-text text-center">
           {error ?? "Audit not found"}
         </Text>
       </View>
@@ -275,8 +277,8 @@ export default function AuditDetail() {
 
   if (!item) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <Text className="text-sm text-muted-fg">No items in this audit.</Text>
+      <View className="flex-1 items-center justify-center bg-bg">
+        <Text className="text-sm text-text-2">No items in this audit.</Text>
       </View>
     );
   }
@@ -293,10 +295,10 @@ export default function AuditDetail() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Sticky progress bar, sits right below PageHeader */}
-        <View className="border-b border-border bg-background pb-3">
-          <View className="h-1.5 overflow-hidden rounded-full bg-primary-50">
+        <View className="border-b border-line bg-bg pb-3">
+          <View className="h-1.5 overflow-hidden rounded-full bg-sunken">
             <View
-              className="h-full bg-primary"
+              className="h-full bg-ink"
               style={{ width: `${((cursor + 1) / total) * 100}%` }}
             />
           </View>
@@ -308,16 +310,16 @@ export default function AuditDetail() {
           contentContainerClassName="px-5 pt-6 pb-6"
       showsVerticalScrollIndicator={false}
     >
-          <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
+          <Text className="text-sm font-body-semi text-text-2">
             {item.sectionName}
           </Text>
-          <Text className="mt-1 text-2xl font-display text-espresso">
+          <Text className="mt-1 text-2xl font-display text-text">
             {item.itemTitle}
           </Text>
           {item.photoRequired && item.photos.length === 0 ? (
-            <View className="mt-3 self-start flex-row items-center gap-1 rounded-full bg-danger/10 px-2 py-1">
-              <Camera color="#B91C1C" size={12} />
-              <Text className="text-[10px] font-body-bold text-danger">
+            <View className="mt-3 self-start flex-row items-center gap-1 rounded-full bg-danger-soft px-2 py-1">
+              <Camera color={C.danger} size={12} />
+              <Text className="text-xs font-body-bold text-danger-text">
                 Photo required
               </Text>
             </View>
@@ -331,24 +333,24 @@ export default function AuditDetail() {
                   label="Pass"
                   Icon={ThumbsUp}
                   active={item.rating === 1}
-                  activeBg="bg-success"
-                  activeText="text-white"
+                  activeBg="border-ok bg-ok-soft"
+                  activeText="text-ok-text"
                   onPress={() => setRating(1)}
                 />
                 <RatingChip
                   label="Fail"
                   Icon={ThumbsDown}
                   active={item.rating === 0}
-                  activeBg="bg-danger"
-                  activeText="text-white"
+                  activeBg="border-danger bg-danger-soft"
+                  activeText="text-danger-text"
                   onPress={() => setRating(0)}
                 />
                 <RatingChip
                   label="N/A"
                   Icon={Minus}
                   active={item.rating === -1}
-                  activeBg="bg-muted"
-                  activeText="text-white"
+                  activeBg="border-ink bg-sunken"
+                  activeText="text-text"
                   onPress={() => setRating(-1)}
                 />
               </View>
@@ -363,12 +365,12 @@ export default function AuditDetail() {
                     <Star
                       color={
                         item.rating !== null && n <= item.rating
-                          ? "#FBBF24"
-                          : "#E5E7EB"
+                          ? C.warn
+                          : C.line
                       }
                       fill={
                         item.rating !== null && n <= item.rating
-                          ? "#FBBF24"
+                          ? C.warn
                           : "transparent"
                       }
                       size={36}
@@ -381,22 +383,22 @@ export default function AuditDetail() {
                 <RatingChip
                   label="Good"
                   active={item.rating === 3}
-                  activeBg="bg-success"
-                  activeText="text-white"
+                  activeBg="border-ok bg-ok-soft"
+                  activeText="text-ok-text"
                   onPress={() => setRating(3)}
                 />
                 <RatingChip
                   label="Fair"
                   active={item.rating === 2}
-                  activeBg="bg-amber-500"
-                  activeText="text-white"
+                  activeBg="border-warn bg-warn-soft"
+                  activeText="text-warn-text"
                   onPress={() => setRating(2)}
                 />
                 <RatingChip
                   label="Poor"
                   active={item.rating === 1}
-                  activeBg="bg-danger"
-                  activeText="text-white"
+                  activeBg="border-danger bg-danger-soft"
+                  activeText="text-danger-text"
                   onPress={() => setRating(1)}
                 />
               </View>
@@ -405,8 +407,8 @@ export default function AuditDetail() {
 
           {/* Notes inline display */}
           {item.notes ? (
-            <View className="mt-5 rounded-2xl bg-blue-50 px-3 py-2">
-              <Text className="text-xs font-body text-blue-700">
+            <View className="mt-5 rounded-2xl bg-info-soft px-3 py-2">
+              <Text className="text-xs font-body text-info-text">
                 {item.notes}
               </Text>
             </View>
@@ -425,9 +427,10 @@ export default function AuditDetail() {
                   </Pressable>
                   <Pressable
                     onPress={() => removePhoto(url)}
-                    className="absolute -right-1 -top-1 h-5 w-5 items-center justify-center rounded-full bg-black/70"
+                    hitSlop={12}
+                    className="absolute -right-1 -top-1 h-6 w-6 items-center justify-center rounded-full bg-black/70"
                   >
-                    <X color="#FFFFFF" size={10} />
+                    <X color={C["on-hero"]} size={12} />
                   </Pressable>
                 </View>
               ))}
@@ -438,14 +441,14 @@ export default function AuditDetail() {
           <View className="mt-6 flex-row gap-2">
             <Pressable
               onPress={() => setCameraOpen(true)}
-              className="h-12 flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border border-border active:bg-primary-50"
+              className="h-12 flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border border-line active:bg-sunken"
             >
               {uploadingFor === item.id ? (
-                <ActivityIndicator color="#A2492C" size="small" />
+                <ActivityIndicator color={C["text-3"]} size="small" />
               ) : (
-                <Camera color="#4A4A4A" size={16} />
+                <Camera color={C["text-2"]} size={16} />
               )}
-              <Text className="text-base font-body-bold text-espresso">
+              <Text className="text-base font-body-bold text-text">
                 {item.photos.length > 0 ? "Add another" : "Add photo"}
               </Text>
             </Pressable>
@@ -454,10 +457,10 @@ export default function AuditDetail() {
                 setNoteDraft(item.notes ?? "");
                 setNoteOpen(true);
               }}
-              className="h-12 flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border border-border active:bg-primary-50"
+              className="h-12 flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border border-line active:bg-sunken"
             >
-              <MessageSquare color="#4A4A4A" size={16} />
-              <Text className="text-base font-body-bold text-espresso">
+              <MessageSquare color={C["text-2"]} size={16} />
+              <Text className="text-base font-body-bold text-text">
                 {item.notes ? "Edit note" : "Add note"}
               </Text>
             </Pressable>
@@ -465,17 +468,17 @@ export default function AuditDetail() {
         </ScrollView>
 
         {/* Bottom nav */}
-        <View className="border-t border-border bg-background px-5 pt-3 pb-8">
+        <View className="border-t border-line bg-bg px-5 pt-3 pb-8">
           <View className="flex-row items-center gap-2">
             <Pressable
               onPress={() => setCursor((c) => Math.max(0, c - 1))}
               disabled={cursor === 0}
               className={`h-14 w-14 items-center justify-center rounded-2xl ${
-                cursor === 0 ? "bg-primary-50/50" : "bg-primary-50"
+                cursor === 0 ? "bg-sunken" : "bg-sunken"
               }`}
             >
               <ChevronLeft
-                color={cursor === 0 ? "#D1D5DB" : "#A2492C"}
+                color={cursor === 0 ? C["text-3"] : C["text-2"]}
                 size={22}
               />
             </Pressable>
@@ -484,22 +487,22 @@ export default function AuditDetail() {
                 onPress={() => setCompleteStep(true)}
                 disabled={rated === 0}
                 className={`h-14 flex-1 items-center justify-center rounded-2xl ${
-                  rated > 0 ? "bg-primary" : "bg-primary/40"
+                  rated > 0 ? "bg-ink" : "bg-ink opacity-40"
                 }`}
               >
-                <Text className="text-base font-body-bold text-white">
+                <Text className="text-base font-body-bold text-on-ink">
                   Review & submit ({rated}/{total})
                 </Text>
               </Pressable>
             ) : (
               <Pressable
                 onPress={() => setCursor((c) => Math.min(total - 1, c + 1))}
-                className="h-14 flex-1 flex-row items-center justify-center gap-1 rounded-2xl bg-primary active:opacity-80"
+                className="h-14 flex-1 flex-row items-center justify-center gap-1 rounded-2xl bg-ink active:opacity-80"
               >
-                <Text className="text-base font-body-bold text-white">
+                <Text className="text-base font-body-bold text-on-ink">
                   Next
                 </Text>
-                <ChevronRight color="#FFFFFF" size={20} />
+                <ChevronRight color={C["on-ink"]} size={20} />
               </Pressable>
             )}
           </View>
@@ -516,14 +519,14 @@ export default function AuditDetail() {
             style={{ flex: 1 }}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
           >
-            <View className="flex-1 bg-background">
-              <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-                <Text className="text-xl font-display text-espresso">Note</Text>
+            <View className="flex-1 bg-bg">
+              <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+                <Text className="text-xl font-display text-text">Note</Text>
                 <Pressable
                   onPress={() => setNoteOpen(false)}
-                  className="px-2 py-1"
+                  className="min-h-11 justify-center px-3"
                 >
-                  <Text className="text-sm font-body-bold text-muted">
+                  <Text className="text-sm font-body-bold text-text-3">
                     Cancel
                   </Text>
                 </Pressable>
@@ -533,18 +536,18 @@ export default function AuditDetail() {
                   value={noteDraft}
                   onChangeText={setNoteDraft}
                   placeholder="Add a note for this item…"
-                  placeholderTextColor="#9B9B9B"
+                  placeholderTextColor={C["text-3"]}
                   multiline
                   autoFocus
-                  className="min-h-32 rounded-2xl border border-border bg-surface px-4 py-3 text-base font-body text-espresso"
+                  className="min-h-32 rounded-2xl border border-line bg-surface px-4 py-3 text-base font-body text-text"
                 />
               </View>
               <View className="mt-auto p-5">
                 <Pressable
                   onPress={saveNote}
-                  className="h-14 items-center justify-center rounded-2xl bg-primary active:opacity-80"
+                  className="h-14 items-center justify-center rounded-2xl bg-ink active:opacity-80"
                 >
-                  <Text className="text-base font-body-bold text-white">
+                  <Text className="text-base font-body-bold text-on-ink">
                     Save note
                   </Text>
                 </Pressable>
@@ -564,16 +567,16 @@ export default function AuditDetail() {
             style={{ flex: 1 }}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
           >
-            <View className="flex-1 bg-background">
-              <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-                <Text className="text-xl font-display text-espresso">
+            <View className="flex-1 bg-bg">
+              <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+                <Text className="text-xl font-display text-text">
                   Submit audit
                 </Text>
                 <Pressable
                   onPress={() => setCompleteStep(false)}
-                  className="px-2 py-1"
+                  className="min-h-11 justify-center px-3"
                 >
-                  <Text className="text-sm font-body-bold text-muted">
+                  <Text className="text-sm font-body-bold text-text-3">
                     Cancel
                   </Text>
                 </Pressable>
@@ -581,44 +584,44 @@ export default function AuditDetail() {
               <ScrollView contentContainerClassName="px-5 pt-4 pb-6"
       showsVerticalScrollIndicator={false}
     >
-                <View className="rounded-2xl border border-border bg-surface p-4">
-                  <Text className="text-xs font-body-semi uppercase tracking-wide text-muted">
+                <View className="rounded-2xl border border-line bg-surface p-4">
+                  <Text className="text-sm font-body-semi text-text-2">
                     Summary
                   </Text>
-                  <Text className="mt-1 text-2xl font-display text-espresso">
+                  <Text className="mt-1 text-2xl font-display text-text">
                     {rated}/{total} items rated
                   </Text>
                   {rated < total ? (
-                    <Text className="mt-1 text-xs font-body text-amber-700">
+                    <Text className="mt-1 text-xs font-body text-warn-text">
                       {total - rated} item{total - rated === 1 ? "" : "s"} still
                       unrated, they will be treated as N/A.
                     </Text>
                   ) : null}
                 </View>
-                <Text className="mt-5 text-xs font-body-semi uppercase tracking-wide text-muted">
+                <Text className="mt-5 text-sm font-body-semi text-text-2">
                   Overall notes (optional)
                 </Text>
                 <TextInput
                   value={overallNotes}
                   onChangeText={setOverallNotes}
                   placeholder="Add a comment for this audit…"
-                  placeholderTextColor="#9B9B9B"
+                  placeholderTextColor={C["text-3"]}
                   multiline
-                  className="mt-2 min-h-32 rounded-2xl border border-border bg-surface px-4 py-3 text-base font-body text-espresso"
+                  className="mt-2 min-h-32 rounded-2xl border border-line bg-surface px-4 py-3 text-base font-body text-text"
                 />
               </ScrollView>
-              <View className="border-t border-border p-5">
+              <View className="border-t border-line p-5">
                 <Pressable
                   onPress={submitComplete}
                   disabled={completing}
-                  className={`h-14 flex-row items-center justify-center gap-2 rounded-2xl ${completing ? "bg-primary/40" : "bg-primary"}`}
+                  className={`h-14 flex-row items-center justify-center gap-2 rounded-2xl ${completing ? "bg-ink opacity-40" : "bg-ink"}`}
                 >
                   {completing ? (
-                    <ActivityIndicator color="#FFFFFF" />
+                    <ActivityIndicator color={C["on-ink"]} />
                   ) : (
                     <>
-                      <CheckCircle2 color="#FFFFFF" size={20} />
-                      <Text className="text-base font-body-bold text-white">
+                      <CheckCircle2 color={C["on-ink"]} size={20} />
+                      <Text className="text-base font-body-bold text-on-ink">
                         Submit audit
                       </Text>
                     </>
@@ -646,9 +649,9 @@ export default function AuditDetail() {
             ) : null}
             <Pressable
               onPress={() => setPreviewUrl(null)}
-              className="absolute right-5 top-16 h-10 w-10 items-center justify-center rounded-full bg-white/20"
+              className="absolute right-5 top-16 h-11 w-11 items-center justify-center rounded-full bg-white/20"
             >
-              <X color="#FFFFFF" size={20} />
+              <X color={C["on-hero"]} size={22} />
             </Pressable>
           </View>
         </Modal>
@@ -672,16 +675,20 @@ function RatingChip({
   activeText: string;
   onPress: () => void;
 }) {
+  const C = useCelsius().color;
   return (
     <Pressable
       onPress={onPress}
-      className={`h-14 flex-1 flex-row items-center justify-center gap-2 rounded-2xl active:opacity-80 ${active ? activeBg : "bg-primary-50"}`}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: active }}
+      className={`h-14 flex-1 flex-row items-center justify-center gap-2 rounded-xl border-2 active:opacity-80 ${active ? activeBg : "border-line bg-surface"}`}
     >
       {Icon ? (
-        <Icon color={active ? "#FFFFFF" : "#A2492C"} size={18} />
+        // The active chip's icon takes its signal colour (activeText minus "text-").
+        <Icon color={active ? C[activeText.replace(/^text-/, "") as ColorName] : C["text-2"]} size={18} />
       ) : null}
       <Text
-        className={`text-base font-body-bold ${active ? activeText : "text-primary"}`}
+        className={`text-base font-body-semi ${active ? activeText : "text-text"}`}
       >
         {label}
       </Text>
@@ -700,6 +707,7 @@ function CompletedView({
   previewUrl: string | null;
   clearPreview: () => void;
 }) {
+  const C = useCelsius().color;
   const grouped = useMemo(() => {
     const g: Record<string, typeof audit.items> = {};
     for (const it of audit.items) {
@@ -716,42 +724,42 @@ function CompletedView({
       showsVerticalScrollIndicator={false}
     >
         <View className="mt-1 flex-row items-end gap-2">
-          <Text className="text-4xl font-display text-espresso">
+          <Text className="text-4xl font-display text-text">
             {audit.overallScore ?? 0}
           </Text>
-          <Text className="mb-1 text-base font-body text-muted">%</Text>
+          <Text className="mb-1 text-base font-body text-text-3">%</Text>
           <View
             className={`mb-1 ml-2 rounded-full px-2 py-0.5 ${
               (audit.overallScore ?? 0) >= 80
-                ? "bg-success/10"
+                ? "bg-ok-soft"
                 : (audit.overallScore ?? 0) >= 60
-                  ? "bg-amber-100"
-                  : "bg-danger/10"
+                  ? "bg-warn-soft"
+                  : "bg-danger-soft"
             }`}
           >
             <Text
               className={`text-xs font-body-bold ${
                 (audit.overallScore ?? 0) >= 80
-                  ? "text-success"
+                  ? "text-ok-text"
                   : (audit.overallScore ?? 0) >= 60
-                    ? "text-amber-700"
-                    : "text-danger"
+                    ? "text-warn-text"
+                    : "text-danger-text"
               }`}
             >
               Completed
             </Text>
           </View>
         </View>
-        <Text className="mt-1 text-sm font-body text-muted-fg">
+        <Text className="mt-1 text-sm font-body text-text-2">
           {audit.outlet.name} · {audit.date} · {audit.auditor.name}
         </Text>
 
         {audit.overallNotes ? (
-          <View className="mt-4 rounded-2xl bg-blue-50 px-3 py-2">
-            <Text className="text-xs font-body-semi uppercase text-blue-700">
+          <View className="mt-4 rounded-2xl bg-info-soft px-3 py-2">
+            <Text className="text-xs font-body-semi text-info-text">
               Overall notes
             </Text>
-            <Text className="mt-1 text-sm font-body text-blue-900">
+            <Text className="mt-1 text-sm font-body text-info-text">
               {audit.overallNotes}
             </Text>
           </View>
@@ -759,51 +767,51 @@ function CompletedView({
 
         {Object.entries(grouped).map(([section, sectionItems]) => (
           <View key={section} className="mt-5">
-            <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+            <Text className="mb-2 text-sm font-body-semi text-text-2">
               {section}
             </Text>
             <View className="gap-1.5">
               {sectionItems.map((i) => (
                 <View
                   key={i.id}
-                  className="rounded-2xl border border-border bg-surface p-3"
+                  className="rounded-2xl border border-line bg-surface p-3"
                 >
                   <View className="flex-row items-center gap-2">
-                    <Text className="flex-1 text-base font-body-medium text-espresso">
+                    <Text className="flex-1 text-base font-body-medium text-text">
                       {i.itemTitle}
                     </Text>
                     {i.rating === null ? (
-                      <Text className="text-xs font-body text-muted">N/A</Text>
+                      <Text className="text-xs font-body text-text-3">N/A</Text>
                     ) : i.ratingType === "pass_fail" ? (
                       <View
                         className={`rounded-full px-2 py-0.5 ${
                           i.rating === 1
-                            ? "bg-success/10"
+                            ? "bg-ok-soft"
                             : i.rating === 0
-                              ? "bg-danger/10"
-                              : "bg-primary-50"
+                              ? "bg-danger-soft"
+                              : "bg-sunken"
                         }`}
                       >
                         <Text
-                          className={`text-[10px] font-body-bold ${
+                          className={`text-xs font-body-bold ${
                             i.rating === 1
-                              ? "text-success"
+                              ? "text-ok-text"
                               : i.rating === 0
-                                ? "text-danger"
-                                : "text-muted"
+                                ? "text-danger-text"
+                                : "text-text-3"
                           }`}
                         >
                           {i.rating === 1 ? "PASS" : i.rating === 0 ? "FAIL" : "N/A"}
                         </Text>
                       </View>
                     ) : (
-                      <Text className="text-base font-body-bold text-espresso">
+                      <Text className="text-base font-body-bold text-text">
                         {i.rating}
                       </Text>
                     )}
                   </View>
                   {i.notes ? (
-                    <Text className="mt-1 text-xs font-body text-blue-700">
+                    <Text className="mt-1 text-xs font-body text-info-text">
                       {i.notes}
                     </Text>
                   ) : null}
@@ -842,9 +850,9 @@ function CompletedView({
           ) : null}
           <Pressable
             onPress={clearPreview}
-            className="absolute right-5 top-16 h-10 w-10 items-center justify-center rounded-full bg-white/20"
+            className="absolute right-5 top-16 h-11 w-11 items-center justify-center rounded-full bg-white/20"
           >
-            <X color="#FFFFFF" size={20} />
+            <X color={C["on-hero"]} size={22} />
           </Pressable>
         </View>
       </Modal>

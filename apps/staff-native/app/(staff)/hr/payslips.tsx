@@ -14,6 +14,7 @@ import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { fetchPayslips, fetchPayslipDownloadUrl, type Payslip } from "../../../lib/hr/api";
 import { earningsLines } from "../../../lib/hr/pay-lines";
+import { sentence, useCelsius } from "../../../lib/celsius-ui";
 
 export default function PayslipsScreen() {
   const { data, isLoading, error } = useQuery({
@@ -31,7 +32,7 @@ export default function PayslipsScreen() {
         </View>
       ) : error ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-sm text-danger text-center">
+          <Text className="text-sm text-danger-text text-center">
             {(error as Error).message}
           </Text>
         </View>
@@ -44,7 +45,7 @@ export default function PayslipsScreen() {
           ItemSeparatorComponent={() => <View className="h-3" />}
           renderItem={({ item }) => <PayslipCard payslip={item} />}
           ListEmptyComponent={
-            <Text className="mt-12 text-center text-sm text-muted-fg">
+            <Text className="mt-12 text-center text-sm text-text-2">
               No confirmed payslips yet.
             </Text>
           }
@@ -101,6 +102,7 @@ function fmtDay(d: string | null | undefined): string {
 // the full breakdown on tap. With several months on file this keeps the list
 // scannable, so a specific month is one glance away instead of a long scroll.
 function PayslipCard({ payslip }: { payslip: Payslip }) {
+  const C = useCelsius().color;
   const [open, setOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const run = payslip.hr_payroll_runs;
@@ -164,42 +166,42 @@ function PayslipCard({ payslip }: { payslip: Payslip }) {
   const paid = run.status === "paid";
 
   return (
-    <View className="overflow-hidden rounded-3xl border border-border bg-surface">
+    <View className="overflow-hidden rounded-2xl border border-line bg-surface">
       {/* Collapsed summary row: period + net + status, always visible */}
       <Pressable
         onPress={() => setOpen((o) => !o)}
-        className="flex-row items-center gap-3 p-5 active:bg-primary-50"
+        className="flex-row items-center gap-3 p-5 active:bg-sunken"
       >
         <View className="flex-1">
-          <Text className="text-base font-body-semi text-espresso">
+          <Text className="text-base font-body-semi text-text">
             {periodLabel}
           </Text>
           <Text
-            className={`mt-0.5 text-xs font-body-medium uppercase tracking-wide ${
-              paid ? "text-success" : "text-primary"
+            className={`mt-0.5 text-xs font-body-medium ${
+              paid ? "text-ok-text" : "text-text"
             }`}
           >
-            {run.status}
+            {sentence(run.status)}
           </Text>
         </View>
         <View className="items-end">
-          <Text className="text-[10px] font-body uppercase tracking-wide text-muted-fg">
+          <Text className="text-xs font-body text-text-2">
             Net pay
           </Text>
-          <Text className="text-lg font-display text-espresso">
+          <Text className="text-lg font-display text-text">
             RM {amount(net)}
           </Text>
         </View>
         {open ? (
-          <ChevronUp color="#9CA3AF" size={18} />
+          <ChevronUp color={C["text-3"]} size={18} />
         ) : (
-          <ChevronDown color="#9CA3AF" size={18} />
+          <ChevronDown color={C["text-3"]} size={18} />
         )}
       </Pressable>
 
       {/* Full breakdown, revealed on tap */}
       {open ? (
-        <View className="border-t border-border px-5 pb-5">
+        <View className="border-t border-line px-5 pb-5">
           {/* Earnings */}
           <SectionLabel>Earnings</SectionLabel>
           <View className="gap-1">
@@ -223,20 +225,20 @@ function PayslipCard({ payslip }: { payslip: Payslip }) {
           <Subtotal label="Total deductions" value={-totalDeductions} />
 
           {/* Net (restated as the closing line) */}
-          <View className="mt-3 flex-row items-center justify-between border-t border-border pt-3">
-            <Text className="text-sm font-body-bold text-espresso">Net pay</Text>
-            <Text className="text-base font-display text-espresso">
+          <View className="mt-3 flex-row items-center justify-between border-t border-line pt-3">
+            <Text className="text-sm font-body-bold text-text">Net pay</Text>
+            <Text className="text-base font-display text-text">
               RM {amount(net)}
             </Text>
           </View>
 
           {/* Employer contributions: paid on top of salary, not deducted */}
           {hasEmployer ? (
-            <View className="mt-4 rounded-2xl bg-primary-50 p-3">
-              <Text className="text-xs font-body-semi text-muted uppercase tracking-wide">
+            <View className="mt-4 rounded-2xl bg-sunken p-3">
+              <Text className="text-sm font-body-semi text-text-2">
                 Employer contributions
               </Text>
-              <Text className="mb-2 text-xs font-body text-muted-fg">
+              <Text className="mb-2 text-xs font-body text-text-2">
                 Paid by Celsius on top of your salary. Not deducted from your pay.
               </Text>
               <View className="gap-1">
@@ -252,14 +254,14 @@ function PayslipCard({ payslip }: { payslip: Payslip }) {
           <Pressable
             onPress={downloadPdf}
             disabled={downloading}
-            className="mt-4 flex-row items-center justify-center gap-2 rounded-2xl bg-primary py-3 active:opacity-80"
+            className="mt-4 flex-row items-center justify-center gap-2 rounded-2xl bg-ink py-3 active:opacity-80"
           >
             {downloading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
+              <ActivityIndicator color={C["on-ink"]} size="small" />
             ) : (
-              <Download color="#FFFFFF" size={18} />
+              <Download color={C["on-ink"]} size={18} />
             )}
-            <Text className="text-sm font-body-semi text-white">
+            <Text className="text-sm font-body-semi text-on-ink">
               {downloading ? "Preparing…" : "Download PDF"}
             </Text>
           </Pressable>
@@ -271,7 +273,7 @@ function PayslipCard({ payslip }: { payslip: Payslip }) {
 
 function SectionLabel({ children }: { children: string }) {
   return (
-    <Text className="mt-4 mb-2 text-xs font-body-semi text-muted uppercase tracking-wide">
+    <Text className="mt-4 mb-2 text-sm font-body-semi text-text-2">
       {children}
     </Text>
   );
@@ -280,9 +282,9 @@ function SectionLabel({ children }: { children: string }) {
 function Subtotal({ label, value }: { label: string; value: number }) {
   const isNeg = value < 0;
   return (
-    <View className="mt-2 flex-row justify-between border-t border-border pt-2">
-      <Text className="text-sm font-body-semi text-espresso">{label}</Text>
-      <Text className="text-sm font-body-bold text-espresso">
+    <View className="mt-2 flex-row justify-between border-t border-line pt-2">
+      <Text className="text-sm font-body-semi text-text">{label}</Text>
+      <Text className="text-sm font-body-bold text-text">
         {isNeg ? "-" : ""}RM {amount(value)}
       </Text>
     </View>
@@ -305,17 +307,17 @@ function PayRow({
   return (
     <View className="flex-row justify-between">
       <View className="flex-1 pr-3">
-        <Text className="text-sm font-body text-muted-fg">{label}</Text>
+        <Text className="text-sm font-body text-text-2">{label}</Text>
         {/* The Employment Act wants the overtime hours and the rate applied
             shown, not a lump sum. A phone has no room for Qty and Rate columns,
             so they sit beneath the description. */}
         {detail ? (
-          <Text className="text-[11px] font-body text-muted-fg opacity-60">{detail}</Text>
+          <Text className="text-xs font-body text-text-2 opacity-60">{detail}</Text>
         ) : null}
       </View>
       <Text
         className={`text-sm font-body-medium ${
-          muted ? "text-muted-fg" : isNeg ? "text-danger" : "text-espresso"
+          muted ? "text-text-2" : isNeg ? "text-danger-text" : "text-text"
         }`}
       >
         {isNeg ? "-" : ""}RM {amount(value)}

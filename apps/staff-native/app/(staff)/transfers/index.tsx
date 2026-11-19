@@ -11,8 +11,10 @@ import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { useStaff } from "../../../lib/store";
 import { listTransfers, type Transfer } from "../../../lib/ops/inventory";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 export default function TransfersPage() {
+  const C = useCelsius().color;
   const session = useStaff((s) => s.session);
   const [items, setItems] = useState<Transfer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +39,7 @@ export default function TransfersPage() {
       <PageHeader title="Transfers" back />
       {loading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#A2492C" />
+          <ActivityIndicator color={C["text-3"]} />
         </View>
       ) : (
     <FlatList
@@ -52,47 +54,47 @@ export default function TransfersPage() {
             setRefreshing(true);
             load();
           }}
-          tintColor="#A2492C"
+          tintColor={C["text-3"]}
         />
       }
       ListEmptyComponent={
         <View className="mt-16 items-center px-6">
-          <View className="h-20 w-20 items-center justify-center rounded-3xl bg-primary-50">
-            <ArrowLeftRight color="#A2492C" size={32} />
+          <View className="h-20 w-20 items-center justify-center rounded-2xl bg-sunken">
+            <ArrowLeftRight color={C["text-2"]} size={32} />
           </View>
-          <Text className="mt-4 text-base font-display text-espresso">
+          <Text className="mt-4 text-base font-display text-text">
             No transfers yet
           </Text>
-          <Text className="mt-1 text-sm font-body text-muted-fg text-center">
+          <Text className="mt-1 text-sm font-body text-text-2 text-center">
             Inter-outlet stock transfers will show up here.
           </Text>
         </View>
       }
       ItemSeparatorComponent={() => <View className="h-2" />}
       renderItem={({ item: t }) => (
-        <View className="rounded-2xl border border-border bg-surface p-4">
+        <View className="rounded-2xl border border-line bg-surface p-4">
           <View className="flex-row items-center gap-2">
             <Text
-              className="shrink text-base font-body-medium text-espresso"
+              className="shrink text-base font-body-medium text-text"
               numberOfLines={1}
             >
               {shortOutlet(t.fromOutlet)}
             </Text>
-            <ArrowRight color="#9CA3AF" size={14} />
+            <ArrowRight color={C["text-3"]} size={14} />
             <Text
-              className="shrink text-base font-body-medium text-espresso"
+              className="shrink text-base font-body-medium text-text"
               numberOfLines={1}
             >
               {shortOutlet(t.toOutlet)}
             </Text>
           </View>
-          <Text className="mt-1 text-xs font-body text-muted">
+          <Text className="mt-1 text-xs font-body text-text-3">
             {t.items.length} item{t.items.length === 1 ? "" : "s"} ·{" "}
             {t.transferredBy} · {t.status.replace("_", " ").toLowerCase()} ·{" "}
             {fmtDate(t.createdAt)}
           </Text>
           {t.notes ? (
-            <Text className="mt-2 text-xs font-body text-muted-fg">
+            <Text className="mt-2 text-xs font-body text-text-2">
               {t.notes}
             </Text>
           ) : null}

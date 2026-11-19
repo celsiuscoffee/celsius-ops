@@ -11,6 +11,7 @@ import {
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { acknowledgeMemo, fetchMemos, type Memo } from "../../../lib/hr/api";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 export default function MemosScreen() {
   const qc = useQueryClient();
@@ -29,7 +30,7 @@ export default function MemosScreen() {
         </View>
       ) : error ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-sm text-danger text-center">
+          <Text className="text-sm text-danger-text text-center">
             {(error as Error).message}
           </Text>
         </View>
@@ -50,7 +51,7 @@ export default function MemosScreen() {
         />
       )}
       ListEmptyComponent={
-        <Text className="mt-12 text-center text-sm text-muted-fg">
+        <Text className="mt-12 text-center text-sm text-text-2">
           No memos right now.
         </Text>
       }
@@ -68,6 +69,7 @@ function MemoCard({
   memo: Memo;
   onAcknowledge: () => Promise<void>;
 }) {
+  const C = useCelsius().color;
   const acked = !!memo.my_acknowledged_at;
   const [acking, setAcking] = useState(false);
 
@@ -87,36 +89,36 @@ function MemoCard({
   }
 
   return (
-    <View className="rounded-3xl border border-border bg-surface p-5">
-      <Text className="text-xs font-body-semi text-muted uppercase tracking-wide">
+    <View className="rounded-2xl border border-line bg-surface p-5">
+      <Text className="text-sm font-body-semi text-text-2">
         {new Date(memo.issued_at).toLocaleDateString([], {
           day: "numeric",
           month: "short",
           year: "numeric",
         })}
       </Text>
-      <Text className="mt-1 text-lg font-display-medium text-espresso">
+      <Text className="mt-1 text-lg font-display-medium text-text">
         {memo.title}
       </Text>
-      <Text className="mt-2 text-sm font-body text-espresso leading-5">
+      <Text className="mt-2 text-sm font-body text-text leading-5">
         {memo.body}
       </Text>
       {acked ? (
-        <Text className="mt-3 text-xs font-body-semi text-success">
+        <Text className="mt-3 text-xs font-body-semi text-ok-text">
           Acknowledged
         </Text>
       ) : (
         <Pressable
           onPress={handleAcknowledge}
           disabled={acking}
-          className={`mt-3 h-10 items-center justify-center rounded-2xl ${
-            acking ? "bg-primary/50" : "bg-primary"
+          className={`mt-3 h-11 items-center justify-center rounded-2xl ${
+            acking ? "bg-ink opacity-50" : "bg-ink"
           }`}
         >
           {acking ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
+            <ActivityIndicator color={C["on-ink"]} size="small" />
           ) : (
-            <Text className="text-sm font-body-bold text-white">
+            <Text className="text-sm font-body-bold text-on-ink">
               Acknowledge
             </Text>
           )}

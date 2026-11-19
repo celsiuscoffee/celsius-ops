@@ -12,8 +12,10 @@ import { Plus, Receipt } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { listClaims, type Claim } from "../../../lib/claims";
+import { sentence, useCelsius } from "../../../lib/celsius-ui";
 
 export default function ClaimsList() {
+  const C = useCelsius().color;
   const router = useRouter();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["claims"],
@@ -31,15 +33,16 @@ export default function ClaimsList() {
   return (
     <Screen edges={["top", "left", "right"]}>
       <PageHeader
-        title="Claims"
-        subtitle="Out-of-pocket purchases"
+        title="Pay and claim"
+        subtitle="Receipts you paid for, and payment requests"
+        back
         right={
           <Pressable
             onPress={() => router.push("/(staff)/claims/new")}
             accessibilityLabel="New claim"
-            className="h-11 w-11 items-center justify-center rounded-2xl bg-primary active:opacity-80"
+            className="h-11 w-11 items-center justify-center rounded-2xl bg-ink active:opacity-80"
           >
-            <Plus color="#FFFFFF" size={22} />
+            <Plus color={C["on-ink"]} size={22} />
           </Pressable>
         }
       />
@@ -50,17 +53,17 @@ export default function ClaimsList() {
         </View>
       ) : error ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-center text-base font-body-bold text-espresso">
+          <Text className="text-center text-base font-body-bold text-text">
             Couldn't load claims
           </Text>
-          <Text className="mt-2 text-center text-sm font-body text-muted-fg">
+          <Text className="mt-2 text-center text-sm font-body text-text-2">
             {(error as Error).message}
           </Text>
           <Pressable
             onPress={() => refetch()}
-            className="mt-6 h-12 items-center justify-center rounded-2xl bg-primary px-8 active:opacity-80"
+            className="mt-6 h-12 items-center justify-center rounded-2xl bg-ink px-8 active:opacity-80"
           >
-            <Text className="text-base font-body-bold text-white">Retry</Text>
+            <Text className="text-base font-body-bold text-on-ink">Retry</Text>
           </Pressable>
         </View>
       ) : claims.length === 0 ? (
@@ -81,22 +84,23 @@ export default function ClaimsList() {
 }
 
 function EmptyState({ onNew }: { onNew: () => void }) {
+  const C = useCelsius().color;
   return (
     <View className="flex-1 items-center justify-center px-6">
-      <View className="h-20 w-20 items-center justify-center rounded-3xl bg-primary-50">
-        <Receipt color="#A2492C" size={32} />
+      <View className="h-20 w-20 items-center justify-center rounded-2xl bg-sunken">
+        <Receipt color={C["text-2"]} size={32} />
       </View>
-      <Text className="mt-4 text-xl font-display text-espresso text-center">
+      <Text className="mt-4 text-xl font-display text-text text-center">
         No claims yet
       </Text>
-      <Text className="mt-2 text-sm font-body text-muted-fg text-center">
+      <Text className="mt-2 text-sm font-body text-text-2 text-center">
         Submit your first claim by snapping a receipt photo.
       </Text>
       <Pressable
         onPress={onNew}
-        className="mt-6 h-16 items-center justify-center rounded-2xl bg-primary px-8 active:opacity-80"
+        className="mt-6 h-16 items-center justify-center rounded-2xl bg-ink px-8 active:opacity-80"
       >
-        <Text className="text-base font-body-bold text-white">
+        <Text className="text-base font-body-bold text-on-ink">
           Submit a Claim
         </Text>
       </Pressable>
@@ -106,19 +110,19 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 
 function ClaimCard({ claim }: { claim: Claim }) {
   return (
-    <View className="rounded-3xl border border-border bg-surface p-4">
+    <View className="rounded-2xl border border-line bg-surface p-4">
       <View className="flex-row items-start justify-between">
         <View className="flex-1 pr-3">
-          <Text className="text-base font-display-medium text-espresso">
+          <Text className="text-base font-display-medium text-text">
             {claim.supplierName ?? "Unknown supplier"}
           </Text>
-          <Text className="mt-1 text-xs font-body text-muted-fg">
+          <Text className="mt-1 text-xs font-body text-text-2">
             {fmtDate(claim.issueDate)}
             {claim.orderNumber ? ` · ${claim.orderNumber}` : ""}
           </Text>
         </View>
         <View className="items-end">
-          <Text className="text-lg font-display-medium text-espresso">
+          <Text className="text-lg font-display-medium text-text">
             RM {Number(claim.amount ?? 0).toFixed(2)}
           </Text>
           <StatusPill status={claim.status} />
@@ -126,7 +130,7 @@ function ClaimCard({ claim }: { claim: Claim }) {
       </View>
       {claim.notes ? (
         <Text
-          className="mt-2 text-xs font-body text-muted-fg"
+          className="mt-2 text-xs font-body text-text-2"
           numberOfLines={2}
         >
           {claim.notes}
@@ -140,7 +144,7 @@ function StatusPill({ status }: { status: string }) {
   const { label, bg, fg } = statusStyle(status);
   return (
     <View className={`mt-1 rounded-full px-2 py-0.5 ${bg}`}>
-      <Text className={`text-[10px] font-body-bold uppercase ${fg}`}>
+      <Text className={`text-xs font-body-bold ${fg}`}>
         {label}
       </Text>
     </View>
@@ -150,18 +154,18 @@ function StatusPill({ status }: { status: string }) {
 function statusStyle(status: string): { label: string; bg: string; fg: string } {
   const s = status.toUpperCase();
   if (s === "PAID") {
-    return { label: "Paid", bg: "bg-success/10", fg: "text-success" };
+    return { label: "Paid", bg: "bg-ok-soft", fg: "text-ok-text" };
   }
   if (s === "REJECTED" || s === "CANCELLED") {
-    return { label: s.toLowerCase(), bg: "bg-danger/10", fg: "text-danger" };
+    return { label: sentence(s), bg: "bg-danger-soft", fg: "text-danger-text" };
   }
   if (s === "APPROVED") {
-    return { label: "Approved", bg: "bg-primary-50", fg: "text-primary" };
+    return { label: "Approved", bg: "bg-sunken", fg: "text-text" };
   }
   return {
-    label: s.toLowerCase() || "draft",
-    bg: "bg-muted/10",
-    fg: "text-muted-fg",
+    label: sentence(s) || "Draft",
+    bg: "bg-sunken",
+    fg: "text-text-2",
   };
 }
 

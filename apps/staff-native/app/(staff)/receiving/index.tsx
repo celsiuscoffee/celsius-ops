@@ -40,6 +40,7 @@ import {
   type CapturedPhoto,
 } from "../../../components/ReceiptCapture";
 import { uploadPhoto } from "../../../lib/upload";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 const PENDING_STATUSES = ["SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
 
@@ -57,6 +58,7 @@ type ReceivedRow = {
 };
 
 export default function ReceivingPage() {
+  const C = useCelsius().color;
   const session = useStaff((s) => s.session);
   const [orders, setOrders] = useState<PendingOrder[]>([]);
   const [recent, setRecent] = useState<ReceivingRecord[]>([]);
@@ -210,8 +212,8 @@ export default function ReceivingPage() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#A2492C" />
+      <View className="flex-1 items-center justify-center bg-bg">
+        <ActivityIndicator color={C["text-3"]} />
       </View>
     );
   }
@@ -238,7 +240,7 @@ export default function ReceivingPage() {
 
   return (
     <Screen edges={["top", "left", "right"]}>
-      <PageHeader title="Receive" back />
+      <PageHeader title="Receiving" back />
       <FlatList
         className="flex-1"
         data={orders}
@@ -251,18 +253,18 @@ export default function ReceivingPage() {
             setRefreshing(true);
             load();
           }}
-          tintColor="#A2492C"
+          tintColor={C["text-3"]}
         />
       }
       ListHeaderComponent={
         <View>
           <View className="flex-row items-center gap-2">
-            <Truck color="#A2492C" size={16} />
-            <Text className="text-base font-body-semi text-espresso">
+            <Truck color={C["text-2"]} size={16} />
+            <Text className="text-base font-body-semi text-text">
               Expected today
             </Text>
-            <View className="rounded-full bg-primary-50 px-2 py-0.5">
-              <Text className="text-[10px] font-body-bold text-primary">
+            <View className="rounded-full bg-sunken px-2 py-0.5">
+              <Text className="text-xs font-body-bold text-text">
                 {orders.length}
               </Text>
             </View>
@@ -271,8 +273,8 @@ export default function ReceivingPage() {
       }
       ListEmptyComponent={
         <View className="mt-6 items-center py-8">
-          <Truck color="#D1D5DB" size={32} />
-          <Text className="mt-2 text-sm font-body text-muted">
+          <Truck color={C["text-3"]} size={32} />
+          <Text className="mt-2 text-sm font-body text-text-3">
             No pending deliveries
           </Text>
         </View>
@@ -281,14 +283,14 @@ export default function ReceivingPage() {
       renderItem={({ item: po }) => (
         <Pressable
           onPress={() => openPO(po)}
-          className="rounded-2xl border border-border bg-surface px-3 py-3 active:bg-primary-50"
+          className="rounded-2xl border border-line bg-surface px-3 py-3 active:bg-sunken"
         >
           <View className="flex-row items-center justify-between gap-3">
             <View className="flex-1">
-              <Text className="text-base font-body-medium text-espresso">
+              <Text className="text-base font-body-medium text-text">
                 {po.supplier}
               </Text>
-              <Text className="text-xs font-body text-muted">
+              <Text className="text-xs font-body text-text-3">
                 {po.orderNumber} · {po.items.length} item
                 {po.items.length === 1 ? "" : "s"} · RM{" "}
                 {Number(po.totalAmount ?? 0).toFixed(2)}
@@ -296,13 +298,13 @@ export default function ReceivingPage() {
             </View>
             <View className="items-end gap-1">
               {po.status === "PARTIALLY_RECEIVED" ? (
-                <View className="rounded-full bg-amber-100 px-2 py-0.5">
-                  <Text className="text-[10px] font-body-bold text-amber-700">
+                <View className="rounded-full bg-warn-soft px-2 py-0.5">
+                  <Text className="text-xs font-body-bold text-warn-text">
                     Partial
                   </Text>
                 </View>
               ) : null}
-              <Package color="#9CA3AF" size={16} />
+              <Package color={C["text-3"]} size={16} />
             </View>
           </View>
         </Pressable>
@@ -310,31 +312,31 @@ export default function ReceivingPage() {
       ListFooterComponent={
         recent.length > 0 ? (
           <View className="mt-6">
-            <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+            <Text className="mb-2 text-sm font-body-semi text-text-2">
               Recently received
             </Text>
             <View className="gap-1.5">
               {recent.map((r) => (
                 <View
                   key={r.id}
-                  className="flex-row items-center justify-between rounded-2xl border border-border bg-surface px-3 py-2.5"
+                  className="flex-row items-center justify-between rounded-2xl border border-line bg-surface px-3 py-2.5"
                 >
                   <View className="flex-1">
-                    <Text className="text-base font-body-medium text-espresso">
+                    <Text className="text-base font-body-medium text-text">
                       {r.supplier}
                     </Text>
-                    <Text className="text-xs font-body text-muted">
+                    <Text className="text-xs font-body text-text-3">
                       {r.orderNumber} · {fmtRelative(r.receivedAt)}
                     </Text>
                   </View>
                   <View className="flex-row items-center gap-2">
-                    <Text className="text-xs font-body text-muted">
+                    <Text className="text-xs font-body text-text-3">
                       {r.items.length} item{r.items.length === 1 ? "" : "s"}
                     </Text>
                     {r.status === "COMPLETE" ? (
-                      <Check color="#15803D" size={16} />
+                      <Check color={C["ok-text"]} size={16} />
                     ) : (
-                      <AlertTriangle color="#F59E0B" size={16} />
+                      <AlertTriangle color={C.warn} size={16} />
                     )}
                   </View>
                 </View>
@@ -376,6 +378,7 @@ function ReceiveDetail({
   onRemovePhoto: (i: number) => void;
   onSubmit: () => void;
 }) {
+  const C = useCelsius().color;
   const insets = useSafeAreaInsets();
   const allFilled = useMemo(
     () => po.items.every((item) => (received[item.id]?.qty ?? "") !== ""),
@@ -388,24 +391,24 @@ function ReceiveDetail({
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View className="flex-1 bg-background">
+      <View className="flex-1 bg-bg">
         {/* Sticky PO header, paddingTop clears the status bar / Dynamic
             Island so the close button is always tappable. */}
         <View
-          className="flex-row items-center justify-between border-b border-border bg-background px-5 pb-4"
+          className="flex-row items-center justify-between border-b border-line bg-bg px-5 pb-4"
           style={{ paddingTop: insets.top + 12 }}
         >
           <View className="flex-1">
-            <Text className="text-base font-body-semi text-espresso">
+            <Text className="text-base font-body-semi text-text">
               {po.supplier}
             </Text>
-            <Text className="text-xs font-body text-muted">{po.orderNumber}</Text>
+            <Text className="text-xs font-body text-text-3">{po.orderNumber}</Text>
           </View>
           <Pressable
             onPress={onBack}
-            className="h-9 w-9 items-center justify-center rounded-full bg-primary-50"
+            className="h-11 w-11 items-center justify-center rounded-full bg-sunken"
           >
-            <X color="#A2492C" size={16} />
+            <X color={C["text-2"]} size={16} />
           </Pressable>
         </View>
 
@@ -431,20 +434,20 @@ function ReceiveDetail({
                   key={item.id}
                   className={`rounded-2xl border bg-surface p-3 ${
                     isShort
-                      ? "border-danger/30"
+                      ? "border-danger"
                       : isOver
-                        ? "border-amber-500/30"
+                        ? "border-warn"
                         : isMatch
-                          ? "border-success/30"
-                          : "border-border"
+                          ? "border-ok"
+                          : "border-line"
                   }`}
                 >
                   <View className="flex-row items-start justify-between">
                     <View className="flex-1 pr-2">
-                      <Text className="text-base font-body-medium text-espresso">
+                      <Text className="text-base font-body-medium text-text">
                         {item.product}
                       </Text>
-                      <Text className="text-xs font-body text-muted">
+                      <Text className="text-xs font-body text-text-3">
                         {prior > 0
                           ? `Balance ${expected} of ${item.orderedOriginalQty ?? item.quantity} (${prior} received)`
                           : `Ordered ${item.quantity}`}{" "}
@@ -453,10 +456,10 @@ function ReceiveDetail({
                       </Text>
                     </View>
                     {isMatch ? (
-                      <Check color="#15803D" size={20} />
+                      <Check color={C["ok-text"]} size={20} />
                     ) : isShort ? (
-                      <View className="rounded-full bg-danger/10 px-2 py-0.5">
-                        <Text className="text-[10px] font-body-bold text-danger">
+                      <View className="rounded-full bg-danger-soft px-2 py-0.5">
+                        <Text className="text-xs font-body-bold text-danger-text">
                           Short {(expected - num).toFixed(0)}
                         </Text>
                       </View>
@@ -465,23 +468,23 @@ function ReceiveDetail({
                   <View className="mt-3 flex-row items-center gap-2">
                     <Pressable
                       onPress={() => onStepQty(item.id, -1, expected)}
-                      className="h-11 w-11 items-center justify-center rounded-xl bg-primary-50 active:opacity-80"
+                      className="h-11 w-11 items-center justify-center rounded-xl bg-sunken active:opacity-80"
                     >
-                      <Text className="text-xl font-display text-primary">−</Text>
+                      <Text className="text-xl font-display text-text">−</Text>
                     </Pressable>
                     <TextInput
                       value={r?.qty ?? ""}
                       onChangeText={(t) => onUpdateQty(item.id, t)}
                       keyboardType="decimal-pad"
-                      className="h-11 min-w-24 flex-1 rounded-xl border border-border bg-surface px-3 text-center text-base font-body-bold text-espresso tabular-nums"
+                      className="h-11 min-w-24 flex-1 rounded-xl border border-line bg-surface px-3 text-center text-base font-body-bold text-text tabular-nums"
                     />
                     <Pressable
                       onPress={() => onStepQty(item.id, 1, expected)}
-                      className="h-11 w-11 items-center justify-center rounded-xl bg-primary-50 active:opacity-80"
+                      className="h-11 w-11 items-center justify-center rounded-xl bg-sunken active:opacity-80"
                     >
-                      <Text className="text-xl font-display text-primary">+</Text>
+                      <Text className="text-xl font-display text-text">+</Text>
                     </Pressable>
-                    <Text className="text-xs font-body text-muted">
+                    <Text className="text-xs font-body text-text-3">
                       {item.uom}
                     </Text>
                     {!isMatch ? (
@@ -489,9 +492,9 @@ function ReceiveDetail({
                         onPress={() =>
                           onUpdateQty(item.id, String(expected))
                         }
-                        className="ml-auto rounded-full bg-success/10 px-2 py-1"
+                        className="ml-auto rounded-full bg-ok-soft px-2 py-1"
                       >
-                        <Text className="text-[10px] font-body-bold text-success">
+                        <Text className="text-xs font-body-bold text-ok-text">
                           Match
                         </Text>
                       </Pressable>
@@ -502,8 +505,8 @@ function ReceiveDetail({
                       value={r?.discrepancyReason ?? ""}
                       onChangeText={(t) => onSetReason(item.id, t)}
                       placeholder="Reason for discrepancy…"
-                      placeholderTextColor="#9CA3AF"
-                      className="mt-2 h-10 rounded-xl border border-border bg-surface px-3 text-sm font-body text-espresso"
+                      placeholderTextColor={C["text-3"]}
+                      className="mt-2 h-10 rounded-xl border border-line bg-surface px-3 text-sm font-body text-text"
                     />
                   ) : null}
                 </View>
@@ -513,7 +516,7 @@ function ReceiveDetail({
 
           {/* Invoice photos */}
           <View className="mt-5">
-            <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+            <Text className="mb-2 text-sm font-body-semi text-text-2">
               Invoice photo
             </Text>
             <View className="flex-row flex-wrap gap-2">
@@ -525,27 +528,28 @@ function ReceiveDetail({
                   />
                   <Pressable
                     onPress={() => onRemovePhoto(i)}
-                    className="absolute -right-1 -top-1 h-5 w-5 items-center justify-center rounded-full bg-black/70"
+                    hitSlop={12}
+                    className="absolute -right-1 -top-1 h-6 w-6 items-center justify-center rounded-full bg-black/70"
                   >
-                    <X color="#FFFFFF" size={10} />
+                    <X color={C["on-hero"]} size={12} />
                   </Pressable>
                 </View>
               ))}
               {uploadingPhoto ? (
                 <View
-                  className="items-center justify-center rounded-xl border-2 border-dashed border-primary/40"
+                  className="items-center justify-center rounded-xl border-2 border-dashed border-line-2"
                   style={{ width: 80, height: 80 }}
                 >
-                  <ActivityIndicator color="#A2492C" size="small" />
+                  <ActivityIndicator color={C["text-3"]} size="small" />
                 </View>
               ) : (
                 <Pressable
                   onPress={onOpenCamera}
-                  className="items-center justify-center rounded-xl border-2 border-dashed border-border active:bg-primary-50"
+                  className="items-center justify-center rounded-xl border-2 border-dashed border-line active:bg-sunken"
                   style={{ width: 80, height: 80 }}
                 >
-                  <Camera color="#9CA3AF" size={20} />
-                  <Text className="mt-1 text-[10px] font-body text-muted">
+                  <Camera color={C["text-3"]} size={20} />
+                  <Text className="mt-1 text-xs font-body text-text-3">
                     Add
                   </Text>
                 </Pressable>
@@ -557,12 +561,12 @@ function ReceiveDetail({
         {/* Pinned bottom submit */}
         <View
           style={{ paddingBottom: 12 }}
-          className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
+          className="absolute inset-x-0 bottom-0 border-t border-line bg-bg px-5 pt-3"
         >
           {!hasPhoto ? (
-            <View className="mb-2 flex-row items-center gap-2 rounded-xl bg-amber-50 px-3 py-2">
-              <AlertTriangle color="#B45309" size={16} />
-              <Text className="flex-1 text-xs font-body text-amber-700">
+            <View className="mb-2 flex-row items-center gap-2 rounded-xl bg-warn-soft px-3 py-2">
+              <AlertTriangle color={C.warn} size={16} />
+              <Text className="flex-1 text-xs font-body text-warn-text">
                 No photo attached. Add the invoice or delivery order so this
                 receiving can be verified.
               </Text>
@@ -572,13 +576,13 @@ function ReceiveDetail({
             onPress={onSubmit}
             disabled={!allFilled || submitting}
             className={`h-16 items-center justify-center rounded-2xl ${
-              allFilled && !submitting ? "bg-primary" : "bg-primary/40"
+              allFilled && !submitting ? "bg-ink" : "bg-ink opacity-40"
             }`}
           >
             {submitting ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={C["on-ink"]} />
             ) : (
-              <Text className="text-base font-body-bold text-white">
+              <Text className="text-base font-body-bold text-on-ink">
                 {hasPhoto ? "Confirm receiving" : "Confirm without photo"}
               </Text>
             )}

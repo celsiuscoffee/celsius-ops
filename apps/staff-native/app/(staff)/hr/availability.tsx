@@ -20,6 +20,7 @@ import {
   type DateAvailability,
 } from "../../../lib/hr/api";
 import { fetchProfile } from "../../../lib/hr/profile";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -55,6 +56,7 @@ function ymd(d: Date): string {
 }
 
 export default function AvailabilityScreen() {
+  const C = useCelsius().color;
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState<Record<number, DayState> | null>(null);
   const [hasPattern, setHasPattern] = useState(false);
@@ -203,27 +205,27 @@ export default function AvailabilityScreen() {
 
   return (
     <Screen edges={["top", "left", "right"]}>
-      <PageHeader title="My Availability" back />
+      <PageHeader title="My availability" back />
       {loading || !days ? (
         <View className="items-center py-10">
-          <ActivityIndicator color="#A2492C" />
+          <ActivityIndicator color={C["text-3"]} />
         </View>
       ) : !isPartTimer ? (
         <View className="items-center px-8 py-16">
-          <CalendarX color="#9CA3AF" size={40} />
-          <Text className="mt-4 text-center text-base font-body-semi text-espresso">
+          <CalendarX color={C["text-3"]} size={40} />
+          <Text className="mt-4 text-center text-base font-body-semi text-text">
             Availability is for part-timers
           </Text>
-          <Text className="mt-1.5 text-center text-sm font-body text-muted-fg">
+          <Text className="mt-1.5 text-center text-sm font-body text-text-2">
             Your shifts are set by your manager, so there's nothing to declare here.
           </Text>
         </View>
       ) : (
         <ScrollView contentContainerClassName="pb-10" showsVerticalScrollIndicator={false}>
           {/* Weekly pattern */}
-          <View className="mt-5 rounded-3xl border border-border bg-surface p-4">
-            <Text className="text-lg font-body-semi text-espresso">Weekly pattern</Text>
-            <Text className="mt-1 text-sm font-body text-muted-fg">
+          <View className="mt-5 rounded-2xl border border-line bg-surface p-4">
+            <Text className="text-lg font-body-semi text-text">Weekly pattern</Text>
+            <Text className="mt-1 text-sm font-body text-text-2">
               {hasPattern
                 ? "You'll only be offered shifts inside this pattern."
                 : "Nothing saved yet — you're flexible, any day. Set a pattern if you have fixed days."}
@@ -241,9 +243,9 @@ export default function AvailabilityScreen() {
                 const d = days[dw];
                 const expanded = openDay === dw && d.mode === "custom";
                 return (
-                  <View key={dw} className={`rounded-2xl ${expanded ? "bg-primary-50/50 p-2.5" : ""}`}>
+                  <View key={dw} className={`rounded-2xl ${expanded ? "bg-sunken p-2.5" : ""}`}>
                     <View className="flex-row items-center gap-2.5">
-                      <Text className="w-12 text-base font-body-bold text-espresso">
+                      <Text className="w-12 text-base font-body-bold text-text">
                         {DAY_NAMES[dw]}
                       </Text>
                       {(["off", "any", "custom"] as const).map((mode) => {
@@ -257,11 +259,11 @@ export default function AvailabilityScreen() {
                               Haptics.selectionAsync();
                             }}
                             className={`min-h-11 flex-1 items-center justify-center rounded-xl px-2 py-2.5 ${
-                              active ? (mode === "off" ? "bg-espresso" : "bg-primary") : "bg-primary-50"
+                              active ? (mode === "off" ? "bg-ink" : "bg-ink") : "bg-sunken"
                             }`}
                           >
                             <Text
-                              className={`text-sm font-body-semi ${active ? "text-white" : "text-muted-fg"}`}
+                              className={`text-sm font-body-semi ${active ? "text-on-ink" : "text-text-2"}`}
                               numberOfLines={1}
                             >
                               {mode === "off" ? "Off" : mode === "any" ? "Any time" : d.mode === "custom" ? `${d.from}–${d.until}` : "Hours…"}
@@ -284,9 +286,9 @@ export default function AvailabilityScreen() {
                                   setDays({ ...days, [dw]: { ...d, from: p.from, until: p.until } });
                                   Haptics.selectionAsync();
                                 }}
-                                className={`min-h-11 justify-center rounded-xl px-3.5 py-2.5 ${active ? "bg-primary" : "bg-surface border border-border"}`}
+                                className={`min-h-11 justify-center rounded-xl px-3.5 py-2.5 ${active ? "bg-ink" : "bg-surface border border-line"}`}
                               >
-                                <Text className={`text-sm font-body-semi ${active ? "text-white" : "text-espresso"}`}>
+                                <Text className={`text-sm font-body-semi ${active ? "text-on-ink" : "text-text"}`}>
                                   {p.label} {p.from}–{p.until}
                                 </Text>
                               </Pressable>
@@ -311,9 +313,9 @@ export default function AvailabilityScreen() {
                         />
                         <Pressable
                           onPress={() => setOpenDay(null)}
-                          className="mt-2 self-end rounded-xl px-3 py-2"
+                          className="mt-2 min-h-11 justify-center self-end rounded-xl px-3"
                         >
-                          <Text className="text-sm font-body-semi text-primary">Done</Text>
+                          <Text className="text-sm font-body-semi text-text">Done</Text>
                         </Pressable>
                       </View>
                     ) : null}
@@ -323,7 +325,7 @@ export default function AvailabilityScreen() {
             </View>
 
             {/* Max shifts per week */}
-            <Text className="mt-5 text-base font-body-semi text-espresso">Max shifts per week</Text>
+            <Text className="mt-5 text-base font-body-semi text-text">Max shifts per week</Text>
             <View className="mt-2 flex-row gap-2">
               {[null, 1, 2, 3, 4, 5].map((n) => (
                 <Pressable
@@ -332,9 +334,9 @@ export default function AvailabilityScreen() {
                     setMaxShifts(n);
                     Haptics.selectionAsync();
                   }}
-                  className={`min-h-11 flex-1 items-center justify-center rounded-xl py-2.5 ${maxShifts === n ? "bg-primary" : "bg-primary-50"}`}
+                  className={`min-h-11 flex-1 items-center justify-center rounded-xl py-2.5 ${maxShifts === n ? "bg-ink" : "bg-sunken"}`}
                 >
-                  <Text className={`text-base font-body-semi ${maxShifts === n ? "text-white" : "text-muted-fg"}`}>
+                  <Text className={`text-base font-body-semi ${maxShifts === n ? "text-on-ink" : "text-text-2"}`}>
                     {n === null ? "Any" : n}
                   </Text>
                 </Pressable>
@@ -342,36 +344,36 @@ export default function AvailabilityScreen() {
             </View>
 
             {/* Live summary */}
-            <Text className="mt-4 text-sm font-body text-muted-fg">{summary}</Text>
+            <Text className="mt-4 text-sm font-body text-text-2">{summary}</Text>
 
             <View className="mt-3 flex-row gap-2">
               <Pressable
                 onPress={() => save(false)}
                 disabled={saving}
-                className="min-h-13 flex-1 items-center justify-center rounded-2xl bg-primary py-3.5 active:opacity-90"
+                className="min-h-13 flex-1 items-center justify-center rounded-2xl bg-ink py-3.5 active:opacity-90"
               >
                 {saving ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color={C["on-ink"]} />
                 ) : (
-                  <Text className="text-base font-body-semi text-white">Save pattern</Text>
+                  <Text className="text-base font-body-semi text-on-ink">Save pattern</Text>
                 )}
               </Pressable>
               {hasPattern ? (
                 <Pressable
                   onPress={() => save(true)}
                   disabled={saving}
-                  className="items-center justify-center rounded-2xl border border-border px-4 py-3.5"
+                  className="items-center justify-center rounded-2xl border border-line px-4 py-3.5"
                 >
-                  <Text className="text-base font-body-semi text-muted-fg">Clear</Text>
+                  <Text className="text-base font-body-semi text-text-2">Clear</Text>
                 </Pressable>
               ) : null}
             </View>
           </View>
 
           {/* Blockout dates — next 4 weeks */}
-          <View className="mt-5 rounded-3xl border border-border bg-surface p-4">
-            <Text className="text-lg font-body-semi text-espresso">Blockout dates</Text>
-            <Text className="mt-1 text-sm font-body text-muted-fg">
+          <View className="mt-5 rounded-2xl border border-line bg-surface p-4">
+            <Text className="text-lg font-body-semi text-text">Blockout dates</Text>
+            <Text className="mt-1 text-sm font-body text-text-2">
               Tap a date you can&apos;t work (next 4 weeks). Red = blocked.
             </Text>
             <View className="mt-3 flex-row flex-wrap gap-1.5">
@@ -385,13 +387,13 @@ export default function AvailabilityScreen() {
                     onPress={() => toggleDate(date, blocked)}
                     disabled={busy}
                     className={`min-h-14 w-[12.5%] min-w-11 items-center justify-center rounded-xl py-2 ${
-                      blocked ? "bg-danger" : "bg-primary-50"
+                      blocked ? "border border-danger bg-danger-soft" : "bg-sunken"
                     }`}
                   >
-                    <Text className={`text-[11px] font-body ${blocked ? "text-white" : "text-muted"}`}>
+                    <Text className={`text-xs font-body ${blocked ? "text-danger-text" : "text-text-3"}`}>
                       {DAY_NAMES[d.getDay()]}
                     </Text>
-                    <Text className={`text-base font-body-semi ${blocked ? "text-white" : "text-espresso"}`}>
+                    <Text className={`text-base font-body-semi ${blocked ? "text-danger-text" : "text-text"}`}>
                       {busy ? "…" : d.getDate()}
                     </Text>
                   </Pressable>
@@ -402,8 +404,8 @@ export default function AvailabilityScreen() {
               <View className="mt-3 gap-2">
                 {blockouts.slice(0, 8).map((b) => (
                   <View key={b.id} className="flex-row items-center gap-2">
-                    <CalendarX color="#DC2626" size={16} />
-                    <Text className="text-sm font-body text-muted-fg">
+                    <CalendarX color={C.danger} size={16} />
+                    <Text className="text-sm font-body text-text-2">
                       {new Date(b.date + "T00:00:00").toLocaleDateString("en-MY", {
                         weekday: "short",
                         day: "numeric",
@@ -426,9 +428,9 @@ function QuickChip({ label, onPress }: { label: string; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      className="min-h-11 justify-center rounded-xl border border-border bg-surface px-3.5 py-2.5 active:bg-primary-50"
+      className="min-h-11 justify-center rounded-xl border border-line bg-surface px-3.5 py-2.5 active:bg-sunken"
     >
-      <Text className="text-sm font-body-semi text-espresso">{label}</Text>
+      <Text className="text-sm font-body-semi text-text">{label}</Text>
     </Pressable>
   );
 }
@@ -447,7 +449,7 @@ function TimeStrip({
 }) {
   return (
     <View className="mt-2.5">
-      <Text className="mb-1.5 text-sm font-body-semi text-muted-fg">{label}</Text>
+      <Text className="mb-1.5 text-sm font-body-semi text-text-2">{label}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-1.5 pr-4">
         {options.map((t) => {
           const active = t === value;
@@ -458,9 +460,9 @@ function TimeStrip({
                 onPick(t);
                 Haptics.selectionAsync();
               }}
-              className={`min-h-11 justify-center rounded-xl px-3.5 py-2.5 ${active ? "bg-primary" : "bg-surface border border-border"}`}
+              className={`min-h-11 justify-center rounded-xl px-3.5 py-2.5 ${active ? "bg-ink" : "bg-surface border border-line"}`}
             >
-              <Text className={`text-base font-body-semi ${active ? "text-white" : "text-espresso"}`}>{t}</Text>
+              <Text className={`text-base font-body-semi ${active ? "text-on-ink" : "text-text"}`}>{t}</Text>
             </Pressable>
           );
         })}
