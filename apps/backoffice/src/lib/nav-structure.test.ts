@@ -95,16 +95,14 @@ describe("shell placement", () => {
     expect(locate("/finance/transactions", owner)?.page?.label).toBe("Reports");
   });
 
-  it("pages with no Gosamē counterpart are hidden but still reachable", () => {
-    for (const href of ["/ads", "/ads/campaigns", "/ads/grab"]) {
-      expect(locate(href, owner)?.section.label, href).toBe("Customers");
-    }
-    expect(railPages(section("Customers"), owner).map((p) => p.label)).toEqual(["Profiles", "Rewards", "Reviews", "Messages"]);
-    // On an ad page (e.g. from ⌘K) the title and tabs are the Ads ones, so a
-    // phone can move between them; it does not pretend to be Messages.
-    const p = locate("/ads/grab", owner);
-    expect(p?.page?.label).toBe("Ads");
-    expect(p?.page?.tabs.map((t) => t.label)).toEqual(["Ads", "Google campaigns", "Optimizer", "GrabFood", "Ad invoices"]);
+  it("Ads stay in the menu under Customers (owner: \"ads: keep\")", () => {
+    expect(railPages(section("Customers"), owner).map((p) => p.label)).toEqual(["Profiles", "Rewards", "Reviews", "Messages", "Ads"]);
+    expect(locate("/ads/grab", owner)?.page?.tabs.map((t) => t.label)).toEqual(["Google", "Google campaigns", "Optimizer", "GrabFood", "Ad invoices"]);
+  });
+
+  it("Money follows Gosamē's pages exactly", () => {
+    expect(railPages(section("Money"), owner).map((p) => p.label)).toEqual(["Overview", "Bank inbox", "Cash flow", "Bills", "Reports"]);
+    expect(locate("/finance/cashflow", owner)?.page?.tabs.map((t) => t.label)).toEqual(["Cash flow", "Bank statements", "Regular bills"]);
   });
 
   it("the home page belongs to no section", () => {

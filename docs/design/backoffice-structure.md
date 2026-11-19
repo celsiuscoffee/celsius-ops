@@ -380,6 +380,13 @@ Where Celsius differs, and why:
   Counts, Food cost, Reserve levels, Menu, Profiles, Rewards, Search position,
   Scoreboard, Checklists.
 
+Follow-up (owner, 19 Nov 2026: "ads: keep", "for money pages, follow exactly how gosame did"):
+Ads are back in the menu as Customers › Ads (Google, Google campaigns, Optimizer, GrabFood,
+Ad invoices). Money is Overview (Tax & close), Bank inbox, Cash flow (Bank statements, Regular
+bills), Bills (the pay-and-claim page), Reports (Ledger, Fixed assets). Cash tracking and
+Monthly are off the menu, still open by URL and ⌘K. Gosamē's Today page has no Celsius
+counterpart, so Tax & close sits under Overview.
+
 ## 3. Every page, sorted into its section
 
 Key: **Keep** = becomes a tab · **Merge** = folds into the named page · **Retire** = hide,
