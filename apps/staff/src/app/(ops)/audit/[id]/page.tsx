@@ -216,7 +216,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
     return (
       <div className="p-6 text-center">
         <p className="text-muted-foreground">Audit not found</p>
-        <Link href="/audit" className="mt-2 text-sm text-terracotta hover:underline">Back</Link>
+        <Link href="/audit" className="mt-2 text-sm text-brand-text hover:underline">Back</Link>
       </div>
     );
   }
@@ -240,7 +240,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
       <CameraCaptureModal
         open={cameraOpen}
         facingMode="environment"
-        title="Audit Photo"
+        title="Audit photo"
         onCapture={handleCameraCapture}
         onClose={() => setCameraOpen(false)}
       />
@@ -258,18 +258,18 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
       {/* Header */}
       <div className="mb-4">
         <Link href="/audit" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-3">
-          <ArrowLeft className="h-4 w-4" />Back to Audits
+          <ArrowLeft className="h-4 w-4" />Audit
         </Link>
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold text-foreground flex-1">{audit.template.name}</h1>
-          <Badge className={isCompleted ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}>
-            {isCompleted ? "Completed" : "In Progress"}
+          <Badge className={isCompleted ? "bg-ok-soft text-ok-text" : "bg-info-soft text-info-text"}>
+            {isCompleted ? "Completed" : "In progress"}
           </Badge>
           <button
             onClick={handleDelete}
             disabled={deleting}
             aria-label="Delete audit"
-            className="rounded-md p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50"
+            className="rounded-md p-1.5 text-text-3 hover:text-danger-text hover:bg-danger-soft disabled:opacity-50"
           >
             {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </button>
@@ -289,12 +289,12 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
           </div>
           <div className="rounded-full bg-muted h-2 overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${isCompleted ? "bg-green-500" : "bg-terracotta"}`}
+              className={`h-full rounded-full transition-all duration-500 ${isCompleted ? "bg-ok" : "bg-ink"}`}
               style={{ width: `${progress}%` }}
             />
           </div>
           {isCompleted && audit.overallScore !== null && (
-            <p className="mt-2 text-xs text-green-600 flex items-center gap-1">
+            <p className="mt-2 text-xs text-ok-text flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5" />
               Score: {audit.overallScore}%
               {audit.completedAt && ` · ${new Date(audit.completedAt).toLocaleString()}`}
@@ -306,7 +306,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
       {/* Sections & Items */}
       {Object.entries(sections).map(([sectionName, items]) => (
         <div key={sectionName} className="mb-4">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-3">
             {sectionName}
           </h2>
           <div className="space-y-2">
@@ -319,7 +319,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                       <div className="flex-1 min-w-0">
                         <h4 className="text-sm font-medium text-foreground">{item.itemTitle}</h4>
                         {item.photoRequired && item.photos.length === 0 && (
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-red-50 px-1.5 py-0.5 text-[9px] font-medium text-red-600 mt-1">
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-danger-soft px-1.5 py-0.5 text-[9px] font-medium text-danger-text mt-1">
                             <Camera className="h-2.5 w-2.5" />Photo required
                           </span>
                         )}
@@ -334,7 +334,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                           {uploadingItem === item.id ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : item.photos.length > 0 ? (
-                            <ImageIcon className="h-3.5 w-3.5 text-green-500" />
+                            <ImageIcon className="h-3.5 w-3.5 text-ok" />
                           ) : (
                             <Camera className="h-3.5 w-3.5" />
                           )}
@@ -347,7 +347,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                           disabled={isCompleted}
                           className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40"
                         >
-                          <MessageSquare className={`h-3.5 w-3.5 ${item.notes ? "text-blue-500" : ""}`} />
+                          <MessageSquare className={`h-3.5 w-3.5 ${item.notes ? "text-info" : ""}`} />
                         </button>
                       </div>
                     </div>
@@ -361,8 +361,8 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                             disabled={isCompleted}
                             className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
                               item.rating === 1
-                                ? "bg-green-500 text-white shadow-sm"
-                                : "bg-gray-100 text-gray-500 hover:bg-green-50 hover:text-green-600"
+                                ? "bg-ok text-on-ink shadow-sm"
+                                : "bg-sunken text-text-3 hover:bg-ok-soft hover:text-ok-text"
                             } disabled:opacity-60`}
                           >
                             <ThumbsUp className="h-3.5 w-3.5" /> Pass
@@ -372,8 +372,8 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                             disabled={isCompleted}
                             className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
                               item.rating === 0
-                                ? "bg-red-500 text-white shadow-sm"
-                                : "bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-600"
+                                ? "bg-danger text-on-ink shadow-sm"
+                                : "bg-sunken text-text-3 hover:bg-danger-soft hover:text-danger-text"
                             } disabled:opacity-60`}
                           >
                             <ThumbsDown className="h-3.5 w-3.5" /> Fail
@@ -383,8 +383,8 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                             disabled={isCompleted}
                             className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
                               item.rating === -1
-                                ? "bg-gray-500 text-white shadow-sm"
-                                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                ? "bg-line-ctl text-on-ink shadow-sm"
+                                : "bg-sunken text-text-3 hover:bg-line"
                             } disabled:opacity-60`}
                           >
                             <Minus className="h-3.5 w-3.5" /> N/A
@@ -403,8 +403,8 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                               <Star
                                 className={`h-6 w-6 ${
                                   item.rating !== null && n <= item.rating
-                                    ? "fill-yellow-400 text-yellow-400"
-                                    : "text-gray-300"
+                                    ? "fill-warn text-warn"
+                                    : "text-line-ctl"
                                 }`}
                               />
                             </button>
@@ -414,9 +414,9 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                       {item.ratingType === "rating_3" && (
                         <div className="flex gap-2">
                           {[
-                            { v: 3, label: "Good", color: "green" },
-                            { v: 2, label: "Fair", color: "yellow" },
-                            { v: 1, label: "Poor", color: "red" },
+                            { v: 3, label: "Good", on: "bg-ok text-on-ink", hover: "hover:bg-ok-soft" },
+                            { v: 2, label: "Fair", on: "bg-warn text-on-ink", hover: "hover:bg-warn-soft" },
+                            { v: 1, label: "Poor", on: "bg-danger text-on-ink", hover: "hover:bg-danger-soft" },
                           ].map((opt) => (
                             <button
                               key={opt.v}
@@ -424,8 +424,8 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                               disabled={isCompleted}
                               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
                                 item.rating === opt.v
-                                  ? `bg-${opt.color}-500 text-white shadow-sm`
-                                  : `bg-gray-100 text-gray-500 hover:bg-${opt.color}-50`
+                                  ? `${opt.on} shadow-sm`
+                                  : `bg-sunken text-text-3 ${opt.hover}`
                               } disabled:opacity-60`}
                             >
                               {opt.label}
@@ -437,7 +437,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
 
                     {/* Notes display */}
                     {item.notes && notesOpen !== item.id && (
-                      <p className="mt-2 text-xs text-blue-600 bg-blue-50 rounded px-2 py-1">{item.notes}</p>
+                      <p className="mt-2 text-xs text-info-text bg-info-soft rounded px-2 py-1">{item.notes}</p>
                     )}
 
                     {/* Photo thumbnails */}
@@ -456,7 +456,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                               onClick={() => handleDeleteAuditPhoto(item.id, url)}
                               disabled={uploadingItem === item.id}
                               aria-label="Delete photo"
-                              className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white shadow-md hover:bg-red-700 disabled:opacity-50"
+                              className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-on-ink shadow-md hover:bg-danger disabled:opacity-50"
                             >
                               <X className="h-3 w-3" />
                             </button>
@@ -465,7 +465,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                               disabled={uploadingItem === item.id}
                               aria-label="Retake photo"
                               title="Retake"
-                              className="absolute -bottom-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-gray-800 text-white shadow-md hover:bg-gray-900 disabled:opacity-50"
+                              className="absolute -bottom-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink text-on-ink shadow-md hover:bg-ink disabled:opacity-50"
                             >
                               <RotateCcw className="h-3 w-3" />
                             </button>
@@ -488,8 +488,8 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                       />
                       <div className="mt-2 flex gap-2 justify-end">
                         <Button variant="outline" size="sm" onClick={() => setNotesOpen(null)}>Cancel</Button>
-                        <Button size="sm" onClick={() => saveNote(item.id)} className="bg-terracotta hover:bg-terracotta-dark">
-                          Save Note
+                        <Button size="sm" onClick={() => saveNote(item.id)} className="bg-ink hover:bg-ink-hover">
+                          Save note
                         </Button>
                       </div>
                     </div>
@@ -508,14 +508,14 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
             <Button
               onClick={() => setShowComplete(true)}
               disabled={ratedCount === 0}
-              className="w-full bg-terracotta hover:bg-terracotta-dark"
+              className="w-full bg-ink hover:bg-ink-hover"
             >
               <CheckCircle2 className="mr-2 h-4 w-4" />
               Complete Audit ({ratedCount}/{totalCount} rated)
             </Button>
           ) : (
-            <Card className="p-4 space-y-3 border-terracotta/30">
-              <h3 className="text-sm font-semibold">Complete Audit</h3>
+            <Card className="p-4 space-y-3 border-brand/30">
+              <h3 className="text-sm font-semibold">Finish audit</h3>
               <textarea
                 value={overallNotes}
                 onChange={(e) => setOverallNotes(e.target.value)}
@@ -524,7 +524,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
               />
               {completeError && (
-                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <div className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-text">
                   {completeError}
                 </div>
               )}
@@ -536,7 +536,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                   size="sm"
                   onClick={handleComplete}
                   disabled={completing}
-                  className="bg-green-600 hover:bg-green-700 flex-1"
+                  className="bg-ok hover:bg-ok flex-1"
                 >
                   {completing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
                   Submit
@@ -551,7 +551,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
       {isCompleted && audit.overallNotes && (
         <Card className="mt-4">
           <CardContent className="p-3">
-            <h3 className="text-xs font-medium mb-1">Overall Notes</h3>
+            <h3 className="text-xs font-medium mb-1">Overall notes</h3>
             <p className="text-xs text-muted-foreground whitespace-pre-wrap">{audit.overallNotes}</p>
           </CardContent>
         </Card>

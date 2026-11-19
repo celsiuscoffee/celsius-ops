@@ -93,8 +93,8 @@ const PENDING_STATUSES = ["SENT", "AWAITING_DELIVERY", "PARTIALLY_RECEIVED"];
 // Pill label + color for the PO card so staff can see at a glance whether
 // the PO is freshly sent, expected, or already partially received.
 const STATUS_PILL: Record<string, { label: string; cls: string }> = {
-  SENT: { label: "Sent", cls: "border-indigo-300 text-indigo-700 bg-indigo-50" },
-  PARTIALLY_RECEIVED: { label: "Partial", cls: "border-orange-300 text-orange-700 bg-orange-50" },
+  SENT: { label: "Sent", cls: "border-info text-info-text bg-info-soft" },
+  PARTIALLY_RECEIVED: { label: "Partial", cls: "border-warn text-warn-text bg-warn-soft" },
 };
 
 // The quantity the CURRENT delivery is expected to bring: the remaining
@@ -335,9 +335,9 @@ export default function ReceivePage() {
   if (loading) {
     return (
       <>
-        <TopBar title="Receive & Capture" />
+        <TopBar title="Receive a delivery" />
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-text-3" />
         </div>
       </>
     );
@@ -346,13 +346,13 @@ export default function ReceivePage() {
   if (submitSuccess) {
     return (
       <>
-        <TopBar title="Receive & Capture" />
+        <TopBar title="Receive a delivery" />
         <div className="flex flex-col items-center justify-center gap-3 py-20">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
-            <Check className="h-7 w-7 text-green-600" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-ok-soft">
+            <Check className="h-7 w-7 text-ok-text" />
           </div>
-          <p className="text-sm font-medium text-gray-900">Receiving recorded</p>
-          <p className="text-xs text-gray-500">Inventory will be updated shortly</p>
+          <p className="text-sm font-medium text-text">Receiving recorded</p>
+          <p className="text-xs text-text-3">Inventory will be updated shortly</p>
         </div>
       </>
     );
@@ -360,7 +360,7 @@ export default function ReceivePage() {
 
   return (
     <>
-      <TopBar title="Receive & Capture" />
+      <TopBar title="Receive a delivery" />
 
       {!selectedPO ? (
         <div className="px-4 py-3">
@@ -368,22 +368,22 @@ export default function ReceivePage() {
             {/* Expected today */}
             <div>
               <div className="mb-2 flex items-center gap-2">
-                <Truck className="h-4 w-4 text-terracotta" />
-                <h2 className="text-sm font-semibold text-gray-900">
-                  Expected Today
+                <Truck className="h-4 w-4 text-brand-text" />
+                <h2 className="text-sm font-semibold text-text">
+                  Expected today
                 </h2>
-                <Badge className="bg-terracotta/10 text-[10px] text-terracotta-dark">
+                <Badge className="bg-brand-soft text-[10px] text-brand-text">
                   {pendingOrders.length}
                 </Badge>
               </div>
 
               {pendingOrders.length === 0 ? (
                 <div className="py-6 text-center">
-                  <Truck className="mx-auto h-6 w-6 text-gray-300" />
-                  <p className="mt-1.5 text-xs text-gray-400">
+                  <Truck className="mx-auto h-6 w-6 text-line-ctl" />
+                  <p className="mt-1.5 text-xs text-text-3">
                     No pending deliveries
                   </p>
-                  <p className="mt-0.5 text-[10px] text-gray-300">
+                  <p className="mt-0.5 text-[10px] text-line-ctl">
                     POs sent by procurement will appear here
                   </p>
                 </div>
@@ -392,15 +392,15 @@ export default function ReceivePage() {
                   {pendingOrders.map((po) => (
                     <Card
                       key={po.id}
-                      className="cursor-pointer transition-colors hover:bg-gray-50 active:bg-gray-100"
+                      className="cursor-pointer transition-colors hover:bg-sunken/60 active:bg-sunken"
                       onClick={() => openPO(po)}
                     >
                       <div className="flex items-center justify-between px-3 py-3">
                         <div>
-                          <p className="text-sm font-medium text-gray-900">
+                          <p className="text-sm font-medium text-text">
                             {po.supplier}
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-text-3">
                             {po.orderNumber} &middot; {po.items.length}{" "}
                             {po.items.length === 1 ? "item" : "items"}{" "}
                             &middot; RM {po.totalAmount.toFixed(2)}
@@ -417,7 +417,7 @@ export default function ReceivePage() {
                               ? formatRelativeDate(po.deliveryDate)
                               : "Pending"}
                           </Badge>
-                          <Package className="h-4 w-4 text-gray-400" />
+                          <Package className="h-4 w-4 text-text-3" />
                         </div>
                       </div>
                     </Card>
@@ -435,16 +435,16 @@ export default function ReceivePage() {
 
             {/* Recent */}
             <div>
-              <h2 className="mb-2 text-sm font-semibold text-gray-900">
-                Recently Received
+              <h2 className="mb-2 text-sm font-semibold text-text">
+                Recently received
               </h2>
               {recentReceivings.length === 0 ? (
                 <div className="py-6 text-center">
-                  <Package className="mx-auto h-6 w-6 text-gray-300" />
-                  <p className="mt-1.5 text-xs text-gray-400">
+                  <Package className="mx-auto h-6 w-6 text-line-ctl" />
+                  <p className="mt-1.5 text-xs text-text-3">
                     No recent receivings
                   </p>
-                  <p className="mt-0.5 text-[10px] text-gray-300">
+                  <p className="mt-0.5 text-[10px] text-line-ctl">
                     Tap a pending delivery above to start receiving
                   </p>
                 </div>
@@ -453,23 +453,23 @@ export default function ReceivePage() {
                   {recentReceivings.map((r) => (
                     <div
                       key={r.id}
-                      className="flex items-center justify-between rounded-lg border border-gray-100 bg-white px-3 py-2.5"
+                      className="flex items-center justify-between rounded-lg border border-line bg-surface px-3 py-2.5"
                     >
                       <div>
-                        <p className="text-sm text-gray-900">{r.supplier}</p>
-                        <p className="text-xs text-gray-400">
+                        <p className="text-sm text-text">{r.supplier}</p>
+                        <p className="text-xs text-text-3">
                           {r.orderNumber} &middot;{" "}
                           {formatRelativeDate(r.receivedAt)}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-text-3">
                           {r.items.length} {r.items.length === 1 ? "item" : "items"}
                         </span>
                         {r.status === "COMPLETE" ? (
-                          <Check className="h-4 w-4 text-green-500" />
+                          <Check className="h-4 w-4 text-ok" />
                         ) : (
-                          <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          <AlertTriangle className="h-4 w-4 text-warn" />
                         )}
                       </div>
                     </div>
@@ -486,10 +486,10 @@ export default function ReceivePage() {
             {/* PO header */}
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-gray-900">
+                <h2 className="text-sm font-semibold text-text">
                   {selectedPO.supplier}
                 </h2>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-text-3">
                   {selectedPO.orderNumber}
                 </p>
               </div>
@@ -523,19 +523,19 @@ export default function ReceivePage() {
                     key={item.id}
                     className={`overflow-hidden ${
                       isShort
-                        ? "border-red-200"
+                        ? "border-danger/30"
                         : isMatch
-                          ? "border-green-200"
+                          ? "border-ok/30"
                           : ""
                     }`}
                   >
                     <div className="px-3 py-2.5">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-gray-900">
+                          <p className="text-sm font-medium text-text">
                             {item.product}
                           </p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-text-3">
                             {item.sku} &middot;{" "}
                             {priorReceived > 0
                               ? `Balance: ${expected} of ${item.orderedOriginalQty ?? item.quantity} ordered (${priorReceived} already received)`
@@ -545,7 +545,7 @@ export default function ReceivePage() {
                           </p>
                         </div>
                         {isMatch && (
-                          <Check className="h-5 w-5 text-green-500" />
+                          <Check className="h-5 w-5 text-ok" />
                         )}
                         {isShort && (
                           <Badge
@@ -558,7 +558,7 @@ export default function ReceivePage() {
                         {isOver && (
                           <Badge
                             variant="outline"
-                            className="border-orange-300 text-[10px] text-orange-700"
+                            className="border-warn text-[10px] text-warn-text"
                           >
                             Over by {receivedNum - expected} {item.uom}
                             {priorReceived > 0 ? " — exceeds outstanding balance" : ""}
@@ -567,7 +567,7 @@ export default function ReceivePage() {
                       </div>
 
                       <div className="mt-2 flex items-center gap-2">
-                        <label className="text-xs text-gray-500">
+                        <label className="text-xs text-text-3">
                           Received:
                         </label>
                         <Input
@@ -580,7 +580,7 @@ export default function ReceivePage() {
                           }
                           className="h-8 w-24 text-center"
                         />
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-text-3">
                           {item.uom}
                         </span>
 
@@ -589,7 +589,7 @@ export default function ReceivePage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 text-xs text-green-600"
+                            className="h-7 text-xs text-ok-text"
                             onClick={() =>
                               updateReceivedQty(
                                 item.id,
@@ -623,7 +623,7 @@ export default function ReceivePage() {
                       {/* Expiry date for perishables */}
                       {isPerishable(item.product) && (
                         <div className="mt-2 flex items-center gap-2">
-                          <label className="text-xs text-gray-500">
+                          <label className="text-xs text-text-3">
                             Expiry:
                           </label>
                           <Input
@@ -647,8 +647,8 @@ export default function ReceivePage() {
 
             {/* Invoice photo capture */}
             <div>
-              <h3 className="mb-1.5 text-sm font-medium text-gray-900">
-                Invoice Photo
+              <h3 className="mb-1.5 text-sm font-medium text-text">
+                Invoice photo
               </h3>
               <div className="flex flex-wrap gap-2">
                 {invoicePhotos.map((photo, i) => (
@@ -670,17 +670,17 @@ export default function ReceivePage() {
                   </div>
                 ))}
                 {compressing ? (
-                  <div className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-terracotta/30 text-terracotta">
+                  <div className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-brand/30 text-brand-text">
                     <Loader2 className="h-5 w-5 animate-spin" />
                     <span className="text-[10px]">Compressing</span>
                   </div>
                 ) : (
                   <button
                     onClick={() => setCameraOpen(true)}
-                    className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 text-gray-400 hover:border-terracotta hover:text-terracotta"
+                    className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-line-2 text-text-3 hover:border-ink hover:text-brand-text"
                   >
                     <Camera className="h-5 w-5" />
-                    <span className="text-[10px]">Add Photo</span>
+                    <span className="text-[10px]">Add photo</span>
                   </button>
                 )}
               </div>
@@ -689,7 +689,7 @@ export default function ReceivePage() {
             {/* Submit */}
             <div className="pb-16">
               {hasDiscrepancies && (
-                <div className="mb-2 flex items-center gap-2 rounded-lg bg-terracotta/5 px-3 py-2 text-xs text-terracotta-dark">
+                <div className="mb-2 flex items-center gap-2 rounded-lg bg-brand-soft px-3 py-2 text-xs text-brand-text">
                   <AlertTriangle className="h-4 w-4 shrink-0" />
                   <span>
                     Some quantities don&apos;t match. Discrepancies will be
@@ -698,12 +698,12 @@ export default function ReceivePage() {
                 </div>
               )}
               {submitError && (
-                <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <div className="mb-2 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-text">
                   {submitError}
                 </div>
               )}
               <Button
-                className="w-full bg-terracotta hover:bg-terracotta-dark"
+                className="w-full bg-ink hover:bg-ink-hover"
                 disabled={!allReceived || submitting}
                 onClick={submitReceiving}
               >
@@ -712,7 +712,7 @@ export default function ReceivePage() {
                 ) : (
                   <FileText className="mr-1.5 h-4 w-4" />
                 )}
-                {submitting ? "Submitting..." : "Confirm Received"}
+                {submitting ? "Submitting..." : "Confirm received"}
               </Button>
             </div>
           </div>
@@ -726,7 +726,7 @@ export default function ReceivePage() {
       <CameraCaptureModal
         open={cameraOpen}
         facingMode="environment"
-        title="Photograph Invoice"
+        title="Photograph the invoice"
         onCapture={handleCameraCapture}
         onClose={() => setCameraOpen(false)}
       />
