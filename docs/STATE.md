@@ -11,6 +11,14 @@ current month.
 
 ## Verified facts
 
+- 2026-11-19 — **Clock-ins / Overtime split, Pulse scrapped, PT hours tab** (PR celsiuscoffee/celsius-ops#1280,
+  not merged). Owner go: OT is approved ONLY on Overtime, by Ariff and managers; confirming a
+  day on Clock-ins files OT as pending (`generateOtRequests` mode `refresh`; `approved` mode
+  removed). Already-approved OT left as is. Pulse crons/routes/tab removed (5,268 unacked
+  alerts); the nudges still use `lib/ops-pulse` detectors + ledger. Monitor tab removed
+  (duplicate of Inbox). Next: staff web (38 pages) and staff-native (37 screens) are NOT yet
+  on Celsius UI — owner asked for it; staff-native merge is an OTA to manager phones.
+
 - 2026-11-18 — **Back office menu now follows Gosamē Office's structure** (owner: "only follow
   the ones gosame did"; `backoffice-structure.md` §2f). Sections: Agents; Sell (Sales,
   Customers); Make and supply (Food, Stock, Orders); Run the business (Team, Money,
