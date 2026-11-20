@@ -8,7 +8,6 @@ export default function HrLayout() {
       <Stack.Screen name="index" options={{ title: "Me" }} />
       <Stack.Screen name="scoreboard" options={{ title: "My scoreboard" }} />
       <Stack.Screen name="shifts" options={{ title: "My shifts" }} />
-      <Stack.Screen name="open-shifts" options={{ title: "Open shifts" }} />
       <Stack.Screen name="availability" options={{ title: "My availability" }} />
       <Stack.Screen name="whos-working" options={{ title: "Who's working" }} />
       <Stack.Screen name="attendance" options={{ title: "Attendance" }} />

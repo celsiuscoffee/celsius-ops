@@ -66,7 +66,7 @@ module: everyone signed in has a Today (the page itself only shows what they can
 | `/hr/shifts` | My shifts, swaps | Keep | |
 | `/hr/whos-working` | Who is on shift each day | Keep | |
 | `/hr/availability` | Part-timers' weekly pattern and days off | Keep | Part-timers and interns only (layout gate unchanged) |
-| `/hr/open-shifts` | Ask for an open slot | Keep, unlinked | Hidden by the owner on 2026-07-22 ("slots logic removed"); the page stays so the entry can come back |
+| `/hr/open-shifts` | Ask for an open slot | Removed (redirects to Shifts) | Owner 20 Nov 2026: "follow gosame" (Gosamē's Staff app has no open-shift page); slots off since 22 Jul |
 | `/hr/leave` | Balances and asking for leave | Keep | |
 | `/hr/overtime` | Ask for overtime | Keep, unlinked | Owner/admin preview only (layout gate unchanged); overtime is captured from attendance. **Owner decision:** open it or delete it |
 | `/hr/payslips` | Payslips | Keep | |
@@ -108,6 +108,8 @@ office may use them). Every old URL still lands somewhere.
 ## 5. Open for the owner
 
 1. `/hr/overtime`: open to staff, or delete (it has been an owner-only preview since it was built).
-2. `/hr/open-shifts`: still hidden since 22 Jul; delete if slots are not coming back.
+2. `/hr/open-shifts`: removed 20 Nov 2026 (owner: "follow gosame").
+
+Overtime (owner 20 Nov 2026: "follow staff app gosame on how they show their OT"): the request page stays an owner/admin preview, as in Gosamē; staff see their overtime on clock-in history — approved hours, and hours "with your manager" (pending on the Overtime page), per day and in total.
 3. The redirects for the SOP pages go to the back office; anyone with `ops:sops` but no
    back-office login will land on its sign-in page.

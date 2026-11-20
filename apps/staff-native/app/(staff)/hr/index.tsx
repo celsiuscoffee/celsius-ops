@@ -5,7 +5,6 @@ import type { ComponentType } from "react";
 import {
   Calendar,
   CalendarClock,
-  CalendarPlus,
   ChevronRight,
   Clock,
   FileText,
@@ -37,7 +36,6 @@ type Item = {
 
 const SHIFTS: Item[] = [
   { href: "/(staff)/hr/shifts", title: "My shifts", subtitle: "Today and upcoming", icon: Calendar },
-  { href: "/(staff)/hr/open-shifts", title: "Open shifts", subtitle: "Extra shifts you can ask for", icon: CalendarPlus },
   { href: "/(staff)/hr/whos-working", title: "Who's working", subtitle: "Your team's shifts by day", icon: Users },
   { href: "/(staff)/hr/availability", title: "My availability", subtitle: "Weekly pattern and days off", icon: CalendarClock },
 ];

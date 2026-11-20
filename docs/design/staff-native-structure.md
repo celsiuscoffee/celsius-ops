@@ -53,7 +53,7 @@ navigation; its path now opens the screen that does the job.
 | `(staff)/hr` — **Me** | Everything about the person | Keep, merged | Was "HR". Its clock card repeated Today's (now shown only for people without an outlet, whom Today does not show it to). Its whole allowance card repeated My scoreboard: now one row, "RM x of RM y in November · n days left". Profile is the first row |
 | `(staff)/hr/scoreboard` | KPIs and allowance this month | Keep, merged | Took the itemised deductions (late, absent, reviews) that only the old HR card had, so nothing was lost |
 | `(staff)/hr/shifts` | My upcoming shifts, add to calendar | Keep | |
-| `(staff)/hr/open-shifts` | Ask for an extra shift | Keep, **linked** | Was linked from nowhere (orphan route). Now "Open shifts" under Me › Shifts |
+| `(staff)/hr/open-shifts` | Ask for an extra shift | Removed | Owner 20 Nov 2026: "follow gosame" — Gosamē's phone app has no open-shift screen; slots off since 22 Jul |
 | `(staff)/hr/whos-working` | Team on shift by day | Keep | |
 | `(staff)/hr/availability` | Weekly pattern, days off (part-timers) | Keep | |
 | `(staff)/hr/attendance` | Clock-in history, overtime | Keep | |
