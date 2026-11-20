@@ -35,7 +35,7 @@ const FLAG_LABELS: Record<string, { label: string; color: string }> = {
 
 export default function MyAttendancePage() {
   const [days, setDays] = useState(30);
-  const { data, error, mutate } = useFetch<{ logs: AttendanceLog[]; stats: Stats }>(`/api/hr/attendance?days=${days}`);
+  const { data, error, mutate } = useFetch<{ logs: AttendanceLog[]; stats: Stats; pendingOtByDate?: Record<string, number> }>(`/api/hr/attendance?days=${days}`);
   const logs = data?.logs || [];
   const stats = data?.stats || { totalHours: 0, totalOT: 0, pendingOT: 0, daysWorked: 0, period: days };
 
@@ -84,7 +84,7 @@ export default function MyAttendancePage() {
         <KeyNumber
           label="Overtime"
           value={`${stats.totalOT}h`}
-          note={stats.pendingOT > 0 ? <span className="text-warn-text" title="Paid once your manager approves the attendance">+{stats.pendingOT}h to approve</span> : undefined}
+          note={<span className="text-text-3">approved{stats.pendingOT > 0 ? <span className="text-info-text"> · +{stats.pendingOT}h with your manager</span> : null}</span>}
         />
       </div>
 
@@ -104,6 +104,7 @@ export default function MyAttendancePage() {
             const dayName = d.toLocaleDateString("en-MY", { weekday: "short" });
             const dateStr = d.toLocaleDateString("en-MY", { day: "numeric", month: "short" });
             const dayTotal = dayLogs.reduce((s, l) => s + (Number(l.total_hours) || 0), 0);
+            const dayPendingOt = data?.pendingOtByDate?.[date] ?? 0;
 
             return (
               <div key={date} className="rounded-2xl border border-line bg-surface p-3">
@@ -136,13 +137,7 @@ export default function MyAttendancePage() {
                             floor as payroll and the stats above; the old >= 1
                             hid a 0.5h tail that the API was already counting. */}
                         {Number(log.overtime_hours) >= 0.5 && (
-                          log.ai_status === "approved" || log.final_status === "approved" ? (
-                            <span className="font-medium text-info-text">+{log.overtime_hours}h OT</span>
-                          ) : (
-                            <span className="font-medium text-warn-text" title="Paid only once your manager approves this attendance">
-                              +{log.overtime_hours}h OT (pending)
-                            </span>
-                          )
+                          <span className="font-medium text-info-text">+{log.overtime_hours}h overtime</span>
                         )}
                         <div className="ml-auto flex gap-1">
                           {log.ai_flags.filter((f) => f !== "migrated_from_briohr").map((f) => {
@@ -157,6 +152,11 @@ export default function MyAttendancePage() {
                       </div>
                     );
                   })}
+                  {dayPendingOt > 0 && (
+                    <p className="flex items-center gap-2 text-xs font-medium text-info-text" title="Paid once a manager approves it on the Overtime page">
+                      +{dayPendingOt}h overtime · with your manager
+                    </p>
+                  )}
                 </div>
               </div>
             );

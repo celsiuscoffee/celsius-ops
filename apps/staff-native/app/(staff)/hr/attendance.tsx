@@ -12,6 +12,14 @@ export default function AttendanceScreen() {
     queryFn: () => fetchAttendance(30),
   });
   const items = data?.logs ?? [];
+  // Overtime still with a manager shows once per day, on that day's first row.
+  const mytDate = (iso: string) => new Date(new Date(iso).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const firstOfDay = new Set<string>();
+  const seenDays = new Set<string>();
+  for (const it of items) {
+    const d = mytDate(it.clock_in);
+    if (!seenDays.has(d)) { seenDays.add(d); firstOfDay.add(it.id); }
+  }
   const stats = data?.stats;
 
   return (
@@ -35,7 +43,12 @@ export default function AttendanceScreen() {
           keyExtractor={(a) => a.id}
           ListHeaderComponent={stats ? <StatsCard stats={stats} /> : null}
           ItemSeparatorComponent={() => <View className="h-2" />}
-          renderItem={({ item }) => <AttendanceCard item={item} />}
+          renderItem={({ item }) => (
+          <AttendanceCard
+            item={item}
+            pendingOt={firstOfDay.has(item.id) ? data?.pendingOtByDate?.[mytDate(item.clock_in)] ?? 0 : 0}
+          />
+        )}
           ListEmptyComponent={
             <Text className="mt-12 text-center text-sm text-text-2">
               No clock-ins in the last 30 days. They show here after your next shift.
@@ -48,7 +61,7 @@ export default function AttendanceScreen() {
   );
 }
 
-function StatsCard({ stats }: { stats: { totalHours: number; totalOT: number; daysWorked: number } }) {
+function StatsCard({ stats }: { stats: { totalHours: number; totalOT: number; pendingOT?: number; daysWorked: number } }) {
   return (
     <View className="mb-4 rounded-2xl border border-line bg-surface p-5">
       <Text className="text-sm font-body-semi text-text-2">
@@ -59,6 +72,11 @@ function StatsCard({ stats }: { stats: { totalHours: number; totalOT: number; da
         <Stat label="Hours" value={Number(stats.totalHours ?? 0).toFixed(1)} />
         <Stat label="Overtime" value={Number(stats.totalOT ?? 0).toFixed(1)} />
       </View>
+      {Number(stats.pendingOT ?? 0) > 0 ? (
+        <Text className="mt-3 text-sm text-info-text">
+          +{Number(stats.pendingOT).toFixed(1)} h overtime with your manager
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -74,15 +92,14 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function AttendanceCard({ item }: { item: AttendanceItem }) {
+function AttendanceCard({ item, pendingOt }: { item: AttendanceItem; pendingOt: number }) {
   // Malaysia time, whatever zone the phone is in.
   const dayLabel = mytDayLabel(item.clock_in);
   const ot = Number(item.overtime_hours ?? 0);
-  // OT pays in 30-minute brackets (owner 2026-09-03: "pay the 0.5h"); the
-  // stats card counted from 0.5 h while rows hid anything under 1 h, so the
-  // total and the rows disagreed. OT only reaches payroll once a manager has
-  // approved the day, so say which state it is in — the web app does.
-  const otApproved = item.final_status === "approved" || item.final_status === "adjusted";
+  // OT pays in 30-minute brackets (owner 2026-09-03: "pay the 0.5h"). Since
+  // 19 Nov the clocked tail lands on the log only once a manager approves it
+  // on the Overtime page; until then it shows as "with your manager" (the
+  // way Gosamē's Staff app shows it, owner 20 Nov 2026).
   const status =
     item.final_status === "rejected" ? "Rejected"
     : item.final_status === "adjusted" ? "Times fixed"
@@ -99,8 +116,11 @@ function AttendanceCard({ item }: { item: AttendanceItem }) {
       </View>
       <Text className="mt-1 text-xs text-text-2">
         {clock12(item.clock_in)} – {item.clock_out ? clock12(item.clock_out) : "still in"}
-        {ot >= 0.5 ? `  ·  Overtime ${ot} h${otApproved ? "" : ", waiting for approval"}` : ""}
+        {ot >= 0.5 ? `  ·  Overtime ${ot} h` : ""}
       </Text>
+      {pendingOt > 0 ? (
+        <Text className="mt-1 text-xs font-body-semi text-info-text">+{pendingOt} h overtime · with your manager</Text>
+      ) : null}
       {status ? (
         <Text className={`mt-1 text-xs font-body-semi ${item.final_status === "rejected" ? "text-danger-text" : "text-text-3"}`}>
           {status}
