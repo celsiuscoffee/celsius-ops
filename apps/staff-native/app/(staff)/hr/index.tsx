@@ -3,6 +3,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { useFocusEffect, useRouter } from "expo-router";
 import type { ComponentType } from "react";
 import {
+  Banknote,
   Calendar,
   CalendarClock,
   ChevronRight,
@@ -43,6 +44,8 @@ const SHIFTS: Item[] = [
 const TIME_AND_PAY: Item[] = [
   { href: "/(staff)/hr/attendance", title: "Attendance", subtitle: "Clock-in history and overtime", icon: Clock },
   { href: "/(staff)/hr/leave", title: "Leave", subtitle: "Balances and requests", icon: Plane },
+  // Pay (owner 20 Nov 2026): pay so far, payday, overtime waiting, latest payslip.
+  { href: "/(staff)/hr/pay", title: "Pay", subtitle: "Pay so far, payday and overtime waiting", icon: Banknote },
   { href: "/(staff)/hr/payslips", title: "Payslips", subtitle: "Monthly pay history", icon: Wallet },
 ];
 
