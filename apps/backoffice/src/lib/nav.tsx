@@ -69,6 +69,7 @@ import {
   Printer,
   Landmark,
   ChefHat,
+  ListChecks,
 } from "lucide-react";
 import { GRANTABLE_MODULE_KEYS } from "@/lib/modules";
 
@@ -387,10 +388,18 @@ export const NAV_SECTIONS: NavSection[] = [
     icon: <Coins className={ICON_SIZE} />,
     subgroups: [
       {
+        // Gosamē's Money starts with Today (owner, 20 Nov 2026): one list of
+        // money decisions, Tax & close under it.
+        label: "Today",
+        items: [
+          { label: "Today",       href: "/finance/today",      icon: <ListChecks className={ICON_SIZE} />,      moduleKey: "finance:reports" },
+          { label: "Tax & close", href: "/finance/compliance", icon: <CalendarClock className={ICON_SIZE} />,   moduleKey: "finance:reports" },
+        ],
+      },
+      {
         label: "Overview",
         items: [
           { label: "Overview",    href: "/finance",            icon: <LayoutDashboard className={ICON_SIZE} />, moduleKey: "finance:reports" },
-          { label: "Tax & close", href: "/finance/compliance", icon: <CalendarClock className={ICON_SIZE} />,   moduleKey: "finance:reports" },
         ],
       },
       {

@@ -3,11 +3,13 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { useFocusEffect, useRouter } from "expo-router";
 import type { ComponentType } from "react";
 import {
+  Banknote,
   Calendar,
   CalendarClock,
   ChevronRight,
   Clock,
   FileText,
+  Inbox,
   Plane,
   Star,
   Target,
@@ -17,7 +19,9 @@ import {
 } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
-import { List, ListRow, Section } from "../../../components/ui";
+import { List, ListRow, Pill, Section } from "../../../components/ui";
+import { approvalsCount, approvalsSummary } from "../../../lib/hr/approvals";
+import { useApprovals } from "../../../lib/hr/use-approvals";
 import { fetchAllowances, fetchMyReviews, type AllowanceBreakdown } from "../../../lib/hr/api";
 import { getClockStatus, type ClockStatus } from "../../../lib/hr/clock";
 import { fetchProfile } from "../../../lib/hr/profile";
@@ -43,6 +47,8 @@ const SHIFTS: Item[] = [
 const TIME_AND_PAY: Item[] = [
   { href: "/(staff)/hr/attendance", title: "Attendance", subtitle: "Clock-in history and overtime", icon: Clock },
   { href: "/(staff)/hr/leave", title: "Leave", subtitle: "Balances and requests", icon: Plane },
+  // Pay (owner 20 Nov 2026): pay so far, payday, overtime waiting, latest payslip.
+  { href: "/(staff)/hr/pay", title: "Pay", subtitle: "Pay so far, payday and overtime waiting", icon: Banknote },
   { href: "/(staff)/hr/payslips", title: "Payslips", subtitle: "Monthly pay history", icon: Wallet },
 ];
 
@@ -70,6 +76,10 @@ export default function MeScreen() {
   // Availability is a part-timer tool (interns too) — full-timers have
   // manager-set schedules, so hide it for them.
   const [isPartTimer, setIsPartTimer] = useState(false);
+  const approvals = useApprovals();
+  const approvalsTotal = approvals.data ? approvalsCount(approvals.data) : 0;
+  const refetchApprovals = approvals.refetch;
+  const approvalsOn = approvals.enabled;
 
   const load = useCallback(async () => {
     try {
@@ -101,7 +111,8 @@ export default function MeScreen() {
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load]),
+      if (approvalsOn) refetchApprovals();
+    }, [load, approvalsOn, refetchApprovals]),
   );
 
   const isClockedIn = !!clock?.activeLog;
@@ -140,6 +151,7 @@ export default function MeScreen() {
             onRefresh={() => {
               setRefreshing(true);
               load();
+              if (approvalsOn) refetchApprovals();
             }}
             tintColor={C["text-3"]}
             colors={[C["text-2"]]}
@@ -168,6 +180,23 @@ export default function MeScreen() {
           </View>
           <ChevronRight color={C["text-3"]} size={18} />
         </Pressable>
+
+        {/* Managers and owners: what waits on them (part-timer hours, overtime,
+            leave, swaps). Same query as the Approvals screen, same count. */}
+        {approvals.enabled ? (
+          <Section title="To approve">
+            <List>
+              <ListRow
+                icon={Inbox}
+                tone={approvalsTotal > 0 ? "warn" : "neutral"}
+                title="Approvals"
+                meta={approvals.data ? approvalsSummary(approvals.data) : "Leave, overtime, swaps and part-timer hours"}
+                trailing={approvalsTotal > 0 ? <Pill label={String(approvalsTotal)} tone="warning" /> : undefined}
+                onPress={() => router.push("/(staff)/hr/approvals")}
+              />
+            </List>
+          </Section>
+        ) : null}
 
         {/* Today shows the clock card only for people with an outlet; anyone
             else clocks in from here. */}

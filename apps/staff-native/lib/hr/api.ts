@@ -250,6 +250,54 @@ export async function submitLeave(req: {
   return body as { success: boolean };
 }
 
+// Pay (owner 20 Nov 2026): the same summary the staff web Pay page shows,
+// from /api/hr/pay. Read-only; payroll's own numbers. Shape mirrors
+// PayResponse in apps/staff/src/lib/hr/pay-summary.ts (the native app cannot
+// import from the web app).
+export type PayRunStatus = "preparing" | "confirmed" | "paid";
+export type PayWeek = {
+  start: string;
+  end: string;
+  shifts: number;
+  clockedHours: number;
+  signedOff: number;
+  onShift: boolean;
+  otApprovedHours: number;
+  otWaitingHours: number;
+};
+export type PaySummary = {
+  today: string;
+  cycle: "monthly" | "weekly";
+  monthly: null | {
+    month: string;
+    basicSalary: number | null;
+    additions: { label: string; amount: number }[];
+    allowance:
+      | { state: "counted"; earned: number; max: number; daysRemaining: number }
+      | { state: "probation"; earned: number; max: number }
+      | { state: "not_eligible" }
+      | { state: "unavailable" };
+    soFar: number | null;
+    overtime: { approvedHours: number; waitingHours: number; waiting: { date: string; hours: number }[] };
+    payday: string | null;
+  };
+  weekly: null | {
+    thisWeek: PayWeek;
+    lastWeek: PayWeek & { run: { status: PayRunStatus; payday: string | null } | null };
+  };
+  lastMonth: null | {
+    month: string;
+    status: PayRunStatus | "not_started";
+    payday: string | null;
+    opensOn: string | null;
+  };
+  latestPayslip: null | { id: string; label: string; netPay: number; weekly: boolean };
+};
+
+export function fetchPay() {
+  return api<PaySummary>("/api/hr/pay");
+}
+
 export function fetchPayslips() {
   return api<{ payslips: Payslip[] }>("/api/hr/payslips");
 }

@@ -31,10 +31,20 @@ export function fetchWithTimeout(
   );
 }
 
-type ApiOptions = RequestInit & { auth?: boolean };
+type ApiOptions = RequestInit & {
+  auth?: boolean;
+  /** Another Celsius app to call (default: the staff app, API_BASE_URL). */
+  baseUrl?: string;
+  /**
+   * Sign out on a 401 (default true). Only the staff app's 401 means the
+   * session is dead. The back office answers 401 for "not a manager" too, so
+   * calls to it pass false: a refused approval must not log the person out.
+   */
+  signOutOn401?: boolean;
+};
 
 export async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
-  const { auth = true, headers, ...rest } = opts;
+  const { auth = true, baseUrl = API_BASE_URL, signOutOn401 = true, headers, ...rest } = opts;
   const finalHeaders: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -50,7 +60,7 @@ export async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
 
   let res: Response;
   try {
-    res = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
+    res = await fetchWithTimeout(`${baseUrl}${path}`, {
       ...rest,
       headers: finalHeaders,
     });
@@ -68,7 +78,7 @@ export async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
     );
   }
 
-  if (res.status === 401 && auth) {
+  if (res.status === 401 && auth && signOutOn401) {
     // Token expired or revoked, wipe BOTH the disk session AND the
     // in-memory Zustand store. Previously only AsyncStorage was
     // cleared, leaving the store with a dead session: UI kept

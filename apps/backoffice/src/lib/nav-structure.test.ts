@@ -73,9 +73,10 @@ describe("shell placement", () => {
     // 18 Nov 2026: the menu follows Gosamē Office's sections (owner: "only
     // follow the ones gosame did"; docs/design/backoffice-structure.md §2f).
     // Adding a page means taking one away, or a reason here.
+    // 31: Money › Today (owner, 20 Nov 2026: "ok" to Gosamē's Money › Today).
     const rail = NAV_SECTIONS.filter((s) => s.placement !== "footer");
     const pages = rail.reduce((n, s) => n + railPages(s, owner).length, 0);
-    expect(pages).toBeLessThanOrEqual(30);
+    expect(pages).toBeLessThanOrEqual(31);
     expect(rail.map((s) => s.label)).toEqual([
       "Agents", "Sales", "Customers", "Food", "Stock", "Orders", "Team", "Money", "Standards",
     ]);
@@ -101,7 +102,11 @@ describe("shell placement", () => {
   });
 
   it("Money follows Gosamē's pages exactly", () => {
-    expect(railPages(section("Money"), owner).map((p) => p.label)).toEqual(["Overview", "Bank inbox", "Cash flow", "Bills", "Reports"]);
+    expect(railPages(section("Money"), owner).map((p) => p.label)).toEqual(["Today", "Overview", "Bank inbox", "Cash flow", "Bills", "Reports"]);
+    // Money › Today (owner, 20 Nov 2026), with Tax & close under it, as Gosamē.
+    expect(locate("/finance/today", owner)?.page?.tabs.map((t) => t.label)).toEqual(["Today", "Tax & close"]);
+    expect(locate("/finance/compliance", owner)?.page?.label).toBe("Today");
+    expect(locate("/finance", owner)?.page?.label).toBe("Overview");
     expect(locate("/finance/cashflow", owner)?.page?.tabs.map((t) => t.label)).toEqual(["Cash flow", "Bank statements", "Regular bills"]);
   });
 

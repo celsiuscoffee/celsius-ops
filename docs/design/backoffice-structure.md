@@ -387,6 +387,21 @@ bills), Bills (the pay-and-claim page), Reports (Ledger, Fixed assets). Cash tra
 Monthly are off the menu, still open by URL and ⌘K. Gosamē's Today page has no Celsius
 counterpart, so Tax & close sits under Overview.
 
+Follow-up (owner, 20 Nov 2026, "ok" to "Money › Today: one list of money decisions — bills
+to pay, bank lines the matcher wasn't sure of, payroll to approve — each with its own
+button"): Money now starts with **Today** (`/finance/today`), with Tax & close under it, as
+Gosamē. Money is Today (Tax & close), Overview, Bank inbox, Cash flow (Bank statements,
+Regular bills), Bills, Reports (Ledger, Fixed assets); the menu cap in
+`nav-structure.test.ts` goes from 30 to 31 pages for it. The page only lists decisions
+(hard rule 6): key numbers (cash in bank from Overview's read, bills due this week, bank
+lines to check, payroll waiting), then payroll runs worked out and waiting (Review opens
+the payroll page, where approval runs its own checks), supplier bills due within 7 days
+(Open goes to Invoices filtered to that bill), payment requests (the Inbox's own source,
+Review opens Bills), and the Bank inbox's unsure matches and possible double payments
+(Match is the Bank inbox's own confirm endpoint, behind a confirmation; double payments
+open the Bank inbox). Reads: `GET /api/finance/today` (new, read only),
+`GET /api/finance/ap-match` and `GET /api/finance/home` (existing).
+
 ## 3. Every page, sorted into its section
 
 Key: **Keep** = becomes a tab · **Merge** = folds into the named page · **Retire** = hide,
