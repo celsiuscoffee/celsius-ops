@@ -11,6 +11,18 @@ current month.
 
 ## Verified facts
 
+- 2026-11-20 — **Pay view for staff** (owner "ok", modelled on Gosamē's Staff Pay tab; not merged).
+  Web `/hr/pay` (row under Shifts › Time off and pay, above Payslips) + manager app Me › Time and
+  pay › Pay, both from new read-only `GET /api/hr/pay` (session.id only; pure rules in
+  `apps/staff/src/lib/hr/pay-summary.ts` + test). FT: estimate = profile basic_salary + allowance
+  engine total (0 on probation, `confirmed_at`) + recurring additions; OT in HOURS only (approved by
+  payroll's isOtApproved rule, waiting from hr_overtime_requests pending); last month's run status;
+  payday "by the 7th" unless a run carries `payday`. PT: this/last Mon–Sun week shifts, clocked
+  hours, manager sign-offs (pt-log-state rule), last week's run status. No payroll logic changed.
+  Open: monthly calculator sets no `payday` on runs (run page defaults 3rd, staff assistant says
+  "by the 7th"); staff app's allowance engine copy has drifted from the back office's (no flat
+  allowance, no hand edits); interns shown the weekly view. staff-native part ships by OTA.
+
 - 2026-11-19 — **Staff web + manager app on Celsius UI** (branch claude/hopeful-heisenberg-9eub5y,
   not merged). Web: tabs Today · Checklists · Shifts · Stock · Audit (managers), Me from the
   initials button; /dashboard → /home; SOP editing/categories/schedules redirect to back office.
