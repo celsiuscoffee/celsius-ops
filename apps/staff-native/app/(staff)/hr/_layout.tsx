@@ -16,6 +16,7 @@ export default function HrLayout() {
       <Stack.Screen name="memos" options={{ title: "Memos" }} />
       <Stack.Screen name="reviews" options={{ title: "Feedback" }} />
       <Stack.Screen name="my-skills" options={{ title: "My skills" }} />
+      <Stack.Screen name="approvals" options={{ title: "Approvals" }} />
     </Stack>
   );
 }

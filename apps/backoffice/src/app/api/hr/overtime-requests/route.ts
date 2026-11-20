@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, getSessionFromRequest } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { resolveVisibleUserIds } from "@/lib/hr/scope";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 // GET /api/hr/overtime-requests?status=pending&user_id=...&from=YYYY-MM-DD&to=YYYY-MM-DD
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
@@ -224,7 +224,7 @@ export async function POST(req: NextRequest) {
 
 // PATCH: manager approves/rejects an OT request
 export async function PATCH(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

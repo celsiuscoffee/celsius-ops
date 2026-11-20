@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSessionFromRequest } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { canAccessOutlet } from "@/lib/hr/scope";
@@ -32,7 +32,7 @@ const flatten = (s: ShiftRow) => ({
 
 // GET — admin queue: list swap requests, filter by status, enrich with names + shift dates.
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
 
 // PATCH — approve / reject. body: { swap_id, action, rejection_reason? }
 export async function PATCH(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
