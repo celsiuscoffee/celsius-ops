@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSessionFromRequest } from "@/lib/auth";
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { prisma } from "@/lib/prisma";
 import { getAccessibleOutletIds } from "@/lib/hr/scope";
@@ -29,7 +29,7 @@ type LogRow = {
 };
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -161,6 +161,10 @@ export async function GET(req: NextRequest) {
     (byUser.get(l.user_id) ?? byUser.set(l.user_id, []).get(l.user_id)!).push({
       id: l.id, date: dateStr,
       clock_in: l.clock_in, clock_out: l.clock_out,
+      // The rostered window the paid span was measured against (display only:
+      // the manager app shows rostered vs clocked on each shift to sign off).
+      rostered_start: window?.start ? window.start.toISOString() : null,
+      rostered_end: window?.end ? window.end.toISOString() : null,
       worked_hours: worked, paid_hours: paid, capped: paid < worked,
       // Why the paid figure differs from the clocked one — the manager needs to
       // see this to confirm honestly, and it's what an unapproved OT tail looks
@@ -196,7 +200,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromRequest(req);
   if (!session || !["OWNER", "ADMIN", "MANAGER"].includes(session.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
