@@ -16,10 +16,8 @@ import { getOutletSst } from "@/lib/outlet-sst";
 import { fetchValidTableLabels } from "@/lib/table-layout";
 import { resolveOrderReward } from "@celsius/shared";
 import { reconcileNonStackTier } from "@/lib/loyalty/non-stack-tier";
+import { insertWithUniqueOrderNumber } from "@/lib/order-number";
 
-function generateOrderNumber(): string {
-  return `C-${Date.now().toString(36).slice(-4).toUpperCase()}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`;
-}
 
 /**
  * POST /api/checkout/initiate
@@ -430,7 +428,6 @@ export async function POST(request: NextRequest) {
       : null;
 
     // ── Compute totals server-side ─────────────────────────────────────────
-    const orderNumber          = generateOrderNumber();
     const subtotalSen          = serverSubtotalSen;
     // SECURITY: ignore the legacy client `discountSen` (no first-party client
     // sends it; 0 orders have ever used it). Server-authoritative discounts
@@ -455,7 +452,7 @@ export async function POST(request: NextRequest) {
       ? "wallet"
       : paymentMethod;
 
-    const { data, error: orderError } = await supabase
+    const { data, error: orderError } = await insertWithUniqueOrderNumber((orderNumber) => supabase
       .from("orders")
       .insert({
         order_number:           orderNumber,
@@ -496,7 +493,7 @@ export async function POST(request: NextRequest) {
         source:                 "web_qr",            // origin attribution (see migration add_orders_source)
       })
       .select()
-      .single();
+      .single());
 
     if (orderError || !data) {
       console.error("Order insert error:", orderError);
