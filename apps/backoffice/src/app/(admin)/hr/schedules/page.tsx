@@ -3,7 +3,8 @@
 import { useFetch } from "@/lib/use-fetch";
 import { minConcurrentInSlot } from "@/lib/hr/coverage";
 import { minutesOfDay, normalizeShiftTime } from "@/lib/hr/shift-time";
-import { Fragment, useState, useMemo, useEffect } from "react";
+import { placePicker } from "@/lib/hr/picker-placement";
+import { Fragment, useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   Bot, CalendarDays, Send, Loader2, ArrowLeftRight,
@@ -137,7 +138,7 @@ export default function SchedulesPage() {
   const [outlets, setOutlets] = useState<{ id: string; name: string }[]>([]);
   const [selectedOutlet, setSelectedOutlet] = useState<string>("");
   const [weekStart, setWeekStart] = useState(getNextMonday());
-  const [pickerOpen, setPickerOpen] = useState<{ userId: string; date: string; top: number; left: number } | null>(null);
+  const [pickerOpen, setPickerOpen] = useState<{ userId: string; date: string; top: number; left: number; maxHeight: number } | null>(null);
   // Custom hours form state — opened from inside picker
   const [customForm, setCustomForm] = useState<{ start: string; end: string; breakMinutes: number } | null>(null);
   // Same parser the API uses, so the button and the server never disagree
@@ -151,25 +152,24 @@ export default function SchedulesPage() {
   const openPicker = (userId: string, date: string, e: React.MouseEvent<HTMLButtonElement>) => {
     if (isPublished) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const POPUP_WIDTH = 224; // w-56
-    // Cap should match the CSS max-h-[70vh] on the popup container.
-    const POPUP_MAX_HEIGHT = Math.min(window.innerHeight * 0.7, 480);
-    const left = Math.min(rect.left, window.innerWidth - POPUP_WIDTH - 8);
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    // Prefer opening below the cell. If there's not enough room below AND
-    // there's more space above, flip up. Otherwise clamp to the viewport so
-    // the popup's internal scroll has a visible window to scroll inside.
-    let top: number;
-    if (spaceBelow < POPUP_MAX_HEIGHT && spaceAbove > spaceBelow) {
-      top = Math.max(8, rect.top - POPUP_MAX_HEIGHT - 4);
-    } else {
-      top = Math.min(rect.bottom + 4, window.innerHeight - POPUP_MAX_HEIGHT - 8);
-      top = Math.max(8, top);
-    }
-    setPickerOpen({ userId, date, top, left });
+    // The VISIBLE viewport: on phones/tablets window.innerHeight can include
+    // the area behind the browser toolbar, which pushed the picker's bottom
+    // (and the custom-hours Save button) off-screen.
+    const vv = window.visualViewport;
+    const place = placePicker(
+      { top: rect.top, bottom: rect.bottom, left: rect.left },
+      { width: vv?.width ?? window.innerWidth, height: vv?.height ?? window.innerHeight },
+    );
+    setPickerOpen({ userId, date, ...place });
     setCustomForm(null); // close custom form when reopening picker
   };
+  // When "Custom hours" expands, bring its Save button into the popup's view.
+  // Keyed on open/close only, not on every keystroke in the form.
+  const customFormRef = useRef<HTMLDivElement>(null);
+  const customFormOpen = customForm !== null;
+  useEffect(() => {
+    if (customFormOpen) customFormRef.current?.scrollIntoView({ block: "nearest" });
+  }, [customFormOpen]);
   const [saving, setSaving] = useState(false);
   const [pendingCheck, setPendingCheck] = useState<null | {
     userId: string;
@@ -1614,8 +1614,8 @@ export default function SchedulesPage() {
                                 onClick={() => setPickerOpen(null)}
                               />
                               <div
-                                className="fixed z-50 w-56 rounded-lg border bg-surface p-1 shadow-lg max-h-[70vh] overflow-y-auto"
-                                style={{ top: pickerOpen!.top, left: pickerOpen!.left }}
+                                className="fixed z-50 w-56 overscroll-contain rounded-lg border bg-surface p-1 shadow-lg overflow-y-auto"
+                                style={{ top: pickerOpen!.top, left: pickerOpen!.left, maxHeight: pickerOpen!.maxHeight }}
                               >
                                 {/* Demand suggestion — the windows this day is short on
                                     for THIS person's station (same model as AI Fill /
@@ -1718,7 +1718,7 @@ export default function SchedulesPage() {
                                     <div className="text-[10px] text-blue-400">Flexible start / end</div>
                                   </button>
                                 ) : (
-                                  <div className="space-y-1.5 px-2 py-2">
+                                  <div ref={customFormRef} className="space-y-1.5 px-2 py-2">
                                     <p className="text-[10px] font-semibold uppercase tracking-wider text-text-2">Custom Shift</p>
                                     <div className="grid grid-cols-2 gap-1.5">
                                       <label className="block">
