@@ -1,6 +1,12 @@
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_STAFF_API_URL ?? "https://staff.celsiuscoffee.com";
 
+// The back office (Office). The manager app calls its approval endpoints
+// directly with the app's Bearer token (lib/hr/approvals-api.ts) and opens
+// its pages for anything the phone does not rebuild.
+export const BACKOFFICE_URL =
+  process.env.EXPO_PUBLIC_BACKOFFICE_URL ?? "https://backoffice.celsiuscoffee.com";
+
 export const SUPABASE_URL =
   process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
 

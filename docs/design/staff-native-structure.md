@@ -62,6 +62,7 @@ navigation; its path now opens the screen that does the job.
 | `(staff)/hr/memos` | Notices from HR, acknowledge | Keep | |
 | `(staff)/hr/reviews` | Customer reviews during my shifts | Keep | |
 | `(staff)/hr/my-skills` | Audit scores about me | Keep | |
+| `(staff)/hr/approvals` | Managers and owners: part-timer hours to sign off, overtime, leave, shift swaps | New (owner, 20 Nov 2026) | Approve during the shift instead of waiting for Office. Reached from Me ("To approve", always for OWNER / ADMIN / MANAGER) and from Today when something waits (managers; owners' Today is Sales). No new tab. Calls the SAME back-office endpoints Office uses (`pt-hours`, `overtime-requests`, `leave`, `shift-swaps`) with the app's Bearer token; their role and scope checks are unchanged. Editing clock times, partial overtime and an overdrawn leave balance open in Office |
 | `(staff)/profile` | Personal info, PIN, Face ID, appearance, sign out | Keep | Reached from Today's header, Me's first row, and Sales' settings button for owners. Now has a back button |
 | `(staff)/personal` | Address, IC, emergency contact | Keep | |
 

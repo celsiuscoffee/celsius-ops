@@ -93,6 +93,9 @@ export default function HRHomePage() {
       title: "Time off and pay",
       rows: [
         { href: "/hr/leave", icon: CalendarOff, label: "Leave", subtitle: "Days left, and asking for leave" },
+        // Pay (owner 20 Nov 2026): the month or week so far, payday, overtime
+        // still waiting and the latest payslip. A row here, not a sixth tab.
+        { href: "/hr/pay", icon: Wallet, label: "Pay", subtitle: "Pay so far, payday and overtime waiting" },
         // The page existed and was reachable only by typing the URL — nothing in
         // this app linked to it. The manager app has had the equivalent tile all
         // along ((staff)/hr/index.tsx).

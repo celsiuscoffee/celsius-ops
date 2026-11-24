@@ -15,8 +15,12 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  Inbox,
 } from "lucide-react-native";
 import { Screen } from "../../components/Screen";
+import { List, ListRow } from "../../components/ui";
+import { approvalsCount, approvalsSummary } from "../../lib/hr/approvals";
+import { useApprovals } from "../../lib/hr/use-approvals";
 import { listChecklists, type ChecklistSummary } from "../../lib/ops/checklists";
 import { getClockStatus, type ClockStatus } from "../../lib/hr/clock";
 import { fetchShifts, type Shift } from "../../lib/hr/api";
@@ -72,6 +76,9 @@ function StaffHome() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showDone, setShowDone] = useState(false);
+  // Off (no request) for anyone who is not a manager.
+  const approvals = useApprovals();
+  const approvalsTotal = approvals.data ? approvalsCount(approvals.data) : 0;
 
   const today = todayString();
 
@@ -99,10 +106,12 @@ function StaffHome() {
     [session?.outletId, today],
   );
 
+  const { enabled: approvalsOn, refetch: refetchApprovals } = approvals;
   useFocusEffect(
     useCallback(() => {
       load(true);
-    }, [load]),
+      if (approvalsOn) refetchApprovals();
+    }, [load, approvalsOn, refetchApprovals]),
   );
 
   useEffect(() => {
@@ -293,6 +302,22 @@ function StaffHome() {
               <ArrowRight color={isClockedIn ? C["ok-text"] : C["on-ink"]} size={20} />
             </View>
           </Pressable>
+        ) : null}
+
+        {/* Managers: approvals waiting on them, only when there are some, so
+            part-timer hours get signed off during the shift (owner, 20 Nov 2026). */}
+        {approvalsTotal > 0 && approvals.data ? (
+          <View className="mt-4">
+            <List>
+              <ListRow
+                icon={Inbox}
+                tone="warn"
+                title={`${approvalsTotal} to approve`}
+                meta={approvalsSummary(approvals.data)}
+                onPress={() => router.push("/(staff)/hr/approvals")}
+              />
+            </List>
+          </View>
         ) : null}
 
         {/* Today's tasks: progress, then what is late, due soon, to do. */}

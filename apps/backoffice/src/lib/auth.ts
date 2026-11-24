@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { applyLiveAccountState } from "./live-account";
 
 const SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET!,
@@ -108,14 +109,30 @@ export async function getSession(): Promise<SessionUser | null> {
   try {
     const { payload } = await jwtVerify(token, SECRET, { audience: AUDIENCE });
     const session = payload as unknown as SessionUser;
-    const live = await liveAccountState(session.id);
-    if (live === null) return null; // account deleted
-    if (!live.active) return null; // deactivated / resigned
-    if (live.role && live.role !== session.role) session.role = live.role; // demoted or promoted since login
-    return session;
+    // Deleted / deactivated → no session; demoted or promoted since login →
+    // the role on the row now (lib/live-account.ts).
+    return applyLiveAccountState(session, await liveAccountState(session.id));
   } catch {
     return null;
   }
+}
+
+// The backoffice session for an API route that the manager app (staff-native)
+// also calls: the backoffice cookie first, else the app's own Bearer token.
+// Only the transport differs. The Bearer session goes through the SAME live
+// account re-check as the cookie (deleted or deactivated → none; role read
+// from the user row now), and every route keeps its own role and scope checks
+// unchanged. Used only by the approval routes the phone's Approvals screen
+// calls (PT hours sign-off, overtime, leave, shift swaps); everything else
+// stays cookie-only. Bearer requests are CSRF-immune (packages/shared/csrf).
+export async function getSessionFromRequest(req: Request): Promise<SessionUser | null> {
+  const fromCookie = await getSession();
+  if (fromCookie) return fromCookie;
+  const m = (req.headers.get("authorization") ?? "").match(/^Bearer\s+(.+)$/i);
+  if (!m) return null;
+  const session = await verifyToken(m[1]);
+  if (!session?.id) return null;
+  return applyLiveAccountState(session, await liveAccountState(session.id));
 }
 
 export async function clearSession() {
