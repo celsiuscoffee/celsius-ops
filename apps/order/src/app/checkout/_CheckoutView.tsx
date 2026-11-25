@@ -163,6 +163,11 @@ export function CheckoutView() {
   const [state, setState] = useState<NonNullable<Persisted["state"]> | null>(null);
   const [method, setMethod] = useState("card");
   const [placing, setPlacing] = useState(false);
+  // Set when the server refuses a charge because this table just paid an
+  // identical amount (see the duplicate guard in /api/checkout/initiate).
+  const [duplicate, setDuplicate] = useState<
+    { orderId: string; orderNumber: string; settled: boolean } | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const [stripeContext, setStripeContext] = useState<{ orderId: string; clientSecret: string } | null>(null);
   const [confirmFn, setConfirmFn] = useState<(() => Promise<{ error?: { message?: string } }>) | null>(null);
@@ -408,8 +413,9 @@ export function CheckoutView() {
     );
   }
 
-  const placeOrder = async () => {
+  const placeOrder = async (allowDuplicate = false) => {
     setError(null);
+    setDuplicate(null);
     setPlacing(true);
     try {
       const res = await fetch("/api/checkout/initiate", {
@@ -446,9 +452,24 @@ export function CheckoutView() {
           rewardName:        reward?.name ?? null,
           rewardPointsCost:  reward?.points_required ?? 0,
           rewardDiscountSen: Math.round(rewardDiscount * 100),
+          // Only true once the customer has answered the duplicate prompt.
+          allowDuplicate,
         }),
       });
       const data = await res.json();
+      // 409 duplicate: this table paid (or is mid-payment on) an identical
+      // amount moments ago. Don't charge — ask. The server only flags the
+      // panic-retry shape (same table+total inside 5 min), so a genuine
+      // second round is one tap away via "Place another anyway".
+      if (res.status === 409 && data?.duplicate) {
+        setDuplicate({
+          orderId: String(data.existingOrderId ?? ""),
+          orderNumber: String(data.existingOrderNumber ?? ""),
+          settled: Boolean(data.settled),
+        });
+        setPlacing(false);
+        return;
+      }
       if (!res.ok) {
         throw new Error(data.error ?? "Failed to start payment");
       }
@@ -801,6 +822,40 @@ export function CheckoutView() {
         </section>
       ) : null}
 
+      {duplicate ? (
+        <section className="px-4 pt-3">
+          <div className="rounded-2xl bg-amber-50 border border-amber-300 p-3">
+            <p className="font-peachi font-bold text-sm text-amber-900">
+              {duplicate.settled
+                ? "This table already paid for this order"
+                : "A payment for this order is already going through"}
+            </p>
+            <p className="text-[12px] text-amber-800 mt-1">
+              Order #{duplicate.orderNumber} for RM{grandTotal.toFixed(2)} was placed from this
+              table moments ago.{" "}
+              {duplicate.settled
+                ? "Paying again would charge you twice."
+                : "It can take up to a minute to confirm — paying again would charge you twice."}
+            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              <a
+                href={`/order/${duplicate.orderId}`}
+                className="block w-full rounded-full bg-[#A2492C] text-white text-center py-3 font-peachi font-bold active:opacity-80"
+              >
+                View that order
+              </a>
+              <button
+                type="button"
+                onClick={() => void placeOrder(true)}
+                className="block w-full rounded-full border border-amber-400 text-amber-900 text-center py-3 font-peachi font-bold active:opacity-60"
+              >
+                This is a separate order — charge me again
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {error ? (
         <p className="px-4 pt-3 text-[12px] text-red-600">{error}</p>
       ) : null}
@@ -834,7 +889,7 @@ export function CheckoutView() {
         <button
           type="button"
           disabled={placing || !state.outletId || paymentsOff}
-          onClick={placeOrder}
+          onClick={() => placeOrder()}
           className={`block w-full rounded-full text-white text-center py-4 font-bold active:opacity-80 ${
             placing || !state.outletId || paymentsOff ? "bg-[#A2492C]/40" : "bg-[#A2492C]"
           }`}

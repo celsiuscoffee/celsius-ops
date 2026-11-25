@@ -13,7 +13,7 @@ import { createSign, createVerify, createPublicKey, type KeyObject } from "crypt
 //
 // .trim() guards against accidental trailing newlines in env var values.
 const BASE_URL      = (process.env.RM_BASE_URL      || "https://sb-open.revenuemonster.my").trim();
-const OAUTH_URL     = (process.env.RM_OAUTH_URL     || "https://sb-oauth.revenuemonster.my").trim();
+const OAUTH_URL     = (process.env.RM_OAUTH_URL     || "https://sb-oauth.revenuemonster.my").trim().replace(/\/+$/, "");
 const CLIENT_ID     = (process.env.RM_CLIENT_ID     || "").trim();
 const CLIENT_SECRET = (process.env.RM_CLIENT_SECRET || "").trim();
 const STORE_ID      = (process.env.RM_STORE_ID      || "").trim();
@@ -116,6 +116,46 @@ const RM_TIMEOUT_MS = 8000;
 let _token: string | null = null;
 let _tokenExpiry = 0;
 
+// RM sits behind a CDN. If that edge ever answers the token POST with a
+// redirect, Node's fetch (redirect: "follow") re-issues it as a GET per the
+// Fetch spec, and /v1/token answers a bare 405 from the edge — the request
+// never reaches RM. So follow redirects by hand, keeping the method and body.
+//
+// Credentials are only ever re-sent to RM's own hosts over https: a redirect
+// anywhere else is returned unfollowed rather than leaking the Basic header.
+function isRmHost(hostname: string): boolean {
+  return hostname === "revenuemonster.my" || hostname.endsWith(".revenuemonster.my");
+}
+
+export async function postFollowingRedirects(
+  url: string,
+  init: RequestInit,
+  maxHops = 3,
+): Promise<{ res: Response; finalUrl: string; hops: number }> {
+  let current = url;
+  for (let hop = 0; hop <= maxHops; hop++) {
+    const res = await fetch(current, { ...init, redirect: "manual" });
+    if (res.status < 300 || res.status >= 400) return { res, finalUrl: current, hops: hop };
+    const location = res.headers.get("location");
+    if (!location) return { res, finalUrl: current, hops: hop };
+    let next: URL;
+    try {
+      next = new URL(location, current);
+    } catch {
+      return { res, finalUrl: current, hops: hop };
+    }
+    if (next.protocol !== "https:" || !isRmHost(next.hostname)) {
+      return { res, finalUrl: current, hops: hop };
+    }
+    current = next.toString();
+  }
+  throw new Error(`RM token failed: too many redirects (>${maxHops}) starting at ${url}`);
+}
+
+export const RM_OAUTH_HOST = (() => {
+  try { return new URL(OAUTH_URL).host; } catch { return "unparseable"; }
+})();
+
 async function getToken(): Promise<string> {
   if (_token && Date.now() < _tokenExpiry) return _token;
 
@@ -126,7 +166,7 @@ async function getToken(): Promise<string> {
   // The previous form-encoded body returned {"error":{"code":"INVALID_GRANT"}}
   // because RM couldn't find "grantType" in the parsed JSON.
   // Reference: https://doc.revenuemonster.my/docs/quickstart/accesstoken/client-credentials
-  const res = await fetch(`${OAUTH_URL}/v1/token`, {
+  const { res, finalUrl, hops } = await postFollowingRedirects(`${OAUTH_URL}/v1/token`, {
     method: "POST",
     headers: {
       Authorization: `Basic ${Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64")}`,
@@ -140,8 +180,16 @@ async function getToken(): Promise<string> {
     // Surface the response body so the Vercel log shows the actual RM
     // complaint (invalid_client, scope_required, etc.) instead of a bare
     // status code. Falls back gracefully if the body isn't JSON.
-    const detail = await res.text().catch(() => "");
-    throw new Error(`RM token failed: ${res.status} ${detail.slice(0, 200)}`);
+    //
+    // finalUrl/hops matter because a 405 served by RM's CDN (an Alibaba
+    // edge page, not RM JSON) means the request never reached their API —
+    // the 2026-11-24 outage. Without them the log cannot tell a redirect
+    // apart from a retired endpoint.
+    const detail  = await res.text().catch(() => "");
+    const via     = hops > 0 ? ` after ${hops} redirect(s) to ${finalUrl}` : "";
+    const location = res.headers.get("location");
+    const locPart  = location ? ` location=${location}` : "";
+    throw new Error(`RM token failed: ${res.status}${via}${locPart} ${detail.slice(0, 200)}`);
   }
   const data = (await res.json()) as { accessToken?: string; expiresIn?: number };
   if (!data.accessToken) {
