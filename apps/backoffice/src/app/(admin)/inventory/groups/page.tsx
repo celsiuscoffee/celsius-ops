@@ -101,26 +101,26 @@ export default function GroupsPage() {
   const loading = tab === "groups" ? loadingGroups : loadingStorage;
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Item Groups</h2>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Item Groups</h2>
+          <p className="mt-0.5 text-sm text-text-2">
             Manage ingredient groups and storage areas
           </p>
         </div>
-        <Button onClick={openAdd} className="bg-terracotta hover:bg-terracotta-dark">
+        <Button onClick={openAdd} className="bg-ink hover:bg-ink-hover">
           <Plus className="mr-1.5 h-4 w-4" />
           {tab === "groups" ? "Add Group" : "Add Storage Area"}
         </Button>
       </div>
 
       {/* Tabs */}
-      <div className="mt-4 flex gap-1 rounded-lg bg-gray-100 p-1">
+      <div className="mt-4 flex gap-1 rounded-lg bg-sunken p-1">
         <button
           onClick={() => setTab("groups")}
           className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-            tab === "groups" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+            tab === "groups" ? "bg-surface text-text shadow-sm" : "text-text-2 hover:text-text-2"
           }`}
         >
           <Tags className="mr-1.5 inline-block h-4 w-4" />
@@ -129,7 +129,7 @@ export default function GroupsPage() {
         <button
           onClick={() => setTab("storage")}
           className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-            tab === "storage" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+            tab === "storage" ? "bg-surface text-text shadow-sm" : "text-text-2 hover:text-text-2"
           }`}
         >
           <Warehouse className="mr-1.5 inline-block h-4 w-4" />
@@ -139,36 +139,36 @@ export default function GroupsPage() {
 
       {loading ? (
         <div className="flex items-center justify-center p-12">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       ) : tab === "groups" ? (
         <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {groups.map((group) => (
             <div
               key={group.id}
-              className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
+              className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 transition-shadow hover:shadow-sm"
             >
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
                   <Tags className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-900">{group.name}</p>
-                  <p className="text-xs text-gray-500">{group.productCount} {group.productCount === 1 ? "item" : "items"}</p>
+                  <p className="font-medium text-text">{group.name}</p>
+                  <p className="text-xs text-text-2">{group.productCount} {group.productCount === 1 ? "item" : "items"}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => openEditGroup(group)} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <button onClick={() => openEditGroup(group)} className="rounded-md p-1.5 text-text-3 hover:bg-sunken hover:text-text-2">
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={() => handleDeleteGroup(group.id)} className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500">
+                <button onClick={() => handleDeleteGroup(group.id)} className="rounded-md p-1.5 text-text-3 hover:bg-red-50 hover:text-red-500">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
           ))}
           {groups.length === 0 && (
-            <p className="col-span-full text-center text-sm text-gray-400 py-8">No item groups yet</p>
+            <p className="col-span-full text-center text-sm text-text-3 py-8">No item groups yet</p>
           )}
         </div>
       ) : (
@@ -176,29 +176,29 @@ export default function GroupsPage() {
           {storageAreas.map((area) => (
             <div
               key={area.id}
-              className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 transition-shadow hover:shadow-sm"
+              className="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 transition-shadow hover:shadow-sm"
             >
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
                   <Warehouse className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-900">{area.name}</p>
-                  <p className="text-xs text-gray-500">{area.productCount} {area.productCount === 1 ? "item" : "items"}</p>
+                  <p className="font-medium text-text">{area.name}</p>
+                  <p className="text-xs text-text-2">{area.productCount} {area.productCount === 1 ? "item" : "items"}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => openEditStorage(area)} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <button onClick={() => openEditStorage(area)} className="rounded-md p-1.5 text-text-3 hover:bg-sunken hover:text-text-2">
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={() => handleDeleteStorage(area.id)} className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500">
+                <button onClick={() => handleDeleteStorage(area.id)} className="rounded-md p-1.5 text-text-3 hover:bg-red-50 hover:text-red-500">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
           ))}
           {storageAreas.length === 0 && (
-            <p className="col-span-full text-center text-sm text-gray-400 py-8">No storage areas yet</p>
+            <p className="col-span-full text-center text-sm text-text-3 py-8">No storage areas yet</p>
           )}
         </div>
       )}
@@ -214,7 +214,7 @@ export default function GroupsPage() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <label className="text-sm font-medium text-gray-700">
+              <label className="text-sm font-medium text-text-2">
                 {tab === "groups" ? "Group Name" : "Storage Area Name"}
               </label>
               <Input
@@ -225,7 +225,7 @@ export default function GroupsPage() {
                 onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
               />
             </div>
-            <Button onClick={handleSubmit} disabled={saving || !name.trim()} className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
+            <Button onClick={handleSubmit} disabled={saving || !name.trim()} className="w-full bg-ink hover:bg-ink-hover disabled:opacity-50">
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
               {editingId ? "Save" : tab === "groups" ? "Add Group" : "Add Storage Area"}
             </Button>

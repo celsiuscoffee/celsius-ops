@@ -1,20 +1,15 @@
 import { Stack } from "expo-router";
+import { useStackScreenOptions } from "../../../lib/screen-options";
 
 export default function ClaimsLayout() {
+  const screenOptions = useStackScreenOptions();
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: "#FFFFFF" },
-        headerTintColor: "#1A0200",
-        headerTitleStyle: { fontFamily: "Peachi-Bold" },
-        headerShadowVisible: false,
-      }}
-    >
+    <Stack screenOptions={screenOptions}>
       <Stack.Screen
         name="index"
-        options={{ title: "Claims", headerShown: false }}
+        options={{ title: "Claims" }}
       />
-      <Stack.Screen name="new" options={{ title: "New Claim" }} />
+      <Stack.Screen name="new" options={{ title: "New claim" }} />
     </Stack>
   );
 }

@@ -13,11 +13,20 @@ type Transfer = {
   id: string;
   fromOutlet: string;
   toOutlet: string;
+  toOutletCode: string;
   status: string;
   transferredBy: string;
   notes: string | null;
   createdAt: string;
-  items: { id: string; product: string; sku: string; quantity: number }[];
+  items: { id: string; product: string; sku: string; package: string; quantity: number }[];
+};
+
+type Package = {
+  id: string;
+  name: string;
+  label: string | null;
+  conversion: number;
+  isDefault: boolean;
 };
 
 type Outlet = {
@@ -31,6 +40,7 @@ type Product = {
   name: string;
   sku: string;
   baseUom: string;
+  packages: Package[];
 };
 
 type UserSession = {
@@ -44,8 +54,14 @@ type TransferItem = {
   productId: string;
   productName: string;
   sku: string;
+  packages: Package[];
+  // Quantity is counted in this package ("6 cartons"). Without it the server
+  // can't convert to base UOM, and transfers were stored as 6 ml of milk.
+  productPackageId: string | null;
   quantity: number;
 };
+
+const packageLabel = (p: Package) => p.label || p.name;
 
 export default function TransferPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -110,11 +126,48 @@ export default function TransferPage() {
   );
 
   const addItem = (product: Product) => {
+    const packages = product.packages ?? [];
+    const preset = packages.find((p) => p.isDefault) ?? (packages.length === 1 ? packages[0] : undefined);
     setTransferItems((prev) => [
       ...prev,
-      { productId: product.id, productName: product.name, sku: product.sku, quantity: 1 },
+      {
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku,
+        packages,
+        productPackageId: preset?.id ?? null,
+        quantity: 1,
+      },
     ]);
     setProductSearch("");
+  };
+
+  const setItemPackage = (productId: string, productPackageId: string) => {
+    setTransferItems((prev) =>
+      prev.map((item) => (item.productId === productId ? { ...item, productPackageId } : item)),
+    );
+  };
+
+  // A product with packages must have one chosen; the API refuses otherwise.
+  const missingPackage = transferItems.some((i) => i.packages.length > 0 && !i.productPackageId);
+
+  const [receivingId, setReceivingId] = useState<string | null>(null);
+  const markReceived = async (t: Transfer) => {
+    setReceivingId(t.id);
+    try {
+      const res = await fetch(`/api/transfers/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "COMPLETED" }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        alert(body?.error ?? `Couldn't mark this transfer received (${res.status}).`);
+      }
+      await fetchTransfers(user?.outletId);
+    } finally {
+      setReceivingId(null);
+    }
   };
 
   const updateItemQty = (productId: string, delta: number) => {
@@ -143,7 +196,7 @@ export default function TransferPage() {
   };
 
   const handleSubmit = async () => {
-    if (!toOutletId || transferItems.length === 0 || !user) return;
+    if (!toOutletId || transferItems.length === 0 || missingPackage || !user) return;
 
     setSubmitting(true);
     setSubmitError(null);
@@ -158,6 +211,7 @@ export default function TransferPage() {
           notes: transferNotes || null,
           items: transferItems.map((i) => ({
             productId: i.productId,
+            productPackageId: i.productPackageId ?? undefined,
             quantity: i.quantity,
           })),
         }),
@@ -191,22 +245,22 @@ export default function TransferPage() {
   const statusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case "completed":
-        return "bg-green-500";
+        return "bg-ok";
       case "pending":
-        return "bg-terracotta";
+        return "bg-ink";
       case "cancelled":
-        return "bg-gray-400";
+        return "bg-line-ctl";
       default:
-        return "bg-gray-400";
+        return "bg-line-ctl";
     }
   };
 
   if (loading) {
     return (
       <>
-        <TopBar title="Stock Transfer" />
+        <TopBar title="Transfers" />
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       </>
     );
@@ -214,35 +268,51 @@ export default function TransferPage() {
 
   return (
     <>
-      <TopBar title="Stock Transfer" />
+      <TopBar title="Transfers" />
       <div className="px-4 py-3">
         <div className="mx-auto max-w-lg space-y-4">
-          <Button onClick={() => setDialogOpen(true)} className="w-full bg-terracotta hover:bg-terracotta-dark">
+          <Button onClick={() => setDialogOpen(true)} className="w-full bg-ink hover:bg-ink-hover">
             <Plus className="mr-1.5 h-4 w-4" />
-            New Transfer
+            New transfer
           </Button>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-gray-900">Recent Transfers</h2>
+            <h2 className="mb-2 text-sm font-semibold text-text">Recent transfers</h2>
             <div className="space-y-2">
               {transfers.length === 0 && (
-                <p className="py-6 text-center text-sm text-gray-400">No transfers yet</p>
+                <p className="py-6 text-center text-sm text-text-3">No transfers yet</p>
               )}
               {transfers.map((t) => (
                 <Card key={t.id} className="px-3 py-2.5">
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2 text-sm">
-                        <span className="font-medium text-gray-900">{t.fromOutlet}</span>
-                        <ArrowRight className="h-3.5 w-3.5 text-gray-400" />
-                        <span className="font-medium text-gray-900">{t.toOutlet}</span>
+                        <span className="font-medium text-text">{t.fromOutlet}</span>
+                        <ArrowRight className="h-3.5 w-3.5 text-text-3" />
+                        <span className="font-medium text-text">{t.toOutlet}</span>
                       </div>
-                      <p className="mt-0.5 text-xs text-gray-500">
+                      <p className="mt-0.5 text-xs text-text-3">
                         {t.items.length} item{t.items.length !== 1 ? "s" : ""} &middot; {formatDate(t.createdAt)} &middot; by {t.transferredBy}
+                      </p>
+                      <p className="mt-0.5 text-xs text-text-3">
+                        {t.items.map((i) => `${i.quantity} ${i.package || "?"} ${i.product}`).join(", ")}
                       </p>
                     </div>
                     <Badge className={`text-[10px] ${statusColor(t.status)}`}>{t.status.toLowerCase()}</Badge>
                   </div>
+                  {/* The receiving outlet confirms arrival; until then the
+                      stock sits in neither outlet's books. */}
+                  {t.status === "PENDING" && t.toOutletCode === userOutlet?.code && (
+                    <Button
+                      size="sm"
+                      className="mt-2 w-full bg-ok hover:bg-ok"
+                      disabled={receivingId === t.id}
+                      onClick={() => markReceived(t)}
+                    >
+                      {receivingId === t.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                      Mark received
+                    </Button>
+                  )}
                 </Card>
               ))}
             </div>
@@ -252,16 +322,16 @@ export default function TransferPage() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="mx-auto max-w-sm">
-          <DialogHeader><DialogTitle>New Stock Transfer</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>New transfer</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <label className="text-sm font-medium">From Outlet</label>
-              <div className="mt-1 w-full rounded-md border bg-gray-50 px-3 py-2 text-sm text-gray-700">
+              <label className="text-sm font-medium">From</label>
+              <div className="mt-1 w-full rounded-md border bg-sunken/60 px-3 py-2 text-sm text-text-2">
                 {userOutlet?.name ?? "Your outlet"}
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium">To Outlet</label>
+              <label className="text-sm font-medium">To</label>
               <select
                 className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
                 value={toOutletId}
@@ -274,9 +344,9 @@ export default function TransferPage() {
               </select>
             </div>
             <div>
-              <label className="text-sm font-medium">Add Products</label>
+              <label className="text-sm font-medium">Add products</label>
               <div className="relative mt-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
                 <Input
                   placeholder="Search by name or SKU..."
                   className="pl-9"
@@ -285,18 +355,18 @@ export default function TransferPage() {
                 />
               </div>
               {productSearch && (
-                <div className="mt-1 max-h-36 overflow-y-auto rounded-md border bg-white shadow-sm">
+                <div className="mt-1 max-h-36 overflow-y-auto rounded-md border bg-surface shadow-sm">
                   {filteredProducts.length === 0 && (
-                    <p className="px-3 py-2 text-xs text-gray-400">No products found</p>
+                    <p className="px-3 py-2 text-xs text-text-3">No products found</p>
                   )}
                   {filteredProducts.slice(0, 8).map((p) => (
                     <button
                       key={p.id}
-                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50"
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-sunken/60"
                       onClick={() => addItem(p)}
                     >
-                      <span className="text-gray-900">{p.name}</span>
-                      <span className="text-xs text-gray-400">{p.sku}</span>
+                      <span className="text-text">{p.name}</span>
+                      <span className="text-xs text-text-3">{p.sku}</span>
                     </button>
                   ))}
                 </div>
@@ -310,26 +380,41 @@ export default function TransferPage() {
                 {transferItems.map((item) => (
                   <div key={item.productId} className="flex items-center justify-between rounded-md border px-3 py-2">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-gray-900">{item.productName}</p>
-                      <p className="text-xs text-gray-400">{item.sku}</p>
+                      <p className="truncate text-sm text-text">{item.productName}</p>
+                      {item.packages.length > 1 ? (
+                        <select
+                          className={`mt-0.5 w-full rounded border px-1.5 py-0.5 text-xs ${item.productPackageId ? "text-text-2" : "border-danger text-danger-text"}`}
+                          value={item.productPackageId ?? ""}
+                          onChange={(e) => setItemPackage(item.productId, e.target.value)}
+                        >
+                          <option value="">Choose unit…</option>
+                          {item.packages.map((p) => (
+                            <option key={p.id} value={p.id}>{packageLabel(p)}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-xs text-text-3">
+                          {item.packages[0] ? packageLabel(item.packages[0]) : item.sku}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => updateItemQty(item.productId, -1)}
-                        className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-gray-600"
+                        className="flex h-6 w-6 items-center justify-center rounded bg-sunken text-text-2"
                       >
                         <Minus className="h-3 w-3" />
                       </button>
                       <span className="min-w-[1.5rem] text-center text-sm font-medium">{item.quantity}</span>
                       <button
                         onClick={() => updateItemQty(item.productId, 1)}
-                        className="flex h-6 w-6 items-center justify-center rounded bg-terracotta/10 text-terracotta-dark"
+                        className="flex h-6 w-6 items-center justify-center rounded bg-brand-soft text-brand-text"
                       >
                         <Plus className="h-3 w-3" />
                       </button>
                       <button
                         onClick={() => removeItem(item.productId)}
-                        className="ml-1 flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:text-red-500"
+                        className="ml-1 flex h-6 w-6 items-center justify-center rounded text-text-3 hover:text-danger"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
@@ -350,13 +435,13 @@ export default function TransferPage() {
             </div>
 
             {submitError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-text">
                 {submitError}
               </div>
             )}
             <Button
-              className="w-full bg-terracotta hover:bg-terracotta-dark"
-              disabled={!toOutletId || transferItems.length === 0 || submitting}
+              className="w-full bg-ink hover:bg-ink-hover"
+              disabled={!toOutletId || transferItems.length === 0 || missingPackage || submitting}
               onClick={handleSubmit}
             >
               {submitting ? (
@@ -364,7 +449,7 @@ export default function TransferPage() {
               ) : (
                 <ArrowRightLeft className="mr-1.5 h-4 w-4" />
               )}
-              {submitting ? "Creating..." : "Create Transfer"}
+              {submitting ? "Creating..." : "Create transfer"}
             </Button>
           </div>
         </DialogContent>

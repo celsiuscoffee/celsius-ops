@@ -76,11 +76,11 @@ export function GrabModifierLinker() {
   };
 
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white">
-      <header className="flex items-start justify-between gap-4 border-b border-neutral-200 px-5 py-3">
+    <section className="rounded-lg border border-line bg-surface">
+      <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-3">
         <div>
-          <h2 className="text-base font-medium text-neutral-900">Unlinked GrabFood add-ons</h2>
-          <p className="mt-0.5 text-sm text-neutral-600">
+          <h2 className="text-base font-medium text-text">Unlinked GrabFood add-ons</h2>
+          <p className="mt-0.5 text-sm text-text-2">
             Grab sends add-ons with only an id + price, so they print as &ldquo;Add-on @ RM x&rdquo;.
             Give each a name (e.g. &ldquo;Oat Milk&rdquo;) so the kitchen docket reads correctly.
             Fills as new Grab orders arrive.
@@ -88,7 +88,7 @@ export function GrabModifierLinker() {
         </div>
         <button
           onClick={load}
-          className="inline-flex shrink-0 items-center gap-2 rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+          className="inline-flex shrink-0 items-center gap-2 rounded border border-line-2 bg-surface px-3 py-1.5 text-sm font-medium text-text-2 hover:bg-sunken"
         >
           <RefreshCw className="h-4 w-4" /> Refresh
         </button>
@@ -109,15 +109,15 @@ export function GrabModifierLinker() {
 
       {loading ? (
         <div className="flex h-24 items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
+          <Loader2 className="h-5 w-5 animate-spin text-text-3" />
         </div>
       ) : !data || data.items.length === 0 ? (
-        <div className="flex items-center justify-center gap-2 px-5 py-8 text-sm text-neutral-500">
+        <div className="flex items-center justify-center gap-2 px-5 py-8 text-sm text-text-2">
           <CheckCircle2 className="h-4 w-4 text-emerald-500" /> No unnamed GrabFood add-ons seen in orders.
         </div>
       ) : (
         <table className="w-full text-sm">
-          <thead className="border-b border-neutral-100 text-left text-xs uppercase tracking-wide text-neutral-500">
+          <thead className="border-b border-line text-left text-xs uppercase tracking-wide text-text-2">
             <tr>
               <th className="px-5 py-2">Grab modifier id</th>
               <th className="px-5 py-2 text-right">Price</th>
@@ -127,9 +127,9 @@ export function GrabModifierLinker() {
               <th className="px-5 py-2" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-100">
+          <tbody className="divide-y divide-line">
             {data.items.map((it) => (
-              <tr key={it.grabModifierId} className="align-middle text-neutral-800">
+              <tr key={it.grabModifierId} className="align-middle text-text">
                 <td className="px-5 py-2 font-mono text-xs">{it.grabModifierId}</td>
                 <td className="px-5 py-2 text-right font-mono">{formatGrabItemPrice(it.minPriceRm, it.maxPriceRm)}</td>
                 <td className="px-5 py-2 text-right">{it.timesOrdered}</td>
@@ -140,14 +140,14 @@ export function GrabModifierLinker() {
                     value={name[it.grabModifierId] ?? ""}
                     onChange={(e) => setName((n) => ({ ...n, [it.grabModifierId]: e.target.value }))}
                     placeholder="e.g. Oat Milk"
-                    className="w-44 rounded border border-neutral-300 px-2 py-1 text-sm focus:border-neutral-500 focus:outline-none"
+                    className="w-44 rounded border border-line-2 px-2 py-1 text-sm focus:border-neutral-500 focus:outline-none"
                   />
                 </td>
                 <td className="px-5 py-2">
                   <select
                     value={product[it.grabModifierId] ?? ""}
                     onChange={(e) => setProduct((p) => ({ ...p, [it.grabModifierId]: e.target.value }))}
-                    className="w-48 rounded border border-neutral-300 px-2 py-1 text-sm focus:border-neutral-500 focus:outline-none"
+                    className="w-48 rounded border border-line-2 px-2 py-1 text-sm focus:border-neutral-500 focus:outline-none"
                   >
                     <option value="">—</option>
                     {data.products.map((p) => (

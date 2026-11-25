@@ -90,6 +90,222 @@ current month.
   RM34.70 → Nazierun Natasha Binti Nor Anizam, CIMB 7628245033,
   012-3108756); and the root enabler is still RM's dead webhooks — every
   second of that 45-90s window is when customers re-pay.
+- 2026-11-19 — **Staff web + manager app on Celsius UI** (branch claude/hopeful-heisenberg-9eub5y,
+  not merged). Web: tabs Today · Checklists · Shifts · Stock · Audit (managers), Me from the
+  initials button; /dashboard → /home; SOP editing/categories/schedules redirect to back office.
+  Audit: docs/design/staff-app-structure.md. Native: tabs Today · Sales · Checks · Stock · Me,
+  Audits inside Checks, open shifts under Me; JS-only (runtime 1.0.0). Audit:
+  docs/design/staff-native-structure.md. Merging staff-native is an OTA to managers' phones:
+  needs the owner's go after a look on a phone. Open owner questions: /hr/overtime (preview),
+  /hr/open-shifts (hidden since 22 Jul), POs/invoices on the phone.
+  Also 19 Nov: PT pay 9–15 Nov blocked on manager sign-off (1 of 48 shifts confirmed at 10:59 AM).
+
+- 2026-11-19 — **Clock-ins / Overtime split, Pulse scrapped, PT hours tab** (PR celsiuscoffee/celsius-ops#1280,
+  not merged). Owner go: OT is approved ONLY on Overtime, by Ariff and managers; confirming a
+  day on Clock-ins files OT as pending (`generateOtRequests` mode `refresh`; `approved` mode
+  removed). Already-approved OT left as is. Pulse crons/routes/tab removed (5,268 unacked
+  alerts); the nudges still use `lib/ops-pulse` detectors + ledger. Monitor tab removed
+  (duplicate of Inbox). Next: staff web (38 pages) and staff-native (37 screens) are NOT yet
+  on Celsius UI — owner asked for it; staff-native merge is an OTA to manager phones.
+
+- 2026-11-18 — **Back office menu now follows Gosamē Office's structure** (owner: "only follow
+  the ones gosame did"; `backoffice-structure.md` §2f). Sections: Agents; Sell (Sales,
+  Customers); Make and supply (Food, Stock, Orders); Run the business (Team, Money,
+  Standards); Settings groups Outlet / Company and people / Stock / Customers / Office.
+  URLs and grants unchanged. Ads hidden from the menu (no Gosamē home; still by URL/⌘K) —
+  ask the owner if they want them back. The clarifying question was declined, so this is
+  my reading of the request; owner may redirect.
+
+- 2026-11-17 — **Owner approved the pay, Money and Payment requests redesign** (layout and
+  words only) for merge. Outlet labels that said "Cyberjaya" for Tamarind now say "Tamarind"
+  (Cash flow incoming panel, Reports entity label, cash-in recon agent, the three fallback
+  shift template labels; ids unchanged). "Cyberjaya" stays where it is the city: ad and
+  geogrid targeting (`OUTLET_CITIES`, geogrid keywords), review-reply area names, and the AI
+  prompts that tell agents staff call the outlet "Cyberjaya".
+
+- 2026-11-17 — **Money, pay pages and Payment requests on the page pattern, layout and words
+  only** (PR celsiuscoffee/celsius-ops#1278). Built by two forks in separate git worktrees (no
+  clashes this time). Checked the diff: no calculation, API, approval or payment change. Owner
+  approved thresholds and "Listed price"; pay/Money/Payment requests still need the owner's OK
+  before merge. Open question: Cash flow's IncomingPanel labels the celsiustamarind entity
+  "Cyberjaya". Review page: claude.ai/artifact/6f68jduMc67wtzfeuR4vJs (75 screens).
+
+- 2026-11-17 — **Step 6 done for every non-pay page** (PR celsiuscoffee/celsius-ops#1278,
+  `backoffice-structure.md` §2e). Built by 4 parallel forks; one ran `git stash` mid-run and
+  everyone's edits were restored by hand (local stash@{0} kept as backup in that container).
+  Lesson: never let parallel agents in one working tree run git stash/checkout; give each its
+  own worktree. Not yet seen on live data. Pay pages, Payment requests and Money untouched.
+  Next: owner review of all screens, then shared components and nav label case.
+
+- 2026-11-17 — **Menu › Items on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
+  key numbers, Celsius tokens, same editor (reorder, on/off, best sellers). Next: Recipes,
+  Menu Status.
+
+- 2026-11-17 — **Celsius has no central kitchen** (owner). Do not design for one: no CK
+  section, no CK outlet type in Settings › Outlets (picker and filter removed; the
+  `OutletType.CENTRAL_KITCHEN` enum value stays in the schema, unused). Transfers are
+  outlet to outlet.
+
+- 2026-11-17 — **Stock › Transfers on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
+  4 key numbers from `lib/inventory/transfer-summary.ts` (late = in transit > 2 days), list,
+  detail as a full page. New/Smart transfer are full pages too. Next: Menu.
+
+- 2026-11-17 — **Stock › Stock Count on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
+  4 key numbers from `lib/inventory/count-summary.ts`, list instead of table, shared
+  `components/ui/key-number.tsx` (Overview + Wastage moved onto it). Review is a full page
+  (was a modal). Next: Transfers, Menu.
+
+- 2026-11-17 — **Stock › Wastage on the page pattern** (PR celsiuscoffee/celsius-ops#1278):
+  4 key numbers from `lib/inventory/waste-summary.ts`, one list. Preview mocks must answer
+  `/api/inventory/ai-decisions` (AIInsightBanner crashes on `[]`). Next: Stock Count, Transfers, Menu.
+
+- 2026-11-17 — **Step 6 part 1: every backoffice page on the Celsius UI palette** (PR
+  celsiuscoffee/celsius-ops#1278, `docs/design/backoffice-structure.md` §2e). Codemod over 176
+  files; main buttons are espresso `bg-ink text-on-ink` (white text on ink was unreadable in
+  dark mode until the second pass). `lib/celsius-ui-palette.test.ts` blocks the old classes.
+  `/ops/audit` and `/loyalty/loops` crash on an empty `[]` mock before and after (mock shape,
+  not this change). Next: page-by-page layouts, most-used first (read Office Usage).
+
+- 2026-11-17 — **Restructure step 5 (list B merges) built**, PR celsiuscoffee/celsius-ops#1278,
+  `docs/design/backoffice-structure.md` §2d: Perishables shares the Ingredients editor (fixes the
+  old copy dropping suppliers on edit), `/pickup` → Pickup App under Sales › Reports, SOP
+  Compliance → Coverage panel on SOP Schedules (Standards › SOPs › Schedules), one SMS tool
+  (Members hands picked phones to Messages, which applies the PDPA opt-out filter the Members
+  sender skipped). Rail/Inbox counts read `counts?.` defensively. Not yet tried on live data.
+
+- 2026-11-17 — **Backoffice declutter built** (PR celsiuscoffee/celsius-ops#1278,
+  `docs/design/backoffice-structure.md` §2c): menu regrouped by first principles, 87 links →
+  36 pages (sections Sales · Customers · Marketing · Menu · Stock · Procurement · Team · Money ·
+  Standards · Agents; HR/Finance/Ops renamed, URLs and moduleKeys unchanged). Page-visit
+  tracking added: `ActivityLog` module `usage`, Settings › System › Office Usage. **Around
+  17 Dec: read Office Usage and remove what nobody opened.** Checked "redundant" claims before
+  deleting: Cashier Performance, Area Scorecard, Perishables and the ops-reminders job are NOT
+  duplicates and were kept (nested). CI: GitHub runners came back 16 Nov; backoffice `next
+  build` and `tsc` OOM at the runner's default ~2 GB heap — main's #1279 gives both steps a
+  6 GB heap (this branch's 4 GB workflow-wide setting was dropped in the merge).
+
+- 2026-11-16 — **Restructure step 4 built** (PR celsiuscoffee/celsius-ops#1278): `/hr/roster`
+  (backoffice, existing APIs only; leave and swaps decided in place, overtime and clock-ins
+  link to their payroll-aware pages) and the staff-native Today clock card shows today's shift
+  (`lib/hr/shift-card.ts`, tested). **Merging this PR now OTAs staff-native to manager phones**
+  (JS-only, runtime unchanged 1.0.0) — follow the ota-release post-merge check. The six old HR
+  pages still exist; redirect them only after the owner checks Roster on real data.
+
+- 2026-11-12 — **Backoffice restructure step 3 done (Inbox v1, read only)**, PR
+  celsiuscoffee/celsius-ops#1278. `GET /api/inbox` aggregates 14 existing queues via
+  `apps/backoffice/src/lib/inbox/sources.ts` (gated by `canAccess`, managers scoped with
+  `lib/hr/scope.ts`; inventory/review list routes do NOT scope managers server-side, so the
+  Inbox applies `getAccessibleOutletIds` itself). Not wired against live data in this session
+  (no Celsius DB access here) — first real load should be checked on the Vercel preview or
+  prod; a failing source shows as "Couldn't check …" on the page. `fin_agent_decisions` has
+  no handled state (always applied=false) — needs a dismissed column before it can join.
+
+- 2026-11-12 — **Backoffice restructure step 2 done (Celsius UI foundation)**, same PR
+  celsiuscoffee/celsius-ops#1278. Tokens in `apps/backoffice/src/styles/celsius-ui/tokens.css`
+  (Gosamē UI names, Celsius values); shadcn vars map onto them; shell in
+  `components/office-shell.tsx` (rail nests the open section's pages; phone top bar + tab bar
+  Today · Sales · Procurement · More). Checked at 1440 and iPhone 13, light and dark, collapsed
+  rail. Gotchas: Next dev serves stale globals.css after edits — restart `next dev` with a clean
+  `.next` before judging CSS; `/dashboard` crashes on an empty `{}` API mock (needs
+  `company`/`outlets`), so preview it with realistic mock data. Next: step 3 (Today + Inbox).
+
+- 2026-11-12 — **Backoffice restructure step 1 done** (PR celsiuscoffee/celsius-ops#1278,
+  branch `claude/hopeful-heisenberg-9eub5y`): 6 duplicate pages now redirect
+  (`/inventory/categories`, `/ops/dashboard`, `/settings` hub, `/pos`,
+  `/inventory/ai-decisions`, `/loyalty/insights`), their only-caller APIs deleted
+  (`api/inventory/categories`, `api/loyalty/admin/ai-insights`), dead links fixed
+  (`/finance/inbox` in the purchasing-manager digest → `/finance`; `/pickup` → `/inventory`).
+  Owner approved 45 mockups (Gosamē UI rules + Celsius brand) and the 6-step order in
+  `docs/design/backoffice-structure.md` §2b; owner wants **phone view checked on every
+  change**. Next: step 2, Celsius UI foundation. Mock sources (HTML generator) live only in
+  the session scratchpad, not the repo. GitHub Actions runs no jobs on this repo since
+  ~2 Nov (runner_id 0, billing/settings) — CI cannot verify PRs until the owner fixes it.
+  Server `redirect()` under the client `(admin)` layout answers 200 and redirects in the
+  browser — test redirects with a browser, not curl.
+
+- 2026-11-11 — **Back-office structure audit** (`docs/design/backoffice-structure.md`,
+  proposal only). 175 routes; nav.tsx registers 103 (86 visible, 17 hidden); ~60 pages
+  are not registered, and 26 of them sit under no registered prefix, so the client route
+  gate in `(admin)/layout.tsx` doesn't check them. No page-view data exists (ActivityLog
+  only logs actions), so start with Step 0a (view logging) before retiring anything.
+  Owner questions (CK transfers, which score stays, Growth vs Marketing, Inbox for
+  managers) are open in section 6 of that doc.
+  **Step 1 built (same PR):** sidebar = 10 sections + Settings gear; pages as tabs
+  (`components/section-tabs.tsx`, driven by nav.tsx subgroups). Follow-up: regroup the
+  Staff & Access grant cards (`lib/modules.ts`) to the new section names. Local tsc of
+  backoffice needs NODE_OPTIONS=--max-old-space-size=8192 (OOMs at the default).
+
+- 2026-11-16 — **EA export: prior-year arrears now go to B.2.** An allowance
+  line with `relates_to_year < form year` (new, set via the run page's ad-hoc
+  adjustment form for ARREARS codes, validated in `/api/hr/payroll/adjustments`)
+  is carved out of B.1(c) into new CSV columns "B.2 Prior-Year Arrears" /
+  "B.2 Relates To Year" (`priorYearArrears()` in `lib/hr/statutory/annual.ts`).
+  CP8D/Form E gross unchanged (still paid that year). Untagged lines are never
+  guessed. **Backfilled 2026-11-16 (owner approved):** all 19 "Arrears Of
+  Salary" lines in the Jan-2026 monthly run (RM10,755.14, Dec-2025 pay) now
+  carry `relates_to_year: 2025` — only that key added; amounts untouched. Hand-made EA PDF for Nur Hidayat
+  bin Jamalolail produced this session (not stored in repo — PII).
+- 2026-10-30 — **GRNI placeholders double-count purchases.** Receiving /
+  PO send mints a placeholder bill; when the real bill is recorded via Quick
+  Upload (pay-and-claim) or the invoices page it lands on a NEW order and the
+  placeholder stayed PENDING, so the goods were counted twice (often once as
+  INGREDIENT, once as OTHER). Code fix: `lib/inventory/supersede-placeholders.ts`
+  zeroes + settles the matching placeholder(s) (same supplier+outlet, ±21d,
+  amount within max(RM2,0.5%), or a unique 2–3 placeholder sum), flag
+  SUPERSEDED_PLACEHOLDER keeps originalAmount. **Applied to prod 2026-10-30:**
+  21 placeholders zeroed (RM11,395.25; Conezion RM6,470.75): 19 duplicates +
+  2 on cancelled POs; reversible via flags->meta.originalAmount (source
+  cleanup-2026-10-30). Still open: placeholders on POs never received
+  (group RM37k at 30 Oct; Conezion Q3 RM9,349.56 unconfirmed after evidence
+  check) and placeholders on CANCELLED POs are not auto-zeroed on cancel.
+- 2026-10-30 — **Conezion Q3 COGS: transfers + stock counts are the swing,
+  not purchases.** Purchases are real (RM177,760 invoiced ≈ RM176,492 paid
+  from the 2644 account). (1) **Stock transfers** never reduce the sender's
+  COGS: the staff web form had NO package picker, so lines stored packs as
+  base units ("6ctn" milk = 6 ml) and none were ever received (all PENDING;
+  P&L counts RECEIVED/COMPLETED only). From the 2026-08-31 package guard on,
+  the form rejected multi-package items → staff stopped logging (0 lines in
+  Sept). Form fixed (package picker + "Mark received"); the ~105 historic
+  lines need a manager-confirmed unit — value swings RM4.1k (smallest pack)
+  to RM14.7k (usual delivery pack) for Putrajaya Q3 out. (2) **Stock-count
+  valuation** inflates via mis-set packages: Chocolate Mudslide / Burnt
+  Cheesecake "Slice" package = whole 12-slice cake at RM130; Biscoff Batik
+  "Box" (10) and Telur Omega "Pack" (10) counted in pieces. Unit-fixed
+  monthly counts: 12 Jul 11.1k (incomplete — core items zero), 31 Jul 18.8k,
+  31 Aug 18.5k, 30 Sep 19.9k → stock is flat. Q3 RPS dividend =
+  25% × (EBITDA − interest) × 85%: RM0 (cautious transfers) to RM1,770.71.
+- 2026-10-30 — **Conezion Q3-2026 accountant FS (Google Sheet "Conezion FS")
+  vetted against prod.** Ties: sales RM356,860.03 = `unified_sales` Q3 for
+  CC001 to the sen (pos_native 257,700.36 incl. Grabfood 26,990.60 + pickup
+  99,159.67; the sheet mislabels it all "Storehub"); RPS dividend 21,859.20 =
+  Q1 10,192.74 + Q2 11,666.48 (bank, 8 lines 27 Jul) = GL 4000; Gosame
+  RM1,500 inflow 25 Jul; payroll total within RM1.4k (hr_payroll_items CC001
+  Jul–Sep: gross 55,259.44, net 49,093.59, EE stat 6,165.85, ER stat
+  7,706.40 — the sheet books NET pay as salary + EE+ER as statutory).
+  **Gaps:** ingredient invoices Q3 = RM177,760 vs sheet COGS 163,566 — the
+  sheet is missing ~RM14k, matching Sept invoices still PENDING (RM20.4k);
+  sheet trade payables RM3,596.50 vs RM22.3k unpaid ingredient invoices.
+  TNB is paid ~3 months late (May bill paid 17 Aug), so Q3 electricity
+  17.4k is a normal accrual and Q1's 8.9k was the understated one.
+  **System gaps found:** Conezion bank feed stops at 2026-09-09 (other two
+  accounts current to 10-13); `fin_payroll_actuals` has nothing after
+  2026-06 (SLO breach); Conezion GL is not usable as a balance sheet
+  (1999 suspense RM58k, 3900 opening equity −271.6k, depreciation stops
+  at RM965, PPE cost 274k vs accountant 482k). Stock counts: 30 Jun was a
+  DAILY 82-item count (no full opening anchor); 30 Sep monthly count values
+  ~RM28.8k with 93/257 items uncosted.
+- 2026-10-30 — **Bank feed ROOT CAUSE confirmed (Vercel logs, manual run
+  08:53Z):** Prisma `P2028` — the feed rebuild rewrote every line since the
+  31 May PDF anchor in one 120s transaction, which no longer fits; rollback →
+  300s timeout. Not Bukku. Follow-up PR resumes from the last complete feed
+  month (`chooseFeedAnchor`, 7-day overlap) + a 180s account budget. Verify
+  after deploy: all 3 accounts reach ~10-29 on the next run.
+- 2026-10-30 — **Bank feed fix shipped (#1271):** per-account isolation +
+  Bukku retries + stale/error escalation in the feed cron. Root error not
+  confirmed (no Vercel log access) — after deploy, read the first
+  `finance_gl_post` escalation in `agent_actions` (or confirm
+  `max(BankStatementLine.txnDate)` advances for 2644). Human action: upload
+  Jun–Sep Maybank PDFs for all 3 accounts to re-anchor the pull.
 
 - 2026-09-26 — **A PAID order was killed 51s after checkout: RM answered
   EXPIRED on a checkout the customer's bank had ALREADY debited.** C-7272

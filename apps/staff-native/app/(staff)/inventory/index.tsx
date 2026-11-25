@@ -1,108 +1,96 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { RefreshControl, ScrollView, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import type { ComponentType } from "react";
 import {
   AlertTriangle,
   ArrowLeftRight,
-  ChevronRight,
   ClipboardCheck,
   FileText,
   Package,
+  PackageCheck,
   Receipt,
   ShoppingCart,
   Trash2,
 } from "lucide-react-native";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
-import { SkeletonRow } from "../../../components/ui";
+import { List, ListRow, Section, SkeletonRow } from "../../../components/ui";
 import { useStaff } from "../../../lib/store";
 import { hasAccess } from "../../../lib/access";
 import { fetchStockLevels } from "../../../lib/ops/stock-levels";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 type Op = {
   href: string;
   title: string;
   subtitle: string;
-  icon: ComponentType<{ color: string; size: number }>;
-  iconBg: string;
-  iconColor: string;
+  icon: ComponentType<{ color?: string; size?: number }>;
   moduleKey: string;
 };
 
-const OPS: Op[] = [
+// Grouped by the life of an ingredient at the outlet: what is on the shelf,
+// what came in or went out, and what was bought and paid for.
+const ON_THE_SHELF: Op[] = [
   {
     href: "/(staff)/stock-count",
-    title: "Stock Count",
-    subtitle: "Daily stock check",
+    title: "Stock count",
+    subtitle: "Count what is on the shelf",
     icon: ClipboardCheck,
-    iconBg: "bg-primary-50",
-    iconColor: "#C2452D",
     moduleKey: "inventory:stock-count",
-  },
-  {
-    href: "/(staff)/receiving",
-    title: "Receiving",
-    subtitle: "Record deliveries",
-    icon: Package,
-    iconBg: "bg-blue-100/70",
-    iconColor: "#2563EB",
-    moduleKey: "inventory:receivings",
   },
   {
     href: "/(staff)/wastage",
     title: "Wastage",
-    subtitle: "Report waste & spillage",
+    subtitle: "Log what was thrown away and why",
     icon: Trash2,
-    iconBg: "bg-red-100/70",
-    iconColor: "#DC2626",
     moduleKey: "inventory:wastage",
+  },
+];
+
+const IN_AND_OUT: Op[] = [
+  {
+    href: "/(staff)/receiving",
+    title: "Receiving",
+    subtitle: "Check in a delivery",
+    icon: Package,
+    moduleKey: "inventory:receivings",
   },
   {
     href: "/(staff)/transfers",
     title: "Transfers",
-    subtitle: "Inter-outlet transfers",
+    subtitle: "Stock moved between outlets",
     icon: ArrowLeftRight,
-    iconBg: "bg-purple-100/70",
-    iconColor: "#7C3AED",
     moduleKey: "inventory:transfers",
   },
-  {
-    href: "/(staff)/claims",
-    title: "Pay & Claim",
-    subtitle: "Receipts & vendor payment requests",
-    icon: Receipt,
-    iconBg: "bg-amber-100/70",
-    iconColor: "#D97706",
-    moduleKey: "inventory:pay-and-claim",
-  },
+];
+
+const BUY_AND_PAY: Op[] = [
   {
     href: "/(staff)/orders",
-    title: "Purchase Orders",
-    subtitle: "Create, approve & send POs to suppliers",
+    title: "Purchase orders",
+    subtitle: "Create, approve and send to suppliers",
     icon: ShoppingCart,
-    iconBg: "bg-emerald-100/70",
-    iconColor: "#059669",
     moduleKey: "inventory:orders",
   },
   {
     href: "/(staff)/invoices",
     title: "Invoices",
-    subtitle: "Supplier invoices: paid, unpaid, overdue",
+    subtitle: "Supplier invoices and proof of payment",
     icon: FileText,
-    iconBg: "bg-indigo-100/70",
-    iconColor: "#4F46E5",
     moduleKey: "inventory:invoices",
+  },
+  {
+    href: "/(staff)/claims",
+    title: "Pay and claim",
+    subtitle: "Receipts you paid for, and payment requests",
+    icon: Receipt,
+    moduleKey: "inventory:pay-and-claim",
   },
 ];
 
 export default function InventoryHub() {
+  const C = useCelsius().color;
   const router = useRouter();
   const session = useStaff((s) => s.session);
   const [counts, setCounts] = useState<{ critical: number; low: number } | null>(
@@ -137,14 +125,16 @@ export default function InventoryHub() {
   );
 
   const alertCount = (counts?.critical ?? 0) + (counts?.low ?? 0);
-  const allowedOps = OPS.filter((op) =>
-    hasAccess(session?.role, session?.moduleAccess, op.moduleKey),
-  );
+  const can = (op: Op) => hasAccess(session?.role, session?.moduleAccess, op.moduleKey);
+  const groups = [
+    { title: "On the shelf", ops: ON_THE_SHELF.filter(can) },
+    { title: "In and out", ops: IN_AND_OUT.filter(can) },
+    { title: "Buy and pay", ops: BUY_AND_PAY.filter(can) },
+  ].filter((g) => g.ops.length > 0);
 
   return (
     <Screen edges={["top", "left", "right"]}>
-      {/* Sticky header */}
-      <PageHeader title="Inventory" subtitle="Stock operations" />
+      <PageHeader title="Stock" subtitle={session?.outletName ?? undefined} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -156,86 +146,52 @@ export default function InventoryHub() {
               setRefreshing(true);
               load();
             }}
-            tintColor="#C2452D"
-            colors={["#C2452D"]}
+            tintColor={C["text-3"]}
+            colors={[C["text-2"]]}
           />
         }
       >
-        {/* Stock status banner */}
+        {/* Stock levels: the one thing to look at first. */}
         {alertCount > 0 ? (
-          <Pressable
-            onPress={() => router.push("/(staff)/inventory/levels")}
-            accessibilityLabel="Stock alert"
-            className="mb-3 flex-row items-center gap-3 rounded-3xl border border-danger/30 bg-danger/5 px-4 py-3.5 active:opacity-90"
-          >
-            <View className="h-11 w-11 items-center justify-center rounded-2xl bg-danger/10">
-              <AlertTriangle color="#DC2626" size={20} />
-            </View>
-            <View className="flex-1">
-              <Text className="text-base font-body-bold text-danger">
-                Stock alert
-              </Text>
-              <Text className="mt-0.5 text-xs font-body text-danger/80">
-                {counts?.critical ?? 0} out, {counts?.low ?? 0} low, tap to
-                review
-              </Text>
-            </View>
-            <ChevronRight color="#DC2626" size={16} />
-          </Pressable>
+          <List>
+            <ListRow
+              icon={AlertTriangle}
+              tone="danger"
+              title={`${counts?.critical ?? 0} out, ${counts?.low ?? 0} low`}
+              meta="Below par at this outlet. Tap to see which."
+              onPress={() => router.push("/(staff)/inventory/levels")}
+            />
+          </List>
         ) : counts ? (
-          <Pressable
-            onPress={() => router.push("/(staff)/inventory/levels")}
-            accessibilityLabel="Stock levels"
-            className="mb-3 flex-row items-center gap-3 rounded-3xl border border-success/30 bg-success/5 px-4 py-3.5 active:opacity-90"
-          >
-            <View className="h-11 w-11 items-center justify-center rounded-2xl bg-success/10">
-              <Package color="#15803D" size={20} />
-            </View>
-            <View className="flex-1">
-              <Text className="text-base font-body-bold text-success">
-                Stock levels healthy
-              </Text>
-              <Text className="mt-0.5 text-xs font-body text-success/80">
-                Nothing below par, tap to browse
-              </Text>
-            </View>
-            <ChevronRight color="#15803D" size={16} />
-          </Pressable>
-        ) : (
-          <View className="mb-3">
-            <SkeletonRow />
-          </View>
-        )}
+          <List>
+            <ListRow
+              icon={PackageCheck}
+              tone="ok"
+              title="Stock levels healthy"
+              meta="Nothing below par. Tap to browse."
+              onPress={() => router.push("/(staff)/inventory/levels")}
+            />
+          </List>
+        ) : session?.outletId ? (
+          <SkeletonRow />
+        ) : null}
 
-        {/* Operations */}
-        <View className="gap-2.5">
-          {allowedOps.map((op) => {
-            const Icon = op.icon;
-            return (
-              <Pressable
-                key={op.href}
-                onPress={() => router.push(op.href as never)}
-                accessibilityLabel={op.title}
-                className="flex-row items-center gap-3 rounded-3xl border border-border bg-surface px-4 py-3.5 active:bg-primary-50"
-              >
-                <View
-                  className={`h-11 w-11 items-center justify-center rounded-2xl ${op.iconBg}`}
-                >
-                  <Icon color={op.iconColor} size={20} />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-base font-body-bold text-espresso">
-                    {op.title}
-                  </Text>
-                  <Text className="mt-0.5 text-xs font-body text-muted-fg">
-                    {op.subtitle}
-                  </Text>
-                </View>
-                <ChevronRight color="#9CA3AF" size={16} />
-              </Pressable>
-            );
-          })}
-        </View>
+        {groups.map((g) => (
+          <Section key={g.title} title={g.title}>
+            <List>
+              {g.ops.map((op) => (
+                <ListRow
+                  key={op.href}
+                  icon={op.icon}
+                  title={op.title}
+                  meta={op.subtitle}
+                  onPress={() => router.push(op.href as never)}
+                />
+              ))}
+            </List>
+          </Section>
+        ))}
+        <View className="h-2" />
       </ScrollView>
     </Screen>
   );

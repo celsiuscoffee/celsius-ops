@@ -15,18 +15,17 @@
 // the attendance screen — which only set final_status and paid 0 OT — and
 // believed the OT was in. Shairuleen had 33 unpaid overstay hours, Firdaus 9.5.
 //
-// Owner 2026-09-03: "only the OT Ariff approves in attendance will be counted
-// as OT on payroll." So the attendance review IS the OT approval: confirming a
-// log with a tail writes an APPROVED request and stamps the log right there
-// (`approved` mode, from the attendance PATCH). The cron still files PENDING
-// requests for tails nobody has looked at (`pending` mode) so they show up in
-// the OT queue instead of vanishing.
+// Owner 2026-09-03 made the attendance review the OT approval. Owner
+// 19 Nov 2026 split them again ("one is issues, one is to approve ot"):
+// Clock-ins decides whether a clock-in is a true record; Overtime decides the
+// OT. Every tail becomes a PENDING request — filed by the daily cron, or
+// straight away when a manager confirms or fixes the day (`refresh` mode) —
+// and only an approval on the Overtime page stamps it for payroll.
 //
 // Pure core (`otRequestCandidates`) is pinned by ot-request-generator.test.ts.
 
 import { hrSupabaseAdmin } from "@/lib/hr/supabase";
 import { paidWindowHours, mytDateString, mytInstant } from "@/lib/hr/hours";
-import { applyApprovedOt } from "@/lib/hr/ot-payroll-sync";
 import { fetchAllRows } from "@/lib/hr/fetch-all";
 
 export type TailLog = {
@@ -233,35 +232,36 @@ export function syncWindow(now: Date, explicitMonth?: string | null): { start: s
 export type GenerateResult = {
   /** New rows inserted. */
   created: number;
-  /** Existing pending rows approved in place (approved mode only). */
-  approved: number;
+  /** Pending rows brought up to date (refresh mode only). */
+  updated: number;
   /** Total hours put in front of / behind the manager. */
   hours: number;
   candidates: OtRequestCandidate[];
 };
 
 /**
- * Scan closed full-timer logs in [start, end) and file a request for every
- * (person, day) with ≥0.5h of clocked OT that has none.
+ * Scan closed full-timer logs in [start, end) and file a PENDING request for
+ * every (person, day) with ≥0.5h of clocked OT, for the manager to decide on
+ * the Overtime page. OT is approved there and only there (owner, 19 Nov 2026:
+ * "one is issues, one is to approve ot" — Clock-ins handles clock-in issues,
+ * Overtime approves OT; Ariff and the outlet managers both approve).
  *
- *  - `pending`  (cron / manual sync): insert pending post_hoc requests for the
- *               manager to decide in the OT queue. Idempotent on (user, date).
- *  - `approved` (attendance review): the manager has just confirmed the day,
- *               and per the owner that confirmation IS the OT approval. Insert
- *               the request already approved — or approve the pending one that
- *               is sitting there — and stamp the log so payroll pays it. A
- *               request the manager already decided (approved / partial /
- *               rejected / cancelled) is left alone.
+ *  - `pending` (daily cron / manual sync): insert requests for days that have
+ *              none. Idempotent on (user, date).
+ *  - `refresh` (a manager just confirmed or corrected a day on Clock-ins):
+ *              as `pending`, but a request still pending for that day is
+ *              updated to the day's current hours, so fixed times are what
+ *              the Overtime page shows. Decided requests are left alone.
  */
 export async function generateOtRequests(opts: {
   start: string;
   end: string;
-  mode: "pending" | "approved";
+  mode: "pending" | "refresh";
   actorUserId: string;
   /** Restrict to these users (single-log hook); omit for everyone. */
   userIds?: string[];
 }): Promise<GenerateResult> {
-  const empty: GenerateResult = { created: 0, approved: 0, hours: 0, candidates: [] };
+  const empty: GenerateResult = { created: 0, updated: 0, hours: 0, candidates: [] };
 
   let profQuery = hrSupabaseAdmin
     .from("hr_employee_profiles")
@@ -299,7 +299,7 @@ export async function generateOtRequests(opts: {
   const pendingByKey = new Map<string, string>();
   for (const r of (existing || []) as Array<{ id: string; user_id: string; date: string; status: string }>) {
     const key = `${r.user_id}|${r.date}`;
-    if (opts.mode === "approved" && r.status === "pending") pendingByKey.set(key, r.id);
+    if (opts.mode === "refresh" && r.status === "pending") pendingByKey.set(key, r.id);
     else existingKeys.add(key);
   }
 
@@ -307,9 +307,10 @@ export async function generateOtRequests(opts: {
   if (candidates.length === 0) return empty;
 
   const now = new Date().toISOString();
-  if (opts.mode === "pending") {
+  const fresh = candidates.filter((c) => !pendingByKey.has(`${c.user_id}|${c.date}`));
+  if (fresh.length > 0) {
     const { error } = await hrSupabaseAdmin.from("hr_overtime_requests").insert(
-      candidates.map((c) => ({
+      fresh.map((c) => ({
         user_id: c.user_id,
         outlet_id: c.outlet_id,
         date: c.date,
@@ -323,84 +324,29 @@ export async function generateOtRequests(opts: {
       })),
     );
     if (error) throw new Error(error.message);
-    return { created: candidates.length, approved: 0, hours: candidates.reduce((s, c) => s + c.hours, 0), candidates };
   }
-
-  type ApprovedRow = {
-    id: string;
-    user_id: string;
-    outlet_id: string | null;
-    date: string;
-    ot_type: string;
-    hours_approved: number;
-    attendance_log_id: string | null;
-  };
-  let created = 0;
-  let approved = 0;
-  let hours = 0;
+  let updated = 0;
   for (const c of candidates) {
-    const key = `${c.user_id}|${c.date}`;
-    const pendingId = pendingByKey.get(key);
-    let row: ApprovedRow | null = null;
-    if (pendingId) {
-      const { data, error } = await hrSupabaseAdmin
-        .from("hr_overtime_requests")
-        .update({
-          status: "approved",
-          hours_approved: c.hours,
-          reviewed_by: opts.actorUserId,
-          reviewed_at: now,
-          updated_at: now,
-          manager_notes: "Approved via attendance review",
-          attendance_log_id: c.attendance_log_id,
-        })
-        .eq("id", pendingId)
-        .select("id, user_id, outlet_id, date, ot_type, hours_approved, attendance_log_id")
-        .single();
-      if (error) throw new Error(error.message);
-      row = data as ApprovedRow;
-      approved++;
-    } else {
-      const { data, error } = await hrSupabaseAdmin
-        .from("hr_overtime_requests")
-        .insert({
-          user_id: c.user_id,
-          outlet_id: c.outlet_id,
-          date: c.date,
-          request_type: "post_hoc",
-          hours_requested: c.hours,
-          hours_approved: c.hours,
-          ot_type: c.ot_type,
-          reason: c.reason,
-          status: "approved",
-          requested_by: opts.actorUserId,
-          reviewed_by: opts.actorUserId,
-          reviewed_at: now,
-          manager_notes: "Approved via attendance review",
-          attendance_log_id: c.attendance_log_id,
-        })
-        .select("id, user_id, outlet_id, date, ot_type, hours_approved, attendance_log_id")
-        .single();
-      if (error) throw new Error(error.message);
-      row = data as ApprovedRow;
-      created++;
-    }
-    if (row) {
-      // Land it on the log so payroll reads it (same path as the OT queue).
-      await applyApprovedOt(row);
-      hours += c.hours;
-    }
+    const pendingId = pendingByKey.get(`${c.user_id}|${c.date}`);
+    if (!pendingId) continue;
+    const { error } = await hrSupabaseAdmin
+      .from("hr_overtime_requests")
+      .update({ hours_requested: c.hours, ot_type: c.ot_type, reason: c.reason, attendance_log_id: c.attendance_log_id, updated_at: now })
+      .eq("id", pendingId)
+      .eq("status", "pending");
+    if (error) throw new Error(error.message);
+    updated++;
   }
-  return { created, approved, hours, candidates };
+  return { created: fresh.length, updated, hours: candidates.reduce((s, c) => s + c.hours, 0), candidates };
 }
 
 /**
- * Attendance-review hook: the manager just confirmed one log. Approve its OT
- * tail (if ≥0.5h and not already decided) and stamp it. Never throws — the
- * review itself must not fail because the OT write did; returns the hours
- * approved so the UI can say so.
+ * Clock-ins hook: the manager just confirmed or corrected one day. Put its OT
+ * (if ≥0.5h and not already decided) on the Overtime page as pending, at the
+ * day's current hours. Never throws — the review itself must not fail because
+ * the OT write did; returns the hours sent so the UI can say so.
  */
-export async function approveOtForReviewedLog(
+export async function fileOtForReviewedLog(
   log: { user_id: string; clock_in: string },
   actorUserId: string,
 ): Promise<number> {
@@ -409,13 +355,13 @@ export async function approveOtForReviewedLog(
     const r = await generateOtRequests({
       start: new Date(dayStart).toISOString(),
       end: new Date(dayStart + 24 * 3600 * 1000).toISOString(),
-      mode: "approved",
+      mode: "refresh",
       actorUserId,
       userIds: [log.user_id],
     });
     return r.hours;
   } catch (e) {
-    console.error("[ot-request-generator] approveOtForReviewedLog failed:", e);
+    console.error("[ot-request-generator] fileOtForReviewedLog failed:", e);
     return 0;
   }
 }

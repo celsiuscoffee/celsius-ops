@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
-import { Plus, Search, RefreshCw, Pencil, Trash2, Loader2, X, ZoomIn, Star, GripVertical } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Loader2, X, ZoomIn, Star, GripVertical } from "lucide-react";
 import { useConfirm, toast } from "@celsius/ui";
 import { adminFetch } from "@/lib/pickup/admin-fetch";
 import { AvailabilityMatrix } from "./_AvailabilityMatrix";
+import { KeyNumber } from "@/components/ui/key-number";
 import type { ModifierGroup } from "./_ModifierGroupsEditor";
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor,
@@ -49,18 +50,18 @@ function SortableCategoryHeader({ id, name, children }: { id: string; name: stri
     position: "relative",
   };
   return (
-    <div ref={setNodeRef} style={style} className="bg-white rounded-2xl overflow-hidden">
-      <div className="px-5 py-3 border-b bg-muted/20 flex items-center gap-3">
+    <div ref={setNodeRef} style={style} className="overflow-hidden rounded-card border border-line bg-surface">
+      <div className="flex items-center gap-3 border-b border-line px-4 py-3">
         <button
           {...attributes}
           {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-[#160800] -ml-1 touch-none"
+          className="-ml-1 cursor-grab touch-none p-1 text-text-3 hover:text-text active:cursor-grabbing"
           title="Drag to reorder category"
           aria-label="Drag to reorder category"
         >
           <GripVertical className="h-4 w-4" />
         </button>
-        <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wide">{name}</h2>
+        <h2 className="text-sm font-semibold text-text">{name}</h2>
       </div>
       {children}
     </div>
@@ -73,16 +74,15 @@ function SortableProductRow({ id, children }: { id: string; children: React.Reac
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    background: isDragging ? "#fff" : undefined,
     zIndex: isDragging ? 10 : undefined,
     position: "relative",
   };
   return (
-    <div ref={setNodeRef} style={style} className="flex items-center gap-4 px-5 py-3.5 bg-white">
+    <div ref={setNodeRef} style={style} className={`flex items-center gap-3 px-4 py-3 ${isDragging ? "bg-raised shadow-lg" : "bg-surface"}`}>
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing p-1 text-muted-foreground hover:text-[#160800] -ml-1 touch-none"
+        className="-ml-1 cursor-grab touch-none p-1 text-text-3 hover:text-text active:cursor-grabbing"
         title="Drag to reorder"
         aria-label="Drag to reorder"
       >
@@ -127,11 +127,11 @@ export default function PickupMenu() {
   useEffect(() => { load(); }, []);
 
   async function handleDelete(id: string) {
-    if (!(await confirm({ title: "Delete this product?", confirmLabel: "Delete", destructive: true }))) return;
+    if (!(await confirm({ title: "Delete this item?", confirmLabel: "Delete", destructive: true }))) return;
     setDeleting(id);
     await adminFetch(`/api/pickup/products/${id}`, { method: "DELETE" });
     setProducts((prev) => prev.filter((p) => p.id !== id));
-    toast.success("Product deleted");
+    toast.success("Item deleted");
     setDeleting(null);
   }
 
@@ -231,88 +231,70 @@ export default function PickupMenu() {
         .filter(({ items }) => items.length > 0);
 
   const unavailableCount = products.filter((p) => !p.is_available).length;
+  const noPhotoCount = products.filter((p) => !p.image).length;
 
   return (
-    <div className="p-3 sm:p-6 space-y-5 max-w-4xl">
+    <div className="max-w-[1100px] space-y-5 px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
-      {/* Tabs */}
-      <div className="flex gap-1 bg-white rounded-xl p-1 w-fit border border-border/40">
-        <button
-          type="button"
-          onClick={() => setView("catalog")}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            view === "catalog"
-              ? "bg-[#160800] text-white shadow-sm"
-              : "text-muted-foreground hover:text-[#160800]"
-          }`}
-        >
-          Catalog
-        </button>
-        <button
-          type="button"
-          onClick={() => setView("availability")}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            view === "availability"
-              ? "bg-[#160800] text-white shadow-sm"
-              : "text-muted-foreground hover:text-[#160800]"
-          }`}
-        >
-          Availability
-        </button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Menu</h1>
+          <p className="mt-0.5 text-sm text-text-2">What customers can order in the app, in what order, and what is switched off.</p>
+        </div>
+        <Link href="/pickup/menu/new" className="inline-flex h-10 items-center gap-1.5 self-start rounded-ctl bg-ink px-4 text-sm font-semibold text-on-ink hover:bg-ink-hover">
+          <Plus className="h-4 w-4" /> Add item
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label="On the menu" value={loading ? null : String(products.length - unavailableCount)}
+          note={<>of <b className="font-semibold text-text-2">{products.length}</b> items in {categories.length} {categories.length === 1 ? "category" : "categories"}</>} />
+        <KeyNumber label="Switched off" value={loading ? null : String(unavailableCount)} tone={unavailableCount > 0 ? "warn" : undefined}
+          note={unavailableCount > 0 ? "customers cannot order these" : "everything can be ordered"} />
+        <KeyNumber label="Best sellers" value={loading ? null : String(products.filter((p) => p.is_popular).length)}
+          note="shown first in the app" />
+        <KeyNumber label="No photo" value={loading ? null : String(noPhotoCount)} tone={noPhotoCount > 0 ? "warn" : undefined}
+          note={noPhotoCount > 0 ? "show as blank tiles in the app" : "every item has a photo"} />
+      </div>
+
+      <div className="flex gap-6 border-b border-line">
+        {([["catalog", "All items"], ["availability", "By outlet"]] as const).map(([key, label]) => (
+          <button key={key} type="button" onClick={() => setView(key)}
+            className={`-mb-px border-b-2 pb-2.5 text-sm transition-colors ${view === key ? "border-text font-semibold text-text" : "border-transparent text-text-2 hover:text-text"}`}>
+            {label}
+          </button>
+        ))}
       </div>
 
       {view === "availability" && <AvailabilityMatrix />}
       {view === "catalog" && (
         <>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-[#160800]">Products</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {products.length} {products.length === 1 ? 'item' : 'items'} · {unavailableCount} unavailable
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={load}
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-[#160800] transition-colors"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              </button>
-              <Link
-                href="/pickup/menu/new"
-                className="flex items-center gap-2 bg-[#160800] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#2d1100] transition-colors"
-              >
-                <Plus className="h-4 w-4" /> Add Product
-              </Link>
-            </div>
-          </div>
-
           {/* Filters */}
-          <div className="bg-white rounded-2xl p-4 flex flex-wrap gap-2">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-wrap gap-2">
+            <div className="relative min-w-[200px] flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
               <input
                 type="text"
-                placeholder="Search products..."
+                placeholder="Search items..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="h-10 w-full rounded-ctl border border-line bg-surface pl-9 pr-3 text-sm text-text focus:border-ink focus:outline-none"
               />
             </div>
             <select
               value={catFilter}
               onChange={(e) => setCatFilter(e.target.value)}
-              className="border rounded-xl px-3 py-2 text-sm focus:outline-none"
+              className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text focus:outline-none"
             >
               <option value="all">All categories</option>
-              <option value={BEST_SELLERS_ID}>★ Best Sellers (order)</option>
+              <option value={BEST_SELLERS_ID}>Best sellers (set their order)</option>
               {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
 
           {/* Product list */}
           {loading ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">Loading...</div>
+            <div className="py-12 text-center text-sm text-text-3">Loading…</div>
           ) : (
             <div className="space-y-4">
               {(() => {
@@ -325,7 +307,7 @@ export default function PickupMenu() {
                       <button
                         type="button"
                         onClick={() => setZoomedImage(p.image)}
-                        className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 group focus:outline-none"
+                        className="group relative h-11 w-11 shrink-0 overflow-hidden rounded-ctl focus:outline-none"
                         title="Click to zoom"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -337,53 +319,49 @@ export default function PickupMenu() {
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className={`text-sm font-semibold ${!p.is_available ? "text-muted-foreground line-through" : "text-[#160800]"}`}>
+                        <p className={`truncate text-sm font-medium ${!p.is_available ? "text-text-3" : "text-text"}`}>
                           {p.name}
                         </p>
-                        {p.is_new && <span className="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">NEW</span>}
+                        {p.is_new && <span className="rounded-full bg-info-soft px-2 py-0.5 text-[11px] text-info-text">New</span>}
+                        {!p.is_available && <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn-text">Off</span>}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">RM {(p.base_price / 100).toFixed(2)}</p>
+                      <p className="mt-0.5 font-mono text-[12px] text-text-2">RM {(p.base_price / 100).toFixed(2)}</p>
                       {p.modifiers.length > 0 && (
-                        <p className="text-xs text-muted-foreground/70 mt-0.5">
+                        <p className="mt-0.5 truncate text-[12px] text-text-3">
                           {p.modifiers.map((g) => g.name).filter(Boolean).join(" · ")}
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex shrink-0 items-center gap-1.5">
                       <button
                         onClick={() => togglePopular(p)}
                         disabled={togglingPopular === p.id}
-                        title={p.is_popular ? "Remove from Best Sellers" : "Mark as Best Seller"}
-                        className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors disabled:opacity-50 ${
-                          p.is_popular
-                            ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                            : "bg-muted text-muted-foreground hover:bg-amber-50 hover:text-amber-600"
-                        }`}
+                        title={p.is_popular ? "Remove from best sellers" : "Mark as a best seller"}
+                        aria-label={p.is_popular ? "Remove from best sellers" : "Mark as a best seller"}
+                        className={`flex h-9 w-9 items-center justify-center rounded-ctl transition-colors disabled:opacity-50 ${p.is_popular ? "text-warn-text" : "text-text-3 hover:bg-sunken hover:text-text"}`}
                       >
-                        <Star className={`h-2.5 w-2.5 ${p.is_popular ? "fill-amber-500 text-amber-500" : ""}`} />
-                        {p.is_popular ? "Best Seller" : ""}
+                        <Star className={`h-4 w-4 ${p.is_popular ? "fill-current" : ""}`} />
                       </button>
-                      {!p.is_available && (
-                        <span className="text-[11px] font-semibold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">86&apos;d</span>
-                      )}
                       <button
                         onClick={() => toggleAvailable(p)}
                         disabled={toggling === p.id}
-                        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 ${p.is_available ? "bg-green-500" : "bg-gray-300"}`}
+                        aria-label={p.is_available ? `Switch off ${p.name}` : `Switch on ${p.name}`}
+                        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 ${p.is_available ? "bg-ok-text" : "bg-line-2"}`}
                       >
-                        <span className={`inline-block h-5 w-5 mt-0.5 rounded-full bg-white shadow transition-transform duration-200 ${p.is_available ? "translate-x-5.5" : "translate-x-0.5"}`} />
+                        <span className={`inline-block h-5 w-5 mt-0.5 rounded-full bg-surface shadow transition-transform duration-200 ${p.is_available ? "translate-x-5.5" : "translate-x-0.5"}`} />
                       </button>
                       <Link
                         href={`/pickup/menu/${p.id}`}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-[#160800] hover:bg-muted/50 transition-colors"
-                        title="Edit product"
+                        className="flex h-9 w-9 items-center justify-center rounded-ctl text-text-3 transition-colors hover:bg-sunken hover:text-text"
+                        title="Edit item" aria-label={`Edit ${p.name}`}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Link>
                       <button
                         onClick={() => handleDelete(p.id)}
                         disabled={deleting === p.id}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
+                        aria-label={`Delete ${p.name}`}
+                        className="flex h-9 w-9 items-center justify-center rounded-ctl text-text-3 transition-colors hover:bg-danger-soft hover:text-danger-text"
                       >
                         {deleting === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                       </button>
@@ -398,7 +376,7 @@ export default function PickupMenu() {
                     onDragEnd={(e) => handleProductDragEnd(e, items, productField)}
                   >
                     <SortableContext items={items.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-                      <div className="divide-y">
+                      <div className="divide-y divide-line">
                         {items.map((p) => (
                           <SortableProductRow key={p.id} id={p.id}>
                             {renderProductRowContent(p)}
@@ -415,9 +393,9 @@ export default function PickupMenu() {
                       {productsList(items)}
                     </SortableCategoryHeader>
                   ) : (
-                    <div key={cat.id} className="bg-white rounded-2xl overflow-hidden">
-                      <div className="px-5 py-3 border-b bg-muted/20">
-                        <h2 className="font-bold text-sm text-muted-foreground uppercase tracking-wide">{cat.name}</h2>
+                    <div key={cat.id} className="overflow-hidden rounded-card border border-line bg-surface">
+                      <div className="border-b border-line px-4 py-3">
+                        <h2 className="text-sm font-semibold text-text">{cat.name}</h2>
                       </div>
                       {productsList(items)}
                     </div>
@@ -441,7 +419,7 @@ export default function PickupMenu() {
                 return <>{categoryCards}</>;
               })()}
               {grouped.length === 0 && (
-                <div className="py-12 text-center text-sm text-muted-foreground">No products found</div>
+                <div className="py-12 text-center text-sm text-text-3">No items match.</div>
               )}
             </div>
           )}
@@ -456,7 +434,7 @@ export default function PickupMenu() {
         >
           <button
             onClick={closeZoom}
-            className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2 transition-colors"
+            className="absolute top-4 right-4 bg-surface/10 hover:bg-surface/20 text-white rounded-full p-2 transition-colors"
           >
             <X className="h-5 w-5" />
           </button>

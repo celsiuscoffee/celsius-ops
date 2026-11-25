@@ -3,13 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/page-header";
+import { BACKOFFICE_URL } from "@/lib/backoffice-url";
 import {
   LogOut,
   ChevronRight,
   Shield,
   Loader2,
-  ClipboardCheck,
   CheckCircle2,
   Key,
   X,
@@ -25,40 +25,19 @@ type User = {
   outletName?: string | null;
 };
 
-type ChecklistSummary = {
-  status: string;
-};
-
 export default function ProfilePage() {
   const params = useSearchParams();
   const justCompleted = params.get("completed") === "1";
   const [user, setUser] = useState<User | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [todayStats, setTodayStats] = useState({ total: 0, completed: 0 });
   const [profileCompleteness, setProfileCompleteness] = useState<{ percent: number; complete: boolean } | null>(null);
 
   useEffect(() => {
+    // Today's checklist count used to sit here too; it lives on Today and
+    // Checklists now (docs/design/staff-app-structure.md).
     fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((data) => {
-        if (data.id) setUser(data);
-        const today = new Date().toISOString().split("T")[0];
-        // For managers, show outlet checklists; for staff, show assigned only
-        const isManager = ["OWNER", "ADMIN", "MANAGER"].includes(data.role);
-        const params = isManager && data.outletId
-          ? `date=${today}&outletId=${data.outletId}`
-          : `date=${today}&mine=true`;
-        return fetch(`/api/checklists?${params}`);
-      })
-      .then((r) => r.json())
-      .then((cls: ChecklistSummary[]) => {
-        if (Array.isArray(cls)) {
-          setTodayStats({
-            total: cls.length,
-            completed: cls.filter((c) => c.status === "COMPLETED").length,
-          });
-        }
-      })
+      .then((data) => { if (data.id) setUser(data); })
       .catch(() => {});
 
     // Profile completeness — small payload, drives the reminder card.
@@ -136,128 +115,68 @@ export default function ProfilePage() {
   const isManager = user?.role === "ADMIN" || user?.role === "MANAGER" || user?.role === "OWNER";
 
   return (
-    <div className="px-4 py-4">
+    <div className="px-4 pb-6">
+      <PageHeader title="Me" description="Your details, your PIN, and signing out." backHref="/home" />
       <div className="space-y-4">
-        <h1 className="font-heading text-lg font-bold text-brand-dark">Profile</h1>
-
-        {/* User info */}
-        <Card className="px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-terracotta/10 text-lg font-bold text-terracotta-dark">
-              {initial}
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-gray-900">{user?.name ?? "Loading..."}</p>
-              <p className="text-sm text-gray-500">{roleLabel}</p>
-              {user?.outletName && (
-                <p className="text-xs text-gray-400">{user.outletName}</p>
-              )}
-            </div>
-            {isManager && (
-              <a
-                href="https://backoffice.celsiuscoffee.com"
-                className="flex items-center gap-1 rounded-lg bg-terracotta/10 px-2.5 py-1.5 text-xs font-medium text-terracotta-dark"
-              >
-                <Shield className="h-3 w-3" />
-                Admin
-              </a>
-            )}
+        {/* Who you are */}
+        <div className="flex items-center gap-3 rounded-card border border-line bg-surface px-4 py-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-sunken text-lg font-semibold text-text-2">
+            {initial}
           </div>
-        </Card>
-
-        {/* Just-completed thank-you ribbon — only after redirect from
-            /profile/personal?completed=1. Auto-fades visually but doesn't
-            time out (next page nav clears it via the URL change). */}
-        {justCompleted && (
-          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
-            <span>Profile saved — thank you!</span>
-          </div>
-        )}
-
-        {/* Personal info entry — also doubles as the completeness reminder
-            when the bar isn't full. Tapping anywhere on the card opens the
-            editor. */}
-        <Link
-          href="/profile/personal"
-          className={
-            "block rounded-xl border px-4 py-3 transition active:scale-[0.99] " +
-            (profileCompleteness && !profileCompleteness.complete
-              ? "border-amber-200 bg-amber-50"
-              : "bg-card hover:bg-gray-50")
-          }
-        >
-          <div className="flex items-center gap-3">
-            {profileCompleteness && !profileCompleteness.complete ? (
-              <AlertCircle className="h-5 w-5 shrink-0 text-amber-600" />
-            ) : (
-              <UserCircle2 className="h-5 w-5 shrink-0 text-terracotta" />
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-900">
-                {profileCompleteness && !profileCompleteness.complete
-                  ? "Complete your personal info"
-                  : "Personal info"}
-              </p>
-              <p className="text-xs text-gray-500">
-                Address, marital status, emergency contact &amp; more — needed for payslips and tax.
-              </p>
-              {profileCompleteness && !profileCompleteness.complete && (
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-amber-100">
-                  <div
-                    className="h-full bg-amber-500 transition-all"
-                    style={{ width: `${profileCompleteness.percent}%` }}
-                  />
-                </div>
-              )}
-            </div>
-            <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
-          </div>
-        </Link>
-
-        {/* Today's stats */}
-        <div>
-          <h2 className="mb-2 text-sm font-semibold text-gray-900">Today</h2>
-          <div className="grid grid-cols-2 gap-2">
-            <Card className="px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <ClipboardCheck className="h-4 w-4 text-terracotta" />
-                <div>
-                  <p className="text-[10px] text-gray-400">Checklists</p>
-                  <p className="text-base font-bold text-gray-900">{todayStats.total}</p>
-                </div>
-              </div>
-            </Card>
-            <Card className="px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                <div>
-                  <p className="text-[10px] text-gray-400">Completed</p>
-                  <p className="text-base font-bold text-gray-900">{todayStats.completed}</p>
-                </div>
-              </div>
-            </Card>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold text-text">{user?.name ?? "Loading…"}</p>
+            <p className="text-[13px] text-text-3">
+              {roleLabel}{user?.outletName && <> · {user.outletName}</>}
+            </p>
           </div>
         </div>
 
-        {/* Links */}
-        <div className="space-y-1">
+        {/* Just-completed thank-you ribbon — only after redirect from
+            /profile/personal?completed=1. */}
+        {justCompleted && (
+          <div className="flex items-center gap-2 rounded-card border border-ok/30 bg-ok-soft px-4 py-3 text-sm text-ok-text">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>Profile saved. Thank you.</span>
+          </div>
+        )}
+
+        <div className="overflow-hidden rounded-card border border-line bg-surface">
+          {/* Personal info: also the completeness reminder while the bar isn't full */}
+          <Link href="/profile/personal" className="flex min-h-[60px] items-center gap-3 px-4 py-2.5 active:bg-sunken">
+            {profileCompleteness && !profileCompleteness.complete ? (
+              <AlertCircle className="h-5 w-5 shrink-0 text-warn-text" />
+            ) : (
+              <UserCircle2 className="h-5 w-5 shrink-0 text-text-3" />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-text">
+                {profileCompleteness && !profileCompleteness.complete ? "Finish your personal info" : "Personal info"}
+              </p>
+              <p className="text-[13px] text-text-3">Address, emergency contact and more, for payslips and tax</p>
+              {profileCompleteness && !profileCompleteness.complete && (
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-warn-soft">
+                  <div className="h-full bg-warn transition-all" style={{ width: `${profileCompleteness.percent}%` }} />
+                </div>
+              )}
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-text-3" />
+          </Link>
           <button
             onClick={openPinModal}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-gray-50 active:bg-gray-100"
+            className="flex min-h-[52px] w-full items-center gap-3 border-t border-line px-4 py-2.5 text-left active:bg-sunken"
           >
-            <Key className="h-5 w-5 text-gray-400" />
-            <span className="flex-1 text-sm text-gray-700">Change PIN</span>
-            <ChevronRight className="h-4 w-4 text-gray-300" />
+            <Key className="h-5 w-5 shrink-0 text-text-3" />
+            <span className="flex-1 font-medium text-text">Change PIN</span>
+            <ChevronRight className="h-5 w-5 shrink-0 text-text-3" />
           </button>
           {isManager && (
             <a
-              href="https://backoffice.celsiuscoffee.com"
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-gray-50 active:bg-gray-100"
+              href={BACKOFFICE_URL}
+              className="flex min-h-[52px] w-full items-center gap-3 border-t border-line px-4 py-2.5 text-left active:bg-sunken"
             >
-              <Shield className="h-5 w-5 text-gray-400" />
-              <span className="flex-1 text-sm text-gray-700">Backoffice</span>
-              <ChevronRight className="h-4 w-4 text-gray-300" />
+              <Shield className="h-5 w-5 shrink-0 text-text-3" />
+              <span className="flex-1 font-medium text-text">Open the back office</span>
+              <ChevronRight className="h-5 w-5 shrink-0 text-text-3" />
             </a>
           )}
         </div>
@@ -266,25 +185,25 @@ export default function ProfilePage() {
         {showPinModal && (
           <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 sm:items-center" onClick={() => setShowPinModal(false)}>
             <div
-              className="w-full max-w-md rounded-t-2xl bg-white p-5 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5"
+              className="w-full max-w-md rounded-t-2xl bg-surface p-5 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-lg font-bold">Change PIN</h2>
-                <button onClick={() => setShowPinModal(false)} className="text-gray-400">
+                <button onClick={() => setShowPinModal(false)} aria-label="Close" className="-mr-2 flex h-11 w-11 items-center justify-center text-text-3">
                   <X className="h-5 w-5" />
                 </button>
               </div>
               {pinSuccess ? (
                 <div className="flex flex-col items-center gap-2 py-6 text-center">
-                  <CheckCircle2 className="h-12 w-12 text-green-500" />
-                  <p className="font-semibold text-gray-900">PIN updated</p>
+                  <CheckCircle2 className="h-12 w-12 text-ok" />
+                  <p className="font-semibold text-text">PIN updated</p>
                 </div>
               ) : (
                 <>
                   <div className="space-y-3">
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-600">Current PIN</label>
+                      <label className="mb-1 block text-xs font-medium text-text-2">Current PIN</label>
                       <input
                         type="password"
                         inputMode="numeric"
@@ -292,13 +211,13 @@ export default function ProfilePage() {
                         maxLength={6}
                         value={currentPin}
                         onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-lg tracking-widest"
+                        className="w-full rounded-ctl border border-line-2 bg-bg px-3 py-2.5 text-lg tracking-widest text-text"
                         placeholder="••••••"
                         autoComplete="current-password"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-600">New PIN (6 digits)</label>
+                      <label className="mb-1 block text-xs font-medium text-text-2">New PIN (6 digits)</label>
                       <input
                         type="password"
                         inputMode="numeric"
@@ -306,13 +225,13 @@ export default function ProfilePage() {
                         maxLength={6}
                         value={newPin}
                         onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-lg tracking-widest"
+                        className="w-full rounded-ctl border border-line-2 bg-bg px-3 py-2.5 text-lg tracking-widest text-text"
                         placeholder="••••••"
                         autoComplete="new-password"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-gray-600">Confirm new PIN</label>
+                      <label className="mb-1 block text-xs font-medium text-text-2">Confirm new PIN</label>
                       <input
                         type="password"
                         inputMode="numeric"
@@ -320,19 +239,19 @@ export default function ProfilePage() {
                         maxLength={6}
                         value={confirmPin}
                         onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-lg tracking-widest"
+                        className="w-full rounded-ctl border border-line-2 bg-bg px-3 py-2.5 text-lg tracking-widest text-text"
                         placeholder="••••••"
                         autoComplete="new-password"
                       />
                     </div>
                   </div>
                   {pinError && (
-                    <p className="mt-3 text-sm text-red-600">{pinError}</p>
+                    <p className="mt-3 text-sm text-danger-text">{pinError}</p>
                   )}
                   <button
                     onClick={handleChangePin}
                     disabled={pinSaving || !currentPin || !newPin || !confirmPin}
-                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-terracotta px-4 py-3 font-medium text-white disabled:opacity-50"
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-ink px-4 py-3 font-medium text-on-ink disabled:opacity-50"
                   >
                     {pinSaving && <Loader2 className="h-4 w-4 animate-spin" />}
                     Update PIN
@@ -347,10 +266,10 @@ export default function ProfilePage() {
         <button
           onClick={handleLogout}
           disabled={loggingOut}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-red-500 hover:bg-red-50 disabled:opacity-50"
+          className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-card border border-line bg-surface px-4 text-danger-text active:bg-danger-soft disabled:opacity-50"
         >
           {loggingOut ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="h-5 w-5" />}
-          <span className="text-sm font-medium">Log Out</span>
+          <span className="font-medium">Sign out</span>
         </button>
       </div>
     </div>

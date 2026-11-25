@@ -218,13 +218,13 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
             key={i}
             onClick={() => { setActive(i); setSelected(null); }}
             className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-              i === active ? "border-[#160800] bg-[#160800] text-white" : "border-gray-200 bg-white text-gray-700 hover:border-[#160800]"
+              i === active ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-text-2 hover:border-ink"
             }`}
           >
             {f.name || `Floor ${i + 1}`}
           </button>
         ))}
-        <button onClick={addFloor} className="flex items-center gap-1 rounded-lg border border-dashed border-gray-300 px-3 py-1.5 text-xs font-semibold text-[#A2492C] hover:border-[#A2492C]">
+        <button onClick={addFloor} className="flex items-center gap-1 rounded-lg border border-dashed border-line-2 px-3 py-1.5 text-xs font-semibold text-[#A2492C] hover:border-[#A2492C]">
           <Plus className="h-3.5 w-3.5" /> Floor
         </button>
       </div>
@@ -237,16 +237,16 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
               value={floor.name}
               onChange={(e) => patchFloor({ name: e.target.value })}
               placeholder="Floor name"
-              className="h-9 w-44 rounded-lg border border-gray-200 px-3 text-sm text-[#160800] outline-none focus:border-[#160800]"
+              className="h-9 w-44 rounded-lg border border-line px-3 text-sm text-text outline-none focus:border-ink"
             />
-            <span className="text-xs font-medium text-gray-500">Add table:</span>
-            <button onClick={() => addTable(2, "round")} title="2-seater (round bistro)" className="flex items-center gap-1 rounded-lg bg-[#160800] px-2.5 py-2 text-xs font-semibold text-white hover:bg-[#2d1100]">
+            <span className="text-xs font-medium text-text-2">Add table:</span>
+            <button onClick={() => addTable(2, "round")} title="2-seater (round bistro)" className="flex items-center gap-1 rounded-lg bg-ink px-2.5 py-2 text-xs font-semibold text-on-ink hover:bg-ink-hover">
               <Plus className="h-3.5 w-3.5" /> 2 pax
             </button>
-            <button onClick={() => addTable(4, "square")} title="4-seater" className="flex items-center gap-1 rounded-lg bg-[#160800] px-2.5 py-2 text-xs font-semibold text-white hover:bg-[#2d1100]">
+            <button onClick={() => addTable(4, "square")} title="4-seater" className="flex items-center gap-1 rounded-lg bg-ink px-2.5 py-2 text-xs font-semibold text-on-ink hover:bg-ink-hover">
               <Plus className="h-3.5 w-3.5" /> 4 pax
             </button>
-            <button onClick={() => addTable(6, "square")} title="6-seater (large)" className="flex items-center gap-1 rounded-lg bg-[#160800] px-2.5 py-2 text-xs font-semibold text-white hover:bg-[#2d1100]">
+            <button onClick={() => addTable(6, "square")} title="6-seater (large)" className="flex items-center gap-1 rounded-lg bg-ink px-2.5 py-2 text-xs font-semibold text-on-ink hover:bg-ink-hover">
               <Plus className="h-3.5 w-3.5" /> 6 pax
             </button>
             {floors.length > 1 && (
@@ -259,7 +259,7 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
           {/* Canvas */}
           <div
             ref={canvasRef}
-            className="relative w-full overflow-hidden rounded-xl border border-gray-200 bg-white"
+            className="relative w-full overflow-hidden rounded-xl border border-line bg-surface"
             style={{
               height: 460,
               touchAction: "none",
@@ -272,7 +272,7 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
             onPointerDown={(e) => { if (e.target === e.currentTarget) setSelected(null); }}
           >
             {floor.tables.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">
+              <div className="absolute inset-0 flex items-center justify-center text-xs text-text-3">
                 Tap &ldquo;Add table&rdquo;, then drag tables to match your floor.
               </div>
             )}
@@ -289,7 +289,7 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
                 onPointerUp={onTilePointerUp}
                 className={`absolute flex cursor-grab select-none flex-col items-center justify-center border text-center shadow-sm active:cursor-grabbing ${
                   t.shape === "round" ? "rounded-full" : "rounded-lg"
-                } ${selected === idx ? "border-[#A2492C] ring-2 ring-[#A2492C]/30" : "border-[#160800]/30"}`}
+                } ${selected === idx ? "border-[#A2492C] ring-2 ring-[#A2492C]/30" : "border-ink/30"}`}
                 style={{
                   left: `${t.x * 100}%`, top: `${t.y * 100}%`, transform: "translate(-50%, -50%)",
                   width: dim.w, height: dim.h, backgroundColor: "#fff",
@@ -298,12 +298,12 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
                 {/* Divider lines between the attached 2-tops (square tables only). */}
                 {t.shape !== "round" && dim.cells > 1 && Array.from({ length: dim.cells - 1 }).map((_, i) =>
                   dim.vertical
-                    ? <div key={i} className="absolute left-1 right-1 h-px bg-[#160800]/15" style={{ top: `${((i + 1) / dim.cells) * 100}%` }} />
-                    : <div key={i} className="absolute top-1 bottom-1 w-px bg-[#160800]/15" style={{ left: `${((i + 1) / dim.cells) * 100}%` }} />
+                    ? <div key={i} className="absolute left-1 right-1 h-px bg-ink/15" style={{ top: `${((i + 1) / dim.cells) * 100}%` }} />
+                    : <div key={i} className="absolute top-1 bottom-1 w-px bg-ink/15" style={{ left: `${((i + 1) / dim.cells) * 100}%` }} />
                 )}
                 <div className="relative z-10 flex flex-col items-center leading-none">
-                  <span className="text-sm font-bold text-[#160800]">{t.label}</span>
-                  {t.seats != null && <span className="text-[9px] text-gray-500">{t.seats}p</span>}
+                  <span className="text-sm font-bold text-text">{t.label}</span>
+                  {t.seats != null && <span className="text-[9px] text-text-2">{t.seats}p</span>}
                 </div>
               </div>
               );
@@ -312,45 +312,45 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
 
           {/* Selected table editor */}
           {selected != null && floor.tables[selected] && (
-            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-sunken/60 p-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Table</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Table</label>
                 <input
                   value={floor.tables[selected].label}
                   onChange={(e) => patchTable(selected, { label: e.target.value })}
-                  className="h-9 w-24 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-[#160800]"
+                  className="h-9 w-24 rounded-lg border border-line px-3 text-sm outline-none focus:border-ink"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Seats</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Seats</label>
                 <input
                   type="number" min={0}
                   value={floor.tables[selected].seats ?? ""}
                   onChange={(e) => patchTable(selected, { seats: e.target.value === "" ? null : Number(e.target.value) })}
-                  className="h-9 w-20 rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-[#160800]"
+                  className="h-9 w-20 rounded-lg border border-line px-3 text-sm outline-none focus:border-ink"
                   placeholder="—"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Shape</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Shape</label>
                 <div className="flex gap-1">
                   <button onClick={() => patchTable(selected, { shape: "square" })}
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg border ${floor.tables[selected].shape === "square" ? "border-[#160800] bg-[#160800] text-white" : "border-gray-200 text-gray-500"}`}>
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg border ${floor.tables[selected].shape === "square" ? "border-ink bg-ink text-on-ink" : "border-line text-text-2"}`}>
                     <Square className="h-4 w-4" />
                   </button>
                   <button onClick={() => patchTable(selected, { shape: "round" })}
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg border ${floor.tables[selected].shape === "round" ? "border-[#160800] bg-[#160800] text-white" : "border-gray-200 text-gray-500"}`}>
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg border ${floor.tables[selected].shape === "round" ? "border-ink bg-ink text-on-ink" : "border-line text-text-2"}`}>
                     <Circle className="h-4 w-4" />
                   </button>
                 </div>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Orient</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Orient</label>
                 <div className="flex gap-1">
                   <button onClick={() => patchTable(selected, { orientation: "h" })} title="Horizontal — join left to right"
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg ${floor.tables[selected].orientation === "h" ? "border-[#160800] bg-[#160800] text-white" : "border-gray-200 text-gray-500"}`}>↔</button>
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg ${floor.tables[selected].orientation === "h" ? "border-ink bg-ink text-on-ink" : "border-line text-text-2"}`}>↔</button>
                   <button onClick={() => patchTable(selected, { orientation: "v" })} title="Vertical — stack top to bottom"
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg ${floor.tables[selected].orientation === "v" ? "border-[#160800] bg-[#160800] text-white" : "border-gray-200 text-gray-500"}`}>↕</button>
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg ${floor.tables[selected].orientation === "v" ? "border-ink bg-ink text-on-ink" : "border-line text-text-2"}`}>↕</button>
                 </div>
               </div>
               <button onClick={() => deleteTable(selected)} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-2 text-xs font-medium text-red-500 hover:text-red-700">
@@ -360,7 +360,7 @@ export function TableLayoutEditor({ value, onChange }: { value: unknown; onChang
           )}
         </>
       ) : (
-        <button onClick={addFloor} className="flex items-center gap-1.5 rounded-lg bg-[#160800] px-3 py-2 text-xs font-semibold text-white hover:bg-[#2d1100]">
+        <button onClick={addFloor} className="flex items-center gap-1.5 rounded-lg bg-ink px-3 py-2 text-xs font-semibold text-on-ink hover:bg-ink-hover">
           <Plus className="h-3.5 w-3.5" /> Add your first floor
         </button>
       )}

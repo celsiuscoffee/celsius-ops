@@ -66,10 +66,10 @@ export const SHIFT_TEMPLATES: ShiftTemplate[] = [
     color: "indigo",
   },
 
-  // Cyberjaya/Tamarind shifts
+  // Tamarind shifts (ids keep the old cyberjaya_ prefix; saved schedules reference them)
   {
     id: "cyberjaya_morning",
-    label: "Cyberjaya Morning",
+    label: "Tamarind Morning",
     start_time: "07:30",
     end_time: "16:30",
     break_minutes: 30,
@@ -78,7 +78,7 @@ export const SHIFT_TEMPLATES: ShiftTemplate[] = [
   },
   {
     id: "cyberjaya_middle",
-    label: "Cyberjaya Middle",
+    label: "Tamarind Middle",
     start_time: "11:00",
     end_time: "20:00",
     break_minutes: 30,
@@ -87,7 +87,7 @@ export const SHIFT_TEMPLATES: ShiftTemplate[] = [
   },
   {
     id: "cyberjaya_closing",
-    label: "Cyberjaya Closing",
+    label: "Tamarind Closing",
     start_time: "14:30",
     end_time: "23:00",
     break_minutes: 30,

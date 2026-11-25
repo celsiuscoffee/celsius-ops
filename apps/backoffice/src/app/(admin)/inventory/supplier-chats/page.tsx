@@ -737,22 +737,22 @@ export default function SupplierChatsPage() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-64px)] gap-3 p-3 text-foreground lg:min-h-[560px]">
+    <div className="flex h-[calc(100dvh-64px)] gap-3 text-text lg:min-h-[560px] px-4 pt-6 pb-10 md:px-8">
       {/* ── Thread list ─────────────────────────────── */}
-      <div className={`${selected ? "hidden lg:flex" : "flex"} w-full lg:w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm`}>
-        <div className="border-b border-border p-3">
+      <div className={`${selected ? "hidden lg:flex" : "flex"} w-full lg:w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-sm`}>
+        <div className="border-b border-line p-3">
           <div className="flex items-center justify-between gap-2 text-sm font-medium">
             <span className="flex items-center gap-2">
               <MessageCircle size={16} /> Suppliers
             </span>
           </div>
           <div className="relative mt-2">
-            <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-3" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search name or number…"
-              className="h-8 w-full rounded-md border border-border bg-background pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground"
+              className="h-8 w-full rounded-md border border-line bg-surface pl-7 pr-2 text-xs text-text placeholder:text-text-3"
             />
           </div>
           {/* Action tabs in workflow order (order → reply → pay → receive). Each shows
@@ -762,7 +762,7 @@ export default function SupplierChatsPage() {
             {(needSupplierIds.size > 0 || filter === "need") && (
               <button
                 onClick={() => { setActiveSegmentId(null); setFilter("need"); }}
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${!activeSegment && filter === "need" ? "bg-amber-500/20 text-amber-800 dark:text-amber-300" : "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-400"}`}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${!activeSegment && filter === "need" ? "bg-warn-soft text-warn-text " : "bg-warn-soft text-warn-text hover:bg-warn-soft "}`}
               >
                 <ShoppingCart size={11} /> Need ordering {needSupplierIds.size}
               </button>
@@ -785,7 +785,7 @@ export default function SupplierChatsPage() {
               value={!activeSegment && (["auto", "assist", "off", "other"] as string[]).includes(filter) ? filter : ""}
               onChange={(e) => { if (e.target.value) { setActiveSegmentId(null); setFilter(e.target.value as "auto" | "assist" | "off" | "other"); } }}
               title="Filter by automation mode"
-              className={`rounded-full border px-2 py-[3px] text-[11px] ${!activeSegment && (["auto", "assist", "off", "other"] as string[]).includes(filter) ? "border-primary/40 bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground"}`}
+              className={`rounded-full border px-2 py-[3px] text-[11px] ${!activeSegment && (["auto", "assist", "off", "other"] as string[]).includes(filter) ? "border-line-2 bg-brand-soft text-text" : "border-line bg-surface text-text-3"}`}
             >
               <option value="">Mode</option>
               <option value="auto">Auto {counts?.auto ?? 0}</option>
@@ -799,7 +799,7 @@ export default function SupplierChatsPage() {
               return (
                 <span
                   key={seg.id}
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] ${on ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] ${on ? "bg-brand-soft text-text" : "text-text-3 hover:bg-sunken"}`}
                 >
                   <button onClick={() => setActiveSegmentId(seg.id)} className="inline-flex items-center gap-1">
                     {seg.name} {seg.keys.length}
@@ -809,7 +809,7 @@ export default function SupplierChatsPage() {
                       onClick={() => deleteSegment(seg.id)}
                       aria-label="Delete segment"
                       title="Delete segment"
-                      className="shrink-0 text-muted-foreground hover:text-destructive"
+                      className="shrink-0 text-text-3 hover:text-danger-text"
                     >
                       <X size={11} />
                     </button>
@@ -820,7 +820,7 @@ export default function SupplierChatsPage() {
             <button
               onClick={() => { const id = createSegment(); if (id) setActiveSegmentId(id); }}
               title="New segment"
-              className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+              className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] text-text-3 hover:bg-sunken"
             >
               <Plus size={11} /> Segment
             </button>
@@ -828,12 +828,12 @@ export default function SupplierChatsPage() {
         </div>
         <div className="flex-1 overflow-y-auto">
           {isLoading && (
-            <div className="flex items-center justify-center p-6 text-muted-foreground">
+            <div className="flex items-center justify-center p-6 text-text-3">
               <Loader2 size={18} className="animate-spin" />
             </div>
           )}
           {!isLoading && shown.length === 0 && (
-            <p className="p-4 text-xs text-muted-foreground">No suppliers match this filter.</p>
+            <p className="p-4 text-xs text-text-3">No suppliers match this filter.</p>
           )}
           {shown.map((t) => {
             const isPinned = pinnedKeys.has(t.key);
@@ -844,32 +844,32 @@ export default function SupplierChatsPage() {
               tabIndex={0}
               onClick={() => setSelected(t.key)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(t.key); } }}
-              className={`group relative flex w-full cursor-pointer gap-2.5 border-b border-border p-2.5 text-left ${selected === t.key ? "bg-muted" : "hover:bg-muted/50"}`}
+              className={`group relative flex w-full cursor-pointer gap-2.5 border-b border-line p-2.5 text-left ${selected === t.key ? "bg-sunken" : "hover:bg-sunken/50"}`}
             >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-medium text-primary">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-medium text-brand-text">
                 {initials(t.name)}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
                   <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium">
-                    {isPinned && <Pin size={11} className="shrink-0 fill-primary text-primary" />}
+                    {isPinned && <Pin size={11} className="shrink-0 fill-current text-brand-text" />}
                     {t.registered && t.automationMode && <ModeDot mode={t.automationMode} />}
                     <span className="truncate">{t.name}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-1">
-                    <span className="text-[11px] text-muted-foreground group-hover:hidden">{t.lastAt ? rel(t.lastAt) : ""}</span>
+                    <span className="text-[11px] text-text-3 group-hover:hidden">{t.lastAt ? rel(t.lastAt) : ""}</span>
                     <button
                       onClick={(e) => { e.stopPropagation(); setOpenMenuKey((k) => (k === t.key ? null : t.key)); }}
                       aria-label="Organize chat"
                       title="Pin / add to segment"
-                      className="hidden rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground group-hover:inline-flex"
+                      className="hidden rounded p-0.5 text-text-3 hover:bg-sunken hover:text-text group-hover:inline-flex"
                     >
                       <MoreHorizontal size={14} />
                     </button>
                   </span>
                 </div>
-                <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  {t.needsAttention && <AlertCircle size={11} className="shrink-0 text-destructive" />}
+                <div className="flex items-center gap-1 text-[11px] text-text-3">
+                  {t.needsAttention && <AlertCircle size={11} className="shrink-0 text-danger-text" />}
                   <span className="truncate">{t.hasMessages ? t.preview : "No messages yet"}</span>
                 </div>
               </div>
@@ -879,21 +879,21 @@ export default function SupplierChatsPage() {
                   <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setOpenMenuKey(null); }} />
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute right-2 top-9 z-20 w-52 rounded-md border border-border bg-popover p-1 text-[12px] text-popover-foreground shadow-lg"
+                    className="absolute right-2 top-9 z-20 w-52 rounded-md border border-line bg-raised p-1 text-[12px] text-text shadow-lg"
                   >
                     <button
                       onClick={() => { togglePin(t.key); setOpenMenuKey(null); }}
-                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-sunken"
                     >
-                      <Pin size={12} className={isPinned ? "fill-primary text-primary" : ""} />
+                      <Pin size={12} className={isPinned ? "fill-current text-brand-text" : ""} />
                       {isPinned ? "Unpin" : "Pin to top"}
                     </button>
-                    <div className="my-1 border-t border-border" />
-                    <div className="px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <div className="my-1 border-t border-line" />
+                    <div className="px-2 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-text-3">
                       Add to segment
                     </div>
                     {segments.length === 0 && (
-                      <div className="px-2 py-1 text-[11px] text-muted-foreground">No segments yet.</div>
+                      <div className="px-2 py-1 text-[11px] text-text-3">No segments yet.</div>
                     )}
                     {segments.map((seg) => {
                       const member = seg.keys.includes(t.key);
@@ -901,10 +901,10 @@ export default function SupplierChatsPage() {
                         <button
                           key={seg.id}
                           onClick={() => toggleSegmentMember(seg.id, t.key)}
-                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted"
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-sunken"
                         >
-                          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border border-border">
-                            {member && <Check size={11} className="text-primary" />}
+                          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border border-line">
+                            {member && <Check size={11} className="text-brand-text" />}
                           </span>
                           <span className="truncate">{seg.name}</span>
                         </button>
@@ -912,7 +912,7 @@ export default function SupplierChatsPage() {
                     })}
                     <button
                       onClick={() => { createSegment(t.key); setOpenMenuKey(null); }}
-                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-muted-foreground hover:bg-muted"
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-text-3 hover:bg-sunken"
                     >
                       <Plus size={12} /> New segment…
                     </button>
@@ -926,37 +926,37 @@ export default function SupplierChatsPage() {
       </div>
 
       {/* ── Conversation ────────────────────────────── */}
-      <div className={`${selected ? "flex" : "hidden lg:flex"} w-full min-w-0 lg:flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm`}>
+      <div className={`${selected ? "flex" : "hidden lg:flex"} w-full min-w-0 lg:flex-1 flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-sm`}>
         {!detail ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          <div className="flex flex-1 items-center justify-center text-sm text-text-3">
             Select a chat
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+            <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
               <div className="flex min-w-0 items-center gap-2">
                 <button
                   onClick={() => setSelected(null)}
                   aria-label="Back to list"
                   title="Back"
-                  className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+                  className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-3 hover:bg-sunken hover:text-text lg:hidden"
                 >
                   <ChevronLeft size={18} />
                 </button>
                 <div className="min-w-0">
                   <div className="truncate text-sm font-medium">{detail.supplier?.name ?? `+${detail.key}`}</div>
-                  <div className="text-xs text-muted-foreground">+{detail.key}</div>
+                  <div className="text-xs text-text-3">+{detail.key}</div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="rounded-full bg-green-500/10 px-2 py-0.5 text-[11px] text-green-600 dark:text-green-400">
+                <span className="rounded-full bg-ok-soft px-2 py-0.5 text-[11px] text-ok-text">
                   WhatsApp
                 </span>
                 <button
                   onClick={() => setMobileRailOpen(true)}
                   aria-label="Supplier details"
                   title="Supplier details"
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-3 hover:bg-sunken hover:text-text lg:hidden"
                 >
                   <Info size={16} />
                 </button>
@@ -964,7 +964,7 @@ export default function SupplierChatsPage() {
             </div>
             <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">
               {detail.messages.length === 0 && (
-                <p className="m-auto text-xs text-muted-foreground">No messages in this thread yet.</p>
+                <p className="m-auto text-xs text-text-3">No messages in this thread yet.</p>
               )}
               {detail.messages.map((m, i) => {
                 const showDivider =
@@ -981,10 +981,10 @@ export default function SupplierChatsPage() {
                     onDoubleClick={() => setReplyingTo(m)}
                     title="Double-click to reply"
                     className={`min-w-0 cursor-default select-none whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-[13px] leading-snug ${
-                      m.direction === "outbound"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-foreground"
-                    }`}
+ m.direction === "outbound"
+ ? "bg-ink text-on-ink"
+ : "bg-sunken text-text"
+}`}
                   >
                     {m.type === "image" && m.mediaUrl ? (
                       <a href={m.mediaUrl} target="_blank" rel="noopener noreferrer" className="block">
@@ -1013,7 +1013,7 @@ export default function SupplierChatsPage() {
                       )
                     )}
                     <div
-                      className={`mt-1 flex items-center gap-1 text-[10px] ${m.direction === "outbound" ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                      className={`mt-1 flex items-center gap-1 text-[10px] ${m.direction === "outbound" ? "text-on-ink/70" : "text-text-3"}`}
                     >
                       {clock(m.timestamp)}
                       {m.direction === "outbound" && m.status === "sent" && (
@@ -1031,7 +1031,7 @@ export default function SupplierChatsPage() {
                     onClick={() => setReplyingTo(m)}
                     aria-label="Reply"
                     title="Reply"
-                    className="shrink-0 rounded-full p-1 text-muted-foreground opacity-50 transition-opacity hover:bg-muted hover:text-foreground hover:opacity-100"
+                    className="shrink-0 rounded-full p-1 text-text-3 opacity-50 transition-opacity hover:bg-sunken hover:text-text hover:opacity-100"
                   >
                     <Reply size={13} />
                   </button>
@@ -1043,16 +1043,16 @@ export default function SupplierChatsPage() {
                   conversation flow, instead of off in the side panel. */}
               {detail.agentProposal && (
                 <div className="pt-1">
-                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/40">
-                    <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                  <div className="rounded-lg border border-line bg-warn-soft p-3">
+                    <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-warn-text">
                       <AlertCircle size={12} /> Agent suggests — your call
                     </div>
                     {detail.agentProposal.insight && (
-                      <div className="mb-1.5 text-[12px] leading-snug text-foreground">
+                      <div className="mb-1.5 text-[12px] leading-snug text-text">
                         {detail.agentProposal.insight}
                       </div>
                     )}
-                    <div className="text-[12px] text-foreground">
+                    <div className="text-[12px] text-text">
                       {detail.agentProposal.invoiceAction ? (
                         <>
                           <span className="font-medium">Revised invoice</span>
@@ -1086,7 +1086,7 @@ export default function SupplierChatsPage() {
                               {a.type === "reduce_qty" && "Reduce qty"}
                               {a.itemName && <> · <span className="font-medium">{a.itemName}</span></>}
                               {a.newQuantity != null && <> → {a.newQuantity}</>}
-                              {a.note && <div className="mt-0.5 text-[11px] text-muted-foreground">“{a.note}”</div>}
+                              {a.note && <div className="mt-0.5 text-[11px] text-text-3">“{a.note}”</div>}
                             </div>
                           ))}
                         </>
@@ -1094,7 +1094,7 @@ export default function SupplierChatsPage() {
                         <span className="capitalize">{detail.agentProposal.intent.replace(/_/g, " ")}</span>
                       )}
                     </div>
-                    <div className="mt-1 text-[10.5px] text-muted-foreground">
+                    <div className="mt-1 text-[10.5px] text-text-3">
                       Held for review: {detail.agentProposal.escalationReason}.{" "}
                       {detail.agentProposal.invoiceAction
                         ? "The agent did not change the invoice — approve to apply."
@@ -1113,7 +1113,7 @@ export default function SupplierChatsPage() {
                             <button
                               onClick={applyInvoiceRevision}
                               disabled={applying}
-                              className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 rounded bg-warn-text px-2 py-1 text-[11px] font-medium text-on-ink hover:opacity-90 disabled:opacity-50"
                             >
                               {applying ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
                               Approve: update invoice
@@ -1123,7 +1123,7 @@ export default function SupplierChatsPage() {
                             <button
                               onClick={applyProposal}
                               disabled={applying}
-                              className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 rounded bg-warn-text px-2 py-1 text-[11px] font-medium text-on-ink hover:opacity-90 disabled:opacity-50"
                             >
                               {applying ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
                               {(detail.agentProposal.poActions?.filter((a) => a.type === "remove_item" || a.type === "reduce_qty").length ?? 0) > 1
@@ -1135,7 +1135,7 @@ export default function SupplierChatsPage() {
                             <button
                               onClick={() => detail.agentProposal?.orderId && openEditOrder(detail.agentProposal.orderId)}
                               disabled={editLoading}
-                              className="inline-flex items-center gap-1 rounded border border-amber-300 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/40"
+                              className="inline-flex items-center gap-1 rounded border border-line px-2 py-1 text-[11px] font-medium text-warn-text hover:bg-warn-soft disabled:opacity-50"
                             >
                               Open PO {editLoading ? <Loader2 size={11} className="animate-spin" /> : <ExternalLink size={11} />}
                             </button>
@@ -1144,36 +1144,36 @@ export default function SupplierChatsPage() {
                             onClick={dismissProposal}
                             disabled={applying}
                             title="Clear this suggestion once you've handled it"
-                            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium text-text-3 hover:bg-sunken disabled:opacity-50"
                           >
                             <Check size={11} /> Mark handled
                           </button>
                         </div>
                       );
                     })()}
-                    {applyError && <div className="mt-1 text-[10.5px] text-destructive">{applyError}</div>}
+                    {applyError && <div className="mt-1 text-[10.5px] text-danger-text">{applyError}</div>}
                   </div>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
-            <div className="border-t border-border px-4 py-2.5">
+            <div className="border-t border-line px-4 py-2.5">
               {detail.humanHandling && (
-                <div className="mb-2 flex items-center gap-1.5 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+                <div className="mb-2 flex items-center gap-1.5 rounded-md bg-warn-soft px-2.5 py-1.5 text-[11px] text-warn-text">
                   <Hand size={13} className="shrink-0" />
                   You&apos;re handling this chat — AI paused here. It resumes once you go quiet.
                 </div>
               )}
               {replyingTo && (
-                <div className="mb-2 flex items-center gap-2 rounded-md border-l-2 border-primary bg-muted px-2.5 py-1.5 text-[11px]">
-                  <Reply size={12} className="shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                <div className="mb-2 flex items-center gap-2 rounded-md border-l-2 border-ink bg-sunken px-2.5 py-1.5 text-[11px]">
+                  <Reply size={12} className="shrink-0 text-text-3" />
+                  <span className="min-w-0 flex-1 truncate text-text-3">
                     Replying to: {msgPreview(replyingTo)}
                   </span>
                   <button
                     onClick={() => setReplyingTo(null)}
                     aria-label="Cancel reply"
-                    className="shrink-0 text-muted-foreground hover:text-foreground"
+                    className="shrink-0 text-text-3 hover:text-text"
                   >
                     <X size={13} />
                   </button>
@@ -1190,13 +1190,13 @@ export default function SupplierChatsPage() {
                   placeholder={
                     detail.windowOpen ? "Type a reply…" : "Window closed — free text not allowed (template only)"
                   }
-                  className="h-9 flex-1 rounded-md border border-border bg-background px-3 text-[13px] text-foreground placeholder:text-muted-foreground disabled:opacity-50"
+                  className="h-9 flex-1 rounded-md border border-line bg-surface px-3 text-[13px] text-text placeholder:text-text-3 disabled:opacity-50"
                 />
                 <button
                   onClick={send}
                   disabled={!detail.windowOpen || sending || !draft.trim()}
                   aria-label="Send"
-                  className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-foreground hover:bg-muted disabled:opacity-40"
+                  className="flex h-9 w-9 items-center justify-center rounded-md border border-line text-text hover:bg-sunken disabled:opacity-40"
                 >
                   {sending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
                 </button>
@@ -1204,12 +1204,12 @@ export default function SupplierChatsPage() {
               <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
                 <Clock
                   size={12}
-                  className={detail.windowOpen ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}
+                  className={detail.windowOpen ? "text-ok-text" : "text-warn-text"}
                 />
-                <span className="text-muted-foreground">
+                <span className="text-text-3">
                   {detail.windowOpen ? "24h window open — free reply" : "24h window closed — template only"}
                 </span>
-                {sendError && <span className="ml-auto text-destructive">{sendError}</span>}
+                {sendError && <span className="ml-auto text-danger-text">{sendError}</span>}
               </div>
             </div>
           </>
@@ -1218,7 +1218,7 @@ export default function SupplierChatsPage() {
 
       {/* ── Supplier context ────────────────────────── */}
       <div
-        className={`${mobileRailOpen ? "flex" : "hidden"} fixed inset-0 z-40 flex-col overflow-y-auto bg-background p-3 lg:static lg:z-auto lg:inset-auto lg:flex lg:w-96 lg:shrink-0 lg:overflow-y-auto lg:rounded-xl lg:border lg:border-border lg:bg-background lg:p-3 lg:shadow-sm`}
+        className={`${mobileRailOpen ? "flex" : "hidden"} fixed inset-0 z-40 flex-col overflow-y-auto bg-surface p-3 lg:static lg:z-auto lg:inset-auto lg:flex lg:w-96 lg:shrink-0 lg:overflow-y-auto lg:rounded-xl lg:border lg:border-line lg:bg-surface lg:p-3 lg:shadow-sm`}
       >
         {/* Mobile-only close row for the overlay. */}
         <div className="mb-2 flex justify-end lg:hidden">
@@ -1226,19 +1226,19 @@ export default function SupplierChatsPage() {
             onClick={() => setMobileRailOpen(false)}
             aria-label="Close details"
             title="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-text-3 hover:bg-sunken hover:text-text"
           >
             <X size={18} />
           </button>
         </div>
         {!detail ? null : (
           <>
-            <div className="flex flex-col items-center gap-1.5 border-b border-border pb-3 text-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
+            <div className="flex flex-col items-center gap-1.5 border-b border-line pb-3 text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-soft text-sm font-medium text-brand-text">
                 {initials(detail.supplier?.name ?? detail.key)}
               </div>
               <div className="text-[13px] font-medium">{detail.supplier?.name ?? `+${detail.key}`}</div>
-              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-1 text-[11px] text-text-3">
                 <Phone size={11} /> +{detail.key}
               </div>
             </div>
@@ -1246,18 +1246,18 @@ export default function SupplierChatsPage() {
             {detail.supplierId ? (
               poOpen ? (
                 <div>
-                  <div className="flex items-center justify-between border-b border-border pb-2 pt-1">
+                  <div className="flex items-center justify-between border-b border-line pb-2 pt-1">
                     <span className="text-[12px] font-medium">New PO</span>
-                    <button onClick={() => !poBusy && setPoOpen(false)} aria-label="Close" className="text-muted-foreground hover:text-foreground">
+                    <button onClick={() => !poBusy && setPoOpen(false)} aria-label="Close" className="text-text-3 hover:text-text">
                       <X size={14} />
                     </button>
                   </div>
-                  <div className="flex items-center gap-2 border-b border-border py-2">
-                    <span className="text-[11px] text-muted-foreground">Outlet</span>
+                  <div className="flex items-center gap-2 border-b border-line py-2">
+                    <span className="text-[11px] text-text-3">Outlet</span>
                     <select
                       value={poOutlet}
                       onChange={(e) => setPoOutlet(e.target.value)}
-                      className="h-7 flex-1 rounded-md border border-border bg-background px-1.5 text-[11px] text-foreground"
+                      className="h-7 flex-1 rounded-md border border-line bg-surface px-1.5 text-[11px] text-text"
                     >
                       {outlets.map((o) => (
                         <option key={o.id} value={o.id}>{o.name}</option>
@@ -1266,9 +1266,9 @@ export default function SupplierChatsPage() {
                   </div>
                   <div className="py-1">
                     {poProducts.length === 0 ? (
-                      <p className="py-6 text-center text-[11px] text-muted-foreground">
+                      <p className="py-6 text-center text-[11px] text-text-3">
                         No price-list products for this supplier yet.{" "}
-                        <a href="/inventory/suppliers" className="font-medium text-primary hover:underline">
+                        <a href="/inventory/suppliers" className="font-medium text-brand-text hover:underline">
                           Add them on the supplier record
                         </a>{" "}
                         first.
@@ -1276,8 +1276,8 @@ export default function SupplierChatsPage() {
                     ) : (
                       <>
                         {poProducts.some((p) => (p.suggestedQty ?? 0) > 0) && (
-                          <div className="flex items-center justify-between border-b border-border py-1.5">
-                            <span className="text-[10.5px] text-muted-foreground">
+                          <div className="flex items-center justify-between border-b border-line py-1.5">
+                            <span className="text-[10.5px] text-text-3">
                               {poProducts.filter((p) => (p.suggestedQty ?? 0) > 0).length} below par at this outlet
                             </span>
                             <button
@@ -1290,17 +1290,17 @@ export default function SupplierChatsPage() {
                                   return next;
                                 })
                               }
-                              className="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10.5px] font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+                              className="rounded-md border border-line bg-warn-soft px-2 py-0.5 text-[10.5px] font-medium text-warn-text hover:bg-warn-soft"
                             >
                               Fill suggested
                             </button>
                           </div>
                         )}
                         {poProducts.map((p) => (
-                          <div key={p.supplierProductId} className="flex items-center gap-2 border-b border-border py-1.5">
+                          <div key={p.supplierProductId} className="flex items-center gap-2 border-b border-line py-1.5">
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-[12px]">{p.name}</div>
-                              <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+                              <div className="flex items-center gap-1.5 text-[10.5px] text-text-3">
                                 <span>
                                   {formatRM(p.price)} / {p.packageLabel}
                                   {p.moq ? ` · MOQ ${p.moq}` : ""}
@@ -1309,7 +1309,7 @@ export default function SupplierChatsPage() {
                                   <button
                                     onClick={() => setPoQty((q) => ({ ...q, [p.supplierProductId]: p.suggestedQty! }))}
                                     title="Below par at this outlet — tap to use the suggested order quantity (par shortfall, capped by MOQ / max level / shelf life)"
-                                    className="shrink-0 rounded bg-amber-100 px-1.5 py-px font-medium text-amber-800 hover:bg-amber-200 dark:bg-amber-900 dark:text-amber-200"
+                                    className="shrink-0 rounded bg-warn-soft px-1.5 py-px font-medium text-warn-text hover:bg-warn-soft"
                                   >
                                     suggest {p.suggestedQty}
                                   </button>
@@ -1324,24 +1324,24 @@ export default function SupplierChatsPage() {
                                 setPoQty((q) => ({ ...q, [p.supplierProductId]: Math.max(0, Number(e.target.value) || 0) }))
                               }
                               placeholder="0"
-                              className="h-7 w-14 rounded-md border border-border bg-background px-1.5 text-right text-[12px] text-foreground"
+                              className="h-7 w-14 rounded-md border border-line bg-surface px-1.5 text-right text-[12px] text-text"
                             />
                           </div>
                         ))}
                       </>
                     )}
                   </div>
-                  <div className="sticky bottom-0 -mx-3 border-t border-border bg-background px-3 pb-1 pt-2">
-                    {poError && <div className="mb-1.5 text-[10.5px] text-destructive">{poError}</div>}
+                  <div className="sticky bottom-0 -mx-3 border-t border-line bg-surface px-3 pb-1 pt-2">
+                    {poError && <div className="mb-1.5 text-[10.5px] text-danger-text">{poError}</div>}
                     <div className="mb-1.5 flex justify-between text-[12px]">
-                      <span className="text-muted-foreground">Total</span>
+                      <span className="text-text-3">Total</span>
                       <span className="font-medium">{formatRM(poTotal)}</span>
                     </div>
                     <div className="flex gap-1.5">
                       <button
                         onClick={() => createPO(false)}
                         disabled={poBusy}
-                        className="flex-1 rounded-md border border-border px-2 py-1.5 text-[12px] font-medium hover:bg-muted disabled:opacity-50"
+                        className="flex-1 rounded-md border border-line px-2 py-1.5 text-[12px] font-medium hover:bg-sunken disabled:opacity-50"
                       >
                         Create draft
                       </button>
@@ -1355,7 +1355,7 @@ export default function SupplierChatsPage() {
                               ? "Window closed — sends a new-order prompt now; the full PO follows automatically when they reply"
                               : "24h window closed and no order-prompt template configured (PROCUREMENT_PO_PROMPT_TEMPLATE) — create a draft instead"
                         }
-                        className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1.5 text-[12px] font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                        className="flex flex-1 items-center justify-center gap-1 rounded-md bg-ink px-2 py-1.5 text-[12px] font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
                       >
                         {poBusy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}{" "}
                         {detail.windowOpen ? <>Create &amp; send</> : detail.canColdPrompt ? <>Create &amp; prompt</> : <>Create &amp; send</>}
@@ -1365,38 +1365,38 @@ export default function SupplierChatsPage() {
                 </div>
               ) : (
               <>
-                <div className="border-b border-border py-3">
+                <div className="border-b border-line py-3">
                   <button
                     onClick={openPO}
-                    className="flex w-full items-center justify-center gap-1 rounded-md bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground hover:bg-primary/90"
+                    className="flex w-full items-center justify-center gap-1 rounded-md bg-ink px-3 py-2 text-[12px] font-medium text-on-ink hover:bg-ink-hover"
                   >
                     <Plus size={13} /> New PO
                   </button>
                 </div>
-                <div className="border-b border-border py-3">
-                  <div className="mb-1.5 text-[11px] text-muted-foreground">Automation</div>
-                  <div className="flex rounded-md border border-border p-0.5">
+                <div className="border-b border-line py-3">
+                  <div className="mb-1.5 text-[11px] text-text-3">Automation</div>
+                  <div className="flex rounded-md border border-line p-0.5">
                     {(["OFF", "ASSIST", "AUTO"] as AutomationMode[]).map((m) => {
                       const on = detail.supplier?.automationMode === m;
                       const tone =
                         m === "AUTO"
-                          ? "bg-green-500/15 text-green-700 dark:text-green-400"
+                          ? "bg-ok-soft text-ok-text"
                           : m === "ASSIST"
-                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                            : "bg-muted text-foreground";
+                            ? "bg-warn-soft text-warn-text"
+                            : "bg-sunken text-text";
                       return (
                         <button
                           key={m}
                           onClick={() => setMode(m)}
                           disabled={modeBusy}
-                          className={`flex-1 rounded px-1.5 py-1 text-[11px] font-medium capitalize disabled:opacity-50 ${on ? tone : "text-muted-foreground hover:bg-muted/60"}`}
+                          className={`flex-1 rounded px-1.5 py-1 text-[11px] font-medium capitalize disabled:opacity-50 ${on ? tone : "text-text-3 hover:bg-sunken/60"}`}
                         >
                           {m.toLowerCase()}
                         </button>
                       );
                     })}
                   </div>
-                  <div className="mt-1 text-[10.5px] text-muted-foreground">
+                  <div className="mt-1 text-[10.5px] text-text-3">
                     {detail.supplier?.automationMode === "AUTO"
                       ? "Agent acts + sends automatically."
                       : detail.supplier?.automationMode === "ASSIST"
@@ -1404,12 +1404,12 @@ export default function SupplierChatsPage() {
                         : "Manual — agent won't act on this supplier."}
                   </div>
                 </div>
-                <div className="flex flex-col gap-1.5 border-b border-border py-3">
+                <div className="flex flex-col gap-1.5 border-b border-line py-3">
                   <a
                     href={`/inventory/orders?search=${encodeURIComponent(detail.supplier?.name ?? "")}`}
-                    className="block rounded-md bg-muted px-2.5 py-1.5 transition hover:bg-muted/70"
+                    className="block rounded-md bg-sunken px-2.5 py-1.5 transition hover:bg-sunken/70"
                   >
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <div className="flex items-center justify-between text-[11px] text-text-3">
                       <span>Open POs</span>
                       <ExternalLink size={11} className="opacity-50" />
                     </div>
@@ -1417,9 +1417,9 @@ export default function SupplierChatsPage() {
                   </a>
                   <a
                     href={`/inventory/invoices?supplier=${detail.supplierId ?? ""}&cardFilter=payable`}
-                    className="block rounded-md bg-muted px-2.5 py-1.5 transition hover:bg-muted/70"
+                    className="block rounded-md bg-sunken px-2.5 py-1.5 transition hover:bg-sunken/70"
                   >
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <div className="flex items-center justify-between text-[11px] text-text-3">
                       <span>Unpaid</span>
                       <ExternalLink size={11} className="opacity-50" />
                     </div>
@@ -1428,21 +1428,21 @@ export default function SupplierChatsPage() {
                   {detail.context.overdueTotal > 0 && (
                     <a
                       href={`/inventory/invoices?supplier=${detail.supplierId ?? ""}&cardFilter=overdue`}
-                      className="block rounded-md bg-destructive/10 px-2.5 py-1.5 transition hover:bg-destructive/15"
+                      className="block rounded-md bg-danger-soft px-2.5 py-1.5 transition hover:bg-danger-soft"
                     >
-                      <div className="flex items-center justify-between text-[11px] text-destructive">
+                      <div className="flex items-center justify-between text-[11px] text-danger-text">
                         <span>Overdue</span>
                         <ExternalLink size={11} className="opacity-60" />
                       </div>
-                      <div className="text-[15px] font-medium text-destructive">
+                      <div className="text-[15px] font-medium text-danger-text">
                         {formatRM(detail.context.overdueTotal)}
                       </div>
                     </a>
                   )}
                 </div>
                 {(detail.context.draftInvoices?.length ?? 0) > 0 && (
-                  <div className="border-b border-border py-3">
-                    <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-violet-600 dark:text-violet-400">
+                  <div className="border-b border-line py-3">
+                    <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-info-text">
                       <FileText size={12} /> Captured — approve to pay
                     </div>
                     {detail.context.draftInvoices!.map((inv) => (
@@ -1453,7 +1453,7 @@ export default function SupplierChatsPage() {
                               href={inv.photoUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                              className="inline-flex items-center gap-1 font-medium text-brand-text hover:underline"
                               title="Open the captured invoice to verify the amount"
                             >
                               {inv.invoiceNumber}
@@ -1462,13 +1462,13 @@ export default function SupplierChatsPage() {
                           ) : (
                             <span className="font-medium">{inv.invoiceNumber}</span>
                           )}
-                          {inv.orderNumber && <span className="ml-1 text-muted-foreground">· {inv.orderNumber}</span>}
+                          {inv.orderNumber && <span className="ml-1 text-text-3">· {inv.orderNumber}</span>}
                         </span>
-                        <span className="shrink-0 text-muted-foreground">{formatRM(inv.amount)}</span>
+                        <span className="shrink-0 text-text-3">{formatRM(inv.amount)}</span>
                         <button
                           onClick={() => approveDraftInvoice(inv.id)}
                           disabled={approvingInvId === inv.id}
-                          className="inline-flex shrink-0 items-center gap-1 rounded-md bg-violet-500 px-2 py-1 text-[10px] font-medium text-white hover:bg-violet-600 disabled:opacity-50"
+                          className="inline-flex shrink-0 items-center gap-1 rounded-md bg-info-text px-2 py-1 text-[10px] font-medium text-on-ink hover:opacity-90 disabled:opacity-50"
                           title="Confirm the captured amount and make this a payable"
                         >
                           {approvingInvId === inv.id ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
@@ -1476,26 +1476,26 @@ export default function SupplierChatsPage() {
                         </button>
                       </div>
                     ))}
-                    <div className="mt-1 px-1 text-[9.5px] text-muted-foreground">
+                    <div className="mt-1 px-1 text-[9.5px] text-text-3">
                       Tap the invoice number to open the photo and check the amount, then Approve to make it payable.
                     </div>
                   </div>
                 )}
                 {detail.context.unpaidInvoices.length > 0 && (
-                  <div className="border-b border-border py-3">
-                    <div className="mb-1.5 text-[11px] text-muted-foreground">Unpaid invoices</div>
+                  <div className="border-b border-line py-3">
+                    <div className="mb-1.5 text-[11px] text-text-3">Unpaid invoices</div>
                     {detail.context.unpaidInvoices.map((inv) => (
                       <a
                         key={inv.id}
                         href={`/inventory/invoices?supplier=${detail.supplierId ?? ""}&cardFilter=payable&search=${encodeURIComponent(inv.invoiceNumber)}`}
-                        className="flex items-center justify-between gap-2 rounded px-1 py-1 text-[11px] hover:bg-muted"
+                        className="flex items-center justify-between gap-2 rounded px-1 py-1 text-[11px] hover:bg-sunken"
                       >
-                        <span className="truncate font-medium text-primary">{inv.invoiceNumber}</span>
+                        <span className="truncate font-medium text-brand-text">{inv.invoiceNumber}</span>
                         <span className="flex shrink-0 items-center gap-1.5">
                           {inv.overdue && (
-                            <span className="rounded bg-destructive/10 px-1 text-[9.5px] font-medium text-destructive">overdue</span>
+                            <span className="rounded bg-danger-soft px-1 text-[9.5px] font-medium text-danger-text">overdue</span>
                           )}
-                          <span className="text-muted-foreground">{formatRM(inv.balance)}</span>
+                          <span className="text-text-3">{formatRM(inv.balance)}</span>
                         </span>
                       </a>
                     ))}
@@ -1505,26 +1505,26 @@ export default function SupplierChatsPage() {
                   const myNeed = (needGroups ?? []).filter((g) => g.supplierId === detail.supplierId);
                   if (myNeed.length === 0) return null;
                   return (
-                    <div className="border-b border-border py-3">
-                      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                    <div className="border-b border-line py-3">
+                      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-warn-text">
                         <ShoppingCart size={12} /> Need ordering
                       </div>
                       {myNeed.map((g) => {
                         const key = `${g.supplierId}_${g.outletId}`;
                         const done = needCreated.has(key);
                         return (
-                          <div key={key} className="mb-2 rounded-md border border-amber-200 bg-amber-50/50 p-2 dark:border-amber-900 dark:bg-amber-950/30">
+                          <div key={key} className="mb-2 rounded-md border border-line bg-warn-soft p-2">
                             <div className="mb-1 flex items-center justify-between gap-2">
-                              <span className="truncate text-[10.5px] text-muted-foreground">
+                              <span className="truncate text-[10.5px] text-text-3">
                                 {g.outletName} · {g.itemCount} item{g.itemCount > 1 ? "s" : ""} · {formatRM(g.total)}
                               </span>
                               {done ? (
-                                <span className="shrink-0 text-[10px] font-medium text-green-600 dark:text-green-400">✓ draft</span>
+                                <span className="shrink-0 text-[10px] font-medium text-ok-text">✓ draft</span>
                               ) : (
                                 <button
                                   onClick={() => createDraftFromGroup(g)}
                                   disabled={needCreatingKey === key}
-                                  className="shrink-0 rounded bg-amber-600 px-2 py-0.5 text-[10px] font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                                  className="shrink-0 rounded bg-warn-text px-2 py-0.5 text-[10px] font-medium text-on-ink hover:opacity-90 disabled:opacity-50"
                                 >
                                   {needCreatingKey === key ? "…" : "Create draft"}
                                 </button>
@@ -1533,7 +1533,7 @@ export default function SupplierChatsPage() {
                             {g.items.map((it) => (
                               <div key={it.productId} className="flex items-center justify-between gap-2 text-[10.5px]">
                                 <span className="truncate">{it.name}</span>
-                                <span className="shrink-0 text-muted-foreground">order {it.qty} {it.packageLabel}</span>
+                                <span className="shrink-0 text-text-3">order {it.qty} {it.packageLabel}</span>
                               </div>
                             ))}
                           </div>
@@ -1543,23 +1543,23 @@ export default function SupplierChatsPage() {
                   );
                 })()}
                 {detail.agentReSource && (
-                  <div className="border-b border-border py-3">
-                    <div className="rounded-md border border-sky-300 bg-sky-50 p-2.5 dark:border-sky-800 dark:bg-sky-950/40">
-                      <div className="mb-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300">
+                  <div className="border-b border-line py-3">
+                    <div className="rounded-md border border-line bg-info-soft p-2.5">
+                      <div className="mb-1 text-[11px] font-semibold text-info-text">
                         Re-sourced (OOS)
                       </div>
-                      <div className="text-[12px] text-foreground">
+                      <div className="text-[12px] text-text">
                         Draft PO <span className="font-medium">{detail.agentReSource.orderNumber}</span> to{" "}
                         <span className="font-medium">{detail.agentReSource.supplierName}</span> · {detail.agentReSource.qty} {detail.agentReSource.unit}
                       </div>
-                      <div className="mt-0.5 text-[10.5px] text-muted-foreground">
+                      <div className="mt-0.5 text-[10.5px] text-text-3">
                         {detail.agentReSource.existing ? "Already pending — review & send." : "Review & send in Purchase Orders. Not visible to this supplier."}
                       </div>
                       {detail.agentReSource.orderId && (
                         <div className="mt-2">
                           <a
                             href={`/inventory/orders/${detail.agentReSource.orderId}`}
-                            className="inline-flex items-center gap-1 rounded bg-sky-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-sky-700"
+                            className="inline-flex items-center gap-1 rounded bg-info-text px-2 py-1 text-[11px] font-medium text-on-ink hover:opacity-90"
                           >
                             Open draft PO <ExternalLink size={11} />
                           </a>
@@ -1568,7 +1568,7 @@ export default function SupplierChatsPage() {
                     </div>
                   </div>
                 )}
-                <div className="flex flex-col gap-1 border-b border-border py-3 text-[12px]">
+                <div className="flex flex-col gap-1 border-b border-line py-3 text-[12px]">
                   <Row label="Delivery" value={detail.supplier?.deliveryDays?.join(", ") || "—"} />
                   <Row label="Lead time" value={`${detail.supplier?.leadTimeDays ?? 0}d`} />
                   <Row label="Terms" value={detail.supplier?.paymentTerms || "—"} />
@@ -1583,26 +1583,26 @@ export default function SupplierChatsPage() {
                   )}
                 </div>
                 <div className="pt-3">
-                  <div className="mb-1.5 text-[11px] text-muted-foreground">Open purchase orders</div>
-                  {editError && <p className="mb-1 text-[11px] text-destructive">{editError}</p>}
+                  <div className="mb-1.5 text-[11px] text-text-3">Open purchase orders</div>
+                  {editError && <p className="mb-1 text-[11px] text-danger-text">{editError}</p>}
                   {detail.context.recentPOs.length === 0 && (
-                    <p className="text-[11px] text-muted-foreground">None open.</p>
+                    <p className="text-[11px] text-text-3">None open.</p>
                   )}
                   {detail.context.recentPOs.map((po) => (
                     <button
                       key={po.id}
                       onClick={() => openEditOrder(po.id)}
-                      className="flex w-full items-center justify-between rounded px-1 py-1 text-left text-[11px] hover:bg-muted"
+                      className="flex w-full items-center justify-between rounded px-1 py-1 text-left text-[11px] hover:bg-sunken"
                     >
-                      <span className="font-medium text-primary">{po.orderNumber}</span>
-                      <span className="text-muted-foreground">{po.status.replace(/_/g, " ").toLowerCase()}</span>
+                      <span className="font-medium text-brand-text">{po.orderNumber}</span>
+                      <span className="text-text-3">{po.status.replace(/_/g, " ").toLowerCase()}</span>
                     </button>
                   ))}
                 </div>
               </>
               )
             ) : (
-              <p className="py-4 text-[11px] text-muted-foreground">
+              <p className="py-4 text-[11px] text-text-3">
                 Not linked to a supplier yet — no procurement context. Match this number on the supplier record to see open POs and balances.
               </p>
             )}
@@ -1623,7 +1623,7 @@ export default function SupplierChatsPage() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">
-      <span className="text-muted-foreground">{label}</span>
+      <span className="text-text-3">{label}</span>
       <span className="text-right">{value}</span>
     </div>
   );
@@ -1642,16 +1642,16 @@ function Chip({
 }) {
   const active =
     tone === "danger"
-      ? "bg-destructive/10 text-destructive"
+      ? "bg-danger-soft text-danger-text"
       : tone === "auto"
-        ? "bg-green-500/15 text-green-700 dark:text-green-400"
+        ? "bg-ok-soft text-ok-text"
         : tone === "assist"
-          ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
-          : "bg-muted text-foreground";
+          ? "bg-warn-soft text-warn-text"
+          : "bg-sunken text-text";
   return (
     <button
       onClick={onClick}
-      className={`rounded-full px-2.5 py-0.5 text-[11px] ${on ? active : "text-muted-foreground hover:bg-muted"}`}
+      className={`rounded-full px-2.5 py-0.5 text-[11px] ${on ? active : "text-text-3 hover:bg-sunken"}`}
     >
       {children}
     </button>
@@ -1659,6 +1659,6 @@ function Chip({
 }
 
 function ModeDot({ mode }: { mode: AutomationMode }) {
-  const c = mode === "AUTO" ? "bg-green-500" : mode === "ASSIST" ? "bg-amber-500" : "bg-muted-foreground/40";
+  const c = mode === "AUTO" ? "bg-ok-text" : mode === "ASSIST" ? "bg-warn-text" : "bg-line-2";
   return <span title={`Automation: ${mode}`} className={`inline-block h-2 w-2 shrink-0 rounded-full ${c}`} />;
 }

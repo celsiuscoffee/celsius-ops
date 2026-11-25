@@ -14,8 +14,8 @@ type Props = PropsWithChildren<{
 
 export function Screen({ children, edges }: Props) {
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={edges}>
-      <View className="flex-1 px-5">{children}</View>
+    <SafeAreaView className="flex-1 bg-bg" edges={edges}>
+      <View className="flex-1 px-4">{children}</View>
     </SafeAreaView>
   );
 }

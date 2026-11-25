@@ -27,7 +27,7 @@ const WINDOW_DAYS = 7;
 const CASHIN_ENTITY: Record<string, string> = {
   celsius: "Shah Alam+Nilai",
   celsiusconezion: "Putrajaya",
-  celsiustamarind: "Cyberjaya",
+  celsiustamarind: "Tamarind",
   group: "Group",
 };
 const CASHIN_CHANNEL: Record<string, string> = {

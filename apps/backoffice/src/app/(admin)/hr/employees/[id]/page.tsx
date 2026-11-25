@@ -597,14 +597,14 @@ export default function EmployeeDetailPage() {
   const update = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
   if (!employee) {
-    return <div className="py-20 text-center text-muted-foreground">Loading...</div>;
+    return <div className="py-20 text-center text-text-3">Loading...</div>;
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
       <div className="flex items-center gap-3">
-        <Link href="/hr/employees" className="rounded-lg p-1 hover:bg-gray-100">
+        <Link href="/hr/employees" className="rounded-lg p-1 hover:bg-sunken">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         {(employee as { profile_photo_url?: string | null }).profile_photo_url ? (
@@ -615,13 +615,13 @@ export default function EmployeeDetailPage() {
             className="h-12 w-12 shrink-0 rounded-full object-cover"
           />
         ) : (
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gray-200 text-sm font-bold text-gray-600">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-line text-sm font-bold text-text-2">
             {(employee.fullName || employee.name).split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
           </div>
         )}
         <div>
-          <h1 className="text-2xl font-bold">{employee.fullName || employee.name}</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{employee.fullName || employee.name}</h1>
+          <p className="text-sm text-text-3">
             {employee.role} · {employee.outlet?.name || "No outlet"}
           </p>
         </div>
@@ -647,8 +647,8 @@ export default function EmployeeDetailPage() {
               className={
                 "shrink-0 border-b-2 px-4 py-2 text-sm font-medium transition " +
                 (active
-                  ? "border-terracotta text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground")
+                  ? "border-ink text-text"
+                  : "border-transparent text-text-3 hover:text-text")
               }
             >
               {t.l}
@@ -659,33 +659,33 @@ export default function EmployeeDetailPage() {
 
       {/* Performance snapshot (current month) — rendered only on Performance tab. */}
       {tab === "performance" && allowance && (
-        <section className="rounded-xl border bg-gradient-to-br from-orange-50 to-amber-50 p-5">
+        <section className="rounded-xl border bg-gradient-to-br from-warn to-warn p-5">
           <div className="mb-4 flex items-start justify-between">
             <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-terracotta" />
+              <TrendingUp className="h-5 w-5 text-brand-text" />
               <div>
                 <h2 className="font-semibold">Performance — {new Date(allowance.period.year, allowance.period.month - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" })}</h2>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-text-3">
                   {allowance.period.daysRemaining} day{allowance.period.daysRemaining !== 1 ? "s" : ""} left in period
                 </p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-bold text-terracotta">RM {allowance.totalEarned}</p>
-              <p className="text-xs text-muted-foreground">of RM {allowance.totalMax} max</p>
+              <p className="text-2xl font-bold text-brand-text">RM {allowance.totalEarned}</p>
+              <p className="text-xs text-text-3">of RM {allowance.totalMax} max</p>
             </div>
           </div>
 
           {!allowance.eligible ? (
-            <p className="rounded-lg bg-white/70 p-3 text-xs text-gray-600">{allowance.tip}</p>
+            <p className="rounded-lg bg-surface/70 p-3 text-xs text-text-2">{allowance.tip}</p>
           ) : (
             <>
               <div className="grid gap-3 md:grid-cols-2">
                 {/* Performance levers */}
-                <div className="rounded-lg bg-white/70 p-3">
+                <div className="rounded-lg bg-surface/70 p-3">
                   <div className="mb-2 flex items-center justify-between text-sm">
                     <div className="flex items-center gap-1.5">
-                      <Sparkles className="h-4 w-4 text-amber-600" />
+                      <Sparkles className="h-4 w-4 text-warn-text" />
                       <span className="font-medium">Performance levers</span>
                     </div>
                     <span className="font-semibold">RM {allowance.performanceEarned} / {allowance.pool}</span>
@@ -695,11 +695,11 @@ export default function EmployeeDetailPage() {
                       <li key={l.key} className="flex items-center justify-between gap-2 text-xs">
                         <span
                           className={`h-2 w-2 shrink-0 rounded-full ${
-                            l.tier === "perform" ? "bg-emerald-500" : l.tier === "half" ? "bg-amber-400" : "bg-gray-300"
+                            l.tier === "perform" ? "bg-ok" : l.tier === "half" ? "bg-warn" : "bg-line"
                           }`}
                         />
                         <span className="flex-1 truncate" title={l.detail}>
-                          {l.label} <span className="text-gray-400">· {l.detail}</span>
+                          {l.label} <span className="text-text-3">· {l.detail}</span>
                         </span>
                         <span className="font-mono">RM {l.earned}/{l.slice}</span>
                       </li>
@@ -708,26 +708,26 @@ export default function EmployeeDetailPage() {
                 </div>
 
                 {/* Attendance deductions */}
-                <div className="rounded-lg bg-white/70 p-3">
+                <div className="rounded-lg bg-surface/70 p-3">
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <div className="flex items-center gap-1.5">
-                      <Clock className="h-4 w-4 text-blue-600" />
+                      <Clock className="h-4 w-4 text-info-text" />
                       <span className="font-medium">Attendance</span>
                     </div>
-                    <span className={`font-semibold ${(allowance.attendance?.total ?? 0) > 0 ? "text-red-600" : ""}`}>
+                    <span className={`font-semibold ${(allowance.attendance?.total ?? 0) > 0 ? "text-danger-text" : ""}`}>
                       {(allowance.attendance?.total ?? 0) > 0 ? `−RM ${allowance.attendance?.total}` : "No deductions"}
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-3 text-[11px] text-gray-600">
+                  <div className="flex flex-wrap gap-3 text-[11px] text-text-2">
                     <span>Late {allowance.attendance?.lateCount ?? 0}</span>
                     <span>No-show {allowance.attendance?.absentCount ?? 0}</span>
                   </div>
                   {(allowance.attendance?.deductions ?? []).length > 0 && (
                     <details className="mt-2 text-xs">
-                      <summary className="cursor-pointer text-gray-600 hover:text-gray-800">
+                      <summary className="cursor-pointer text-text-2 hover:text-text">
                         {(allowance.attendance?.deductions ?? []).length} deduction{(allowance.attendance?.deductions ?? []).length === 1 ? "" : "s"} — tap to view
                       </summary>
-                      <ul className="mt-1 space-y-0.5 text-gray-600">
+                      <ul className="mt-1 space-y-0.5 text-text-2">
                         {(allowance.attendance?.deductions ?? []).slice(0, 10).map((d, i) => (
                           <li key={i}>
                             {d.date ? <span className="font-mono text-[10px]">{d.date}</span> : null} · {d.label} (−RM {d.amount})
@@ -742,37 +742,37 @@ export default function EmployeeDetailPage() {
 
               {/* Review penalty */}
               {(allowance.reviewPenalty?.total ?? 0) > 0 && (
-                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3">
+                <div className="mt-3 rounded-lg border border-danger/30 bg-danger-soft p-3">
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <div className="flex items-center gap-1.5">
-                      <AlertTriangle className="h-4 w-4 text-red-600" />
-                      <span className="font-medium text-red-700">Review penalty</span>
+                      <AlertTriangle className="h-4 w-4 text-danger-text" />
+                      <span className="font-medium text-danger-text">Review penalty</span>
                     </div>
-                    <span className="font-semibold text-red-700">−RM {allowance.reviewPenalty?.total}</span>
+                    <span className="font-semibold text-danger-text">−RM {allowance.reviewPenalty?.total}</span>
                   </div>
-                  <ul className="space-y-0.5 text-xs text-red-700">
+                  <ul className="space-y-0.5 text-xs text-danger-text">
                     {(allowance.reviewPenalty?.entries ?? []).map((e) => (
                       <li key={e.id} className="flex items-start gap-1.5">
                         <span className="flex shrink-0 items-center">
                           {Array.from({ length: 5 }).map((_, i) => (
-                            <Star key={i} className={`h-3 w-3 ${i < e.rating ? "fill-red-500 text-red-500" : "text-red-200"}`} />
+                            <Star key={i} className={`h-3 w-3 ${i < e.rating ? "fill-danger text-danger-text" : "text-danger-soft"}`} />
                           ))}
                         </span>
                         <span className="font-mono text-[10px]">{e.reviewDate}</span>
                         <span>· −RM {e.amount}</span>
-                        {e.reviewText && <span className="text-red-600 italic truncate">&ldquo;{e.reviewText}&rdquo;</span>}
+                        {e.reviewText && <span className="text-danger-text italic truncate">&ldquo;{e.reviewText}&rdquo;</span>}
                       </li>
                     ))}
                   </ul>
                 </div>
               )}
 
-              <p className="mt-3 text-xs text-gray-600">{allowance.tip}</p>
+              <p className="mt-3 text-xs text-text-2">{allowance.tip}</p>
             </>
           )}
 
           <div className="mt-3 flex justify-end">
-            <Link href={`/hr/performance?userId=${id}`} className="text-xs text-terracotta hover:underline">
+            <Link href={`/hr/performance?userId=${id}`} className="text-xs text-brand-text hover:underline">
               Full performance page →
             </Link>
           </div>
@@ -814,7 +814,7 @@ export default function EmployeeDetailPage() {
                   </label>
                 ))}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">Tick both FOH and BOH for a floater. None ticked = infer from position.</p>
+              <p className="mt-1 text-xs text-text-3">Tick both FOH and BOH for a floater. None ticked = infer from position.</p>
             </Field>
             <Field label="Type">
               <select value={form.employment_type} onChange={(e) => update("employment_type", e.target.value)} className="input">
@@ -844,7 +844,7 @@ export default function EmployeeDetailPage() {
                 onChange={(e) => setForm((f) => ({ ...f, schedule_required: e.target.checked }))}
               />
               <span>Appears in weekly schedule grid</span>
-              <span className="text-xs text-muted-foreground">(off for HQ / non-outlet roles)</span>
+              <span className="text-xs text-text-3">(off for HQ / non-outlet roles)</span>
             </label>
           </div>
         </section>
@@ -865,7 +865,7 @@ export default function EmployeeDetailPage() {
                 <input type="number" value={form.hourly_rate_weekend} onChange={(e) => update("hourly_rate_weekend", e.target.value)} className="input" placeholder="Optional" />
               </Field>
               <div className="mt-2 border-t pt-3">
-                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                <p className="mb-2 text-xs font-medium text-text-3">
                   Performance allowance — leave blank for the scored pool (RM200 max across checklist, phone capture,
                   serving time and audit, less lateness, absence and review penalties). Enter an amount to pay it FLAT
                   every month with no scoring and no deductions; 0 pays nothing.
@@ -917,20 +917,20 @@ export default function EmployeeDetailPage() {
             <FileText className="h-4 w-4" />
             Documents
           </h2>
-          <p className="mb-3 text-xs text-muted-foreground">
+          <p className="mb-3 text-xs text-text-3">
             Letters of Employment, contracts, NDAs, confirmation letters, resignation letters, etc.
             Click a row to open.
           </p>
 
           {canUploadDocs && (
-            <div className="mb-4 rounded-lg border border-dashed bg-muted/20 p-3">
+            <div className="mb-4 rounded-lg border border-dashed bg-sunken p-3">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <label className="block">
-                  <span className="text-[10px] font-medium uppercase text-muted-foreground">Type</span>
+                  <span className="text-[10px] font-medium uppercase text-text-3">Type</span>
                   <select
                     value={newDocType}
                     onChange={(e) => setNewDocType(e.target.value)}
-                    className="mt-0.5 w-full rounded border bg-background px-2 py-1.5 text-xs"
+                    className="mt-0.5 w-full rounded border bg-bg px-2 py-1.5 text-xs"
                   >
                     <option value="loe">Letter of Employment</option>
                     <option value="coe">Contract of Employment</option>
@@ -943,22 +943,22 @@ export default function EmployeeDetailPage() {
                   </select>
                 </label>
                 <label className="block">
-                  <span className="text-[10px] font-medium uppercase text-muted-foreground">Title (optional)</span>
+                  <span className="text-[10px] font-medium uppercase text-text-3">Title (optional)</span>
                   <input
                     type="text"
                     value={newDocTitle}
                     onChange={(e) => setNewDocTitle(e.target.value)}
                     placeholder={`e.g. ${new Date().getFullYear()} LoE`}
-                    className="mt-0.5 w-full rounded border bg-background px-2 py-1.5 text-xs"
+                    className="mt-0.5 w-full rounded border bg-bg px-2 py-1.5 text-xs"
                   />
                 </label>
                 <label className="block">
-                  <span className="text-[10px] font-medium uppercase text-muted-foreground">Effective date</span>
+                  <span className="text-[10px] font-medium uppercase text-text-3">Effective date</span>
                   <input
                     type="date"
                     value={newDocEffectiveDate}
                     onChange={(e) => setNewDocEffectiveDate(e.target.value)}
-                    className="mt-0.5 w-full rounded border bg-background px-2 py-1.5 text-xs"
+                    className="mt-0.5 w-full rounded border bg-bg px-2 py-1.5 text-xs"
                   />
                 </label>
               </div>
@@ -977,8 +977,8 @@ export default function EmployeeDetailPage() {
                 className={
                   "mt-2 flex cursor-pointer items-center justify-center gap-2 rounded border-2 border-dashed py-4 text-xs transition " +
                   (docDragOver
-                    ? "border-terracotta bg-terracotta/5 text-terracotta"
-                    : "border-gray-300 bg-background text-muted-foreground hover:bg-muted/30")
+                    ? "border-text bg-raised font-semibold text-text"
+                    : "border-line-2 bg-bg text-text-3 hover:bg-sunken")
                 }
               >
                 {uploadingDoc ? (
@@ -1012,24 +1012,24 @@ export default function EmployeeDetailPage() {
           )}
 
           {documents.length === 0 ? (
-            <p className="rounded border bg-muted/10 p-4 text-center text-xs text-muted-foreground">
+            <p className="rounded border bg-sunken p-4 text-center text-xs text-text-3">
               No documents uploaded yet.
             </p>
           ) : (
             <div className="space-y-2">
               {documents.map((d) => (
-                <div key={d.id} className="flex items-center gap-3 rounded-lg border bg-background p-3 text-xs">
-                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <div key={d.id} className="flex items-center gap-3 rounded-lg border bg-bg p-3 text-xs">
+                  <FileText className="h-4 w-4 shrink-0 text-text-3" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-semibold uppercase text-gray-600">
+                      <span className="rounded-full bg-sunken px-2 py-0.5 text-[9px] font-semibold uppercase text-text-2">
                         {d.doc_type}
                       </span>
                       <span className="font-medium truncate">
                         {d.title || d.file_name}
                       </span>
                     </div>
-                    <div className="mt-0.5 text-[10px] text-muted-foreground">
+                    <div className="mt-0.5 text-[10px] text-text-3">
                       {d.file_name}
                       {d.effective_date && ` · Effective ${d.effective_date}`}
                       {d.size_bytes && ` · ${(d.size_bytes / 1024).toFixed(0)} KB`}
@@ -1042,7 +1042,7 @@ export default function EmployeeDetailPage() {
                       href={d.signed_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-muted"
+                      className="flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium text-text-2 hover:bg-sunken"
                       title="Open in new tab"
                     >
                       <Download className="h-3 w-3" /> Open
@@ -1051,7 +1051,7 @@ export default function EmployeeDetailPage() {
                   {canUploadDocs && (
                     <button
                       onClick={() => handleDeleteDoc(d.id)}
-                      className="rounded-lg border border-red-200 bg-red-50 p-1.5 text-red-600 hover:bg-red-100"
+                      className="rounded-lg border border-danger/30 bg-danger-soft p-1.5 text-danger-text hover:bg-danger-soft"
                       title="Delete"
                     >
                       <Trash2 className="h-3 w-3" />
@@ -1235,7 +1235,7 @@ export default function EmployeeDetailPage() {
             <button
               onClick={handleSaveBank}
               disabled={savingBank}
-              className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+              className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
             >
               {savingBank ? <Loader2 className="h-3 w-3 animate-spin" /> : bankSaved ? <CheckCircle2 className="h-3 w-3" /> : <Save className="h-3 w-3" />}
               {bankSaved ? "Saved" : "Save Bank"}
@@ -1266,12 +1266,12 @@ export default function EmployeeDetailPage() {
         <section className="rounded-xl border bg-card p-5 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="flex items-center gap-2 font-semibold">
-              <Shield className="h-5 w-5 text-terracotta" />
+              <Shield className="h-5 w-5 text-brand-text" />
               Login & Access
             </h2>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              {employee.hasPin && <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-green-700"><CheckCircle2 className="h-3 w-3" />PIN set</span>}
-              {employee.hasPassword && <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-green-700"><CheckCircle2 className="h-3 w-3" />Password set</span>}
+            <div className="flex items-center gap-2 text-xs text-text-3">
+              {employee.hasPin && <span className="inline-flex items-center gap-1 rounded-full bg-ok-soft px-2 py-0.5 text-ok-text"><CheckCircle2 className="h-3 w-3" />PIN set</span>}
+              {employee.hasPassword && <span className="inline-flex items-center gap-1 rounded-full bg-ok-soft px-2 py-0.5 text-ok-text"><CheckCircle2 className="h-3 w-3" />Password set</span>}
               {employee.lastLoginAt && <span>Last login: {new Date(employee.lastLoginAt).toLocaleDateString("en-MY")}</span>}
             </div>
           </div>
@@ -1315,8 +1315,8 @@ export default function EmployeeDetailPage() {
               </Field>
               {access.outletId && (outlets?.length ?? 0) > 1 && (
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Also works at (rotation)</label>
-                  <div className="space-y-1 rounded-md border border-gray-200 p-2">
+                  <label className="mb-1 block text-xs font-medium text-text-3">Also works at (rotation)</label>
+                  <div className="space-y-1 rounded-md border border-line p-2">
                     {outlets
                       ?.filter((o) => o.id !== access.outletId)
                       .map((o) => (
@@ -1337,7 +1337,7 @@ export default function EmployeeDetailPage() {
                         </label>
                       ))}
                   </div>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
+                  <p className="mt-1 text-[10px] text-text-3">
                     Tick every outlet this staffer rotates to. They&apos;ll appear in the schedule
                     grid, AI Fill pool, and shift-assist candidates for each — with weekly hours summed across all of them.
                   </p>
@@ -1357,7 +1357,7 @@ export default function EmployeeDetailPage() {
                     placeholder={employee.hasPin ? "•••• (leave blank to keep)" : "Enter new PIN"}
                     maxLength={6}
                   />
-                  <button type="button" onClick={() => setShowPin(!showPin)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
+                  <button type="button" onClick={() => setShowPin(!showPin)} className="absolute right-2 top-1/2 -translate-y-1/2 text-text-3">
                     {showPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
@@ -1371,12 +1371,12 @@ export default function EmployeeDetailPage() {
                     className="input pr-10"
                     placeholder={employee.hasPassword ? "•••••••• (leave blank to keep)" : "Enter new password"}
                   />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 text-text-3">
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </Field>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[10px] text-text-3">
                 PIN is for staff login (phone). Password is for backoffice login (desktop).
               </p>
             </div>
@@ -1384,7 +1384,7 @@ export default function EmployeeDetailPage() {
             {/* App + HR Module Access */}
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">App Access</label>
+                <label className="mb-1 block text-xs font-medium text-text-3">App Access</label>
                 <div className="grid grid-cols-2 gap-1">
                   {APP_OPTIONS.map((app) => (
                     <label key={app} className="flex items-center gap-1.5 text-xs">
@@ -1403,15 +1403,15 @@ export default function EmployeeDetailPage() {
                   payroll, finance and staff bank details). For a head of
                   operations who owns the roster company-wide. */}
               <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                <label className="mb-1 block text-xs font-medium text-text-3">
                   Elevated Permissions
                 </label>
                 {access.role === "OWNER" || access.role === "ADMIN" ? (
-                  <p className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-[11px] text-muted-foreground">
+                  <p className="rounded-lg border border-line bg-sunken p-2 text-[11px] text-text-3">
                     {access.role} already holds every elevated permission.
                   </p>
                 ) : access.role === "STAFF" ? (
-                  <p className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-[11px] text-muted-foreground">
+                  <p className="rounded-lg border border-line bg-sunken p-2 text-[11px] text-text-3">
                     Set the role to Manager to grant elevated permissions.
                   </p>
                 ) : (
@@ -1419,7 +1419,7 @@ export default function EmployeeDetailPage() {
                     {CAPABILITY_OPTIONS.map((cap) => (
                       <label
                         key={cap.key}
-                        className="flex items-start gap-2 rounded-lg border border-gray-200 bg-white p-2 text-xs"
+                        className="flex items-start gap-2 rounded-lg border border-line bg-surface p-2 text-xs"
                       >
                         <input
                           type="checkbox"
@@ -1429,19 +1429,19 @@ export default function EmployeeDetailPage() {
                         />
                         <span>
                           <span className="font-medium">{cap.label}</span>
-                          <span className="block text-[10px] text-muted-foreground">{cap.hint}</span>
+                          <span className="block text-[10px] text-text-3">{cap.hint}</span>
                         </span>
                       </label>
                     ))}
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-[10px] text-text-3">
                       Each grant is audit-logged. They never include payroll, finance or bank details.
                     </p>
                   </div>
                 )}
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">HR Module Access</label>
-                <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-2 text-sm">
+                <label className="mb-1 block text-xs font-medium text-text-3">HR Module Access</label>
+                <label className="flex items-center gap-2 rounded-lg border border-line bg-surface p-2 text-sm">
                   <input
                     type="checkbox"
                     checked={access.hrAccess}
@@ -1451,7 +1451,7 @@ export default function EmployeeDetailPage() {
                   <span>Enable HR portal access</span>
                 </label>
                 {(access.role === "OWNER" || access.role === "ADMIN") && (
-                  <p className="mt-1 text-[10px] text-muted-foreground">
+                  <p className="mt-1 text-[10px] text-text-3">
                     {access.role} bypasses module checks — always has HR access
                   </p>
                 )}
@@ -1490,13 +1490,13 @@ export default function EmployeeDetailPage() {
         const daysLeft = Math.ceil((Date.parse(dueDate) - Date.now()) / 86400000);
         const overdue = dueDate < today;
         return (
-          <section className={`mt-6 rounded-lg border p-4 ${overdue ? "border-amber-300 bg-amber-50/60" : "border-blue-200 bg-blue-50/40"}`}>
+          <section className={`mt-6 rounded-lg border p-4 ${overdue ? "border-warn/30 bg-warn-soft" : "border-info/30 bg-info-soft"}`}>
             <div className="flex items-center justify-between">
               <div>
-                <h3 className={`text-sm font-semibold ${overdue ? "text-amber-900" : "text-blue-900"}`}>
+                <h3 className={`text-sm font-semibold ${overdue ? "text-warn-text" : "text-info-text"}`}>
                   {overdue ? "In Probation — review overdue" : "In Probation"}
                 </h3>
-                <p className={`mt-1 text-xs ${overdue ? "text-amber-800" : "text-blue-800"}`}>
+                <p className={`mt-1 text-xs ${overdue ? "text-warn-text" : "text-info-text"}`}>
                   Joined <strong>{p.join_date}</strong>. Confirmation was due by <strong>{dueDate}</strong>
                   {overdue
                     ? ` (${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? "" : "s"} ago).`
@@ -1510,7 +1510,7 @@ export default function EmployeeDetailPage() {
                   <a
                     href={`/api/hr/employees/${id}/confirmation-letter`}
                     download
-                    className="rounded-md border border-blue-300 bg-white px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                    className="rounded-md border border-info/30 bg-surface px-2.5 py-1.5 text-xs font-medium text-info-text hover:bg-info-soft"
                   >
                     Preview draft
                   </a>
@@ -1518,7 +1518,7 @@ export default function EmployeeDetailPage() {
                     type="button"
                     onClick={handleSignConfirmationLetter}
                     disabled={signingLetter}
-                    className="rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+                    className="rounded-md bg-info px-3 py-1.5 text-xs font-semibold text-white hover:bg-info disabled:opacity-50"
                   >
                     {signingLetter ? "Signing…" : "Sign & file"}
                   </button>
@@ -1534,34 +1534,34 @@ export default function EmployeeDetailPage() {
         const p = profile as unknown as { resigned_at?: string | null; end_date?: string | null } | null;
         const isResigned = !!(p?.resigned_at || p?.end_date);
         return (
-          <section className="mt-6 rounded-lg border border-red-200 bg-red-50/40 p-4">
+          <section className="mt-6 rounded-lg border border-danger/30 bg-danger-soft p-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-semibold text-red-900">Resignation</h3>
+                <h3 className="text-sm font-semibold text-danger-text">Resignation</h3>
                 {isResigned ? (
-                  <p className="mt-1 text-xs text-red-800">
+                  <p className="mt-1 text-xs text-danger-text">
                     Resigned on <strong>{p?.resigned_at}</strong> · Last working day{" "}
                     <strong>{p?.end_date}</strong>. Auto-deactivates at end of that day.
                   </p>
                 ) : (
-                  <p className="mt-1 text-xs text-red-700">Mark employee as resigned to trigger prorate + auto-deactivation.</p>
+                  <p className="mt-1 text-xs text-danger-text">Mark employee as resigned to trigger prorate + auto-deactivation.</p>
                 )}
               </div>
               {isResigned ? (
                 <div className="flex items-center gap-2">
                   <a
                     href={`/api/hr/payroll/annual-forms?year=${new Date(p?.end_date || new Date()).getFullYear()}&type=ea&user_id=${id}`}
-                    className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+                    className="rounded-md border border-danger/30 bg-surface px-3 py-1.5 text-xs font-medium text-danger-text hover:bg-danger-soft"
                     download
                   >
                     Download EA Form
                   </a>
-                  <button onClick={cancelResign} className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+                  <button onClick={cancelResign} className="rounded-md border border-danger/30 bg-surface px-3 py-1.5 text-xs font-medium text-danger-text hover:bg-danger-soft">
                     Cancel Resignation
                   </button>
                 </div>
               ) : (
-                <button onClick={() => setResignOpen(true)} className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700">
+                <button onClick={() => setResignOpen(true)} className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white hover:bg-danger">
                   Mark as Resigned
                 </button>
               )}
@@ -1573,33 +1573,33 @@ export default function EmployeeDetailPage() {
       {/* Resign Modal */}
       {resignOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setResignOpen(false)}>
-          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-lg bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-base font-semibold">Mark as Resigned</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs text-text-3">
               Payroll will prorate final salary. Staff auto-deactivates at end of last working day.
             </p>
             {id && <ResignAssetWarning userId={id} />}
             <div className="mt-4 space-y-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Resignation Date (letter submitted)</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">Resignation Date (letter submitted)</span>
                 <input type="date" value={resignedAt} onChange={(e) => setResignedAt(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm" />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Last Working Day *</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">Last Working Day *</span>
                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full rounded-md border px-3 py-2 text-sm" />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Reason (optional)</span>
+                <span className="mb-1 block text-xs font-medium text-text-3">Reason (optional)</span>
                 <input value={resignReason} onChange={(e) => setResignReason(e.target.value)} placeholder="e.g. further studies" className="w-full rounded-md border px-3 py-2 text-sm" />
               </label>
-              {resignErr && <p className="text-xs text-red-600">{resignErr}</p>}
+              {resignErr && <p className="text-xs text-danger-text">{resignErr}</p>}
             </div>
             <div className="mt-5 flex justify-end gap-2">
-              <button onClick={() => setResignOpen(false)} className="rounded-md border px-4 py-2 text-sm hover:bg-gray-50">Cancel</button>
+              <button onClick={() => setResignOpen(false)} className="rounded-md border px-4 py-2 text-sm hover:bg-sunken">Cancel</button>
               <button
                 onClick={() => submitResign(false)}
                 disabled={resignSaving || !resignedAt || !endDate}
-                className="inline-flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-md bg-danger px-4 py-2 text-sm font-medium text-white hover:bg-danger disabled:opacity-50"
               >
                 {resignSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Confirm Resignation
@@ -1610,11 +1610,11 @@ export default function EmployeeDetailPage() {
       )}
 
       {/* Save Button */}
-      <div className="sticky bottom-0 flex justify-end border-t bg-background py-4">
+      <div className="sticky bottom-0 flex justify-end border-t bg-bg py-4">
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 rounded-lg bg-terracotta px-6 py-2.5 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg bg-ink px-6 py-2.5 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {saved ? "Saved!" : "Save Profile"}
@@ -1627,7 +1627,7 @@ export default function EmployeeDetailPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-text-3">{label}</span>
       {children}
     </label>
   );
@@ -1663,29 +1663,29 @@ function SelfReportedSection({ profile }: { profile: EmployeeProfile }) {
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">Self-reported by employee</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-text-3">
             Filled by the employee in the staff app. Read-only here — ask them to update if anything is wrong.
           </p>
         </div>
         {profile.profile_completed_at ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ok-soft px-2 py-0.5 text-[10px] font-medium text-ok-text">
             <CheckCircle2 className="h-3 w-3" />
             Marked complete
           </span>
         ) : profile.profile_self_updated_at ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-medium text-warn-text">
             <AlertCircle className="h-3 w-3" />
             In progress
           </span>
         ) : (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-sunken px-2 py-0.5 text-[10px] font-medium text-text-2">
             Not started
           </span>
         )}
       </div>
 
       {!hasAnyData ? (
-        <p className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
+        <p className="rounded-lg border bg-sunken p-3 text-xs text-text-3">
           Nothing filled yet. The staff app shows a reminder card on home / profile until they complete this.
         </p>
       ) : (
@@ -1697,8 +1697,8 @@ function SelfReportedSection({ profile }: { profile: EmployeeProfile }) {
           {profile.spouse_name && (
             <ReadField label="Spouse">
               {profile.spouse_name}
-              {profile.spouse_working === true && <span className="ml-1 text-xs text-muted-foreground">(working)</span>}
-              {profile.spouse_working === false && <span className="ml-1 text-xs text-muted-foreground">(not working)</span>}
+              {profile.spouse_working === true && <span className="ml-1 text-xs text-text-3">(working)</span>}
+              {profile.spouse_working === false && <span className="ml-1 text-xs text-text-3">(not working)</span>}
             </ReadField>
           )}
           {typeof profile.num_children === "number" && (
@@ -1719,8 +1719,8 @@ function SelfReportedSection({ profile }: { profile: EmployeeProfile }) {
       )}
 
       {profile.profile_self_updated_at && (
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          Last self-updated {new Date(profile.profile_self_updated_at).toLocaleString("en-MY", { dateStyle: "medium", timeStyle: "short" })}
+        <p className="mt-3 text-[11px] text-text-3">
+          Last self-updated {new Date(profile.profile_self_updated_at).toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}
         </p>
       )}
     </section>
@@ -1730,7 +1730,7 @@ function SelfReportedSection({ profile }: { profile: EmployeeProfile }) {
 function ReadField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dt className="text-xs text-text-3">{label}</dt>
       <dd className="mt-0.5 font-medium">{children}</dd>
     </div>
   );
@@ -1853,19 +1853,19 @@ function RecurringItemsSection({ userId }: { userId: string }) {
         {!showAdd && (
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-muted"
+            className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-sunken"
           >
             <Plus className="h-3 w-3" /> Add
           </button>
         )}
       </div>
-      <p className="mb-3 text-xs text-muted-foreground">
+      <p className="mb-3 text-xs text-text-3">
         Items from the payroll catalog applied to every payroll run while active.
         Use <em>effective date</em> to start and <em>end date</em> to stop.
       </p>
 
       {showAdd && (
-        <div className="mb-4 space-y-3 rounded-lg border bg-muted/20 p-3">
+        <div className="mb-4 space-y-3 rounded-lg border bg-sunken p-3">
           <Field label="Item">
             <select value={code} onChange={(e) => setCode(e.target.value)} className="input">
               <option value="">Select an item from catalog…</option>
@@ -1877,7 +1877,7 @@ function RecurringItemsSection({ userId }: { userId: string }) {
             </select>
           </Field>
           {selected && (
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[10px] text-text-3">
               Will record as <strong>{inferredKind}</strong>. Statutory:
               {selected.epf_contributing ? " EPF" : ""}
               {selected.socso_contributing ? " · SOCSO" : ""}
@@ -1900,13 +1900,13 @@ function RecurringItemsSection({ userId }: { userId: string }) {
               <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="input" placeholder="e.g. Tranche 1 of 6" />
             </Field>
           </div>
-          {err && <p className="text-xs text-red-600">{err}</p>}
+          {err && <p className="text-xs text-danger-text">{err}</p>}
           <div className="flex justify-end gap-2">
-            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50">Cancel</button>
+            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-sunken">Cancel</button>
             <button
               onClick={handleAdd}
               disabled={saving}
-              className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+              className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
               Add
@@ -1916,7 +1916,7 @@ function RecurringItemsSection({ userId }: { userId: string }) {
       )}
 
       {items.length === 0 ? (
-        <p className="rounded border bg-muted/10 p-4 text-center text-xs text-muted-foreground">
+        <p className="rounded border bg-sunken p-4 text-center text-xs text-text-3">
           No recurring items configured.
         </p>
       ) : (
@@ -1925,18 +1925,18 @@ function RecurringItemsSection({ userId }: { userId: string }) {
             const today = new Date().toISOString().slice(0, 10);
             const active = it.effective_date <= today && (!it.end_date || it.end_date >= today);
             return (
-              <div key={it.id} className="flex items-center gap-3 rounded-lg border bg-background p-3 text-xs">
+              <div key={it.id} className="flex items-center gap-3 rounded-lg border bg-bg p-3 text-xs">
                 <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${
-                  it.kind === "addition" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                  it.kind === "addition" ? "bg-ok-soft text-ok-text" : "bg-danger-soft text-danger-text"
                 }`}>
                   {it.kind}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-medium truncate">{it.catalog?.name || it.catalog_code}</span>
-                    {!active && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500">inactive</span>}
+                    {!active && <span className="rounded bg-sunken px-1.5 py-0.5 text-[9px] text-text-2">inactive</span>}
                   </div>
-                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  <div className="mt-0.5 text-[10px] text-text-3">
                     From {it.effective_date}{it.end_date && ` → ${it.end_date}`}
                     {it.note && ` · ${it.note}`}
                   </div>
@@ -1946,7 +1946,7 @@ function RecurringItemsSection({ userId }: { userId: string }) {
                 </span>
                 <button
                   onClick={() => handleDelete(it.id)}
-                  className="rounded-lg border border-red-200 bg-red-50 p-1.5 text-red-600 hover:bg-red-100"
+                  className="rounded-lg border border-danger/30 bg-danger-soft p-1.5 text-danger-text hover:bg-danger-soft"
                   title="Remove"
                 >
                   <Trash2 className="h-3 w-3" />
@@ -2068,7 +2068,7 @@ function TaxReliefsSection({ userId }: { userId: string }) {
           <select
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
-            className="rounded-lg border bg-background px-2 py-1 text-xs"
+            className="rounded-lg border bg-bg px-2 py-1 text-xs"
           >
             {[year + 1, year, year - 1, year - 2].map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -2077,20 +2077,20 @@ function TaxReliefsSection({ userId }: { userId: string }) {
           {!showAdd && (
             <button
               onClick={() => setShowAdd(true)}
-              className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-muted"
+              className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-sunken"
             >
               <Plus className="h-3 w-3" /> Add
             </button>
           )}
         </div>
       </div>
-      <p className="mb-3 text-xs text-muted-foreground">
+      <p className="mb-3 text-xs text-text-3">
         Personal reliefs (spouse, children, lifestyle, etc.) reduce PCB taxable income.
         Year-scoped — declared annually by the employee.
       </p>
 
       {showAdd && (
-        <div className="mb-4 space-y-3 rounded-lg border bg-muted/20 p-3">
+        <div className="mb-4 space-y-3 rounded-lg border bg-sunken p-3">
           <Field label="Relief">
             <select value={code} onChange={(e) => setCode(e.target.value)} className="input">
               <option value="">Select a relief from LHDN catalog…</option>
@@ -2104,13 +2104,13 @@ function TaxReliefsSection({ userId }: { userId: string }) {
           <Field label="Amount Claimed (RM)">
             <input type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="input" placeholder="0.00" />
           </Field>
-          {err && <p className="text-xs text-red-600">{err}</p>}
+          {err && <p className="text-xs text-danger-text">{err}</p>}
           <div className="flex justify-end gap-2">
-            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50">Cancel</button>
+            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-sunken">Cancel</button>
             <button
               onClick={handleAdd}
               disabled={saving}
-              className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+              className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
               Add
@@ -2120,17 +2120,17 @@ function TaxReliefsSection({ userId }: { userId: string }) {
       )}
 
       {reliefs.length === 0 ? (
-        <p className="rounded border bg-muted/10 p-4 text-center text-xs text-muted-foreground">
+        <p className="rounded border bg-sunken p-4 text-center text-xs text-text-3">
           No reliefs declared for {year}.
         </p>
       ) : (
         <div className="space-y-2">
           {reliefs.map((r) => (
-            <div key={r.id} className="flex items-center gap-3 rounded-lg border bg-background p-3 text-xs">
+            <div key={r.id} className="flex items-center gap-3 rounded-lg border bg-bg p-3 text-xs">
               <div className="min-w-0 flex-1">
                 <span className="font-medium truncate block">{r.catalog?.name || r.relief_code}</span>
                 {r.catalog?.ea_form_field && (
-                  <span className="mt-0.5 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[9px] text-gray-500">
+                  <span className="mt-0.5 inline-block rounded bg-sunken px-1.5 py-0.5 text-[9px] text-text-2">
                     EA {r.catalog.ea_form_field}
                   </span>
                 )}
@@ -2140,14 +2140,14 @@ function TaxReliefsSection({ userId }: { userId: string }) {
               </span>
               <button
                 onClick={() => handleDelete(r.id)}
-                className="rounded-lg border border-red-200 bg-red-50 p-1.5 text-red-600 hover:bg-red-100"
+                className="rounded-lg border border-danger/30 bg-danger-soft p-1.5 text-danger-text hover:bg-danger-soft"
                 title="Remove"
               >
                 <Trash2 className="h-3 w-3" />
               </button>
             </div>
           ))}
-          <div className="mt-2 flex items-center justify-between rounded-lg bg-muted/30 px-3 py-2 text-xs font-semibold">
+          <div className="mt-2 flex items-center justify-between rounded-lg bg-sunken px-3 py-2 text-xs font-semibold">
             <span>Total declared (effective)</span>
             <span className="font-mono">RM {total.toFixed(2)}</span>
           </div>
@@ -2233,19 +2233,19 @@ function SalaryHistorySection({ userId }: { userId: string }) {
         {!showAdd && (
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-muted"
+            className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-sunken"
           >
             <Plus className="h-3 w-3" /> Log change
           </button>
         )}
       </div>
-      <p className="mb-3 text-xs text-muted-foreground">
+      <p className="mb-3 text-xs text-text-3">
         Track increments, promotions, and restructures. Saving &quot;base&quot; or &quot;hourly&quot;
         with effective date ≤ today also updates the live profile so payroll picks it up.
       </p>
 
       {showAdd && (
-        <div className="mb-4 space-y-3 rounded-lg border bg-muted/20 p-3">
+        <div className="mb-4 space-y-3 rounded-lg border bg-sunken p-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Effective Date">
               <input type="date" value={effective} onChange={(e) => setEffective(e.target.value)} className="input" />
@@ -2266,10 +2266,10 @@ function SalaryHistorySection({ userId }: { userId: string }) {
               <input type="text" value={comment} onChange={(e) => setComment(e.target.value)} className="input" placeholder="e.g. Annual increment, Confirmation bump" />
             </Field>
           </div>
-          {err && <p className="text-xs text-red-600">{err}</p>}
+          {err && <p className="text-xs text-danger-text">{err}</p>}
           <div className="flex justify-end gap-2">
-            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50">Cancel</button>
-            <button onClick={submit} disabled={saving} className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50">
+            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-sunken">Cancel</button>
+            <button onClick={submit} disabled={saving} className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
               {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
               Log change
             </button>
@@ -2278,21 +2278,21 @@ function SalaryHistorySection({ userId }: { userId: string }) {
       )}
 
       {entries.length === 0 ? (
-        <p className="rounded border bg-muted/10 p-4 text-center text-xs text-muted-foreground">No salary changes logged.</p>
+        <p className="rounded border bg-sunken p-4 text-center text-xs text-text-3">No salary changes logged.</p>
       ) : (
         <div className="space-y-2">
           {entries.map((e) => (
-            <div key={e.id} className="flex items-center gap-3 rounded-lg border bg-background p-3 text-xs">
-              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[9px] font-semibold uppercase text-blue-700">{e.salary_type}</span>
+            <div key={e.id} className="flex items-center gap-3 rounded-lg border bg-bg p-3 text-xs">
+              <span className="rounded-full bg-info-soft px-2 py-0.5 text-[9px] font-semibold uppercase text-info-text">{e.salary_type}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{e.effective_date}</span>
-                  {e.end_date && <span className="text-gray-400">→ {e.end_date}</span>}
+                  {e.end_date && <span className="text-text-3">→ {e.end_date}</span>}
                 </div>
-                {e.comment && <div className="mt-0.5 text-[10px] text-muted-foreground">{e.comment}</div>}
+                {e.comment && <div className="mt-0.5 text-[10px] text-text-3">{e.comment}</div>}
               </div>
               <span className="font-mono font-semibold tabular-nums">RM {Number(e.amount).toFixed(2)}</span>
-              <button onClick={() => handleDelete(e.id)} className="rounded-lg border border-red-200 bg-red-50 p-1.5 text-red-600 hover:bg-red-100">
+              <button onClick={() => handleDelete(e.id)} className="rounded-lg border border-danger/30 bg-danger-soft p-1.5 text-danger-text hover:bg-danger-soft">
                 <Trash2 className="h-3 w-3" />
               </button>
             </div>
@@ -2401,25 +2401,25 @@ function DisciplinarySection({ userId }: { userId: string }) {
       <ConfirmDialog />
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 font-semibold">
-          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertTriangle className="h-4 w-4 text-warn-text" />
           Disciplinary Record
           {activeCount > 0 && (
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">{activeCount} active</span>
+            <span className="rounded-full bg-danger-soft px-2 py-0.5 text-[10px] font-bold text-danger-text">{activeCount} active</span>
           )}
         </h2>
         {!showAdd && (
-          <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-muted">
+          <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-sunken">
             <Plus className="h-3 w-3" /> Issue
           </button>
         )}
       </div>
-      <p className="mb-3 text-xs text-muted-foreground">
+      <p className="mb-3 text-xs text-text-3">
         Formal record of warnings, suspensions, and dismissals (per LoE clause C3).
         Pairs with review-penalties — those dock pay; this is the audit trail.
       </p>
 
       {showAdd && (
-        <div className="mb-4 space-y-3 rounded-lg border bg-muted/20 p-3">
+        <div className="mb-4 space-y-3 rounded-lg border bg-sunken p-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Issued Date">
               <input type="date" value={issuedAt} onChange={(e) => setIssuedAt(e.target.value)} className="input" />
@@ -2447,10 +2447,10 @@ function DisciplinarySection({ userId }: { userId: string }) {
           <Field label="Action taken">
             <textarea rows={2} value={actionTaken} onChange={(e) => setActionTaken(e.target.value)} className="input" placeholder="e.g. Verbal warning issued, will reassess in 30 days" />
           </Field>
-          {err && <p className="text-xs text-red-600">{err}</p>}
+          {err && <p className="text-xs text-danger-text">{err}</p>}
           <div className="flex justify-end gap-2">
-            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50">Cancel</button>
-            <button onClick={submit} disabled={saving} className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50">
+            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-sunken">Cancel</button>
+            <button onClick={submit} disabled={saving} className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
               {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
               Issue
             </button>
@@ -2459,36 +2459,36 @@ function DisciplinarySection({ userId }: { userId: string }) {
       )}
 
       {actions.length === 0 ? (
-        <p className="rounded border bg-muted/10 p-4 text-center text-xs text-muted-foreground">No disciplinary actions on record.</p>
+        <p className="rounded border bg-sunken p-4 text-center text-xs text-text-3">No disciplinary actions on record.</p>
       ) : (
         <div className="space-y-2">
           {actions.map((a) => {
-            const sevColor = a.severity === "gross" ? "bg-red-100 text-red-700"
-              : a.severity === "major" ? "bg-orange-100 text-orange-800"
-              : a.severity === "moderate" ? "bg-amber-100 text-amber-800"
-              : "bg-gray-100 text-gray-600";
+            const sevColor = a.severity === "gross" ? "bg-danger-soft text-danger-text"
+              : a.severity === "major" ? "bg-warn-soft text-warn-text"
+              : a.severity === "moderate" ? "bg-warn-soft text-warn-text"
+              : "bg-sunken text-text-2";
             return (
-              <div key={a.id} className="rounded-lg border bg-background p-3 text-xs">
+              <div key={a.id} className="rounded-lg border bg-bg p-3 text-xs">
                 <div className="flex items-center gap-2">
                   <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${sevColor}`}>{a.severity}</span>
                   <span className="font-semibold">{(DISC_CATEGORIES.find((c) => c.v === a.category)?.l) || a.category}</span>
-                  <span className="text-gray-400">{a.issued_at}</span>
+                  <span className="text-text-3">{a.issued_at}</span>
                   {a.status === "active" ? (
-                    <span className="ml-auto rounded-full bg-red-100 px-2 py-0.5 text-[9px] font-bold text-red-700">Active</span>
+                    <span className="ml-auto rounded-full bg-danger-soft px-2 py-0.5 text-[9px] font-bold text-danger-text">Active</span>
                   ) : (
-                    <span className="ml-auto rounded-full bg-gray-100 px-2 py-0.5 text-[9px] font-bold text-gray-500">{a.status}</span>
+                    <span className="ml-auto rounded-full bg-sunken px-2 py-0.5 text-[9px] font-bold text-text-2">{a.status}</span>
                   )}
                 </div>
                 <p className="mt-1 text-[11px]">{a.reason}</p>
-                {a.action_taken && <p className="mt-1 text-[10px] text-muted-foreground">{a.action_taken}</p>}
-                {a.effective_until && <p className="mt-1 text-[10px] text-amber-700">Effective until {a.effective_until}</p>}
+                {a.action_taken && <p className="mt-1 text-[10px] text-text-3">{a.action_taken}</p>}
+                {a.effective_until && <p className="mt-1 text-[10px] text-warn-text">Effective until {a.effective_until}</p>}
                 <div className="mt-2 flex justify-end gap-2">
                   {a.status === "active" && (
-                    <button onClick={() => close(a.id)} className="rounded border bg-white px-2 py-0.5 text-[10px] hover:bg-gray-50">
+                    <button onClick={() => close(a.id)} className="rounded border bg-surface px-2 py-0.5 text-[10px] hover:bg-sunken">
                       Close
                     </button>
                   )}
-                  <button onClick={() => handleDelete(a.id)} className="rounded border border-red-200 bg-red-50 p-1 text-red-600 hover:bg-red-100">
+                  <button onClick={() => handleDelete(a.id)} className="rounded border border-danger/30 bg-danger-soft p-1 text-danger-text hover:bg-danger-soft">
                     <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
@@ -2617,22 +2617,22 @@ function AssetsSection({ userId }: { userId: string }) {
           <Shield className="h-4 w-4" />
           Company Assets
           {outstandingCount > 0 && (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">{outstandingCount} outstanding</span>
+            <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[10px] font-bold text-warn-text">{outstandingCount} outstanding</span>
           )}
         </h2>
         {!showAdd && (
-          <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-muted">
+          <button onClick={() => setShowAdd(true)} className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium hover:bg-sunken">
             <Plus className="h-3 w-3" /> Issue
           </button>
         )}
       </div>
-      <p className="mb-3 text-xs text-muted-foreground">
+      <p className="mb-3 text-xs text-text-3">
         Track laptops, uniforms, key cards, etc. issued to this employee.
         Outstanding assets are blocked at resignation until returned or written off.
       </p>
 
       {showAdd && (
-        <div className="mb-4 space-y-3 rounded-lg border bg-muted/20 p-3">
+        <div className="mb-4 space-y-3 rounded-lg border bg-sunken p-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Type">
               <select value={type} onChange={(e) => setType(e.target.value)} className="input">
@@ -2649,10 +2649,10 @@ function AssetsSection({ userId }: { userId: string }) {
               <input type="text" value={serial} onChange={(e) => setSerial(e.target.value)} className="input" placeholder="e.g. C02XXX" />
             </Field>
           </div>
-          {err && <p className="text-xs text-red-600">{err}</p>}
+          {err && <p className="text-xs text-danger-text">{err}</p>}
           <div className="flex justify-end gap-2">
-            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50">Cancel</button>
-            <button onClick={submit} disabled={saving} className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50">
+            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-sunken">Cancel</button>
+            <button onClick={submit} disabled={saving} className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
               {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
               Issue
             </button>
@@ -2661,32 +2661,32 @@ function AssetsSection({ userId }: { userId: string }) {
       )}
 
       {assets.length === 0 ? (
-        <p className="rounded border bg-muted/10 p-4 text-center text-xs text-muted-foreground">No company assets issued.</p>
+        <p className="rounded border bg-sunken p-4 text-center text-xs text-text-3">No company assets issued.</p>
       ) : (
         <div className="space-y-2">
           {assets.map((a) => (
-            <div key={a.id} className="flex items-center gap-3 rounded-lg border bg-background p-3 text-xs">
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-gray-600">{a.asset_type.replace(/_/g, " ")}</span>
+            <div key={a.id} className="flex items-center gap-3 rounded-lg border bg-bg p-3 text-xs">
+              <span className="rounded bg-sunken px-1.5 py-0.5 text-[9px] font-semibold uppercase text-text-2">{a.asset_type.replace(/_/g, " ")}</span>
               <div className="min-w-0 flex-1">
                 <div className="font-medium truncate">{a.description}</div>
-                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                <div className="mt-0.5 text-[10px] text-text-3">
                   Issued {a.issued_at}
                   {a.serial_number && ` · ${a.serial_number}`}
                   {a.returned_at && ` · Returned ${a.returned_at} (${a.return_condition})`}
                 </div>
               </div>
               {a.status === "issued" ? (
-                <button onClick={() => markReturned(a)} className="rounded border bg-white px-2 py-1 text-[10px] hover:bg-gray-50">
+                <button onClick={() => markReturned(a)} className="rounded border bg-surface px-2 py-1 text-[10px] hover:bg-sunken">
                   Mark returned
                 </button>
               ) : (
                 <span className={`rounded-full px-2 py-0.5 text-[9px] font-medium ${
-                  a.status === "returned" ? "bg-emerald-100 text-emerald-700"
-                  : a.status === "lost" ? "bg-red-100 text-red-700"
-                  : "bg-gray-100 text-gray-600"
+                  a.status === "returned" ? "bg-ok-soft text-ok-text"
+                  : a.status === "lost" ? "bg-danger-soft text-danger-text"
+                  : "bg-sunken text-text-2"
                 }`}>{a.status}</span>
               )}
-              <button onClick={() => handleDelete(a.id)} className="rounded-lg border border-red-200 bg-red-50 p-1 text-red-600 hover:bg-red-100">
+              <button onClick={() => handleDelete(a.id)} className="rounded-lg border border-danger/30 bg-danger-soft p-1 text-danger-text hover:bg-danger-soft">
                 <Trash2 className="h-3 w-3" />
               </button>
             </div>
@@ -2796,23 +2796,23 @@ function CertificationsSection({ userId }: { userId: string }) {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="flex items-center gap-2 font-semibold">
-            <Award className="h-5 w-5 text-terracotta" />
+            <Award className="h-5 w-5 text-brand-text" />
             Training & Certification
           </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-text-3">
             Food handler cert is required by MOH for everyone touching food. Renewal reminders fire 30/14/7 days before expiry.
           </p>
         </div>
         <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark"
+          className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover"
         >
           <Plus className="h-3 w-3" /> Add cert
         </button>
       </div>
 
       {certs.length === 0 ? (
-        <p className="rounded-lg border bg-muted/10 p-4 text-center text-xs text-muted-foreground">
+        <p className="rounded-lg border bg-sunken p-4 text-center text-xs text-text-3">
           No certifications on file.
         </p>
       ) : (
@@ -2823,36 +2823,36 @@ function CertificationsSection({ userId }: { userId: string }) {
             return (
               <div
                 key={c.id}
-                className={`flex items-start gap-3 rounded-lg border bg-background p-3 text-sm ${
-                  sev === "expired" ? "border-red-300 bg-red-50/40" : sev === "urgent" ? "border-amber-300 bg-amber-50/30" : ""
+                className={`flex items-start gap-3 rounded-lg border bg-bg p-3 text-sm ${
+                  sev === "expired" ? "border-danger/30 bg-danger-soft" : sev === "urgent" ? "border-warn/30 bg-warn-soft" : ""
                 }`}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-medium">{typeLabel}</span>
                     <span className="font-semibold">{c.name}</span>
-                    {c.cert_number && <span className="text-xs text-muted-foreground">#{c.cert_number}</span>}
+                    {c.cert_number && <span className="text-xs text-text-3">#{c.cert_number}</span>}
                   </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <p className="mt-0.5 text-xs text-text-3">
                     {c.issuer && `${c.issuer} · `}
                     {c.issued_date && `Issued ${c.issued_date}`}
                     {c.issued_date && c.expires_at && " · "}
                     {c.expires_at && `Expires ${c.expires_at}`}
                   </p>
-                  {c.notes && <p className="mt-1 text-xs italic text-muted-foreground">{c.notes}</p>}
+                  {c.notes && <p className="mt-1 text-xs italic text-text-3">{c.notes}</p>}
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   {c.expires_at && (
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      sev === "expired" ? "bg-red-100 text-red-700" :
-                      sev === "urgent" ? "bg-red-100 text-red-700" :
-                      sev === "warning" ? "bg-amber-100 text-amber-800" :
-                      "bg-emerald-100 text-emerald-700"
+                      sev === "expired" ? "bg-danger-soft text-danger-text" :
+                      sev === "urgent" ? "bg-danger-soft text-danger-text" :
+                      sev === "warning" ? "bg-warn-soft text-warn-text" :
+                      "bg-ok-soft text-ok-text"
                     }`}>
                       {sev === "expired" ? `Expired ${Math.abs(c.days_to_expiry!)}d ago` : `${c.days_to_expiry}d left`}
                     </span>
                   )}
-                  <button onClick={() => remove(c)} className="rounded p-1 text-red-500 hover:bg-red-50">
+                  <button onClick={() => remove(c)} className="rounded p-1 text-danger-text hover:bg-danger-soft">
                     <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
@@ -2863,7 +2863,7 @@ function CertificationsSection({ userId }: { userId: string }) {
       )}
 
       {showAdd && (
-        <div className="mt-3 rounded-lg border-2 border-dashed bg-muted/20 p-4">
+        <div className="mt-3 rounded-lg border-2 border-dashed bg-sunken p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Type *">
               <select value={form.cert_type} onChange={(e) => setForm((f) => ({ ...f, cert_type: e.target.value }))} className="input">
@@ -2889,13 +2889,13 @@ function CertificationsSection({ userId }: { userId: string }) {
           <Field label="Notes">
             <input value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="input" placeholder="Optional" />
           </Field>
-          {err && <p className="mt-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
+          {err && <p className="mt-2 rounded bg-danger-soft px-3 py-2 text-xs text-danger-text">{err}</p>}
           <div className="mt-3 flex justify-end gap-2">
-            <button onClick={reset} disabled={saving} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-muted">Cancel</button>
+            <button onClick={reset} disabled={saving} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-sunken">Cancel</button>
             <button
               onClick={submit}
               disabled={saving || !form.name}
-              className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+              className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
             >
               {saving && <Loader2 className="h-3 w-3 animate-spin" />}
               Save certification
@@ -3002,15 +3002,15 @@ function ProbationReviewSection({ userId }: { userId: string }) {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="flex items-center gap-2 font-semibold">
-            <CheckCircle2 className="h-5 w-5 text-terracotta" />
+            <CheckCircle2 className="h-5 w-5 text-brand-text" />
             Probation Review
           </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <p className="mt-0.5 text-xs text-text-3">
             Required before issuing the confirmation letter. Manager fills the form, OWNER/ADMIN approves.
           </p>
         </div>
         {canEdit && !showForm && (
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark">
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover">
             <Plus className="h-3 w-3" /> New review
           </button>
         )}
@@ -3018,17 +3018,17 @@ function ProbationReviewSection({ userId }: { userId: string }) {
 
       {/* Existing review summary */}
       {current && !showForm && (
-        <div className="rounded-lg border bg-background p-4">
+        <div className="rounded-lg border bg-bg p-4">
           <div className="mb-3 flex items-center justify-between">
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-              current.status === "approved" ? "bg-emerald-50 text-emerald-700" :
-              current.status === "submitted" ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-700"
+              current.status === "approved" ? "bg-ok-soft text-ok-text" :
+              current.status === "submitted" ? "bg-info-soft text-info-text" : "bg-sunken text-text-2"
             }`}>
               {current.status.toUpperCase()}
             </span>
             <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-              current.decision === "confirm" ? "bg-emerald-100 text-emerald-800" :
-              current.decision === "extend" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"
+              current.decision === "confirm" ? "bg-ok-soft text-ok-text" :
+              current.decision === "extend" ? "bg-warn-soft text-warn-text" : "bg-danger-soft text-danger-text"
             }`}>
               Decision: {current.decision === "confirm" ? "Confirm employment" : current.decision === "extend" ? `Extend ${current.extension_months}mo` : "Terminate"}
             </span>
@@ -3042,32 +3042,32 @@ function ProbationReviewSection({ userId }: { userId: string }) {
           </div>
           {current.strengths && (
             <div className="mt-3">
-              <p className="text-xs font-medium text-muted-foreground">Strengths</p>
+              <p className="text-xs font-medium text-text-3">Strengths</p>
               <p className="mt-0.5 text-sm">{current.strengths}</p>
             </div>
           )}
           {current.improvements && (
             <div className="mt-2">
-              <p className="text-xs font-medium text-muted-foreground">Improvements needed</p>
+              <p className="text-xs font-medium text-text-3">Improvements needed</p>
               <p className="mt-0.5 text-sm">{current.improvements}</p>
             </div>
           )}
           {current.recommendation_notes && (
             <div className="mt-2">
-              <p className="text-xs font-medium text-muted-foreground">Recommendation</p>
+              <p className="text-xs font-medium text-text-3">Recommendation</p>
               <p className="mt-0.5 text-sm">{current.recommendation_notes}</p>
             </div>
           )}
           {current.status === "submitted" && (
             <div className="mt-3 flex justify-end gap-2">
-              <button onClick={approve} disabled={saving} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+              <button onClick={approve} disabled={saving} className="flex items-center gap-1 rounded-lg bg-ok px-3 py-1.5 text-xs font-medium text-white hover:bg-ok disabled:opacity-50">
                 {saving && <Loader2 className="h-3 w-3 animate-spin" />}
                 Approve review (OWNER/ADMIN only)
               </button>
             </div>
           )}
           {current.status === "approved" && current.decision === "confirm" && (
-            <p className="mt-3 rounded bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+            <p className="mt-3 rounded bg-ok-soft px-3 py-2 text-xs text-ok-text">
               ✅ Review approved — you can now issue the confirmation letter.
             </p>
           )}
@@ -3076,8 +3076,8 @@ function ProbationReviewSection({ userId }: { userId: string }) {
 
       {/* New review form */}
       {showForm && (
-        <div className="space-y-3 rounded-lg border-2 border-dashed bg-muted/20 p-4">
-          <p className="text-xs text-muted-foreground">Rate each axis 1–5 (1 = very poor, 5 = excellent).</p>
+        <div className="space-y-3 rounded-lg border-2 border-dashed bg-sunken p-4">
+          <p className="text-xs text-text-3">Rate each axis 1–5 (1 = very poor, 5 = excellent).</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
             {([
               ["attendance_score", "Attendance"],
@@ -3125,11 +3125,11 @@ function ProbationReviewSection({ userId }: { userId: string }) {
               </>
             )}
           </div>
-          {err && <p className="rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
+          {err && <p className="rounded bg-danger-soft px-3 py-2 text-xs text-danger-text">{err}</p>}
           <div className="flex justify-end gap-2">
-            <button onClick={() => setShowForm(false)} disabled={saving} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-muted">Cancel</button>
-            <button onClick={() => submit("draft")} disabled={saving} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-muted">Save draft</button>
-            <button onClick={() => submit("submitted")} disabled={saving} className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50">
+            <button onClick={() => setShowForm(false)} disabled={saving} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-sunken">Cancel</button>
+            <button onClick={() => submit("draft")} disabled={saving} className="rounded-lg border px-3 py-1.5 text-xs hover:bg-sunken">Save draft</button>
+            <button onClick={() => submit("submitted")} disabled={saving} className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
               {saving && <Loader2 className="h-3 w-3 animate-spin" />}
               Submit for approval
             </button>
@@ -3138,7 +3138,7 @@ function ProbationReviewSection({ userId }: { userId: string }) {
       )}
 
       {!current && !showForm && (
-        <p className="rounded-lg border bg-muted/10 p-4 text-center text-xs text-muted-foreground">
+        <p className="rounded-lg border bg-sunken p-4 text-center text-xs text-text-3">
           No probation review on file yet. Click &ldquo;New review&rdquo; to start one.
         </p>
       )}
@@ -3149,8 +3149,8 @@ function ProbationReviewSection({ userId }: { userId: string }) {
 function ScoreReadout({ label, v }: { label: string; v: number | null }) {
   return (
     <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-base font-semibold">{v ?? "–"}<span className="text-xs text-muted-foreground"> / 5</span></p>
+      <p className="text-xs text-text-3">{label}</p>
+      <p className="text-base font-semibold">{v ?? "–"}<span className="text-xs text-text-3"> / 5</span></p>
     </div>
   );
 }
@@ -3199,10 +3199,10 @@ function VerificationLetterSection({ userId, onGenerated }: { userId: string; on
     <section className="rounded-xl border bg-card p-5 lg:col-span-2">
       <div className="mb-3">
         <h2 className="flex items-center gap-2 font-semibold">
-          <FileText className="h-5 w-5 text-terracotta" />
+          <FileText className="h-5 w-5 text-brand-text" />
           Generate Verification Letter
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-xs text-text-3">
           For banks (loan applications), embassies (visa), and landlords (tenancy). Preview unsigned, then sign & file to the employee&apos;s documents.
         </p>
       </div>
@@ -3226,16 +3226,16 @@ function VerificationLetterSection({ userId, onGenerated }: { userId: string; on
         <input value={recipientAddress} onChange={(e) => setRecipientAddress(e.target.value)} className="input" placeholder="e.g. Maybank Berhad, KL Branch" />
       </Field>
 
-      {err && <p className="mt-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
+      {err && <p className="mt-2 rounded bg-danger-soft px-3 py-2 text-xs text-danger-text">{err}</p>}
 
       <div className="mt-4 flex items-center justify-end gap-2">
-        <a href={buildPreviewUrl()} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted">
+        <a href={buildPreviewUrl()} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-sunken">
           <Download className="h-3 w-3" /> Preview unsigned
         </a>
         <button
           onClick={signAndFile}
           disabled={signing}
-          className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+          className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
         >
           {signing && <Loader2 className="h-3 w-3 animate-spin" />}
           Sign &amp; file to documents
@@ -3250,7 +3250,7 @@ function ResignAssetWarning({ userId }: { userId: string }) {
   const outstanding = (data?.assets || []).filter((a) => a.status === "issued");
   if (outstanding.length === 0) return null;
   return (
-    <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+    <div className="mt-3 rounded-md border border-warn/30 bg-warn-soft p-3 text-xs text-warn-text">
       <p className="font-semibold">⚠ {outstanding.length} outstanding asset{outstanding.length === 1 ? "" : "s"}</p>
       <ul className="mt-1 list-disc pl-5">
         {outstanding.slice(0, 4).map((a) => (
@@ -3316,13 +3316,13 @@ function OnboardingSection({ userId }: { userId: string }) {
           <CheckCircle2 className="h-4 w-4" />
           Onboarding
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-            pct === 100 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"
+            pct === 100 ? "bg-ok-soft text-ok-text" : "bg-warn-soft text-warn-text"
           }`}>{done}/{total}</span>
         </h2>
-        <span className="text-xs text-muted-foreground">{pct}% complete</span>
+        <span className="text-xs text-text-3">{pct}% complete</span>
       </div>
-      <div className="mb-4 h-1.5 w-full rounded-full bg-gray-100">
-        <div className="h-1.5 rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+      <div className="mb-4 h-1.5 w-full rounded-full bg-sunken">
+        <div className="h-1.5 rounded-full bg-ok transition-all" style={{ width: `${pct}%` }} />
       </div>
 
       <div className="space-y-3">
@@ -3332,27 +3332,27 @@ function OnboardingSection({ userId }: { userId: string }) {
           const stageDone = list.filter((t) => t.progress?.completed_at).length;
           return (
             <div key={stage}>
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-                {STAGE_LABEL[stage]} <span className="text-gray-400">· {stageDone}/{list.length}</span>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-text-2">
+                {STAGE_LABEL[stage]} <span className="text-text-3">· {stageDone}/{list.length}</span>
               </p>
               <ul className="space-y-1">
                 {list.map((t) => {
                   const completed = !!t.progress?.completed_at;
                   return (
-                    <li key={t.id} className="flex items-start gap-2 rounded border bg-background p-2 text-xs">
+                    <li key={t.id} className="flex items-start gap-2 rounded border bg-bg p-2 text-xs">
                       <button
                         onClick={() => toggle(t)}
                         className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                          completed ? "border-emerald-500 bg-emerald-500 text-white" : "border-gray-300 bg-white"
+                          completed ? "border-ok/30 bg-ok text-white" : "border-line-2 bg-surface"
                         }`}
                       >
                         {completed && <CheckCircle2 className="h-3 w-3" />}
                       </button>
                       <div className="min-w-0 flex-1">
-                        <span className={`font-medium ${completed ? "line-through text-gray-400" : ""}`}>{t.title}</span>
-                        {t.description && <p className="mt-0.5 text-[10px] text-muted-foreground">{t.description}</p>}
+                        <span className={`font-medium ${completed ? "line-through text-text-3" : ""}`}>{t.title}</span>
+                        {t.description && <p className="mt-0.5 text-[10px] text-text-3">{t.description}</p>}
                         {completed && t.progress?.completed_at && (
-                          <p className="mt-0.5 text-[10px] text-emerald-700">
+                          <p className="mt-0.5 text-[10px] text-ok-text">
                             Completed {new Date(t.progress.completed_at).toLocaleDateString("en-MY")}
                           </p>
                         )}
@@ -3403,7 +3403,7 @@ function MonthlyPerformanceHistory({ userId }: { userId: string }) {
     return (
       <section className="rounded-xl border bg-card p-5">
         <h2 className="mb-2 font-semibold">Monthly History</h2>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-text-3">
           No confirmed payroll runs yet. History fills in automatically as monthly cycles are confirmed.
         </p>
       </section>
@@ -3419,7 +3419,7 @@ function MonthlyPerformanceHistory({ userId }: { userId: string }) {
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="border-b text-left text-muted-foreground">
+            <tr className="border-b text-left text-text-3">
               <th className="py-2 pr-3">Period</th>
               <th className="py-2 pr-3 text-right">Attendance</th>
               <th className="py-2 pr-3 text-right">Performance</th>
@@ -3435,19 +3435,19 @@ function MonthlyPerformanceHistory({ userId }: { userId: string }) {
                 <tr key={`${h.period_year}-${h.period_month}`} className="border-b last:border-0">
                   <td className="py-2 pr-3 font-medium">
                     {MONTH_NAMES[h.period_month - 1]} {h.period_year}
-                    <span className="ml-1 rounded bg-gray-100 px-1.5 py-0.5 text-[9px] uppercase text-gray-500">
+                    <span className="ml-1 rounded bg-sunken px-1.5 py-0.5 text-[9px] uppercase text-text-2">
                       {h.status}
                     </span>
                   </td>
                   <td className="py-2 pr-3 text-right font-mono">{formatRM(h.attendance_allowance)}</td>
                   <td className="py-2 pr-3 text-right font-mono">{formatRM(h.performance_allowance)}</td>
-                  <td className="py-2 pr-3 text-right font-mono text-red-700">
+                  <td className="py-2 pr-3 text-right font-mono text-danger-text">
                     {h.review_penalty > 0 ? `− ${formatRM(h.review_penalty)}` : "—"}
                   </td>
                   <td className="py-2 pr-3">
-                    <div className="h-1.5 w-32 overflow-hidden rounded-full bg-gray-100">
+                    <div className="h-1.5 w-32 overflow-hidden rounded-full bg-sunken">
                       <div
-                        className="h-full rounded-full bg-emerald-400"
+                        className="h-full rounded-full bg-ok"
                         style={{ width: `${earnedPct}%` }}
                       />
                     </div>

@@ -37,7 +37,7 @@ export default function HrAnalyticsPage() {
   const maxOutflow = Math.max(...data.payroll_trend_monthly.map((m) => m.total_outflow), 1);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <HrPageHeader
         title="Analytics"
         description={`Headcount, turnover, attendance health, payroll cost trend. Year-to-date from ${data.ytd_start}.`}
@@ -120,9 +120,9 @@ export default function HrAnalyticsPage() {
               const overdue = c.due_date < today;
               return (
                 <li key={c.id} className="flex items-center gap-3 text-xs">
-                  <span className={`font-mono ${overdue ? "font-bold text-red-700" : "text-gray-500"} w-24`}>{c.due_date}</span>
+                  <span className={`font-mono ${overdue ? "font-bold text-red-700" : "text-text-2"} w-24`}>{c.due_date}</span>
                   <span className="flex-1 font-medium">{c.title}</span>
-                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[9px] uppercase text-gray-600">{c.category.replace(/_/g, " ")}</span>
+                  <span className="rounded bg-sunken px-1.5 py-0.5 text-[9px] uppercase text-text-2">{c.category.replace(/_/g, " ")}</span>
                 </li>
               );
             })}
@@ -145,10 +145,10 @@ export default function HrAnalyticsPage() {
               return (
                 <div key={m.period} className="text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-gray-500">{m.period}</span>
+                    <span className="font-mono text-text-2">{m.period}</span>
                     <span className="font-mono font-semibold tabular-nums">{fmtRM(m.total_outflow)}</span>
                   </div>
-                  <div className="mt-0.5 h-2 w-full rounded-full bg-gray-100">
+                  <div className="mt-0.5 h-2 w-full rounded-full bg-sunken">
                     <div className="h-2 rounded-full bg-emerald-400" style={{ width: `${widthPct}%` }} />
                   </div>
                   <div className="mt-0.5 flex justify-between text-[9px] text-muted-foreground">
@@ -181,7 +181,7 @@ function ActionPill({ href, label, count, sub }: { href: string; label: string; 
   return (
     <Link href={href} className="rounded-lg border bg-background p-3 text-sm hover:bg-muted">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${count > 0 ? "text-red-600" : "text-gray-400"}`}>{count}</div>
+      <div className={`mt-1 text-2xl font-bold ${count > 0 ? "text-red-600" : "text-text-3"}`}>{count}</div>
       {sub && <div className="mt-0.5 text-[10px] text-muted-foreground">{sub}</div>}
     </Link>
   );

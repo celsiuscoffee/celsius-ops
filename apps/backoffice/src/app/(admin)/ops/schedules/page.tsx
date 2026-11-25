@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Loader2, Trash2, Calendar, User, Clock, CalendarDays } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
+import { mutate as refreshKey } from "swr";
+import { SopCoverage } from "./_coverage";
 
 type Sop = { id: string; title: string; category: { name: string } };
 type Outlet = { id: string; code: string; name: string };
@@ -30,9 +32,9 @@ type Schedule = {
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SHIFT_LABELS: Record<string, string> = { OPENING: "Opening", MIDDAY: "Midday", CLOSING: "Closing" };
 const SHIFT_COLORS: Record<string, string> = {
-  OPENING: "bg-amber-100 text-amber-700",
-  MIDDAY: "bg-blue-100 text-blue-700",
-  CLOSING: "bg-purple-100 text-purple-700",
+  OPENING: "bg-warn-soft text-warn-text",
+  MIDDAY: "bg-info-soft text-info-text",
+  CLOSING: "bg-info-soft text-info-text",
 };
 const RECURRENCE_LABELS: Record<string, string> = {
   SHIFT: "Once per shift",
@@ -119,6 +121,7 @@ export default function SchedulesPage() {
       }
       setDialogOpen(false);
       mutate();
+      refreshKey("/api/ops/compliance");
     } catch {
       setError("Connection error");
     } finally {
@@ -130,6 +133,7 @@ export default function SchedulesPage() {
     if (!confirm("Remove this schedule?")) return;
     await fetch(`/api/ops/schedules/${id}`, { method: "DELETE" });
     mutate();
+    refreshKey("/api/ops/compliance");
   };
 
   const toggleActive = async (schedule: Schedule) => {
@@ -139,6 +143,7 @@ export default function SchedulesPage() {
       body: JSON.stringify({ isActive: !schedule.isActive }),
     });
     mutate();
+    refreshKey("/api/ops/compliance");
   };
 
   // Filter staff by selected outlet
@@ -151,26 +156,28 @@ export default function SchedulesPage() {
     <div className="p-3 sm:p-6 lg:p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Schedules</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Assign SOPs to staff with recurring schedules
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Checklists</h1>
+          <p className="mt-1 text-sm text-text-3">
+            Who runs each SOP, at which outlet and when, and which SOPs nobody is scheduled to run.
           </p>
         </div>
-        <Button onClick={openCreate} className="bg-terracotta hover:bg-terracotta-dark">
+        <Button onClick={openCreate} className="bg-ink hover:bg-ink-hover">
           <Plus className="mr-2 h-4 w-4" />New Schedule
         </Button>
       </div>
 
+      <SopCoverage />
+
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <Loader2 className="h-6 w-6 animate-spin text-text-3" />
         </div>
       ) : !schedules || schedules.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center py-12">
-            <Calendar className="h-10 w-10 text-muted-foreground/40" />
-            <p className="mt-3 text-sm text-muted-foreground">No schedules yet</p>
-            <p className="mt-1 text-xs text-muted-foreground/60">
+            <Calendar className="h-10 w-10 text-text-3" />
+            <p className="mt-3 text-sm text-text-3">No schedules yet</p>
+            <p className="mt-1 text-xs text-text-3">
               Create a schedule to auto-generate daily checklists for staff
             </p>
             <Button onClick={openCreate} variant="outline" className="mt-4">
@@ -186,7 +193,7 @@ export default function SchedulesPage() {
                 <div className="flex items-start gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-medium text-foreground">{s.sop.title}</h3>
+                      <h3 className="font-medium text-text">{s.sop.title}</h3>
                       <Badge variant="secondary" className="text-[10px]">{s.sop.category.name}</Badge>
                       <Badge className={`text-[10px] ${SHIFT_COLORS[s.shift]}`}>
                         {SHIFT_LABELS[s.shift]}
@@ -198,7 +205,7 @@ export default function SchedulesPage() {
                       )}
                       {!s.isActive && <Badge variant="outline" className="text-[10px]">Paused</Badge>}
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                    <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-text-3">
                       <span className="flex items-center gap-1">
                         <User className="h-3 w-3" />{s.assignedTo.name}
                       </span>
@@ -211,7 +218,7 @@ export default function SchedulesPage() {
                         </span>
                       )}
                       {s.dueMinutes > 0 && (
-                        <span className="text-amber-600">Due within {s.dueMinutes}min</span>
+                        <span className="text-warn-text">Due within {s.dueMinutes}min</span>
                       )}
                       <span className="flex items-center gap-1">
                         <CalendarDays className="h-3 w-3" />
@@ -224,15 +231,15 @@ export default function SchedulesPage() {
                       onClick={() => toggleActive(s)}
                       className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${
                         s.isActive
-                          ? "bg-green-100 text-green-700 hover:bg-green-200"
-                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                          ? "bg-ok-soft text-ok-text hover:bg-ok-soft"
+                          : "bg-sunken text-text-2 hover:bg-line"
                       }`}
                     >
                       {s.isActive ? "Active" : "Paused"}
                     </button>
                     <button
                       onClick={() => handleDelete(s.id)}
-                      className="rounded-md p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 transition-colors"
+                      className="rounded-md p-1.5 text-text-3 hover:bg-danger-soft hover:text-danger-text transition-colors"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -256,7 +263,7 @@ export default function SchedulesPage() {
               <select
                 value={sopId}
                 onChange={(e) => setSopId(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="w-full rounded-md border border-input bg-bg px-3 py-2 text-sm"
               >
                 <option value="">Select a published SOP</option>
                 {sops?.map((s) => (
@@ -270,7 +277,7 @@ export default function SchedulesPage() {
                 <select
                   value={outletId}
                   onChange={(e) => setOutletId(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-input bg-bg px-3 py-2 text-sm"
                 >
                   <option value="">Select outlet</option>
                   {outlets?.map((o) => (
@@ -283,7 +290,7 @@ export default function SchedulesPage() {
                 <select
                   value={shift}
                   onChange={(e) => setShift(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-input bg-bg px-3 py-2 text-sm"
                 >
                   <option value="OPENING">Opening</option>
                   <option value="MIDDAY">Midday</option>
@@ -299,7 +306,7 @@ export default function SchedulesPage() {
                 {(["SHIFT", "SPECIFIC_TIMES", "HOURLY"] as const).map((r) => (
                   <button key={r} type="button" onClick={() => { setRecurrence(r); if (r === "SHIFT") setTimes([]); }}
                     className={`flex-1 rounded-md py-2 text-xs font-medium transition-colors ${
-                      recurrence === r ? "bg-terracotta text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      recurrence === r ? "bg-ink text-on-ink" : "bg-sunken text-text-3 hover:bg-sunken"
                     }`}
                   >
                     {RECURRENCE_LABELS[r]}
@@ -314,20 +321,20 @@ export default function SchedulesPage() {
                 <label className="mb-1.5 block text-sm font-medium">Times *</label>
                 <div className="flex gap-2 mb-2">
                   <input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)}
-                    className="rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
+                    className="rounded-md border border-input bg-bg px-3 py-1.5 text-sm" />
                   <Button type="button" variant="outline" size="sm" onClick={addTime}>Add</Button>
                 </div>
                 {times.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                     {times.map((t) => (
-                      <span key={t} className="inline-flex items-center gap-1 rounded-full bg-terracotta/10 px-2.5 py-1 text-xs text-terracotta">
+                      <span key={t} className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-xs text-brand-text">
                         {t}
-                        <button onClick={() => removeTime(t)} className="hover:text-red-500">×</button>
+                        <button onClick={() => removeTime(t)} className="hover:text-danger-text">×</button>
                       </span>
                     ))}
                   </div>
                 )}
-                {times.length === 0 && <p className="text-xs text-muted-foreground">Add at least one time</p>}
+                {times.length === 0 && <p className="text-xs text-text-3">Add at least one time</p>}
               </div>
             )}
 
@@ -339,7 +346,7 @@ export default function SchedulesPage() {
                   {[0, 15, 30, 60].map((m) => (
                     <button key={m} type="button" onClick={() => setDueMinutes(m)}
                       className={`flex-1 rounded-md py-2 text-xs font-medium transition-colors ${
-                        dueMinutes === m ? "bg-terracotta text-white" : "bg-muted text-muted-foreground"
+                        dueMinutes === m ? "bg-ink text-on-ink" : "bg-sunken text-text-3"
                       }`}
                     >
                       {m === 0 ? "No limit" : `${m} min`}
@@ -350,7 +357,7 @@ export default function SchedulesPage() {
             )}
             <div>
               <label className="mb-1.5 block text-sm font-medium">
-                Assign to Staff * <span className="text-xs text-muted-foreground font-normal">({selectedStaff.size} selected)</span>
+                Assign to Staff * <span className="text-xs text-text-3 font-normal">({selectedStaff.size} selected)</span>
               </label>
               <div className="max-h-72 overflow-y-auto rounded-md border border-input p-2 space-y-0.5">
                 {filteredStaff?.map((s) => {
@@ -361,23 +368,23 @@ export default function SchedulesPage() {
                       type="button"
                       onClick={() => toggleStaff(s.id)}
                       className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors ${
-                        isSelected ? "bg-terracotta/10 text-foreground" : "hover:bg-muted text-muted-foreground"
+                        isSelected ? "bg-brand-soft text-text" : "hover:bg-sunken text-text-3"
                       }`}
                     >
                       <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                        isSelected ? "bg-terracotta border-terracotta text-white" : "border-input"
+                        isSelected ? "bg-ink border-ink text-on-ink" : "border-input"
                       }`}>
                         {isSelected && <span className="text-[10px]">✓</span>}
                       </div>
                       <span className={isSelected ? "font-medium" : ""}>{s.name}</span>
-                      <span className="text-[10px] text-muted-foreground ml-auto">
+                      <span className="text-[10px] text-text-3 ml-auto">
                         {s.role}{s.outlet ? ` · ${s.outlet.name}` : ""}
                       </span>
                     </button>
                   );
                 })}
                 {(!filteredStaff || filteredStaff.length === 0) && (
-                  <p className="py-3 text-center text-xs text-muted-foreground">No staff found</p>
+                  <p className="py-3 text-center text-xs text-text-3">No staff found</p>
                 )}
               </div>
               {filteredStaff && filteredStaff.length > 0 && (
@@ -385,14 +392,14 @@ export default function SchedulesPage() {
                   <button
                     type="button"
                     onClick={() => setSelectedStaff(new Set(filteredStaff.map((s) => s.id)))}
-                    className="text-[10px] text-terracotta hover:underline"
+                    className="text-[10px] text-brand-text hover:underline"
                   >
                     Select all
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedStaff(new Set())}
-                    className="text-[10px] text-muted-foreground hover:underline"
+                    className="text-[10px] text-text-3 hover:underline"
                   >
                     Clear
                   </button>
@@ -411,8 +418,8 @@ export default function SchedulesPage() {
                       onClick={() => toggleDay(day)}
                       className={`flex-1 rounded-md py-2 text-xs font-medium transition-colors ${
                         selected
-                          ? "bg-terracotta text-white"
-                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                          ? "bg-ink text-on-ink"
+                          : "bg-sunken text-text-3 hover:bg-sunken"
                       }`}
                     >
                       {label}
@@ -421,11 +428,11 @@ export default function SchedulesPage() {
                 })}
               </div>
             </div>
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {error && <p className="text-sm text-danger-text">{error}</p>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving} className="bg-terracotta hover:bg-terracotta-dark">
+            <Button onClick={handleSave} disabled={saving} className="bg-ink hover:bg-ink-hover">
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create Schedule
             </Button>

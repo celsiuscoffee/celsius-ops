@@ -35,6 +35,7 @@ import {
   type Product,
   type ServerItem,
 } from "../../../lib/ops/inventory";
+import { clock12, useCelsius } from "../../../lib/celsius-ui";
 
 const STORAGE_AREA_LABEL: Record<string, string> = {
   FRIDGE: "Fridge",
@@ -53,6 +54,7 @@ function key(productId: string, packageId: string | null): string {
 }
 
 export default function StockCount() {
+  const C = useCelsius().color;
   const session = useStaff((s) => s.session);
   const [frequency, setFrequency] = useState<Frequency>("daily");
   const [products, setProducts] = useState<Product[]>([]);
@@ -435,16 +437,16 @@ export default function StockCount() {
   // ── Render branches ──
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#A2492C" />
+      <View className="flex-1 items-center justify-center bg-bg">
+        <ActivityIndicator color={C["text-3"]} />
       </View>
     );
   }
 
   if (error && products.length === 0) {
     return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <Text className="text-sm text-danger text-center">{error}</Text>
+      <View className="flex-1 items-center justify-center bg-bg px-6">
+        <Text className="text-sm text-danger-text text-center">{error}</Text>
       </View>
     );
   }
@@ -456,28 +458,28 @@ export default function StockCount() {
       submittedToday.countedBy?.name ??
       "Someone";
     return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <View className="h-16 w-16 items-center justify-center rounded-full bg-success/10">
-          <Check color="#15803D" size={32} />
+      <View className="flex-1 items-center justify-center bg-bg px-6">
+        <View className="h-16 w-16 items-center justify-center rounded-full bg-ok-soft">
+          <Check color={C["ok-text"]} size={32} />
         </View>
-        <Text className="mt-4 text-xl font-display text-espresso text-center">
+        <Text className="mt-4 text-xl font-display text-text text-center">
           Today's {frequency} count is done
         </Text>
-        <Text className="mt-1 text-sm font-body text-muted-fg text-center">
-          Finalized by {name}
+        <Text className="mt-1 text-sm font-body text-text-2 text-center">
+          Finished by {name}
           {time
-            ? ` at ${new Date(time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+            ? ` at ${clock12(time)}`
             : ""}
         </Text>
         <Pressable
           onPress={() => setStartNew(true)}
-          className="mt-6 h-14 items-center justify-center rounded-2xl bg-primary px-8 active:opacity-80"
+          className="mt-6 h-14 items-center justify-center rounded-2xl bg-ink px-8 active:opacity-80"
         >
-          <Text className="text-base font-body-bold text-white">
+          <Text className="text-base font-body-bold text-on-ink">
             Start new count
           </Text>
         </Pressable>
-        <Text className="mt-3 max-w-xs text-center text-xs text-muted">
+        <Text className="mt-3 max-w-xs text-center text-xs text-text-3">
           Only start a new count if you need to re-count after a delivery or
           adjustment.
         </Text>
@@ -489,19 +491,19 @@ export default function StockCount() {
     <Screen edges={["top", "left", "right"]}>
       <PageHeader title="Stock count" back />
       {/* Sticky frequency tabs, sits below the PageHeader. */}
-      <View className="border-b border-border bg-background pb-3">
+      <View className="border-b border-line bg-bg pb-3">
         <View className="flex-row items-center gap-2">
           {(["daily", "weekly", "monthly"] as Frequency[]).map((f) => (
             <Pressable
               key={f}
               onPress={() => setFrequency(f)}
-              className={`rounded-full px-3 py-1.5 ${
-                frequency === f ? "bg-primary" : "bg-primary-50"
+              className={`h-11 justify-center rounded-full px-4 ${
+                frequency === f ? "bg-ink" : "bg-sunken"
               }`}
             >
               <Text
                 className={`text-xs font-body-bold capitalize ${
-                  frequency === f ? "text-white" : "text-primary"
+                  frequency === f ? "text-on-ink" : "text-text-2"
                 }`}
               >
                 {f}
@@ -516,51 +518,51 @@ export default function StockCount() {
                   { text: "Reset", style: "destructive", onPress: handleReset },
                 ])
               }
-              className="ml-auto flex-row items-center gap-1 px-2 py-1"
+              className="ml-auto min-h-11 flex-row items-center gap-1 px-2"
             >
-              <RotateCcw color="#6B6B6B" size={12} />
-              <Text className="text-xs font-body text-muted">Reset</Text>
+              <RotateCcw color={C["text-2"]} size={12} />
+              <Text className="text-xs font-body text-text-3">Reset</Text>
             </Pressable>
           ) : null}
         </View>
 
         <View className="mt-2 flex-row items-center justify-between">
-          <Text className="text-xs font-body text-muted">
-            <Text className="font-body-bold text-espresso">
+          <Text className="text-xs font-body text-text-3">
+            <Text className="font-body-bold text-text">
               {countedItems}/{totalItems}
             </Text>{" "}
             counted
           </Text>
           <View
-            className={`rounded-full px-2 py-0.5 ${countedItems === totalItems ? "bg-success" : "bg-primary-50"}`}
+            className={`rounded-full px-2 py-0.5 ${countedItems === totalItems ? "bg-ok-soft" : "bg-sunken"}`}
           >
             <Text
-              className={`text-[10px] font-body-bold ${countedItems === totalItems ? "text-white" : "text-primary"}`}
+              className={`text-xs font-body-bold ${countedItems === totalItems ? "text-ok-text" : "text-text-2"}`}
             >
               {pct}%
             </Text>
           </View>
         </View>
-        <View className="mt-1 h-1.5 overflow-hidden rounded-full bg-primary-50">
+        <View className="mt-1 h-1.5 overflow-hidden rounded-full bg-sunken">
           <View
-            className={`h-full ${pct === 100 ? "bg-success" : "bg-primary"}`}
+            className={`h-full ${pct === 100 ? "bg-ok" : "bg-ink"}`}
             style={{ width: `${pct}%` }}
           />
         </View>
 
         {contributors.length > 0 ? (
           <View className="mt-2 flex-row items-center gap-1.5">
-            <Users color="#9CA3AF" size={12} />
+            <Users color={C["text-3"]} size={12} />
             {contributors.slice(0, 4).map((c) => (
               <View
                 key={c.id}
                 className={`rounded-full px-2 py-0.5 ${
-                  c.id === session?.userId ? "bg-primary-50" : "bg-blue-50"
+                  c.id === session?.userId ? "bg-sunken" : "bg-info-soft"
                 }`}
               >
                 <Text
-                  className={`text-[10px] font-body-bold ${
-                    c.id === session?.userId ? "text-primary" : "text-blue-700"
+                  className={`text-xs font-body-bold ${
+                    c.id === session?.userId ? "text-text" : "text-info-text"
                   }`}
                 >
                   {c.id === session?.userId ? "You" : c.name.split(" ")[0]} ·{" "}
@@ -572,14 +574,14 @@ export default function StockCount() {
         ) : null}
 
         {/* Search */}
-        <View className="mt-3 flex-row items-center gap-2 rounded-2xl border border-border bg-surface px-3 h-12">
-          <Search color="#9CA3AF" size={16} />
+        <View className="mt-3 flex-row items-center gap-2 rounded-2xl border border-line bg-surface px-3 h-12">
+          <Search color={C["text-3"]} size={16} />
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder="Search product…"
-            placeholderTextColor="#9CA3AF"
-            className="flex-1 text-base font-body text-espresso"
+            placeholderTextColor={C["text-3"]}
+            className="flex-1 text-base font-body text-text"
           />
         </View>
       </View>
@@ -609,19 +611,19 @@ export default function StockCount() {
                 className="flex-row items-center gap-2 py-2"
               >
                 {isCollapsed ? (
-                  <ChevronRight color="#9CA3AF" size={16} />
+                  <ChevronRight color={C["text-3"]} size={16} />
                 ) : (
-                  <ChevronDown color="#9CA3AF" size={16} />
+                  <ChevronDown color={C["text-3"]} size={16} />
                 )}
-                <Text className="text-xs font-body-bold uppercase tracking-wide text-muted">
+                <Text className="text-sm font-body-semi text-text-2">
                   {STORAGE_AREA_LABEL[group.area] ?? group.area}
                 </Text>
                 <Text
-                  className={`text-xs font-body ${allDone ? "text-success" : "text-muted"}`}
+                  className={`text-xs font-body ${allDone ? "text-ok-text" : "text-text-3"}`}
                 >
                   {counted}/{total}
                 </Text>
-                {allDone ? <Check color="#15803D" size={14} /> : null}
+                {allDone ? <Check color={C["ok-text"]} size={14} /> : null}
               </Pressable>
               {!isCollapsed ? (
                 <View className="gap-1.5">
@@ -640,18 +642,18 @@ export default function StockCount() {
                         onPress={() => openKeypad(item)}
                         className={`flex-row items-center gap-3 rounded-2xl border px-3 py-3 active:opacity-90 ${
                           isCounted
-                            ? "border-success/30 bg-success/5"
-                            : "border-border bg-surface"
+                            ? "border-ok bg-ok-soft"
+                            : "border-line bg-surface"
                         }`}
                       >
                         <View
                           className={`h-11 w-11 items-center justify-center rounded-xl ${
-                            isCounted ? "bg-success/10" : "bg-primary-50"
+                            isCounted ? "bg-ok-soft" : "bg-sunken"
                           }`}
                         >
                           <Text
                             className={`text-sm font-body-bold tabular-nums ${
-                              isCounted ? "text-success" : "text-muted"
+                              isCounted ? "text-ok-text" : "text-text-3"
                             }`}
                           >
                             {isCounted ? c.qty : "-"}
@@ -659,30 +661,27 @@ export default function StockCount() {
                         </View>
                         <View className="flex-1">
                           <Text
-                            className="text-base font-body-medium text-espresso"
+                            className="text-base font-body-medium text-text"
                             numberOfLines={1}
                           >
                             {item.name}
                           </Text>
                           <View className="flex-row items-center gap-1.5">
-                            <Text className="text-xs font-body text-muted">
+                            <Text className="text-xs font-body text-text-3">
                               {u}
                             </Text>
                             {byOther && serverIt?.countedAt ? (
-                              <View className="rounded bg-blue-50 px-1.5 py-px">
-                                <Text className="text-[10px] font-body-bold text-blue-700">
+                              <View className="rounded bg-info-soft px-1.5 py-px">
+                                <Text className="text-xs font-body-bold text-info-text">
                                   {serverIt.countedBy!.name.split(" ")[0]}{" "}
-                                  {new Date(serverIt.countedAt).toLocaleTimeString(
-                                    [],
-                                    { hour: "2-digit", minute: "2-digit" },
-                                  )}
+                                  {clock12(serverIt.countedAt)}
                                 </Text>
                               </View>
                             ) : null}
                           </View>
                         </View>
                         {isCounted ? (
-                          <Check color="#15803D" size={16} />
+                          <Check color={C["ok-text"]} size={16} />
                         ) : null}
                       </Pressable>
                     );
@@ -699,21 +698,21 @@ export default function StockCount() {
       {/* Finalize CTA pinned bottom */}
       <View
         style={{ paddingBottom: 12 }}
-        className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3"
+        className="absolute inset-x-0 bottom-0 border-t border-line bg-bg px-5 pt-3"
       >
         <Pressable
           onPress={() => void handleFinalize()}
           disabled={countedItems < totalItems || finalizing}
           className={`h-16 items-center justify-center rounded-2xl ${
             countedItems < totalItems || finalizing
-              ? "bg-primary/40"
-              : "bg-primary"
+              ? "bg-ink opacity-40"
+              : "bg-ink"
           }`}
         >
           {finalizing ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={C["on-ink"]} />
           ) : (
-            <Text className="text-base font-body-bold text-white">
+            <Text className="text-base font-body-bold text-on-ink">
               {countedItems < totalItems
                 ? `Count ${totalItems - countedItems} more`
                 : `Finalize count (${countedItems}/${totalItems})`}
@@ -753,24 +752,24 @@ export default function StockCount() {
         transparent
         onRequestClose={() => setConflict(null)}
       >
-        <View className="flex-1 justify-end bg-black/40">
+        <View className="flex-1 justify-end bg-scrim">
           {conflict ? (
-            <View className="rounded-t-3xl bg-background p-5">
+            <View className="rounded-t-3xl bg-bg p-5">
               <View className="flex-row items-start gap-3">
-                <View className="h-10 w-10 items-center justify-center rounded-full bg-amber-100">
-                  <AlertTriangle color="#F59E0B" size={20} />
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-warn-soft">
+                  <AlertTriangle color={C.warn} size={20} />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-base font-display text-espresso">
+                  <Text className="text-base font-display text-text">
                     {conflict.serverName ?? "Someone"} already counted this
                   </Text>
-                  <Text className="mt-1 text-sm font-body text-muted-fg">
+                  <Text className="mt-1 text-sm font-body text-text-2">
                     They saved{" "}
-                    <Text className="text-espresso font-body-bold">
+                    <Text className="text-text font-body-bold">
                       {conflict.serverQty ?? "-"}
                     </Text>
                     . You're overwriting with{" "}
-                    <Text className="text-espresso font-body-bold">
+                    <Text className="text-text font-body-bold">
                       {conflict.pendingQty}
                     </Text>
                     .
@@ -795,9 +794,9 @@ export default function StockCount() {
                     });
                     setConflict(null);
                   }}
-                  className="h-14 flex-1 items-center justify-center rounded-2xl border border-border"
+                  className="h-14 flex-1 items-center justify-center rounded-2xl border border-line"
                 >
-                  <Text className="text-base font-body-bold text-espresso">
+                  <Text className="text-base font-body-bold text-text">
                     Keep theirs
                   </Text>
                 </Pressable>
@@ -812,9 +811,9 @@ export default function StockCount() {
                       true,
                     );
                   }}
-                  className="h-14 flex-1 items-center justify-center rounded-2xl bg-primary"
+                  className="h-14 flex-1 items-center justify-center rounded-2xl bg-ink"
                 >
-                  <Text className="text-sm font-body-bold text-white">
+                  <Text className="text-sm font-body-bold text-on-ink">
                     Overwrite
                   </Text>
                 </Pressable>
@@ -834,18 +833,18 @@ export default function StockCount() {
         transparent
         onRequestClose={() => setExpiredPrompt(null)}
       >
-        <View className="flex-1 justify-end bg-black/40">
+        <View className="flex-1 justify-end bg-scrim">
           {expiredPrompt ? (
-            <View className="rounded-t-3xl bg-background p-5 pb-10">
+            <View className="rounded-t-3xl bg-bg p-5 pb-10">
               <View className="flex-row items-start gap-3">
-                <View className="h-10 w-10 items-center justify-center rounded-full bg-amber-100">
-                  <AlertTriangle color="#F59E0B" size={20} />
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-warn-soft">
+                  <AlertTriangle color={C.warn} size={20} />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-base font-display text-espresso">
+                  <Text className="text-base font-display text-text">
                     This count expired
                   </Text>
-                  <Text className="mt-1 text-sm font-body text-muted-fg">
+                  <Text className="mt-1 text-sm font-body text-text-2">
                     It was started{" "}
                     {expiredPrompt.daysOpen === 1
                       ? "a day"
@@ -865,9 +864,9 @@ export default function StockCount() {
                     setCountId(null);
                     setServerItems({});
                   }}
-                  className="h-14 items-center justify-center rounded-2xl bg-primary active:opacity-80"
+                  className="h-14 items-center justify-center rounded-2xl bg-ink active:opacity-80"
                 >
-                  <Text className="text-base font-body-bold text-white">
+                  <Text className="text-base font-body-bold text-on-ink">
                     Start a new count for today
                   </Text>
                 </Pressable>
@@ -878,14 +877,14 @@ export default function StockCount() {
                     expiredActionRef.current = "continue";
                     setExpiredPrompt(null);
                   }}
-                  className="h-14 items-center justify-center rounded-2xl border border-border"
+                  className="h-14 items-center justify-center rounded-2xl border border-line"
                 >
-                  <Text className="text-base font-body-bold text-espresso">
+                  <Text className="text-base font-body-bold text-text">
                     Continue it (re-date to today)
                   </Text>
                 </Pressable>
               </View>
-              <Text className="mt-3 text-center text-xs font-body text-muted">
+              <Text className="mt-3 text-center text-xs font-body text-text-3">
                 Nothing already counted is deleted either way.
               </Text>
             </View>
@@ -902,22 +901,22 @@ export default function StockCount() {
         transparent
         onRequestClose={() => setStalePrompt(null)}
       >
-        <View className="flex-1 justify-end bg-black/40">
+        <View className="flex-1 justify-end bg-scrim">
           {stalePrompt ? (
-            <View className="rounded-t-3xl bg-background p-5 pb-10">
+            <View className="rounded-t-3xl bg-bg p-5 pb-10">
               <View className="flex-row items-start gap-3">
-                <View className="h-10 w-10 items-center justify-center rounded-full bg-amber-100">
-                  <AlertTriangle color="#F59E0B" size={20} />
+                <View className="h-10 w-10 items-center justify-center rounded-full bg-warn-soft">
+                  <AlertTriangle color={C.warn} size={20} />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-base font-display text-espresso">
+                  <Text className="text-base font-display text-text">
                     Open{" "}
                     {stalePrompt.daysOpen === 1
                       ? "a day"
                       : `${stalePrompt.daysOpen} days`}{" "}
                     — when was this counted?
                   </Text>
-                  <Text className="mt-1 text-sm font-body text-muted-fg">
+                  <Text className="mt-1 text-sm font-body text-text-2">
                     A manager will review it. Say which day(s) the stock was
                     physically counted so the numbers can be read correctly.
                   </Text>
@@ -930,15 +929,15 @@ export default function StockCount() {
                   setStalePrompt((p) => (p ? { ...p, reason: t } : p))
                 }
                 placeholder="e.g. counted Tue morning, finished Wed"
-                placeholderTextColor="#9CA3AF"
-                className="mt-4 h-12 rounded-2xl border border-border bg-surface px-3 text-base font-body text-espresso"
+                placeholderTextColor={C["text-3"]}
+                className="mt-4 h-12 rounded-2xl border border-line bg-surface px-3 text-base font-body text-text"
               />
               <View className="mt-5 flex-row gap-2">
                 <Pressable
                   onPress={() => setStalePrompt(null)}
-                  className="h-14 flex-1 items-center justify-center rounded-2xl border border-border"
+                  className="h-14 flex-1 items-center justify-center rounded-2xl border border-line"
                 >
-                  <Text className="text-base font-body-bold text-espresso">
+                  <Text className="text-base font-body-bold text-text">
                     Cancel
                   </Text>
                 </Pressable>
@@ -947,14 +946,14 @@ export default function StockCount() {
                   onPress={() => void handleFinalize(stalePrompt.reason.trim())}
                   className={`h-14 flex-1 items-center justify-center rounded-2xl ${
                     stalePrompt.reason.trim().length < 3 || finalizing
-                      ? "bg-primary/40"
-                      : "bg-primary"
+                      ? "bg-ink opacity-40"
+                      : "bg-ink"
                   }`}
                 >
                   {finalizing ? (
-                    <ActivityIndicator color="#FFFFFF" />
+                    <ActivityIndicator color={C["on-ink"]} />
                   ) : (
-                    <Text className="text-base font-body-bold text-white">
+                    <Text className="text-base font-body-bold text-on-ink">
                       Finalize
                     </Text>
                   )}
@@ -993,6 +992,7 @@ function KeypadView({
   defaultPkg: (p: Product) => Package | null;
   uomLabel: (p: Product, pkgId?: string | null) => string;
 }) {
+  const C = useCelsius().color;
   const insets = useSafeAreaInsets();
   const typed = parseFloat(value);
   const pkg = pkgId
@@ -1002,24 +1002,24 @@ function KeypadView({
   const showConv = !isNaN(typed) && typed > 0 && cf > 1;
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-bg">
       {/* Header */}
       <View
-        className="border-b border-border px-5 pb-4"
+        className="border-b border-line px-5 pb-4"
         style={{ paddingTop: insets.top + 12 }}
       >
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-3">
             <Text
-              className="text-base font-body-bold text-espresso"
+              className="text-base font-body-bold text-text"
               numberOfLines={1}
             >
               {product.name}
             </Text>
-            <Text className="text-xs font-body text-muted">{product.sku}</Text>
+            <Text className="text-xs font-body text-text-3">{product.sku}</Text>
           </View>
-          <Pressable onPress={onCancel} className="h-10 w-10 items-center justify-center rounded-full">
-            <X color="#6B6B6B" size={20} />
+          <Pressable onPress={onCancel} className="h-11 w-11 items-center justify-center rounded-full">
+            <X color={C["text-2"]} size={20} />
           </Pressable>
         </View>
         {product.packages.length > 1 ? (
@@ -1028,14 +1028,14 @@ function KeypadView({
               <Pressable
                 key={p.id}
                 onPress={() => setPkgId(p.id)}
-                className={`rounded-full border-2 px-4 py-2 ${
+                className={`min-h-11 justify-center rounded-full border-2 px-4 py-2 ${
                   pkgId === p.id
-                    ? "border-primary bg-primary-50"
-                    : "border-border bg-surface"
+                    ? "border-ink bg-sunken"
+                    : "border-line bg-surface"
                 }`}
               >
                 <Text
-                  className={`text-sm font-body-bold ${pkgId === p.id ? "text-primary" : "text-muted-fg"}`}
+                  className={`text-sm font-body-bold ${pkgId === p.id ? "text-text" : "text-text-2"}`}
                 >
                   {p.label || p.name}
                 </Text>
@@ -1043,9 +1043,9 @@ function KeypadView({
             ))}
           </View>
         ) : product.packages.length === 1 ? (
-          <Text className="mt-2 text-sm font-body text-muted">
+          <Text className="mt-2 text-sm font-body text-text-3">
             Count in:{" "}
-            <Text className="font-body-bold text-espresso">
+            <Text className="font-body-bold text-text">
               {product.packages[0].label || product.packages[0].name}
             </Text>
           </Text>
@@ -1055,21 +1055,21 @@ function KeypadView({
       {/* Display */}
       <View className="flex-1 items-center justify-center px-6">
         <Text
-          className={`text-7xl font-display tabular-nums ${value ? "text-espresso" : "text-muted/40"}`}
+          className={`text-7xl font-display tabular-nums ${value ? "text-text" : "text-text-3"}`}
         >
           {value || "0"}
         </Text>
-        <Text className="mt-2 text-sm font-body text-muted">
+        <Text className="mt-2 text-sm font-body text-text-3">
           {uomLabel(product, pkgId)}
         </Text>
         {showConv ? (
-          <Text className="mt-3 text-xs font-body text-amber-700">
+          <Text className="mt-3 text-xs font-body text-warn-text">
             ={" "}
             <Text className="font-body-bold">
               {(typed * cf).toLocaleString()}
             </Text>{" "}
             {product.baseUom}{" "}
-            <Text className="text-muted">
+            <Text className="text-text-3">
               ({typed} × {cf.toLocaleString()})
             </Text>
           </Text>
@@ -1077,7 +1077,7 @@ function KeypadView({
       </View>
 
       {/* Keypad */}
-      <View className="border-t border-border bg-primary-50/30 px-3 pt-3 pb-10">
+      <View className="border-t border-line bg-sunken px-3 pt-3 pb-10">
         <View className="flex-row flex-wrap justify-center">
           {["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "back"].map(
             (k) => (
@@ -1085,14 +1085,14 @@ function KeypadView({
                 key={k}
                 onPress={() => onPress(k)}
                 className={`m-1 h-[4.5rem] w-[31%] items-center justify-center rounded-2xl active:opacity-70 ${
-                  k === "back" ? "bg-primary-50" : "bg-surface"
+                  k === "back" ? "bg-sunken" : "bg-surface"
                 }`}
-                style={{ shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 2 }}
+                style={{ boxShadow: "0 1px 2px rgba(22, 8, 0, 0.06)" }}
               >
                 {k === "back" ? (
-                  <Delete color="#4A4A4A" size={22} />
+                  <Delete color={C["text-2"]} size={22} />
                 ) : (
-                  <Text className="text-2xl font-display text-espresso">
+                  <Text className="text-2xl font-display text-text">
                     {k}
                   </Text>
                 )}
@@ -1104,17 +1104,17 @@ function KeypadView({
           {hasExisting ? (
             <Pressable
               onPress={onClear}
-              className="h-14 flex-1 items-center justify-center rounded-2xl border border-danger/30"
+              className="h-14 flex-1 items-center justify-center rounded-2xl border border-danger"
             >
-              <Text className="text-base font-body-bold text-danger">Clear</Text>
+              <Text className="text-base font-body-bold text-danger-text">Clear</Text>
             </Pressable>
           ) : null}
           <Pressable
             onPress={onConfirm}
             disabled={!value}
-            className={`h-14 flex-1 items-center justify-center rounded-2xl ${value ? "bg-primary" : "bg-primary/40"}`}
+            className={`h-14 flex-1 items-center justify-center rounded-2xl ${value ? "bg-ink" : "bg-ink opacity-40"}`}
           >
-            <Text className="text-base font-body-bold text-white">Save</Text>
+            <Text className="text-base font-body-bold text-on-ink">Save</Text>
           </Pressable>
         </View>
       </View>

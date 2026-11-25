@@ -6,7 +6,7 @@
 import { AppState } from "react-native";
 import { supabase } from "./supabase";
 import { posOrderComplete } from "./loyalty";
-import { listPending, removePending, bumpAttempts, quarantine, type PendingSale } from "./offline-queue";
+import { listPending, removePending, bumpAttempts, quarantine, requeueDeadLetterOnce, type PendingSale } from "./offline-queue";
 import { markOnline, markOffline, withTimeout } from "./connectivity";
 
 let flushing = false;
@@ -104,7 +104,11 @@ export async function flushPending(): Promise<void> {
 export function startSyncLoop(): void {
   if (started) return;
   started = true;
-  void flushPending();
+  // Put any sales held back by the 2026-10-03 outage back in the queue first,
+  // so this first drain uploads them. No-op after the first run on each till.
+  void requeueDeadLetterOnce().finally(() => {
+    void flushPending();
+  });
   setInterval(() => {
     void flushPending();
   }, 20000);

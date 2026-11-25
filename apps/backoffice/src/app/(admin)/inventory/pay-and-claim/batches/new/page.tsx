@@ -165,48 +165,48 @@ export default function NewBatchPage() {
     : null;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <Link
         href="/inventory/pay-and-claim/batches"
-        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-2 text-sm text-text-2 hover:text-text"
       >
         <ArrowLeft className="h-4 w-4" /> Back to batches
       </Link>
 
       <div>
-        <h1 className="text-2xl font-bold">New Claim Batch</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">New claim batch</h1>
+        <p className="text-sm text-text-2">
           Pick which staff claims to pay together. All selected invoices must belong to the same payee and the same outlet.
         </p>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-card p-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-surface p-3">
         <label className="block text-xs">
-          <span className="font-medium text-muted-foreground">Outlet</span>
+          <span className="font-medium text-text-2">Outlet</span>
           <select
             value={outletId}
             onChange={(e) => setOutletId(e.target.value)}
-            className="mt-1 rounded-lg border bg-background px-2 py-1.5"
+            className="mt-1 rounded-lg border border-line bg-surface px-2 py-1.5"
           >
             <option value="">All outlets</option>
             {outlets?.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
         </label>
         <label className="block text-xs">
-          <span className="font-medium text-muted-foreground">From</span>
+          <span className="font-medium text-text-2">From</span>
           <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-            className="mt-1 rounded-lg border bg-background px-2 py-1.5" />
+            className="mt-1 rounded-lg border border-line bg-surface px-2 py-1.5" />
         </label>
         <label className="block text-xs">
-          <span className="font-medium text-muted-foreground">To</span>
+          <span className="font-medium text-text-2">To</span>
           <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
-            className="mt-1 rounded-lg border bg-background px-2 py-1.5" />
+            className="mt-1 rounded-lg border border-line bg-surface px-2 py-1.5" />
         </label>
         {(from || to || outletId) && (
           <button
             onClick={() => { setFrom(""); setTo(""); setOutletId(""); }}
-            className="rounded-lg border px-3 py-1.5 text-xs hover:bg-muted"
+            className="rounded-lg border border-line px-3 py-1.5 text-xs hover:bg-sunken"
           >
             Reset
           </button>
@@ -214,11 +214,11 @@ export default function NewBatchPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center gap-2 py-20 text-muted-foreground">
+        <div className="flex items-center gap-2 py-20 text-text-2">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading unbatched claims…
         </div>
       ) : groups.length === 0 ? (
-        <p className="rounded-xl border bg-card p-10 text-center text-sm text-muted-foreground">
+        <p className="rounded-xl border border-line bg-surface p-10 text-center text-sm text-text-2">
           No unbatched claims match those filters.
         </p>
       ) : (
@@ -230,9 +230,9 @@ export default function NewBatchPage() {
             return (
               <div
                 key={g.userId}
-                className={`rounded-xl border bg-card ${dimmed ? "opacity-40" : ""}`}
+                className={`rounded-xl border bg-surface ${dimmed ? "opacity-40" : ""}`}
               >
-                <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+                <div className="flex items-center justify-between border-b bg-sunken px-4 py-3">
                   <label className="flex items-center gap-3">
                     <input
                       type="checkbox"
@@ -243,7 +243,7 @@ export default function NewBatchPage() {
                     />
                     <div>
                       <div className="font-semibold">{g.payee?.fullName || g.payee?.name || "(no payee)"}</div>
-                      <div className="text-[10px] text-muted-foreground">
+                      <div className="text-[10px] text-text-2">
                         {g.payee?.bankName || "—"} · {g.payee?.bankAccountNumber || "no account on file"}
                       </div>
                     </div>
@@ -259,7 +259,7 @@ export default function NewBatchPage() {
                     return (
                     <label
                       key={inv.id}
-                      className={`flex items-center gap-3 px-4 py-2 text-sm ${outletLocked ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:bg-muted/30"}`}
+                      className={`flex items-center gap-3 px-4 py-2 text-sm ${outletLocked ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:bg-sunken"}`}
                     >
                       <input
                         type="checkbox"
@@ -271,14 +271,14 @@ export default function NewBatchPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs">{inv.invoiceNumber}</span>
-                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
+                          <span className="rounded-full bg-sunken px-1.5 py-0.5 text-[10px] text-text-2">
                             {inv.status}
                           </span>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-xs text-text-2">
                             {inv.outlet?.code || inv.outlet?.name} · {new Date(inv.createdAt).toLocaleDateString()}
                           </span>
                         </div>
-                        {inv.order?.notes && <div className="text-[10px] text-muted-foreground">{inv.order.notes}</div>}
+                        {inv.order?.notes && <div className="text-[10px] text-text-2">{inv.order.notes}</div>}
                       </div>
                       <div className="text-right text-sm font-semibold">
                         RM {Number(inv.amount).toFixed(2)}
@@ -295,15 +295,15 @@ export default function NewBatchPage() {
 
       {/* Sticky footer */}
       {selectedIds.size > 0 && (
-        <div className="sticky bottom-0 z-10 mt-6 rounded-xl border bg-card p-4 shadow-lg">
+        <div className="sticky bottom-0 z-10 mt-6 rounded-xl border border-line bg-surface p-4 shadow-lg">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">Selection</div>
+              <div className="text-xs uppercase tracking-wide text-text-2">Selection</div>
               <div className="text-lg font-bold">
                 {selectedIds.size} claim{selectedIds.size === 1 ? "" : "s"} · RM {selectedTotal.toFixed(2)}
               </div>
               {payeeOfSelected && (
-                <div className="mt-0.5 text-xs text-muted-foreground">
+                <div className="mt-0.5 text-xs text-text-2">
                   Payee: <span className="font-medium">{payeeOfSelected.fullName || payeeOfSelected.name}</span>
                   {payeeOfSelected.bankAccountNumber && (
                     <> — {payeeOfSelected.bankName} {payeeOfSelected.bankAccountNumber}</>
@@ -311,29 +311,29 @@ export default function NewBatchPage() {
                 </div>
               )}
               {outletOfSelected && (
-                <div className="mt-0.5 text-xs text-muted-foreground">
+                <div className="mt-0.5 text-xs text-text-2">
                   Outlet: <span className="font-medium">{outletOfSelected.name}</span>
                 </div>
               )}
             </div>
             <div className="flex items-end gap-2">
               <label className="block text-xs">
-                <span className="text-muted-foreground">Notes (optional)</span>
+                <span className="text-text-2">Notes (optional)</span>
                 <input
                   type="text"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="mt-1 w-64 rounded-lg border bg-background px-3 py-1.5 text-sm"
+                  className="mt-1 w-64 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm"
                   placeholder="e.g. week 17 Shah Alam"
                 />
               </label>
               <button
                 onClick={createBatch}
                 disabled={submitting}
-                className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Create Batch
+                Create batch
               </button>
             </div>
           </div>

@@ -1,16 +1,14 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
+import { KeyNumber } from "@/components/ui/key-number";
+import { countedInBase, summariseCounts, unresolvedIn } from "@/lib/inventory/count-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  ClipboardCheck, Loader2, Search,
-  CheckCircle2, Clock, AlertTriangle, Eye, Save,
+  ArrowLeft, Loader2, Search,
+  CheckCircle2, AlertTriangle, Save,
 } from "lucide-react";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
 
 interface StockCountItem {
   id: string;
@@ -52,24 +50,12 @@ const VARIANCE_REASONS = [
   "Other",
 ];
 
-const STATUS_STYLES: Record<string, string> = {
-  SUBMITTED: "bg-yellow-50 text-yellow-700 border-yellow-200",
-  REVIEWED: "bg-green-50 text-green-700 border-green-200",
-  DRAFT: "bg-gray-50 text-gray-500 border-gray-200",
-};
-
-const STATUS_ICON: Record<string, typeof Clock> = {
-  SUBMITTED: Clock,
-  REVIEWED: CheckCircle2,
-  DRAFT: AlertTriangle,
-};
-
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kuala_Lumpur" });
 }
 
 // A count was auto-approved when it went straight to REVIEWED at submit time —
@@ -82,24 +68,6 @@ function isAutoApproved(sc: { status: string; submittedAt: string | null; review
   return Math.abs(new Date(sc.reviewedAt).getTime() - new Date(sc.submittedAt).getTime()) < 3000;
 }
 
-// Counted vs expected live in different units (package vs base UOM) — convert
-// before comparing, same as finalize does before writing balances.
-function countedInBase(i: StockCountItem) {
-  return i.countedQty! * (i.packageConversion > 0 ? i.packageConversion : 1);
-}
-
-// Discrepancies still waiting for a manager's reason code. Counts auto-approve
-// at finalize, so this — not the SUBMITTED status — is what "needs attention"
-// means on this screen.
-function unresolvedIn(sc: StockCount) {
-  return sc.items.filter(
-    (i) =>
-      i.countedQty != null &&
-      i.expectedQty != null &&
-      countedInBase(i) !== i.expectedQty &&
-      !i.varianceReason,
-  ).length;
-}
 
 export default function StockCountPage() {
   const [data, setData] = useState<StockCount[]>([]);
@@ -124,17 +92,15 @@ export default function StockCountPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // When dialog opens, populate edit reasons from existing data
-  useEffect(() => {
-    if (selected) {
-      const reasons: Record<string, string> = {};
-      selected.items.forEach((item) => {
-        if (item.varianceReason) reasons[item.id] = item.varianceReason;
-      });
-      setEditReasons(reasons);
-      setShowAllItems(false);
-    }
-  }, [selected]);
+  // Opening a count loads its saved reasons into the editor.
+  function openCount(sc: StockCount) {
+    const reasons: Record<string, string> = {};
+    sc.items.forEach((item) => { if (item.varianceReason) reasons[item.id] = item.varianceReason; });
+    setEditReasons(reasons);
+    setShowAllItems(false);
+    setSelected(sc);
+    window.scrollTo(0, 0);
+  }
 
   const filtered = useMemo(() => {
     return data.filter((sc) => {
@@ -150,6 +116,9 @@ export default function StockCountPage() {
       return true;
     });
   }, [data, search, statusFilter]);
+
+  const [now] = useState(() => Date.now());
+  const summary = useMemo(() => summariseCounts(data, now), [data, now]);
 
   const stats = useMemo(() => ({
     total: data.length,
@@ -260,34 +229,171 @@ export default function StockCountPage() {
     return `${rounded.toLocaleString()} ${conversion > 0 && conversion !== 1 ? pkgLabel : baseUom}`;
   }
 
+
+  // ── Review: a full page, not a modal (data-dense detail gets the room) ──
+  if (selected) {
+    const counted = selected.items.filter((i) => i.countedQty != null);
+    const isOff = (i: StockCountItem) => { const v = getVariance(i); return v !== null && v !== 0; };
+    const discrepancyItems = counted.filter(isOff);
+    const checkedCount = counted.filter((i) => getVariance(i) !== null).length;
+    const uncheckedCount = counted.length - checkedCount;
+    // A count with no expectedQty was never compared. Observed 2026-08-12 at
+    // Tamarind: 9 items, all expectedQty null, the old review said "None"
+    // while the shelf was 32kg short on ICEHOT Foam. Silence about a missing
+    // check has to look different from a clean check.
+    const nothingChecked = checkedCount === 0 && counted.length > 0;
+    const unresolvedCount = discrepancyItems.filter((i) => !(editReasons[i.id] || i.varianceReason)).length;
+    // Exception-only: discrepancies first; the rest on request. When nothing
+    // was checked there are no exceptions, so show everything counted.
+    const rest = counted.filter((i) => !isOff(i));
+    const visible = showAllItems || nothingChecked ? [...discrepancyItems, ...rest] : discrepancyItems;
+    const editable = selected.status === "SUBMITTED" || selected.status === "REVIEWED";
+    const banner = nothingChecked
+      ? { cls: "bg-warn-soft text-warn-text", title: "Not checked", text: `No expected stock was recorded for any of these ${counted.length} items, so nothing was compared. The figures below are what was counted, not a checked result.` }
+      : discrepancyItems.length === 0
+        ? { cls: "bg-ok-soft text-ok-text", title: "Everything matched", text: `All ${checkedCount} checked items match the system.${uncheckedCount > 0 ? ` ${uncheckedCount} had no expected stock to compare.` : ""}` }
+        : unresolvedCount > 0
+          ? { cls: "bg-warn-soft text-warn-text", title: unresolvedCount === discrepancyItems.length ? `${unresolvedCount} ${unresolvedCount === 1 ? "gap needs" : "gaps need"} a reason` : `${unresolvedCount} of ${discrepancyItems.length} gaps still need a reason`, text: "Pick why the shelf differs from the system, then save." }
+          : { cls: "bg-sunken text-text-2", title: `${discrepancyItems.length} ${discrepancyItems.length === 1 ? "gap" : "gaps"}, all explained`, text: uncheckedCount > 0 ? `${uncheckedCount} items had no expected stock to compare.` : "Nothing left to do on this count." };
+
+    return (
+      <div className="max-w-[960px] px-4 pt-6 pb-10 md:px-8">
+        <button onClick={() => setSelected(null)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+          <ArrowLeft className="h-4 w-4" /> All stock counts
+        </button>
+        <h1 className="mt-3 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
+          {selected.outlet} <span className="font-normal text-text-3">· {selected.frequency.toLowerCase()} count</span>
+        </h1>
+        <p className="mt-0.5 text-sm text-text-2">
+          {formatDate(selected.countDate)} at {formatTime(selected.createdAt)} · counted by {selected.countedBy} · {counted.length} of {selected.items.length} items
+        </p>
+
+        <div className={`mt-5 flex gap-2.5 rounded-card px-4 py-3 ${banner.cls}`}>
+          {nothingChecked || unresolvedCount > 0 ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
+          <div>
+            <p className="text-sm font-semibold">{banner.title}</p>
+            <p className="text-[13px] opacity-90">{banner.text}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 overflow-hidden rounded-card border border-line bg-surface">
+          <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+            <p className="text-sm font-semibold text-text">
+              {showAllItems || nothingChecked ? `All ${counted.length} counted items` : `${discrepancyItems.length} ${discrepancyItems.length === 1 ? "gap" : "gaps"}`}
+            </p>
+            {rest.length > 0 && !nothingChecked && (
+              <button onClick={() => setShowAllItems((v) => !v)} className="whitespace-nowrap text-[13px] font-medium text-brand-text hover:underline">
+                {showAllItems ? "Show gaps only" : `Show all ${counted.length} items`}
+              </button>
+            )}
+          </div>
+          {visible.length === 0 && <p className="px-4 py-8 text-center text-sm text-text-3">No gaps on this count.</p>}
+          {visible.map((item) => {
+            const variance = getVariance(item);
+            const off = variance !== null && variance !== 0;
+            const cf = item.packageConversion || 1;
+            const uom = item.package || item.baseUom;
+            return (
+              <div key={item.id} className="border-b border-line px-4 py-3 last:border-b-0">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-text">{item.product}</p>
+                    <p className="mt-0.5 text-[12px] text-text-3">
+                      System <span className="font-mono text-text-2">{formatBaseQty(item.expectedQty, cf, item.baseUom, uom)}</span>
+                      {" · "}Counted <span className="font-mono text-text-2">{formatPackageQty(item.countedQty, item.baseUom, uom, cf)}</span>
+                    </p>
+                  </div>
+                  <p className={`shrink-0 font-mono text-sm font-semibold ${variance === null ? "text-text-3" : !off ? "text-ok-text" : variance < 0 ? "text-danger-text" : "text-warn-text"}`}>
+                    {variance === null ? "Not checked" : !off ? "Matched" : `${variance > 0 ? "+" : ""}${formatBaseQty(variance, cf, item.baseUom, uom)}`}
+                  </p>
+                </div>
+                {off && (
+                  // Reasons stay editable after auto-approval: approval applies
+                  // the balances; the reason is the manager's follow-up.
+                  editable ? (
+                    <select
+                      aria-label={`Reason for ${item.product}`}
+                      className="mt-2 h-10 w-full rounded-ctl border border-line bg-surface px-3 text-sm text-text sm:w-72"
+                      value={editReasons[item.id] || item.varianceReason || ""}
+                      onChange={(e) => setEditReasons((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                    >
+                      <option value="">Pick a reason…</option>
+                      {VARIANCE_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  ) : (
+                    <p className="mt-1 text-[13px] text-text-2">Reason: {item.varianceReason || "none given"}</p>
+                  )
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {editable && discrepancyItems.length > 0 && (
+          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => saveReasons(selected.id)} disabled={saving}>
+              {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Save className="mr-1.5 h-4 w-4" />}
+              Save reasons
+            </Button>
+            {selected.status === "SUBMITTED" && (
+              <Button onClick={() => markReviewed(selected.id)} disabled={reviewing || unresolvedCount > 0} className="bg-ink text-on-ink hover:bg-ink-hover">
+                {reviewing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
+                Approve and close
+              </Button>
+            )}
+          </div>
+        )}
+        {selected.status === "SUBMITTED" && discrepancyItems.length === 0 && (
+          <div className="mt-4 flex justify-end">
+            <Button onClick={() => markReviewed(selected.id)} disabled={reviewing} className="bg-ink text-on-ink hover:bg-ink-hover">
+              {reviewing ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}
+              Approve and close
+            </Button>
+          </div>
+        )}
+        {selected.status === "REVIEWED" && selected.reviewedAt && (
+          <p className="mt-4 text-right text-[12px] text-text-3">
+            {isAutoApproved(selected) ? "Auto-approved" : "Reviewed"} on {formatDate(selected.reviewedAt)} at {formatTime(selected.reviewedAt)}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-text-3" />
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Stock Count</h2>
-          <p className="mt-0.5 text-sm text-gray-500">
-            {stats.total} counts — {stats.flagged} with unresolved discrepancies, {stats.reviewed} reviewed
-          </p>
-        </div>
+    <div className="px-4 pt-6 pb-10 md:px-8">
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Counts</h1>
+      <p className="mt-0.5 text-sm text-text-2">Whether outlets count, whether the shelf matches the system, and every gap explained.</p>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label="Counts, last 7 days" value={String(summary.week.counts)}
+          note={<><b className="font-semibold text-text-2">{summary.week.outlets}</b> {summary.week.outlets === 1 ? "outlet" : "outlets"} counted</>} />
+        <KeyNumber label="Waiting for a reason" value={String(summary.waiting.counts)} tone={summary.waiting.counts > 0 ? "warn" : undefined}
+          note={summary.waiting.counts > 0 ? <><b className="font-semibold text-text-2">{summary.waiting.items}</b> {summary.waiting.items === 1 ? "gap has" : "gaps have"} no reason yet</> : "every gap has a reason"} />
+        <KeyNumber label="Matched the system, 30 days" value={summary.accuracy.share == null ? "–" : `${Math.round(summary.accuracy.share * 100)}%`}
+          tone={summary.accuracy.share != null && summary.accuracy.share < 0.9 ? "warn" : undefined}
+          note={<><b className="font-semibold text-text-2">{summary.accuracy.matched}</b> of {summary.accuracy.compared} items</>} />
+        <KeyNumber label="Not checked, 30 days" value={String(summary.unchecked.items)} tone={summary.unchecked.items > 0 ? "warn" : undefined}
+          note={summary.unchecked.items > 0 ? "counted, but no expected stock to compare" : "every counted item was compared"} />
       </div>
 
       {/* Filters */}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <div className="relative w-full sm:max-w-sm sm:flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <Input placeholder="Search outlet or staff..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {(["all", "flagged", "SUBMITTED", "REVIEWED"] as const).map((t) => (
-            <button key={t} onClick={() => setStatusFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${statusFilter === t ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>
+            <button key={t} onClick={() => setStatusFilter(t)} className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${statusFilter === t ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2"}`}>
               {t === "all" ? `All (${stats.total})`
                 : t === "flagged" ? `Flagged (${stats.flagged})`
                 : t === "SUBMITTED" ? `Pending (${stats.submitted})`
@@ -298,381 +404,46 @@ export default function StockCountPage() {
       </div>
 
       {error && (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="mt-4 rounded-card bg-danger-soft px-4 py-3 text-sm text-danger-text">{error}</div>
       )}
 
-      {/* Table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm min-w-[720px]">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Date</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Type</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Counted By</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Items</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Discrepancies</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400">No stock counts found</td></tr>
-            )}
-            {filtered.map((sc) => {
-              const comparable = sc.items.filter(
-                (i) => i.countedQty != null && i.expectedQty != null,
-              );
-              const countedItems = sc.items.filter((i) => i.countedQty != null).length;
-              const discrepancies = comparable.filter(
-                (i) => countedInBase(i) !== i.expectedQty,
-              ).length;
-              const unresolvedDiscrepancies = comparable.filter(
-                (i) => countedInBase(i) !== i.expectedQty && !i.varianceReason,
-              ).length;
-              // Counted but never compared — distinct from "compared and clean".
-              const uncheckedItems = countedItems - comparable.length;
-              const StatusIcon = STATUS_ICON[sc.status] ?? Clock;
-              return (
-                <tr key={sc.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">{formatDate(sc.countDate)}</p>
-                    <p className="text-[10px] text-gray-400">{formatTime(sc.createdAt)}</p>
-                  </td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{sc.outlet}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant="outline" className="text-[10px] capitalize">{sc.frequency.toLowerCase()}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{sc.countedBy}</td>
-                  <td className="px-4 py-3">
-                    <span className="text-gray-900 font-medium">{sc.items.filter((i) => i.countedQty != null).length}</span>
-                    <span className="text-gray-400 text-xs ml-1">/ {sc.items.length}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {discrepancies > 0 ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-red-600 font-semibold">{discrepancies}</span>
-                        {unresolvedDiscrepancies > 0 && (
-                          <Badge variant="outline" className="text-[10px] border-red-200 bg-red-50 text-red-600">
-                            {unresolvedDiscrepancies} unresolved
-                          </Badge>
-                        )}
-                      </div>
-                    ) : comparable.length === 0 && countedItems > 0 ? (
-                      <span className="text-amber-700 text-xs" title="No expected stock was recorded, so nothing was compared">
-                        Not checked
-                      </span>
-                    ) : uncheckedItems > 0 ? (
-                      <span className="text-amber-700 text-xs" title={`${comparable.length} compared, ${uncheckedItems} had no expected stock`}>
-                        {uncheckedItems} unchecked
-                      </span>
-                    ) : (
-                      <span className="text-green-600 text-xs">All OK</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[sc.status] ?? ""}`}>
-                        <StatusIcon className="h-3 w-3 mr-1" />
-                        {sc.status === "SUBMITTED" ? "Pending" : sc.status.toLowerCase()}
-                      </Badge>
-                      {isAutoApproved(sc) && (
-                        <span className="text-[9px] uppercase tracking-wide text-gray-400" title="Auto-approved at finalize">
-                          auto
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSelected(sc)}>
-                      <Eye className="h-3 w-3 mr-1" />
-                      {sc.status === "SUBMITTED" ? "Review" : unresolvedDiscrepancies > 0 ? "Manage" : "View"}
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* One list: newest first, gaps waiting for a reason signalled */}
+      <div className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+        {filtered.length === 0 && <p className="px-4 py-12 text-center text-sm text-text-3">No stock counts found</p>}
+        {filtered.map((sc) => {
+          const comparable = sc.items.filter((i) => i.countedQty != null && i.expectedQty != null);
+          const countedItems = sc.items.filter((i) => i.countedQty != null).length;
+          const discrepancies = comparable.filter((i) => countedInBase(i) !== i.expectedQty).length;
+          const unresolved = unresolvedIn(sc);
+          // Counted but never compared — distinct from "compared and clean".
+          const uncheckedItems = countedItems - comparable.length;
+          const signal = unresolved > 0
+            ? { text: `${unresolved} need a reason`, cls: "bg-warn-soft text-warn-text" }
+            : comparable.length === 0 && countedItems > 0
+              ? { text: "Not checked", cls: "bg-warn-soft text-warn-text" }
+              : discrepancies > 0
+                ? { text: `${discrepancies} explained`, cls: "bg-sunken text-text-2" }
+                : uncheckedItems > 0
+                  ? { text: `${uncheckedItems} unchecked`, cls: "bg-warn-soft text-warn-text" }
+                  : { text: "All matched", cls: "bg-ok-soft text-ok-text" };
+          return (
+            <button key={sc.id} onClick={() => openCount(sc)}
+              className="flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 hover:bg-sunken/50">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-text">
+                  {sc.outlet} <span className="font-normal text-text-3">· {sc.frequency.toLowerCase()}</span>
+                </p>
+                <p className="mt-0.5 truncate text-[12px] text-text-3">
+                  {formatDate(sc.countDate)} · {formatTime(sc.createdAt)} · by {sc.countedBy} · {countedItems} of {sc.items.length} items
+                  {sc.status === "SUBMITTED" ? " · waiting for review" : isAutoApproved(sc) ? " · auto-approved" : ""}
+                </p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] ${signal.cls}`}>{signal.text}</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* ── Review Dialog ── */}
-      <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
-          {selected && (() => {
-            const itemsWithVariance = selected.items
-              .filter((i) => i.countedQty != null)
-              .sort((a, b) => {
-                // Show discrepancies first
-                const va = getVariance(a);
-                const vb = getVariance(b);
-                if (va !== null && va !== 0 && (vb === null || vb === 0)) return -1;
-                if (vb !== null && vb !== 0 && (va === null || va === 0)) return 1;
-                return 0;
-              });
-            const discrepancyCount = itemsWithVariance.filter((i) => {
-              const v = getVariance(i);
-              return v !== null && v !== 0;
-            }).length;
-            const unresolvedCount = itemsWithVariance.filter((i) => {
-              const v = getVariance(i);
-              return v !== null && v !== 0 && !(editReasons[i.id] || i.varianceReason);
-            }).length;
-            const discrepancyItems = itemsWithVariance.filter((i) => {
-              const v = getVariance(i);
-              return v !== null && v !== 0;
-            });
-            // A count with no expectedQty was never compared to anything.
-            // getVariance returns null there, so it lands in the same bucket as
-            // "checked and equal" — which is how a count where NOTHING was
-            // checked used to render a green "No discrepancies". Observed
-            // 2026-08-12 at Tamarind: 9 items, all expectedQty null, the review
-            // screen reported "None" while the shelf was 32kg short of the
-            // system on ICEHOT Foam. Silence about a missing check has to look
-            // different from a clean check.
-            const checkedCount = itemsWithVariance.filter((i) => getVariance(i) !== null).length;
-            const uncheckedCount = itemsWithVariance.length - checkedCount;
-            const nothingChecked = checkedCount === 0 && itemsWithVariance.length > 0;
-            // Exception-only: show just the discrepancy rows unless the manager
-            // expands to the full list. When nothing was checked there are no
-            // exception rows to show, so fall back to the full list rather than
-            // rendering an empty table under a "not checked" banner.
-            const visibleItems = showAllItems || nothingChecked ? itemsWithVariance : discrepancyItems;
-
-            return (
-              <>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <ClipboardCheck className="h-5 w-5 text-terracotta" />
-                    Stock Count — {selected.outlet}
-                  </DialogTitle>
-                </DialogHeader>
-
-                {/* Meta cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-2">
-                  <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-gray-500 uppercase">Date</p>
-                    <p className="text-sm font-semibold">{formatDate(selected.countDate)}</p>
-                  </div>
-                  <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-gray-500 uppercase">Type</p>
-                    <p className="text-sm font-semibold capitalize">{selected.frequency.toLowerCase()}</p>
-                  </div>
-                  <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-gray-500 uppercase">Counted By</p>
-                    <p className="text-sm font-semibold">{selected.countedBy}</p>
-                  </div>
-                  <div className="rounded-lg border p-2.5">
-                    <p className="text-[10px] text-gray-500 uppercase">Items</p>
-                    <p className="text-sm font-semibold">{itemsWithVariance.length}</p>
-                  </div>
-                  <div className={`rounded-lg border p-2.5 ${
-                    discrepancyCount > 0 ? "border-red-200 bg-red-50"
-                      : uncheckedCount > 0 ? "border-amber-200 bg-amber-50"
-                      : "border-green-200 bg-green-50"
-                  }`}>
-                    <p className="text-[10px] text-gray-500 uppercase">Discrepancies</p>
-                    <p className={`text-sm font-semibold ${
-                      discrepancyCount > 0 ? "text-red-600"
-                        : uncheckedCount > 0 ? "text-amber-700"
-                        : "text-green-600"
-                    }`}>
-                      {discrepancyCount > 0
-                        ? `${discrepancyCount} found`
-                        : nothingChecked
-                          ? "Not checked"
-                          : uncheckedCount > 0
-                            ? `${uncheckedCount} unchecked`
-                            : "None"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Exception-only review: discrepancies first, expandable to all */}
-                <div className="mt-3 flex items-center justify-between gap-2">
-                  <p className="text-xs text-gray-500">
-                    {discrepancyCount > 0
-                      ? showAllItems
-                        ? `Showing all ${itemsWithVariance.length} items`
-                        : `Showing ${discrepancyCount} discrepanc${discrepancyCount === 1 ? "y" : "ies"} only`
-                      : nothingChecked
-                        ? "Not checked — no expected stock was recorded for this count"
-                        : uncheckedCount > 0
-                          ? `${checkedCount} checked and clean · ${uncheckedCount} had no expected stock to compare`
-                          : "No discrepancies — nothing to review"}
-                  </p>
-                  {itemsWithVariance.length > discrepancyItems.length && (
-                    <button
-                      onClick={() => setShowAllItems((v) => !v)}
-                      className="text-xs text-terracotta hover:underline whitespace-nowrap"
-                    >
-                      {showAllItems
-                        ? "Show discrepancies only"
-                        : `Show all ${itemsWithVariance.length} items`}
-                    </button>
-                  )}
-                </div>
-
-                {/* Never claim a clean bill of health for a count that was never
-                    compared. This is a banner rather than a replacement for the
-                    table: when nothing was checked, the counted figures are
-                    exactly what the manager needs to see. */}
-                {nothingChecked && (
-                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex gap-2.5">
-                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-amber-800">Not checked</p>
-                      <p className="text-xs text-amber-700/90">
-                        No expected stock was recorded for any of these {itemsWithVariance.length} items,
-                        so nothing was compared. The figures below are what was counted, not a verified result.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {discrepancyCount === 0 && !nothingChecked && !showAllItems ? (
-                  <div className="mt-2 rounded-lg border border-green-200 bg-green-50 px-4 py-4 text-center">
-                    <CheckCircle2 className="h-5 w-5 text-green-600 mx-auto" />
-                    <p className="mt-1.5 text-sm font-medium text-green-700">No discrepancies found</p>
-                    <p className="text-xs text-green-600/80">
-                      All {checkedCount} checked items are in line — nothing to action.
-                      {uncheckedCount > 0 && ` ${uncheckedCount} had no expected stock to compare against.`}
-                    </p>
-                  </div>
-                ) : (
-                <div className="mt-2 rounded-lg border overflow-hidden overflow-x-auto">
-                  <table className="w-full text-xs min-w-[720px]">
-                    <thead>
-                      <tr className="bg-gray-50 border-b">
-                        <th className="px-3 py-2 text-left font-medium text-gray-500">Product</th>
-                        <th className="px-3 py-2 text-right font-medium text-gray-500">Expected</th>
-                        <th className="px-3 py-2 text-right font-medium text-gray-500">Counted</th>
-                        <th className="px-3 py-2 text-right font-medium text-gray-500">Variance</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-500 min-w-[180px]">Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleItems.map((item) => {
-                        const variance = getVariance(item);
-                        const hasVariance = variance !== null && variance !== 0;
-                        const cf = item.packageConversion || 1;
-                        const uom = item.package || item.baseUom;
-
-                        return (
-                          <tr key={item.id} className={`border-b border-gray-50 ${hasVariance ? "bg-red-50/30" : ""}`}>
-                            <td className="px-3 py-2">
-                              <p className="font-medium text-gray-900">{item.product}</p>
-                              <p className="text-[10px] text-gray-400">{item.sku}</p>
-                            </td>
-                            <td className="px-3 py-2 text-right font-mono text-gray-500">
-                              {formatBaseQty(item.expectedQty, cf, item.baseUom, uom)}
-                            </td>
-                            <td className="px-3 py-2 text-right font-mono font-medium text-gray-900">
-                              {formatPackageQty(item.countedQty, item.baseUom, uom, cf)}
-                            </td>
-                            <td className={`px-3 py-2 text-right font-mono font-bold ${
-                              !hasVariance ? "text-green-600" : variance! < 0 ? "text-red-600" : "text-amber-600"
-                            }`}>
-                              {variance === null ? "—" : variance === 0 ? "✓" : (
-                                <>
-                                  {variance > 0 ? "+" : ""}{formatBaseQty(variance, cf, item.baseUom, uom)}
-                                </>
-                              )}
-                            </td>
-                            <td className="px-3 py-2">
-                              {hasVariance ? (
-                                // Reasons stay editable after auto-approval —
-                                // approval applies the balances; the reason
-                                // coding is the manager's follow-up work.
-                                selected.status === "SUBMITTED" || selected.status === "REVIEWED" ? (
-                                  <select
-                                    className="h-7 w-full rounded border border-gray-200 px-2 text-xs"
-                                    value={editReasons[item.id] || item.varianceReason || ""}
-                                    onChange={(e) => setEditReasons((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                                  >
-                                    <option value="">Select reason...</option>
-                                    {VARIANCE_REASONS.map((r) => (
-                                      <option key={r} value={r}>{r}</option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <span className="text-gray-600">{item.varianceReason || "—"}</span>
-                                )
-                              ) : (
-                                <span className="text-gray-300">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                )}
-
-                {/* Actions */}
-                {selected.status === "SUBMITTED" && (
-                  <div className="mt-4 flex items-center justify-between">
-                    <p className="text-xs text-gray-500">
-                      {unresolvedCount > 0
-                        ? <span className="text-red-500 font-medium">{unresolvedCount} discrepancies need a reason before review</span>
-                        : <span className="text-green-600">All discrepancies resolved ✓</span>
-                      }
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => saveReasons(selected.id)}
-                        disabled={saving}
-                      >
-                        {saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                        Save
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => markReviewed(selected.id)}
-                        disabled={reviewing || unresolvedCount > 0}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        {reviewing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
-                        Approve &amp; Close
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {selected.status === "REVIEWED" && discrepancyCount > 0 && (
-                  <div className="mt-4 flex items-center justify-between">
-                    <p className="text-xs text-gray-500">
-                      {unresolvedCount > 0
-                        ? <span className="text-red-500 font-medium">{unresolvedCount} discrepanc{unresolvedCount === 1 ? "y" : "ies"} still need{unresolvedCount === 1 ? "s" : ""} a reason</span>
-                        : <span className="text-green-600">All discrepancies resolved ✓</span>
-                      }
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => saveReasons(selected.id)}
-                      disabled={saving}
-                    >
-                      {saving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                      Save reasons
-                    </Button>
-                  </div>
-                )}
-
-                {selected.status === "REVIEWED" && selected.reviewedAt && (
-                  <p className="mt-3 text-xs text-gray-400 text-right">
-                    {isAutoApproved(selected) ? "Auto-approved" : "Reviewed"} on {formatDate(selected.reviewedAt)} at {formatTime(selected.reviewedAt)}
-                  </p>
-                )}
-              </>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -122,16 +122,16 @@ export function ReportTable<T>({
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-gray-200 bg-white">
+    <div className="mt-4 rounded-xl border border-line bg-surface">
       {/* Controls */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-3" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={searchPlaceholder}
-            className="h-8 w-56 rounded-lg border border-gray-200 bg-white pl-7 pr-2 text-xs text-gray-700 placeholder:text-gray-400 focus:border-terracotta focus:outline-none"
+            className="h-8 w-56 rounded-lg border border-line bg-surface pl-7 pr-2 text-xs text-text-2 placeholder:text-text-3 focus:border-ink focus:outline-none"
           />
         </div>
 
@@ -141,7 +141,7 @@ export function ReportTable<T>({
               key={facet.key}
               value={picked[facet.key] ?? ""}
               onChange={(e) => setPicked((p) => ({ ...p, [facet.key]: e.target.value }))}
-              className="h-8 max-w-[190px] rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:border-terracotta focus:outline-none"
+              className="h-8 max-w-[190px] rounded-lg border border-line bg-surface px-2 text-xs text-text-2 focus:border-ink focus:outline-none"
             >
               <option value="">All {facet.label.toLowerCase()}</option>
               {options.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -155,8 +155,8 @@ export function ReportTable<T>({
             onClick={() => setActive((a) => ({ ...a, [t.key]: !a[t.key] }))}
             className={`h-8 rounded-lg border px-2.5 text-xs transition-colors ${
               active[t.key]
-                ? "border-terracotta bg-terracotta/10 font-medium text-terracotta"
-                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                ? "border-ink bg-brand-soft font-medium text-brand-text"
+                : "border-line bg-surface text-text-2 hover:bg-sunken"
             }`}
           >
             {t.label}
@@ -164,19 +164,19 @@ export function ReportTable<T>({
         ))}
 
         {filtersOn && (
-          <button onClick={clearAll} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-gray-500 hover:text-gray-800">
+          <button onClick={clearAll} className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs text-text-2 hover:text-text">
             <X className="h-3 w-3" /> Clear
           </button>
         )}
 
         <span className="ml-auto flex items-center gap-2">
-          <span className="text-[11px] tabular-nums text-gray-400">
+          <span className="text-[11px] tabular-nums text-text-3">
             {filtersOn ? `${sorted.length} of ${rows.length}` : `${rows.length} rows`}
           </span>
           <select
             value={pageSize}
             onChange={(e) => setPageSize(Number(e.target.value))}
-            className="h-8 rounded-lg border border-gray-200 bg-white px-1.5 text-xs text-gray-600 focus:border-terracotta focus:outline-none"
+            className="h-8 rounded-lg border border-line bg-surface px-1.5 text-xs text-text-2 focus:border-ink focus:outline-none"
             aria-label="Rows per page"
           >
             {PAGE_SIZES.map((n) => <option key={n} value={n}>{n} rows</option>)}
@@ -184,7 +184,7 @@ export function ReportTable<T>({
           <button
             onClick={exportCsv}
             disabled={sorted.length === 0}
-            className="inline-flex h-8 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1 rounded-lg border border-line bg-surface px-2.5 text-xs text-text-2 hover:bg-sunken disabled:opacity-50"
           >
             <Download className="h-3.5 w-3.5" /> CSV
           </button>
@@ -194,22 +194,22 @@ export function ReportTable<T>({
       <div className="overflow-x-auto">
         <table className="w-full text-sm" style={{ minWidth }}>
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
+            <tr className="border-b border-line bg-sunken/50">
               {columns.map((c) => {
                 const sortable = !!c.sortValue;
                 const on = sort?.key === c.key;
                 return (
                   <th
                     key={c.key}
-                    className={`px-4 py-3 font-medium text-gray-500 ${c.align === "right" ? "text-right" : "text-left"} ${sortable ? "cursor-pointer select-none hover:text-gray-800" : ""}`}
+                    className={`px-4 py-3 font-medium text-text-2 ${c.align === "right" ? "text-right" : "text-left"} ${sortable ? "cursor-pointer select-none hover:text-text" : ""}`}
                     onClick={sortable ? () => toggleSort(c.key) : undefined}
                     aria-sort={on ? (sort!.dir === "asc" ? "ascending" : "descending") : undefined}
                   >
                     <span className={`inline-flex items-center gap-1 ${c.align === "right" ? "flex-row-reverse" : ""}`}>
                       {c.header}
                       {sortable && (on
-                        ? (sort!.dir === "asc" ? <ArrowUp className="h-3 w-3 text-terracotta" /> : <ArrowDown className="h-3 w-3 text-terracotta" />)
-                        : <ChevronsUpDown className="h-3 w-3 text-gray-300" />)}
+                        ? (sort!.dir === "asc" ? <ArrowUp className="h-3 w-3 text-brand-text" /> : <ArrowDown className="h-3 w-3 text-brand-text" />)
+                        : <ChevronsUpDown className="h-3 w-3 text-text-3" />)}
                     </span>
                   </th>
                 );
@@ -218,7 +218,7 @@ export function ReportTable<T>({
           </thead>
           <tbody>
             {visible.length === 0 && (
-              <tr><td colSpan={columns.length} className="px-4 py-8 text-center text-sm text-gray-400">
+              <tr><td colSpan={columns.length} className="px-4 py-8 text-center text-sm text-text-3">
                 {filtersOn ? "No rows match these filters." : emptyMessage}
               </td></tr>
             )}
@@ -228,7 +228,7 @@ export function ReportTable<T>({
               return (
                 <Fragment key={key}>
                   <tr
-                    className={`border-b border-gray-50 last:border-b-0 hover:bg-gray-50/70 ${i % 2 ? "bg-gray-50/30" : ""} ${onRowClick ? "cursor-pointer" : ""}`}
+                    className={`border-b border-line last:border-b-0 hover:bg-sunken/70 ${i % 2 ? "bg-sunken/30" : ""} ${onRowClick ? "cursor-pointer" : ""}`}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
                   >
                     {columns.map((c) => (
@@ -238,8 +238,8 @@ export function ReportTable<T>({
                     ))}
                   </tr>
                   {extra ? (
-                    <tr className="border-b border-gray-50">
-                      <td colSpan={columns.length} className="bg-gray-50 px-4 py-3">{extra}</td>
+                    <tr className="border-b border-line">
+                      <td colSpan={columns.length} className="bg-sunken px-4 py-3">{extra}</td>
                     </tr>
                   ) : null}
                 </Fragment>
@@ -250,10 +250,10 @@ export function ReportTable<T>({
       </div>
 
       {sorted.length > visible.length && (
-        <div className="border-t border-gray-100 px-4 py-2.5 text-center">
+        <div className="border-t border-line px-4 py-2.5 text-center">
           <button
             onClick={() => setPageSize((n) => n + 100)}
-            className="text-xs text-terracotta hover:underline"
+            className="text-xs text-brand-text hover:underline"
           >
             Show more — {visible.length} of {sorted.length} shown
           </button>

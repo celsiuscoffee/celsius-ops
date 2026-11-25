@@ -130,24 +130,24 @@ export default function CashTrackingPage() {
   }, [data]);
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <Link href="/finance/cashflow" className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
-            <ChevronLeft className="h-3 w-3" /> Cashflow
+          <Link href="/finance/cashflow" className="inline-flex items-center gap-1 text-[13px] text-text-2 hover:text-text">
+            <ChevronLeft className="h-3.5 w-3.5" /> Cash flow
           </Link>
-          <h2 className="mt-1 text-lg sm:text-xl font-semibold text-gray-900">Cash Tracking</h2>
-          <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
-            Per-outlet × category × month breakdown. Sourced from classified bank statement lines — values mirror Finance&rsquo;s cash-tracking spreadsheet.
+          <h1 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Cash tracking</h1>
+          <p className="mt-0.5 text-sm text-text-2">
+            Money in and out for each outlet, by category and month, from the classified bank lines. Same figures as the finance cash-tracking sheet.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
+          <div className="flex rounded-lg border border-line bg-surface p-0.5">
             {[3, 6, 12].map((m) => (
               <button
                 key={m}
                 onClick={() => setMonthsBack(m)}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${monthsBack === m ? "bg-terracotta text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${monthsBack === m ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"}`}
               >
                 {m}m
               </button>
@@ -157,12 +157,12 @@ export default function CashTrackingPage() {
       </div>
 
       {isLoading || !data ? (
-        <div className="mt-6 flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
+        <div className="mt-6 flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-text-3" /></div>
       ) : data.outlets.length === 0 || data.months.length === 0 ? (
-        <div className="mt-6 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center">
-          <p className="text-sm text-gray-500">No classified bank statement lines yet.</p>
-          <p className="mt-1 text-xs text-gray-400">
-            Upload a CSV/Excel statement on the <Link href="/finance/bank-statements" className="text-terracotta hover:underline">Bank Statements</Link> page — lines will be auto-classified and appear here.
+        <div className="mt-6 rounded-lg border border-dashed border-line-2 bg-sunken px-4 py-8 text-center">
+          <p className="text-sm text-text-2">No classified bank statement lines yet.</p>
+          <p className="mt-1 text-xs text-text-3">
+            Upload a CSV/Excel statement on the <Link href="/finance/bank-statements" className="text-brand-text hover:underline">Bank Statements</Link> page — lines will be auto-classified and appear here.
           </p>
         </div>
       ) : (
@@ -171,7 +171,7 @@ export default function CashTrackingPage() {
           <div className="mt-4 flex flex-wrap gap-1.5">
             <button
               onClick={() => setActiveOutletId(null)}
-              className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${activeOutletId === null ? "border-terracotta bg-terracotta text-white" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+              className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${activeOutletId === null ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-text-2 hover:bg-sunken"}`}
             >
               All outlets
             </button>
@@ -179,7 +179,7 @@ export default function CashTrackingPage() {
               <button
                 key={o.id}
                 onClick={() => setActiveOutletId(o.id)}
-                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${activeOutletId === o.id ? "border-terracotta bg-terracotta text-white" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"} ${o.isHQ ? "italic" : ""}`}
+                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${activeOutletId === o.id ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-text-2 hover:bg-sunken"} ${o.isHQ ? "italic" : ""}`}
               >
                 {o.name}
               </button>
@@ -187,11 +187,11 @@ export default function CashTrackingPage() {
           </div>
 
           {/* Matrix table */}
-          <div className="mt-3 overflow-x-auto rounded-lg border border-gray-200 bg-white">
+          <div className="mt-3 overflow-x-auto rounded-lg border border-line bg-surface">
             <table className="min-w-full text-xs">
-              <thead className="bg-gray-50 text-gray-600">
+              <thead className="bg-sunken text-text-2">
                 <tr>
-                  <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-left font-medium">Category</th>
+                  <th className="sticky left-0 z-10 bg-sunken px-3 py-2 text-left font-medium">Category</th>
                   {data.months.map((m) => (
                     <th key={m} className="px-3 py-2 text-right font-medium tabular-nums">{monthLabel(m)}</th>
                   ))}
@@ -249,8 +249,8 @@ export default function CashTrackingPage() {
                   }
                   if (!anyNonZero) return null;
                   return (
-                    <tr className="border-t border-gray-200 bg-amber-50/40 italic text-amber-900">
-                      <td className="sticky left-0 z-10 bg-amber-50/40 px-3 py-1.5">
+                    <tr className="border-t border-line bg-warn-soft italic text-warn-text">
+                      <td className="sticky left-0 z-10 bg-warn-soft px-3 py-1.5">
                         <span className="text-[11px] font-medium">Uncategorized · needs review</span>
                       </td>
                       {data.months.map((m) => (
@@ -266,14 +266,14 @@ export default function CashTrackingPage() {
                     matches what the bank PDFs say. Per-outlet view falls
                     back to summing the outlet's tagged lines (BS isn't
                     outlet-tagged). */}
-                <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
-                  <td className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-gray-900">Net cash flow</td>
+                <tr className="border-t-2 border-line-2 bg-sunken font-semibold">
+                  <td className="sticky left-0 z-10 bg-sunken px-3 py-2 text-text">Net cash flow</td>
                   {data.months.map((m) => {
                     const total = activeOutletId
                       ? totalForOutletMonth(data, activeOutletId, m)
                       : (data.bsMonthNet[m] ?? 0);
                     return (
-                      <td key={m} className={`px-3 py-2 text-right tabular-nums ${total >= 0 ? "text-green-700" : "text-red-700"}`}>
+                      <td key={m} className={`px-3 py-2 text-right tabular-nums ${total >= 0 ? "text-ok-text" : "text-danger-text"}`}>
                         {fmtMYR(total, { showZero: true })}
                       </td>
                     );
@@ -283,7 +283,7 @@ export default function CashTrackingPage() {
             </table>
           </div>
 
-          <p className="mt-2 text-[11px] text-gray-400">
+          <p className="mt-2 text-[11px] text-text-3">
             Net Cash Flow row is sourced from <strong>BankStatement totals</strong> (verified against bank PDFs/CSVs), net of InterCo offsets · category rows come from classified bank lines · the &ldquo;Uncategorized&rdquo; row is the residual that makes the matrix reconcile to the BS total · InterCo (Management Fee / Asset Transfer) is netted out automatically.
           </p>
         </>
@@ -324,19 +324,19 @@ function BandSection({
 }) {
   return (
     <>
-      <tr className={`${band.tone === "in" ? "bg-green-50" : "bg-red-50"}`}>
-        <td className={`sticky left-0 z-10 ${band.tone === "in" ? "bg-green-50" : "bg-red-50"} px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${band.tone === "in" ? "text-green-800" : "text-red-800"}`}>
+      <tr className={`${band.tone === "in" ? "bg-ok-soft" : "bg-danger-soft"}`}>
+        <td className={`sticky left-0 z-10 ${band.tone === "in" ? "bg-ok-soft" : "bg-danger-soft"} px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${band.tone === "in" ? "text-ok-text" : "text-danger-text"}`}>
           {band.label}
         </td>
         {months.map((m) => (
-          <td key={m} className={`px-3 py-1 text-right text-[11px] font-semibold tabular-nums ${band.tone === "in" ? "text-green-800" : "text-red-800"}`}>
+          <td key={m} className={`px-3 py-1 text-right text-[11px] font-semibold tabular-nums ${band.tone === "in" ? "text-ok-text" : "text-danger-text"}`}>
             {fmtMYR(subtotal[m] ?? 0)}
           </td>
         ))}
       </tr>
       {band.categories.map((c) => (
-        <tr key={c} className="border-t border-gray-100 hover:bg-gray-50">
-          <td className="sticky left-0 z-10 bg-white px-3 py-1.5 text-gray-700">
+        <tr key={c} className="border-t border-line hover:bg-sunken">
+          <td className="sticky left-0 z-10 bg-surface px-3 py-1.5 text-text-2">
             <span className="ml-2">{CATEGORY_LABELS[c] ?? c}</span>
           </td>
           {months.map((m) => {
@@ -348,7 +348,7 @@ function BandSection({
               for (const o of outlets) v += cells[`${c}|${o.id}|${m}`] ?? 0;
             }
             return (
-              <td key={m} className={`px-3 py-1.5 text-right tabular-nums ${v === 0 ? "text-gray-300" : v > 0 ? "text-green-700" : "text-red-700"}`}>
+              <td key={m} className={`px-3 py-1.5 text-right tabular-nums ${v === 0 ? "text-text-3" : v > 0 ? "text-ok-text" : "text-danger-text"}`}>
                 {fmtMYR(v)}
               </td>
             );

@@ -51,10 +51,10 @@ type Response = {
 };
 
 function DeltaBadge({ delta, suffix = "" }: { delta: number | null; suffix?: string }) {
-  if (delta === null) return <span className="text-[10px] text-gray-400">—</span>;
+  if (delta === null) return <span className="text-[10px] text-text-3">—</span>;
   if (delta === 0) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-500">
+      <span className="inline-flex items-center gap-0.5 text-[10px] text-text-2">
         <Minus className="h-2.5 w-2.5" />0{suffix}
       </span>
     );
@@ -96,7 +96,7 @@ function Sparkline({ values }: { values: (number | null)[] }) {
   const lastX = (points.length - 1) * stepX;
   const lastY = h - ((last - min) / (max - min)) * h;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-md text-terracotta">
+    <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-md text-brand-text">
       <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
       <circle cx={lastX} cy={lastY} r="3" fill="currentColor" />
     </svg>
@@ -112,26 +112,26 @@ export default function StaffSkillsDetailPage({ params }: { params: Promise<{ us
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
 
   if (!data?.auditee) {
-    return <div className="p-6 text-center text-sm text-gray-500">Staff not found</div>;
+    return <div className="p-6 text-center text-sm text-text-2">Staff not found</div>;
   }
 
   const { auditee, templates } = data;
 
   return (
-    <div className="space-y-4 p-6 max-w-4xl">
-      <Link href="/ops/staff-skills" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+    <div className="space-y-4 max-w-4xl px-4 pt-6 pb-10 md:px-8">
+      <Link href="/ops/staff-skills" className="inline-flex items-center gap-1 text-sm text-text-2 hover:text-text-2">
         <ArrowLeft className="h-4 w-4" />Back to Staff Skills
       </Link>
 
       <div>
-        <h2 className="text-xl font-semibold text-gray-900">{auditee.name}</h2>
-        <p className="text-sm text-gray-500">
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">{auditee.name}</h2>
+        <p className="text-sm text-text-2">
           {templates.length} skill template{templates.length !== 1 ? "s" : ""} audited
         </p>
       </div>
@@ -139,34 +139,34 @@ export default function StaffSkillsDetailPage({ params }: { params: Promise<{ us
       {/* AI Coach card — surfaces strengths, focus areas, and concrete coaching
           actions. Cached server-side per latest audit so this card is cheap. */}
       {(coachLoading || coach?.insights) && (
-        <Card className="border-terracotta/30 bg-gradient-to-br from-amber-50 to-orange-50">
+        <Card className="border-ink/30 bg-gradient-to-br from-amber-50 to-orange-50">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
-              <div className="rounded-full bg-terracotta/15 p-1.5">
-                <Sparkles className="h-4 w-4 text-terracotta" />
+              <div className="rounded-full bg-brand-soft p-1.5">
+                <Sparkles className="h-4 w-4 text-brand-text" />
               </div>
-              <h3 className="text-sm font-semibold text-gray-900">Coach insights</h3>
+              <h3 className="text-sm font-semibold text-text">Coach insights</h3>
               {coach?.cached && (
-                <span className="text-[10px] text-gray-400">(cached)</span>
+                <span className="text-[10px] text-text-3">(cached)</span>
               )}
             </div>
 
             {coachLoading && (
-              <div className="flex items-center gap-2 text-xs text-gray-500 py-2">
+              <div className="flex items-center gap-2 text-xs text-text-2 py-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analysing audit history…
               </div>
             )}
 
             {coach?.insights && (
               <div className="space-y-3">
-                <p className="text-sm text-gray-800">{coach.insights.summary}</p>
+                <p className="text-sm text-text">{coach.insights.summary}</p>
 
                 {coach.insights.needs_more_data ? null : (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {coach.insights.strengths.length > 0 && (
-                      <div className="rounded-lg bg-white/70 p-3">
+                      <div className="rounded-lg bg-surface/70 p-3">
                         <p className="text-[11px] font-semibold uppercase tracking-wider text-green-700 mb-1.5">Strengths</p>
-                        <ul className="space-y-1 text-xs text-gray-700">
+                        <ul className="space-y-1 text-xs text-text-2">
                           {coach.insights.strengths.map((s, i) => (
                             <li key={i} className="leading-snug">• {s}</li>
                           ))}
@@ -174,9 +174,9 @@ export default function StaffSkillsDetailPage({ params }: { params: Promise<{ us
                       </div>
                     )}
                     {coach.insights.focus_areas.length > 0 && (
-                      <div className="rounded-lg bg-white/70 p-3">
+                      <div className="rounded-lg bg-surface/70 p-3">
                         <p className="text-[11px] font-semibold uppercase tracking-wider text-red-700 mb-1.5">Focus areas</p>
-                        <ul className="space-y-1 text-xs text-gray-700">
+                        <ul className="space-y-1 text-xs text-text-2">
                           {coach.insights.focus_areas.map((s, i) => (
                             <li key={i} className="leading-snug">• {s}</li>
                           ))}
@@ -184,9 +184,9 @@ export default function StaffSkillsDetailPage({ params }: { params: Promise<{ us
                       </div>
                     )}
                     {coach.insights.coaching_actions.length > 0 && (
-                      <div className="rounded-lg bg-white/70 p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-terracotta mb-1.5">This week</p>
-                        <ul className="space-y-1 text-xs text-gray-700">
+                      <div className="rounded-lg bg-surface/70 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-text mb-1.5">This week</p>
+                        <ul className="space-y-1 text-xs text-text-2">
                           {coach.insights.coaching_actions.map((s, i) => (
                             <li key={i} className="leading-snug">• {s}</li>
                           ))}
@@ -204,7 +204,7 @@ export default function StaffSkillsDetailPage({ params }: { params: Promise<{ us
       {templates.length === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-sm text-gray-500">No completed audits for this staff member yet.</p>
+            <p className="text-sm text-text-2">No completed audits for this staff member yet.</p>
           </CardContent>
         </Card>
       )}
@@ -223,15 +223,15 @@ export default function StaffSkillsDetailPage({ params }: { params: Promise<{ us
             <CardContent className="p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900">{template.name}</h3>
-                  <p className="text-[11px] text-gray-500">
+                  <h3 className="text-sm font-semibold text-text">{template.name}</h3>
+                  <p className="text-[11px] text-text-2">
                     {audits.length} audit{audits.length !== 1 ? "s" : ""}
                     {(template.jobRoleFilter ?? []).length > 0 ? ` · ${(template.jobRoleFilter ?? []).join(", ")}` : ""}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-semibold text-gray-900">
-                    {latest?.overallScore ?? 0}<span className="text-sm text-gray-400">%</span>
+                  <p className="text-2xl font-semibold text-text">
+                    {latest?.overallScore ?? 0}<span className="text-sm text-text-3">%</span>
                   </p>
                   {overallChange !== null && audits.length > 1 && (
                     <DeltaBadge delta={overallChange} suffix="% overall" />
@@ -242,11 +242,11 @@ export default function StaffSkillsDetailPage({ params }: { params: Promise<{ us
               <Sparkline values={audits.map((a) => a.overallScore)} />
 
               {/* Per-audit row with score + delta */}
-              <div className="border-t border-gray-100 pt-3 space-y-1.5">
+              <div className="border-t border-line pt-3 space-y-1.5">
                 {[...audits].reverse().map((a) => (
                   <div key={a.id} className="flex items-center gap-3 text-xs">
-                    <span className="text-gray-500 w-20 shrink-0">{a.date}</span>
-                    <span className="text-gray-700 flex-1 truncate">
+                    <span className="text-text-2 w-20 shrink-0">{a.date}</span>
+                    <span className="text-text-2 flex-1 truncate">
                       {a.auditor.name} · {a.outlet.name}
                     </span>
                     <Badge
@@ -267,11 +267,11 @@ export default function StaffSkillsDetailPage({ params }: { params: Promise<{ us
 
               {/* Per-item drill-down (deltas vs previous audit) */}
               {audits.length > 0 && (
-                <div className="border-t border-gray-100 pt-3">
+                <div className="border-t border-line pt-3">
                   <button
                     type="button"
                     onClick={() => setExpanded({ ...expanded, [template.id]: !isExpanded })}
-                    className="flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-terracotta"
+                    className="flex items-center gap-1 text-xs font-medium text-text-2 hover:text-brand-text"
                   >
                     {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                     Latest audit per-item breakdown
@@ -281,9 +281,9 @@ export default function StaffSkillsDetailPage({ params }: { params: Promise<{ us
                     <div className="mt-2 space-y-1.5">
                       {latest.items.map((it, i) => (
                         <div key={i} className="flex items-center gap-2 text-[11px]">
-                          <span className="text-gray-400 w-32 shrink-0 truncate">{it.sectionName}</span>
-                          <span className="text-gray-700 flex-1 truncate">{it.itemTitle}</span>
-                          <span className="font-medium text-gray-900 w-10 text-right">{it.rating ?? "—"}</span>
+                          <span className="text-text-3 w-32 shrink-0 truncate">{it.sectionName}</span>
+                          <span className="text-text-2 flex-1 truncate">{it.itemTitle}</span>
+                          <span className="font-medium text-text w-10 text-right">{it.rating ?? "—"}</span>
                           <DeltaBadge delta={it.ratingDelta} />
                         </div>
                       ))}

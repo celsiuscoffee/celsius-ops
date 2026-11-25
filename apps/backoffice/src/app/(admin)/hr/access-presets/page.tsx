@@ -43,34 +43,34 @@ export default function AccessPresetsPage() {
     } finally { setBusy(null); }
   };
 
-  if (isLoading) return <div className="flex min-h-[40vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-terracotta" /></div>;
+  if (isLoading) return <div className="flex min-h-[40vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-brand-text" /></div>;
 
   const deviating = (data?.staff ?? []).filter((s) => !s.matches);
   const ok = data ? data.total - data.deviating : 0;
 
   return (
-    <div className="p-3 sm:p-6 max-w-4xl">
+    <div className="max-w-4xl px-4 pt-6 pb-10 md:px-8">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-terracotta" /> Staff app access
+        <h2 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
+          <ShieldCheck className="h-5 w-5 text-brand-text" /> Staff app access
         </h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-text-2">
           Each staff member&apos;s floor-app access should match their position preset
           (Barista → Crew, Shift Lead → Lead, etc.). Anyone who drifted is flagged below.
         </p>
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-6">
-        <Card><CardContent className="p-4"><p className="text-xs text-gray-500">Staff</p><p className="text-2xl font-semibold">{data?.total ?? 0}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-gray-500">On preset</p><p className="text-2xl font-semibold text-green-600">{ok}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-gray-500">Deviating</p><p className="text-2xl font-semibold text-amber-600">{data?.deviating ?? 0}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-text-2">Staff</p><p className="text-2xl font-semibold">{data?.total ?? 0}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-text-2">On preset</p><p className="text-2xl font-semibold text-green-600">{ok}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-text-2">Deviating</p><p className="text-2xl font-semibold text-amber-600">{data?.deviating ?? 0}</p></CardContent></Card>
       </div>
 
       <div className="flex items-center gap-3 mb-4">
         <Button
           onClick={() => apply({ applyAll: true }, "all")}
           disabled={busy !== null || deviating.length === 0}
-          className="bg-terracotta hover:bg-terracotta-dark"
+          className="bg-ink hover:bg-ink-hover"
         >
           {busy === "all" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Normalize all {deviating.length > 0 ? `(${deviating.length})` : ""}
@@ -90,15 +90,15 @@ export default function AccessPresetsPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-900">{s.name}</span>
-                      <Badge className="bg-gray-100 text-gray-600 text-[10px]">{s.role}</Badge>
-                      <Badge className="bg-terracotta/10 text-terracotta text-[10px]">
+                      <span className="font-medium text-text">{s.name}</span>
+                      <Badge className="bg-sunken text-text-2 text-[10px]">{s.role}</Badge>
+                      <Badge className="bg-brand-soft text-brand-text text-[10px]">
                         {s.position || "no position"} · {TIER_LABEL[s.tier] ?? s.tier}
                       </Badge>
                     </div>
                     <ul className="mt-2 space-y-0.5">
                       {s.diff.map((d, i) => (
-                        <li key={i} className="text-xs text-gray-500 flex items-center gap-1.5">
+                        <li key={i} className="text-xs text-text-2 flex items-center gap-1.5">
                           <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" /><code>{d}</code>
                         </li>
                       ))}

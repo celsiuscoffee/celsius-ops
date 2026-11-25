@@ -32,7 +32,7 @@ export default function CampaignsPage() {
   const { data: outletData } = useFetch<Array<{ id: string; name: string }>>("/api/ops/outlets");
 
   if (isLoading || !data) {
-    return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-neutral-400" /></div>;
+    return <div className="flex h-64 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-text-3" /></div>;
   }
 
   async function updateOutlet(campaignId: string, outletId: string | null) {
@@ -45,13 +45,16 @@ export default function CampaignsPage() {
   }
 
   return (
-    <div className="space-y-4 p-4 lg:p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-semibold">Campaigns</h1>
+        <div>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Google campaigns</h1>
+          <p className="mt-0.5 text-sm text-text-2">Each Google Ads campaign: spend, clicks and conversions, and which outlet it belongs to.</p>
+        </div>
         <select
           value={days}
           onChange={(e) => setDays(Number(e.target.value))}
-          className="rounded-md border border-neutral-200 bg-white px-3 py-1.5 text-sm"
+          className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text"
         >
           <option value="7">Last 7 days</option>
           <option value="30">Last 30 days</option>
@@ -61,11 +64,11 @@ export default function CampaignsPage() {
 
       <Card className="overflow-hidden">
         {data.campaigns.length === 0 ? (
-          <p className="p-8 text-center text-sm text-neutral-500">No campaigns yet. Run a sync from Settings.</p>
+          <p className="p-8 text-center text-sm text-text-2">No campaigns yet. Run a sync from Settings.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-neutral-50 text-xs text-neutral-500">
+              <thead className="bg-sunken text-xs text-text-2">
                 <tr>
                   <th className="px-3 py-2 text-left font-normal">Campaign</th>
                   <th className="px-3 py-2 text-left font-normal">Status</th>
@@ -79,23 +82,23 @@ export default function CampaignsPage() {
               </thead>
               <tbody>
                 {data.campaigns.map((c) => (
-                  <tr key={c.id} className="border-t border-neutral-100 hover:bg-neutral-50">
+                  <tr key={c.id} className="border-t border-line hover:bg-sunken">
                     <td className="px-3 py-2">
-                      <div className="text-neutral-700">{c.name}</div>
-                      <div className="text-[11px] text-neutral-400">{c.channelType}</div>
+                      <div className="text-text-2">{c.name}</div>
+                      <div className="text-[11px] text-text-3">{c.channelType}</div>
                     </td>
                     <td className="px-3 py-2">
                       <span className={`rounded px-1.5 py-0.5 text-[11px] ${
-                        c.status === "ENABLED" ? "bg-emerald-50 text-emerald-700"
-                        : c.status === "PAUSED" ? "bg-amber-50 text-amber-700"
-                        : "bg-neutral-100 text-neutral-500"
+                        c.status === "ENABLED" ? "bg-ok-soft text-ok-text"
+                        : c.status === "PAUSED" ? "bg-warn-soft text-warn-text"
+                        : "bg-sunken text-text-2"
                       }`}>{c.status}</span>
                     </td>
                     <td className="px-3 py-2">
                       <select
                         value={c.outletId ?? ""}
                         onChange={(e) => updateOutlet(c.id, e.target.value || null)}
-                        className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs"
+                        className="rounded border border-line bg-surface px-2 py-1 text-xs"
                       >
                         <option value="">— none —</option>
                         {outletData?.map((o) => (

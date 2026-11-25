@@ -44,10 +44,10 @@ export default function FinanceHome() {
   const { data, error, isLoading } = useFetch<HomeData>("/api/finance/home");
 
   return (
-    <div className="space-y-6 p-3 sm:p-6">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold">Finance</h1>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Finance</h1>
           <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
             Agentic finance module. The agents handle the books — you handle the exceptions.
           </p>

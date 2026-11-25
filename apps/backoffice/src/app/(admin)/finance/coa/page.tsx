@@ -72,67 +72,67 @@ export default function CoaPage() {
   }
 
   return (
-    <div className="space-y-5 p-3 sm:p-6">
+    <div className="space-y-5 px-4 pt-6 pb-10 md:px-8">
       <header>
-        <h1 className="text-xl sm:text-2xl font-semibold">Chart of Accounts</h1>
-        <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Chart of Accounts</h1>
+        <p className="mt-0.5 text-xs sm:text-sm text-text-2">
           Seeded from Bukku, owned here. Bank categories book to these accounts; add one when a spend type needs its own line.
         </p>
       </header>
 
-      <section className="rounded-lg border bg-white p-3">
+      <section className="rounded-lg border bg-surface p-3">
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-xs text-gray-500">Code
+          <label className="text-xs text-text-2">Code
             <input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.trim() })} placeholder="6515-01"
-              className="mt-1 block h-8 w-28 rounded border border-gray-200 px-2 text-sm tabular-nums" />
+              className="mt-1 block h-8 w-28 rounded border border-line px-2 text-sm tabular-nums" />
           </label>
-          <label className="text-xs text-gray-500">Name
+          <label className="text-xs text-text-2">Name
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Equipment rental"
-              className="mt-1 block h-8 w-56 rounded border border-gray-200 px-2 text-sm" />
+              className="mt-1 block h-8 w-56 rounded border border-line px-2 text-sm" />
           </label>
-          <label className="text-xs text-gray-500">Type
+          <label className="text-xs text-text-2">Type
             <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}
-              className="mt-1 block h-8 rounded border border-gray-200 bg-white px-2 text-sm">
+              className="mt-1 block h-8 rounded border border-line bg-surface px-2 text-sm">
               {TYPE_ORDER.map((x) => <option key={x} value={x}>{TYPE_LABEL[x]}</option>)}
             </select>
           </label>
-          <label className="text-xs text-gray-500">Parent (optional)
+          <label className="text-xs text-text-2">Parent (optional)
             <input value={form.parentCode} onChange={(e) => setForm({ ...form, parentCode: e.target.value.trim() })} placeholder="6515"
-              className="mt-1 block h-8 w-24 rounded border border-gray-200 px-2 text-sm tabular-nums" />
+              className="mt-1 block h-8 w-24 rounded border border-line px-2 text-sm tabular-nums" />
           </label>
           <Button size="sm" onClick={createAccount} disabled={busy || !form.code || !form.name}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Add account
           </Button>
         </div>
-        {note && <p className="mt-2 text-[11px] text-gray-500">{note}</p>}
+        {note && <p className="mt-2 text-[11px] text-text-2">{note}</p>}
       </section>
 
       <div className="flex items-center gap-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search code or name…"
-          className="h-8 w-64 rounded border border-gray-200 bg-white px-2 text-sm" />
-        <span className="text-[11px] text-gray-400 tabular-nums">{filtered.length} of {accounts.length} accounts</span>
+          className="h-8 w-64 rounded border border-line bg-surface px-2 text-sm" />
+        <span className="text-[11px] text-text-3 tabular-nums">{filtered.length} of {accounts.length} accounts</span>
       </div>
 
-      {!data ? <div className="py-12 text-center text-sm text-gray-400">Loading…</div> : (
+      {!data ? <div className="py-12 text-center text-sm text-text-3">Loading…</div> : (
         <div className="grid gap-4 lg:grid-cols-2">
           {TYPE_ORDER.map((type) => {
             const rows = filtered.filter((a) => a.type === type);
             if (!rows.length) return null;
             return (
-              <section key={type} className="overflow-hidden rounded-lg border bg-white">
-                <header className="border-b bg-gray-50/60 px-3 py-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+              <section key={type} className="overflow-hidden rounded-lg border bg-surface">
+                <header className="border-b bg-sunken/60 px-3 py-2 text-xs font-medium uppercase tracking-wide text-text-2">
                   {TYPE_LABEL[type]} <span className="font-normal">· {rows.length}</span>
                 </header>
                 <table className="w-full text-sm">
                   <tbody className="divide-y">
                     {rows.map((a) => (
                       <tr key={a.code} className={a.is_active ? "" : "opacity-45"}>
-                        <td className="w-24 whitespace-nowrap px-3 py-1.5 text-xs text-gray-500 tabular-nums"
+                        <td className="w-24 whitespace-nowrap px-3 py-1.5 text-xs text-text-2 tabular-nums"
                           style={{ paddingLeft: a.parent_code ? 28 : 12 }}>{a.code}</td>
                         <td className="px-3 py-1.5">{a.name}</td>
                         <td className="w-24 px-3 py-1.5 text-right">
-                          <button onClick={() => toggleActive(a)} className="text-[11px] text-gray-400 underline hover:text-gray-600">
+                          <button onClick={() => toggleActive(a)} className="text-[11px] text-text-3 underline hover:text-text-2">
                             {a.is_active ? "deactivate" : "reactivate"}
                           </button>
                         </td>
@@ -149,17 +149,17 @@ export default function CoaPage() {
       <section className="space-y-2">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">Learned categorizations</h2>
-          <span className="text-[11px] text-gray-400">taught by your manual classifications on the Reconciliation page</span>
+          <span className="text-[11px] text-text-3">taught by your manual classifications on the Reconciliation page</span>
         </div>
-        {!hintData ? <div className="py-6 text-center text-sm text-gray-400">Loading…</div>
+        {!hintData ? <div className="py-6 text-center text-sm text-text-3">Loading…</div>
         : hintData.hints.length === 0 ? (
-          <p className="rounded-lg border bg-white px-4 py-3 text-xs text-gray-400">
+          <p className="rounded-lg border bg-surface px-4 py-3 text-xs text-text-3">
             Nothing learned yet. Classify a line on the Reconciliation page and its payee shows up here; future payments to that payee classify themselves.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border bg-white">
+          <div className="overflow-x-auto rounded-lg border bg-surface">
             <table className="w-full min-w-[560px] text-sm">
-              <thead><tr className="border-b bg-gray-50/60 text-left text-xs text-gray-500">
+              <thead><tr className="border-b bg-sunken/60 text-left text-xs text-text-2">
                 <th className="px-3 py-2 font-medium">Payee phrase</th>
                 <th className="px-3 py-2 font-medium">Books to</th>
                 <th className="px-3 py-2 font-medium">Direction</th>
@@ -170,11 +170,11 @@ export default function CoaPage() {
                 {hintData.hints.map((h) => (
                   <tr key={h.phrase}>
                     <td className="px-3 py-1.5 font-medium">{h.phrase}</td>
-                    <td className="px-3 py-1.5 text-xs text-gray-600">{h.category.toLowerCase().replace(/_/g, " ")}</td>
-                    <td className="px-3 py-1.5 text-xs text-gray-500">{h.direction === "DR" ? "cash out" : h.direction === "CR" ? "cash in" : "both"}</td>
-                    <td className="px-3 py-1.5 text-xs text-gray-400 tabular-nums">{h.updated_at.slice(0, 10)}</td>
+                    <td className="px-3 py-1.5 text-xs text-text-2">{h.category.toLowerCase().replace(/_/g, " ")}</td>
+                    <td className="px-3 py-1.5 text-xs text-text-2">{h.direction === "DR" ? "cash out" : h.direction === "CR" ? "cash in" : "both"}</td>
+                    <td className="px-3 py-1.5 text-xs text-text-3 tabular-nums">{h.updated_at.slice(0, 10)}</td>
                     <td className="px-3 py-1.5 text-right">
-                      <button onClick={() => forgetHint(h.phrase)} className="text-[11px] text-gray-400 underline hover:text-gray-600">forget</button>
+                      <button onClick={() => forgetHint(h.phrase)} className="text-[11px] text-text-3 underline hover:text-text-2">forget</button>
                     </td>
                   </tr>
                 ))}

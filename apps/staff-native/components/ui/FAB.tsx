@@ -1,5 +1,6 @@
-import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import type { ComponentType } from "react";
+import { useCelsius } from "../../lib/celsius-ui";
 
 type Props = {
   icon: ComponentType<{ color: string; size: number }>;
@@ -9,52 +10,30 @@ type Props = {
   disabled?: boolean;
 };
 
-// Floating Action Button. Sits in the bottom-right corner above the
-// tab bar, terracotta primary with white icon. Soft shadow gives it
-// elevation against the scroll content. Optional `label` turns it
-// into an extended FAB (pill-shaped with icon + text), otherwise it's
-// a 56×56 circle.
-//
-// Tab bar height + iOS home-indicator safe area = ~84-100px from the
-// bottom; the FAB's `bottom-24` (96px) lifts it above both.
-const SHADOW = Platform.select({
-  ios: {
-    shadowColor: "#4E1F12",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-  },
-  android: { elevation: 6 },
-  default: {},
-});
-
+// Floating action button: the screen's one main action, in ink. Sits above
+// the tab bar (bottom-24). `label` makes it an extended pill.
 export function FAB({ icon: Icon, label, onPress, loading, disabled }: Props) {
+  const C = useCelsius().color;
   const off = disabled || loading;
   const extended = !!label;
   return (
-    <View
-      pointerEvents="box-none"
-      className="absolute inset-x-0 bottom-24 items-end px-5"
-    >
+    <View pointerEvents="box-none" className="absolute inset-x-0 bottom-24 items-end px-4">
       <Pressable
         onPress={onPress}
         disabled={off}
+        accessibilityRole="button"
         accessibilityLabel={label ?? "Action"}
-        style={SHADOW}
-        className={`flex-row items-center justify-center gap-2 rounded-full ${
-          off ? "bg-primary/50" : "bg-primary active:opacity-90"
+        style={{ boxShadow: "0 8px 24px rgba(22, 8, 0, 0.18)" }}
+        className={`flex-row items-center justify-center gap-2 rounded-full bg-ink ${
+          off ? "opacity-50" : "active:opacity-90"
         } ${extended ? "h-14 px-5" : "h-14 w-14"}`}
       >
         {loading ? (
-          <ActivityIndicator color="#FFFFFF" />
+          <ActivityIndicator color={C["on-ink"]} />
         ) : (
           <>
-            <Icon color="#FFFFFF" size={22} />
-            {extended ? (
-              <Text className="text-base font-body-bold text-white">
-                {label}
-              </Text>
-            ) : null}
+            <Icon color={C["on-ink"]} size={22} />
+            {extended ? <Text className="text-base font-body-semi text-on-ink">{label}</Text> : null}
           </>
         )}
       </Pressable>

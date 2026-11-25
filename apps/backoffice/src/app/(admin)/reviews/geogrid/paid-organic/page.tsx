@@ -48,7 +48,7 @@ const myr = (n: number) => `RM${n.toLocaleString(undefined, { maximumFractionDig
 
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {
   return (
-    <div className="rounded-xl border border-border bg-white p-4">
+    <div className="rounded-xl border border-border bg-surface p-4">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${tone ?? "text-foreground"}`}>{value}</p>
       {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
@@ -136,7 +136,7 @@ export default function PaidOrganicPage() {
       <Link href="/reviews/geogrid" className="mb-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" /> Back to Geogrid
       </Link>
-      <h1 className="font-heading text-2xl font-bold text-foreground">Paid × Organic</h1>
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Paid × Organic</h1>
       <p className="text-sm text-muted-foreground">
         What each ad search term costs vs where you rank organically. Terms you own on the map are candidates to stop paying
         for — every exclusion needs your explicit approval before anything touches Google Ads.
@@ -149,7 +149,7 @@ export default function PaidOrganicPage() {
       ) : error ? (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{error}</div>
       ) : rows.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-border bg-white p-10 text-center">
+        <div className="mt-6 rounded-xl border border-border bg-surface p-10 text-center">
           <Coins className="mx-auto h-10 w-10 text-muted-foreground/30" />
           <p className="mt-3 text-sm text-muted-foreground">
             No search-term spend synced yet. It starts flowing with the nightly ads sync — or run the ads backfill
@@ -169,7 +169,7 @@ export default function PaidOrganicPage() {
             <div className="mt-4 flex flex-wrap items-end gap-3">
               <div>
                 <label className="block text-xs font-medium text-muted-foreground">Outlet</label>
-                <select value={outletFilter} onChange={(e) => setOutletFilter(e.target.value)} className="mt-1 rounded-lg border border-border bg-white px-3 py-2 text-sm">
+                <select value={outletFilter} onChange={(e) => setOutletFilter(e.target.value)} className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm">
                   <option value="">All outlets</option>
                   {outlets.map((o) => (
                     <option key={o} value={o}>{o}</option>
@@ -178,7 +178,7 @@ export default function PaidOrganicPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground">Verdict</label>
-                <select value={verdictFilter} onChange={(e) => setVerdictFilter(e.target.value)} className="mt-1 rounded-lg border border-border bg-white px-3 py-2 text-sm">
+                <select value={verdictFilter} onChange={(e) => setVerdictFilter(e.target.value)} className="mt-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm">
                   <option value="">All verdicts</option>
                   {Object.entries(VERDICT_META).map(([k, v]) => (
                     <option key={k} value={k}>{v.label}</option>
@@ -187,7 +187,7 @@ export default function PaidOrganicPage() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl border border-border bg-white p-4">
+            <div className="mt-4 rounded-xl border border-border bg-surface p-4">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs text-muted-foreground">
@@ -261,7 +261,7 @@ export default function PaidOrganicPage() {
                               <button
                                 onClick={() => decide(r, "reject")}
                                 disabled={busy === key}
-                                className="rounded-lg border border-border bg-white px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-muted/50 disabled:opacity-50"
+                                className="rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-muted/50 disabled:opacity-50"
                               >
                                 Dismiss
                               </button>

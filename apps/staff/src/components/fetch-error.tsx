@@ -19,12 +19,12 @@ export function FetchError({
   const message = error instanceof Error ? error.message : String(error ?? "");
   const unauthorized = /\b401\b/.test(message);
   return (
-    <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-5 text-center">
-      <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-red-400" />
-      <p className="text-sm font-semibold text-red-700">
+    <div className="rounded-2xl border border-danger/30 bg-danger-soft px-4 py-5 text-center">
+      <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-danger" />
+      <p className="text-sm font-semibold text-danger-text">
         {unauthorized ? "Your session has expired" : `Couldn't load ${what}`}
       </p>
-      <p className="mt-0.5 text-xs text-red-600">
+      <p className="mt-0.5 text-xs text-danger-text">
         {unauthorized
           ? "Sign in again to continue."
           : "Check your connection and try again. If it keeps happening, tell your manager."}
@@ -32,14 +32,14 @@ export function FetchError({
       {unauthorized ? (
         <a
           href="/login"
-          className="mt-3 inline-flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-medium text-white"
+          className="mt-3 inline-flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-on-ink"
         >
           Sign in
         </a>
       ) : onRetry ? (
         <button
           onClick={onRetry}
-          className="mt-3 inline-flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-red-700 ring-1 ring-red-200 active:scale-95"
+          className="mt-3 inline-flex items-center gap-1 rounded-lg bg-surface px-3 py-1.5 text-xs font-medium text-danger-text ring-1 ring-danger/30 active:scale-95"
         >
           <RefreshCw className="h-3 w-3" /> Retry
         </button>

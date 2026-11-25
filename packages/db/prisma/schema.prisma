@@ -137,6 +137,11 @@ model User {
   username     String?    @unique
   passwordHash String?
   pin          String?
+  // True while the PIN on this account was set by somebody else (HR issuing a
+  // temp PIN, or a manager resetting one) and the holder has not yet replaced
+  // it. The staff app blocks every route but change-pin until they do — see
+  // apps/staff/src/middleware.ts. Cleared by apps/staff /api/auth/change-pin.
+  mustChangePin Boolean   @default(false)
   status       UserStatus @default(ACTIVE)
   outletIds    String[]   @default([])
   appAccess    String[]   @default([])

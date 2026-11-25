@@ -35,10 +35,12 @@ import {
   type Supplier,
 } from "../../../lib/claims";
 import { useStaff } from "../../../lib/store";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 type Step = "capture" | "form";
 
 export default function NewClaim() {
+  const C = useCelsius().color;
   const router = useRouter();
   const qc = useQueryClient();
   const session = useStaff((s) => s.session);
@@ -188,24 +190,24 @@ export default function NewClaim() {
 
         <Pressable
           onPress={() => setCameraOpen(true)}
-          className="mt-6 items-center justify-center rounded-3xl border-2 border-dashed border-primary/40 bg-primary-50 py-12 active:opacity-80"
+          className="mt-6 items-center justify-center rounded-2xl border-2 border-dashed border-line-2 bg-sunken py-12 active:opacity-80"
         >
-          <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-            <Camera color="#C2452D" size={32} />
+          <View className="h-16 w-16 items-center justify-center rounded-2xl bg-sunken">
+            <Camera color={C["text-2"]} size={32} />
           </View>
-          <Text className="mt-4 text-base font-body-bold text-primary">
+          <Text className="mt-4 text-base font-body-bold text-text">
             Take photo of receipt
           </Text>
-          <Text className="mt-1 text-xs font-body text-muted-fg">
+          <Text className="mt-1 text-xs font-body text-text-2">
             Tap to open camera
           </Text>
         </Pressable>
 
         <Pressable
           onPress={startManualEntry}
-          className="mt-4 h-14 items-center justify-center rounded-2xl border border-border bg-surface active:bg-primary-50"
+          className="mt-4 h-14 items-center justify-center rounded-2xl border border-line bg-surface active:bg-sunken"
         >
-          <Text className="text-base font-body-semi text-espresso">
+          <Text className="text-base font-body-semi text-text">
             Enter manually without photo
           </Text>
         </Pressable>
@@ -243,16 +245,16 @@ export default function NewClaim() {
             only submit reimbursement claims (the legacy default). */}
         {canRequestVendorPayment ? (
           <>
-            <View className="mt-4 flex-row gap-2 rounded-2xl border border-border bg-surface p-1.5">
+            <View className="mt-4 flex-row gap-2 rounded-2xl border border-line bg-surface p-1.5">
               <Pressable
                 onPress={() => setFlow("CLAIM")}
                 className={`flex-1 items-center rounded-xl py-2.5 active:opacity-80 ${
-                  flow === "CLAIM" ? "bg-primary" : ""
+                  flow === "CLAIM" ? "bg-ink" : ""
                 }`}
               >
                 <Text
                   className={`text-sm font-body-bold ${
-                    flow === "CLAIM" ? "text-white" : "text-muted-fg"
+                    flow === "CLAIM" ? "text-on-ink" : "text-text-2"
                   }`}
                 >
                   Reimburse me
@@ -261,19 +263,19 @@ export default function NewClaim() {
               <Pressable
                 onPress={() => setFlow("REQUEST")}
                 className={`flex-1 items-center rounded-xl py-2.5 active:opacity-80 ${
-                  flow === "REQUEST" ? "bg-primary" : ""
+                  flow === "REQUEST" ? "bg-ink" : ""
                 }`}
               >
                 <Text
                   className={`text-sm font-body-bold ${
-                    flow === "REQUEST" ? "text-white" : "text-muted-fg"
+                    flow === "REQUEST" ? "text-on-ink" : "text-text-2"
                   }`}
                 >
                   Pay vendor
                 </Text>
               </Pressable>
             </View>
-            <Text className="mt-1.5 text-xs font-body text-muted-fg">
+            <Text className="mt-1.5 text-xs font-body text-text-2">
               {flow === "CLAIM"
                 ? "You paid out-of-pocket, finance reimburses you."
                 : "Finance pays the vendor directly, no out-of-pocket."}
@@ -282,8 +284,8 @@ export default function NewClaim() {
         ) : null}
 
         <Field label="Outlet">
-          <View className="h-14 justify-center rounded-2xl bg-primary-50 px-4">
-            <Text className="text-base font-body-semi text-espresso">
+          <View className="h-14 justify-center rounded-2xl bg-sunken px-4">
+            <Text className="text-base font-body-semi text-text">
               {session?.outletName ?? "-"}
             </Text>
           </View>
@@ -295,8 +297,8 @@ export default function NewClaim() {
               value={vendorName}
               onChangeText={setVendorName}
               placeholder="e.g. ABC Plumbing Services"
-              placeholderTextColor="#9CA3AF"
-              className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso"
+              placeholderTextColor={C["text-3"]}
+              className="h-14 rounded-2xl border border-line bg-surface px-4 text-base font-body text-text"
             />
           </Field>
         ) : null}
@@ -308,16 +310,16 @@ export default function NewClaim() {
         >
           <Pressable
             onPress={() => setSupplierPickerOpen(true)}
-            className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50"
+            className="h-14 flex-row items-center justify-between rounded-2xl border border-line bg-surface px-4 active:bg-sunken"
           >
             <Text
-              className={`flex-1 text-base font-body ${supplierName ? "text-espresso" : "text-muted"}`}
+              className={`flex-1 text-base font-body ${supplierName ? "text-text" : "text-text-3"}`}
               numberOfLines={1}
             >
               {supplierName ||
                 (flow === "REQUEST" ? "None (one-off vendor)" : "Select supplier")}
             </Text>
-            <ChevronDown color="#9CA3AF" size={20} />
+            <ChevronDown color={C["text-3"]} size={20} />
           </Pressable>
         </Field>
 
@@ -326,9 +328,9 @@ export default function NewClaim() {
             value={amount}
             onChangeText={setAmount}
             placeholder="0.00"
-            placeholderTextColor="#9B9B9B"
+            placeholderTextColor={C["text-3"]}
             keyboardType="decimal-pad"
-            className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body-semi text-espresso"
+            className="h-14 rounded-2xl border border-line bg-surface px-4 text-base font-body-semi text-text"
           />
         </Field>
 
@@ -337,9 +339,9 @@ export default function NewClaim() {
             value={purchaseDate}
             onChangeText={setPurchaseDate}
             placeholder="YYYY-MM-DD"
-            placeholderTextColor="#9B9B9B"
+            placeholderTextColor={C["text-3"]}
             autoCapitalize="none"
-            className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso"
+            className="h-14 rounded-2xl border border-line bg-surface px-4 text-base font-body text-text"
           />
         </Field>
 
@@ -348,14 +350,14 @@ export default function NewClaim() {
             value={notes}
             onChangeText={setNotes}
             placeholder="e.g. urgent restock"
-            placeholderTextColor="#9B9B9B"
+            placeholderTextColor={C["text-3"]}
             multiline
-            className="min-h-14 rounded-2xl border border-border bg-surface px-4 py-3 text-base font-body text-espresso"
+            className="min-h-14 rounded-2xl border border-line bg-surface px-4 py-3 text-base font-body text-text"
           />
         </Field>
 
         {formError ? (
-          <Text className="mt-4 text-sm text-danger">{formError}</Text>
+          <Text className="mt-4 text-sm text-danger-text">{formError}</Text>
         ) : null}
 
         <Pressable
@@ -364,12 +366,12 @@ export default function NewClaim() {
             submitMutation.mutate();
           }}
           disabled={submitMutation.isPending}
-          className="mt-6 h-16 flex-row items-center justify-center rounded-2xl bg-primary active:opacity-80 disabled:opacity-50"
+          className="mt-6 h-16 flex-row items-center justify-center rounded-2xl bg-ink active:opacity-80 disabled:opacity-50"
         >
           {submitMutation.isPending ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={C["on-ink"]} />
           ) : (
-            <Text className="text-base font-body-bold text-white">
+            <Text className="text-base font-body-bold text-on-ink">
               {flow === "CLAIM" ? "Submit claim" : "Submit payment request"}
             </Text>
           )}
@@ -401,7 +403,7 @@ function Field({
 }) {
   return (
     <View className="mt-5">
-      <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+      <Text className="mb-2 text-sm font-body-semi text-text-2">
         {label}
       </Text>
       {children}
@@ -422,44 +424,45 @@ function PhotoStatus({
   confidence: string | null;
   onRetake: () => void;
 }) {
+  const C = useCelsius().color;
   if (!hasPhoto) {
     return (
-      <View className="flex-row items-center rounded-2xl border border-border bg-surface p-4">
-        <View className="h-12 w-12 items-center justify-center rounded-2xl bg-muted/10">
-          <ImageIcon color="#9CA3AF" size={20} />
+      <View className="flex-row items-center rounded-2xl border border-line bg-surface p-4">
+        <View className="h-12 w-12 items-center justify-center rounded-2xl bg-sunken">
+          <ImageIcon color={C["text-3"]} size={20} />
         </View>
         <View className="ml-3 flex-1">
-          <Text className="text-base font-body-semi text-espresso">
+          <Text className="text-base font-body-semi text-text">
             No photo attached
           </Text>
-          <Text className="mt-0.5 text-xs font-body text-muted-fg">
+          <Text className="mt-0.5 text-xs font-body text-text-2">
             Add one for faster approval
           </Text>
         </View>
         <Pressable
           onPress={onRetake}
-          className="h-10 items-center justify-center rounded-xl bg-primary px-3 active:opacity-80"
+          className="h-11 items-center justify-center rounded-xl bg-ink px-3 active:opacity-80"
         >
-          <Text className="text-xs font-body-bold text-white">Add photo</Text>
+          <Text className="text-xs font-body-bold text-on-ink">Add photo</Text>
         </Pressable>
       </View>
     );
   }
 
   return (
-    <View className="rounded-2xl border border-border bg-surface p-4">
+    <View className="rounded-2xl border border-line bg-surface p-4">
       <View className="flex-row items-center">
-        <View className="h-12 w-12 items-center justify-center rounded-2xl bg-primary-50">
+        <View className="h-12 w-12 items-center justify-center rounded-2xl bg-sunken">
           {extracting ? (
-            <Loader color="#C2452D" size={20} />
+            <Loader color={C["text-2"]} size={20} />
           ) : uploadError ? (
-            <ImageIcon color="#B91C1C" size={20} />
+            <ImageIcon color={C.danger} size={20} />
           ) : (
-            <Check color="#C2452D" size={20} />
+            <Check color={C["text-2"]} size={20} />
           )}
         </View>
         <View className="ml-3 flex-1">
-          <Text className="text-base font-body-semi text-espresso">
+          <Text className="text-base font-body-semi text-text">
             {uploadError
               ? "Upload failed"
               : extracting
@@ -467,31 +470,31 @@ function PhotoStatus({
                 : "Receipt attached"}
           </Text>
           {uploadError ? (
-            <Text className="mt-0.5 text-xs text-danger" numberOfLines={2}>
+            <Text className="mt-0.5 text-xs text-danger-text" numberOfLines={2}>
               {uploadError}
             </Text>
           ) : extracting ? (
             <View className="mt-0.5 flex-row items-center gap-1">
-              <Sparkles color="#C2452D" size={12} />
-              <Text className="text-xs font-body text-muted-fg">
+              <Sparkles color={C["text-2"]} size={12} />
+              <Text className="text-xs font-body text-text-2">
                 Filling in details automatically
               </Text>
             </View>
           ) : confidence ? (
-            <Text className="mt-0.5 text-xs font-body text-muted-fg">
+            <Text className="mt-0.5 text-xs font-body text-text-2">
               Details prefilled ({confidence} confidence)
             </Text>
           ) : (
-            <Text className="mt-0.5 text-xs font-body text-muted-fg">
+            <Text className="mt-0.5 text-xs font-body text-text-2">
               Review the details below
             </Text>
           )}
         </View>
         <Pressable
           onPress={onRetake}
-          className="h-10 items-center justify-center rounded-xl bg-primary-50 px-3 active:opacity-80"
+          className="h-11 items-center justify-center rounded-xl bg-sunken px-3 active:opacity-80"
         >
-          <Text className="text-xs font-body-bold text-primary">Retake</Text>
+          <Text className="text-xs font-body-bold text-text">Retake</Text>
         </Pressable>
       </View>
     </View>
@@ -511,6 +514,7 @@ function SupplierPicker({
   onClose: () => void;
   onSelect: (s: Supplier) => void;
 }) {
+  const C = useCelsius().color;
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -525,11 +529,11 @@ function SupplierPicker({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View className="flex-1 bg-background">
-        <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-          <Text className="text-xl font-display text-espresso">Suppliers</Text>
-          <Pressable onPress={onClose} className="px-2 py-1">
-            <Text className="text-sm font-body-bold text-primary">Close</Text>
+      <View className="flex-1 bg-bg">
+        <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+          <Text className="text-xl font-display text-text">Suppliers</Text>
+          <Pressable onPress={onClose} className="min-h-11 justify-center px-3">
+            <Text className="text-sm font-body-bold text-text">Close</Text>
           </Pressable>
         </View>
         <View className="px-5 pt-3">
@@ -537,15 +541,15 @@ function SupplierPicker({
             value={query}
             onChangeText={setQuery}
             placeholder="Search suppliers"
-            placeholderTextColor="#9B9B9B"
-            className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso"
+            placeholderTextColor={C["text-3"]}
+            className="h-14 rounded-2xl border border-line bg-surface px-4 text-base font-body text-text"
           />
         </View>
         <ScrollView className="flex-1" contentContainerClassName="px-5 py-4"
       showsVerticalScrollIndicator={false}
     >
           {filtered.length === 0 ? (
-            <Text className="mt-8 text-center text-sm text-muted-fg">
+            <Text className="mt-8 text-center text-sm text-text-2">
               No suppliers match "{query}"
             </Text>
           ) : (
@@ -553,20 +557,20 @@ function SupplierPicker({
               <Pressable
                 key={s.id}
                 onPress={() => onSelect(s)}
-                className={`mb-2 h-14 flex-row items-center justify-between rounded-2xl border px-4 active:bg-primary-50 ${
+                className={`mb-2 h-14 flex-row items-center justify-between rounded-2xl border px-4 active:bg-sunken ${
                   s.id === selectedId
-                    ? "border-primary bg-primary-50"
-                    : "border-border bg-surface"
+                    ? "border-ink bg-sunken"
+                    : "border-line bg-surface"
                 }`}
               >
                 <Text
-                  className="flex-1 text-base font-body-semi text-espresso"
+                  className="flex-1 text-base font-body-semi text-text"
                   numberOfLines={1}
                 >
                   {s.name}
                 </Text>
                 {s.id === selectedId ? (
-                  <Check color="#C2452D" size={20} />
+                  <Check color={C["text-2"]} size={20} />
                 ) : null}
               </Pressable>
             ))

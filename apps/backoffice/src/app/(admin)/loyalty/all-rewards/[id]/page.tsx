@@ -78,14 +78,14 @@ export default function EditRewardPage() {
 
   if (error) {
     return (
-      <div className="px-6 py-6 max-w-3xl mx-auto">
+      <div className="max-w-3xl mx-auto px-4 pt-6 pb-10 md:px-8">
         <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-rose-700">{error}</div>
       </div>
     );
   }
   if (!initial) {
     return (
-      <div className="px-6 py-6 max-w-3xl mx-auto text-slate-500">Loading…</div>
+      <div className="max-w-3xl mx-auto text-text-2 px-4 pt-6 pb-10 md:px-8">Loading…</div>
     );
   }
   return <RewardForm mode="edit" initial={initial} />;

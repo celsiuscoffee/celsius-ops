@@ -72,12 +72,18 @@ export async function POST(req: NextRequest) {
     ? await prisma.outlet.findUnique({ where: { id: outletId }, select: { name: true } })
     : matchedUser.outlet;
 
+  // A PIN somebody else chose gets the holder exactly one destination: the
+  // change-PIN screen. The flag rides in the token so middleware can gate
+  // every route without a database round trip (see apps/staff/middleware.ts).
+  const mustChangePin = matchedUser.mustChangePin === true;
+
   await createSession({
     id: matchedUser.id,
     name: matchedUser.name,
     role: matchedUser.role,
     outletId: outletId || matchedUser.outletId,
     outletName: selectedOutlet?.name ?? matchedUser.outlet?.name ?? null,
+    mustChangePin,
   });
 
   return NextResponse.json({
@@ -85,5 +91,6 @@ export async function POST(req: NextRequest) {
     name: matchedUser.name,
     role: matchedUser.role,
     moduleAccess: matchedUser.moduleAccess ?? {},
+    mustChangePin,
   });
 }

@@ -99,20 +99,20 @@ export default function PurchaseSummaryPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link
           href="/inventory/reports"
-          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          className="rounded-lg p-1.5 text-text-3 hover:bg-sunken hover:text-text-2"
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
             Purchase Summary
           </h2>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-text-2">
             Spending by supplier within selected period
           </p>
         </div>
@@ -121,47 +121,47 @@ export default function PurchaseSummaryPage() {
       {/* Summary cards */}
       {data && (
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="rounded-xl border border-line bg-surface p-4">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-green-50 p-2">
                 <DollarSign className="h-4 w-4 text-green-600" />
               </div>
-              <span className="text-sm text-gray-500">Total Spend</span>
+              <span className="text-sm text-text-2">Total Spend</span>
             </div>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
+            <p className="mt-2 text-2xl font-bold text-text">
               RM {fmt(data.summary.totalSpend)}
             </p>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="rounded-xl border border-line bg-surface p-4">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-blue-50 p-2">
                 <ShoppingCart className="h-4 w-4 text-blue-600" />
               </div>
-              <span className="text-sm text-gray-500">Total Orders</span>
+              <span className="text-sm text-text-2">Total Orders</span>
             </div>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
+            <p className="mt-2 text-2xl font-bold text-text">
               {data.summary.totalOrders}
             </p>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="rounded-xl border border-line bg-surface p-4">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-purple-50 p-2">
                 <Package className="h-4 w-4 text-purple-600" />
               </div>
-              <span className="text-sm text-gray-500">Suppliers</span>
+              <span className="text-sm text-text-2">Suppliers</span>
             </div>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
+            <p className="mt-2 text-2xl font-bold text-text">
               {data.summary.totalSuppliers}
             </p>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="rounded-xl border border-line bg-surface p-4">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-amber-50 p-2">
                 <TrendingUp className="h-4 w-4 text-amber-600" />
               </div>
-              <span className="text-sm text-gray-500">Avg Order Value</span>
+              <span className="text-sm text-text-2">Avg Order Value</span>
             </div>
-            <p className="mt-2 text-2xl font-bold text-gray-900">
+            <p className="mt-2 text-2xl font-bold text-text">
               RM {fmt(data.summary.avgOrderValue)}
             </p>
           </div>
@@ -171,7 +171,7 @@ export default function PurchaseSummaryPage() {
       {/* Filters */}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <select
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          className="rounded-lg border border-line px-3 py-2 text-sm"
           value={outletId}
           onChange={(e) => setOutletId(e.target.value)}
         >
@@ -183,7 +183,7 @@ export default function PurchaseSummaryPage() {
           ))}
         </select>
         <select
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          className="rounded-lg border border-line px-3 py-2 text-sm"
           value={supplierId}
           onChange={(e) => setSupplierId(e.target.value)}
         >
@@ -196,13 +196,13 @@ export default function PurchaseSummaryPage() {
         </select>
         <input
           type="date"
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          className="rounded-lg border border-line px-3 py-2 text-sm"
           value={from}
           onChange={(e) => setFrom(e.target.value)}
         />
         <input
           type="date"
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          className="rounded-lg border border-line px-3 py-2 text-sm"
           value={to}
           onChange={(e) => setTo(e.target.value)}
         />
@@ -211,7 +211,7 @@ export default function PurchaseSummaryPage() {
       {/* Loading */}
       {isLoading && (
         <div className="flex items-center justify-center p-12">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       )}
 
@@ -243,17 +243,17 @@ const purchaseColumns = (expanded: Set<string>): ReportColumn<SupplierRow>[] => 
   {
     key: "supplierName", header: "Supplier", sortValue: (it) => it.supplierName, csv: (it) => it.supplierName,
     render: (it) => (
-      <span className="flex items-center gap-1.5 font-medium text-gray-900">
-        {expanded.has(it.supplierId) ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+      <span className="flex items-center gap-1.5 font-medium text-text">
+        {expanded.has(it.supplierId) ? <ChevronDown className="h-4 w-4 text-text-3" /> : <ChevronRight className="h-4 w-4 text-text-3" />}
         {it.supplierName}
       </span>
     ),
   },
-  { key: "totalOrders", header: "Orders", align: "right", sortValue: (it) => it.totalOrders, render: (it) => <span className="font-mono text-gray-900">{it.totalOrders}</span> },
-  { key: "totalAmount", header: "Total Amount (RM)", align: "right", sortValue: (it) => it.totalAmount, render: (it) => <span className="font-mono text-gray-900">{fmt(it.totalAmount)}</span> },
-  { key: "totalReceived", header: "Received (RM)", align: "right", sortValue: (it) => it.totalReceived, render: (it) => <span className="font-mono text-gray-900">{fmt(it.totalReceived)}</span> },
-  { key: "totalInvoiced", header: "Invoiced (RM)", align: "right", sortValue: (it) => it.totalInvoiced, render: (it) => <span className="font-mono text-gray-900">{fmt(it.totalInvoiced)}</span> },
-  { key: "productCount", header: "Products", align: "right", sortValue: (it) => it.productCount, render: (it) => <span className="font-mono text-gray-600">{it.productCount}</span> },
+  { key: "totalOrders", header: "Orders", align: "right", sortValue: (it) => it.totalOrders, render: (it) => <span className="font-mono text-text">{it.totalOrders}</span> },
+  { key: "totalAmount", header: "Total Amount (RM)", align: "right", sortValue: (it) => it.totalAmount, render: (it) => <span className="font-mono text-text">{fmt(it.totalAmount)}</span> },
+  { key: "totalReceived", header: "Received (RM)", align: "right", sortValue: (it) => it.totalReceived, render: (it) => <span className="font-mono text-text">{fmt(it.totalReceived)}</span> },
+  { key: "totalInvoiced", header: "Invoiced (RM)", align: "right", sortValue: (it) => it.totalInvoiced, render: (it) => <span className="font-mono text-text">{fmt(it.totalInvoiced)}</span> },
+  { key: "productCount", header: "Products", align: "right", sortValue: (it) => it.productCount, render: (it) => <span className="font-mono text-text-2">{it.productCount}</span> },
   {
     key: "topProducts", header: "Top Products", sortValue: (it) => it.topProducts[0] ?? null,
     csv: (it) => it.topProducts.join(" | "),
@@ -269,7 +269,7 @@ function ProductBreakdownTable({ rows }: { rows: ProductBreakdown[] }) {
   return (
     <table className="w-full text-xs">
       <thead>
-        <tr className="text-gray-500">
+        <tr className="text-text-2">
           <th className="px-3 py-1.5 text-left font-medium">Product</th>
           <th className="px-3 py-1.5 text-left font-medium">SKU</th>
           <th className="px-3 py-1.5 text-right font-medium">Qty Ordered</th>
@@ -279,12 +279,12 @@ function ProductBreakdownTable({ rows }: { rows: ProductBreakdown[] }) {
       </thead>
       <tbody>
         {rows.map((p) => (
-          <tr key={p.sku} className="border-t border-gray-100">
-            <td className="px-3 py-1.5 text-gray-900">{p.productName}</td>
-            <td className="px-3 py-1.5 font-mono text-gray-400">{p.sku}</td>
-            <td className="px-3 py-1.5 text-right font-mono text-gray-900">{fmt(p.qtyOrdered)}</td>
-            <td className="px-3 py-1.5 text-right font-mono text-gray-900">{fmt(p.qtyReceived)}</td>
-            <td className="px-3 py-1.5 text-right font-mono text-gray-900">{fmt(p.amount)}</td>
+          <tr key={p.sku} className="border-t border-line">
+            <td className="px-3 py-1.5 text-text">{p.productName}</td>
+            <td className="px-3 py-1.5 font-mono text-text-3">{p.sku}</td>
+            <td className="px-3 py-1.5 text-right font-mono text-text">{fmt(p.qtyOrdered)}</td>
+            <td className="px-3 py-1.5 text-right font-mono text-text">{fmt(p.qtyReceived)}</td>
+            <td className="px-3 py-1.5 text-right font-mono text-text">{fmt(p.amount)}</td>
           </tr>
         ))}
       </tbody>

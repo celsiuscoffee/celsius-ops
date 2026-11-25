@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Loader2, AlertTriangle, ShieldAlert, RefreshCw, Clock } from "lucide-react";
+import { Send, Loader2, AlertTriangle, RefreshCw, Clock } from "lucide-react";
 import { useFetch } from "@/lib/use-fetch";
 
 type Thread = {
@@ -56,12 +56,7 @@ type ThreadDetail = {
 };
 
 function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-MY", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }
 function fmtPhone(p: string): string {
   return /^60\d+$/.test(p) ? "+" + p : p;
@@ -135,11 +130,11 @@ export default function InboxPanel() {
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">WhatsApp — ops-pulse digests &amp; staff replies</span>
+        <span className="text-xs text-text-3">WhatsApp conversations with staff</span>
         <select
           value={outletFilter}
           onChange={(e) => setOutletFilter(e.target.value)}
-          className="ml-auto h-7 rounded-md border bg-background px-2 text-xs text-foreground"
+          className="ml-auto h-7 rounded-md border bg-bg px-2 text-xs text-text"
           title="Filter by outlet"
         >
           <option value="all">All outlets</option>
@@ -155,7 +150,7 @@ export default function InboxPanel() {
             mutateList();
             if (selected) mutateThread();
           }}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          className="flex items-center gap-1 text-xs text-text-3 hover:text-text"
         >
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </button>
@@ -165,13 +160,13 @@ export default function InboxPanel() {
         {/* Thread list */}
         <Card className="h-[calc(100vh-15rem)] overflow-y-auto">
           {isLoading ? (
-            <div className="p-6 text-center text-muted-foreground">
+            <div className="p-6 text-center text-text-3">
               <Loader2 className="mx-auto h-5 w-5 animate-spin" />
             </div>
           ) : visibleThreads.length === 0 ? (
-            <div className="p-6 text-center text-sm text-muted-foreground">
+            <div className="p-6 text-center text-sm text-text-3">
               {outletFilter === "all"
-                ? "No conversations yet. Messages appear here as staff reply to ops-pulse digests, or message the WhatsApp number."
+                ? "No conversations yet. Messages appear here when staff message the WhatsApp number or reply to one."
                 : "No conversations for this outlet."}
             </div>
           ) : (
@@ -184,11 +179,11 @@ export default function InboxPanel() {
                       onClick={() => setSelected(t.staffPhone)}
                       className={
                         "w-full px-3 py-2.5 text-left transition " +
-                        (active ? "bg-brand-offwhite" : "hover:bg-gray-50")
+                        (active ? "bg-brand-offwhite" : "hover:bg-sunken")
                       }
                     >
                       <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium text-foreground">
+                        <span className="truncate text-sm font-medium text-text">
                           {t.name || fmtPhone(t.staffPhone)}
                         </span>
                         {t.role && (
@@ -197,24 +192,19 @@ export default function InboxPanel() {
                           </Badge>
                         )}
                         {t.outletName && (
-                          <span className="truncate text-[10px] text-muted-foreground">· {t.outletName}</span>
+                          <span className="truncate text-[10px] text-text-3">· {t.outletName}</span>
                         )}
-                        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                        <span className="ml-auto shrink-0 text-[10px] text-text-3">
                           {fmtTime(t.lastAt)}
                         </span>
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      <div className="mt-0.5 truncate text-xs text-text-3">
                         {t.lastDirection === "OUT" ? "You: " : ""}
                         {t.lastBody}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         {t.awaitingReply && (
-                          <Badge className="bg-blue-100 text-[10px] text-blue-700">New reply</Badge>
-                        )}
-                        {t.openAlerts > 0 && (
-                          <Badge className="bg-amber-100 text-[10px] text-amber-700">
-                            {t.openAlerts} open alert{t.openAlerts === 1 ? "" : "s"}
-                          </Badge>
+                          <Badge className="bg-info-soft text-[10px] text-info-text">New reply</Badge>
                         )}
                         {!t.windowOpen && (
                           <Badge variant="secondary" className="text-[10px]">
@@ -233,15 +223,15 @@ export default function InboxPanel() {
         {/* Thread detail */}
         <Card className="flex h-[calc(100vh-15rem)] flex-col">
           {!selected ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            <div className="flex flex-1 items-center justify-center text-sm text-text-3">
               Select a conversation
             </div>
           ) : detailLoading && !detail ? (
             <div className="flex flex-1 items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <Loader2 className="h-5 w-5 animate-spin text-text-3" />
             </div>
           ) : !detail ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            <div className="flex flex-1 items-center justify-center text-sm text-text-3">
               No messages
             </div>
           ) : (
@@ -249,21 +239,15 @@ export default function InboxPanel() {
               {/* header */}
               <div className="flex items-center gap-2 border-b px-4 py-2.5">
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-foreground">
+                  <div className="truncate text-sm font-medium text-text">
                     {detail.name || fmtPhone(detail.staffPhone)}
                   </div>
-                  <div className="text-[11px] text-muted-foreground">
+                  <div className="text-[11px] text-text-3">
                     {fmtPhone(detail.staffPhone)}
                     {detail.role ? ` · ${detail.role}` : ""}
                     {detail.outletName ? ` · ${detail.outletName}` : ""}
                   </div>
                 </div>
-                {detail.openAlerts.length > 0 && (
-                  <Badge className="ml-auto flex items-center gap-1 bg-amber-100 text-[10px] text-amber-700">
-                    <ShieldAlert className="h-3 w-3" />
-                    {detail.openAlerts.length} open alert{detail.openAlerts.length === 1 ? "" : "s"}
-                  </Badge>
-                )}
               </div>
 
               {/* messages */}
@@ -275,14 +259,14 @@ export default function InboxPanel() {
                       <div
                         className={
                           "max-w-[78%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm " +
-                          (out ? "bg-terracotta text-white" : "border bg-white text-foreground")
+                          (out ? "bg-ink text-on-ink" : "border bg-surface text-text")
                         }
                       >
                         {m.body}
                         <div
                           className={
                             "mt-1 flex items-center gap-1 text-[10px] " +
-                            (out ? "text-white/70" : "text-muted-foreground")
+                            (out ? "text-white/70" : "text-text-3")
                           }
                         >
                           <span>{fmtTime(m.sentAt)}</span>
@@ -291,7 +275,7 @@ export default function InboxPanel() {
                           {m.status === "failed" && <AlertTriangle className="h-3 w-3" />}
                         </div>
                         {m.error && (
-                          <div className={out ? "mt-0.5 text-[10px] text-white/80" : "mt-0.5 text-[10px] text-red-600"}>
+                          <div className={out ? "mt-0.5 text-[10px] text-white/80" : "mt-0.5 text-[10px] text-danger-text"}>
                             {m.error}
                           </div>
                         )}
@@ -320,13 +304,13 @@ export default function InboxPanel() {
                     <Button
                       onClick={send}
                       disabled={sending || !text.trim()}
-                      className="bg-terracotta hover:bg-terracotta-dark"
+                      className="bg-ink hover:bg-ink-hover"
                     >
                       {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     </Button>
                   </div>
                 ) : (
-                  <div className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <div className="flex items-start gap-2 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn-text">
                     <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>
                       Outside the 24-hour reply window — WhatsApp only allows free-form replies within
@@ -335,7 +319,7 @@ export default function InboxPanel() {
                     </span>
                   </div>
                 )}
-                {sendError && <div className="mt-1 text-xs text-red-600">{sendError}</div>}
+                {sendError && <div className="mt-1 text-xs text-danger-text">{sendError}</div>}
               </div>
             </>
           )}

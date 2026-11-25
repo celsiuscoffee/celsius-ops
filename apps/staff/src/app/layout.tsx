@@ -23,13 +23,26 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#A2492C",
+  // Celsius UI --bg in each theme (the status bar sits on the page)
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F5F3F0" },
+    { media: "(prefers-color-scheme: dark)", color: "#120B08" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full">
-      <body className="h-full bg-brand-offwhite font-sans antialiased">
+    <html lang="en" className="h-full" suppressHydrationWarning>
+      <head>
+        {/* Light and dark follow the phone (Celsius UI): set `.dark` before
+            the first paint and keep it in step when the phone switches. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var m=matchMedia("(prefers-color-scheme: dark)");var a=function(){document.documentElement.classList.toggle("dark",m.matches)};a();m.addEventListener("change",a)}catch(e){}})()`,
+          }}
+        />
+      </head>
+      <body className="h-full bg-bg font-sans text-text antialiased">
         <ServiceWorkerRegister />
         {children}
         <Toaster />
