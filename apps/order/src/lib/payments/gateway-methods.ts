@@ -1,4 +1,4 @@
-export type GatewayProvider = "stripe" | "revenue_monster" | "ipay88" | "ntt_data";
+export type GatewayProvider = "stripe" | "revenue_monster" | "ipay88";
 
 export type GatewayMethod = {
   method_id: string;
@@ -49,31 +49,19 @@ export function methodSets(rows: GatewayMethod[] | null | undefined): {
   stripe: Set<string>;
   rm: Set<string>;
   ipay88: Set<string>;
-  ntt_data: Set<string>;
 } {
-  const sets = {
-    stripe: new Set<string>(),
-    rm: new Set<string>(),
-    ipay88: new Set<string>(),
-    ntt_data: new Set<string>(),
-  };
+  const sets = { stripe: new Set<string>(), rm: new Set<string>(), ipay88: new Set<string>() };
   for (const m of rows && rows.length > 0 ? rows : DEFAULT_GATEWAY_METHODS) {
     if (!m.enabled) continue;
     if (m.provider === "stripe") sets.stripe.add(m.method_id);
     else if (m.provider === "ipay88") sets.ipay88.add(m.method_id);
-    else if (m.provider === "ntt_data") sets.ntt_data.add(m.method_id);
     else sets.rm.add(m.method_id);
   }
   return sets;
 }
 
 /** Default sets for server-side routing in `initiate`. */
-export function defaultMethodSets(): {
-  stripe: Set<string>;
-  rm: Set<string>;
-  ipay88: Set<string>;
-  ntt_data: Set<string>;
-} {
+export function defaultMethodSets(): { stripe: Set<string>; rm: Set<string>; ipay88: Set<string> } {
   return methodSets(null);
 }
 
