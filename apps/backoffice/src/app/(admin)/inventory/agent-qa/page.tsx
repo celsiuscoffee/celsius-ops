@@ -124,7 +124,7 @@ export default function AgentQaPage() {
     <div className="mx-auto max-w-5xl px-4 py-6">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-xl font-semibold">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
             <ShieldCheck size={20} /> Agent QA
           </h1>
           <p className="mt-0.5 text-[13px] text-muted-foreground">

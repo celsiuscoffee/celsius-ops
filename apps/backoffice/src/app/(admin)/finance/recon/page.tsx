@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useFetch } from "@/lib/use-fetch";
+import { KeyNumber } from "@/components/ui/key-number";
 import { OUTFLOW_CATEGORIES, INFLOW_CATEGORIES, categoryLabel } from "@/lib/finance/cash-categories";
-import { Loader2, CheckCircle2, AlertTriangle, HelpCircle, Copy, ArrowDownCircle, Paperclip, History } from "lucide-react";
+import { Loader2, CheckCircle2, Paperclip, History } from "lucide-react";
 
 type ApMatch = {
   invoiceId: string; invoiceNumber: string | null; payee: string; amount: number; issueDate: string;
@@ -75,51 +76,62 @@ export default function ReconPage() {
   }
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Reconciliation</h2>
-          <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
-            Cash out AND cash in: payments matched to invoices, receipts matched to their source. The loop auto-applies high-confidence matches; the rest is your queue — every manual pick books straight to the chart of accounts.
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Bank inbox</h1>
+          <p className="mt-0.5 text-sm text-text-2">
+            Every bank line matched to an invoice or a source. Sure matches clear on their own; the rest waits for you here.
           </p>
         </div>
-        <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
+        <div className="flex rounded-lg border border-line bg-surface p-0.5">
           {[30, 90, 180].map((d) => (
             <button key={d} onClick={() => setDays(d)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${days === d ? "bg-terracotta text-white" : "text-gray-600 hover:bg-gray-50"}`}>
-              {d}d
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${days === d ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"}`}>
+              {d} days
             </button>
           ))}
         </div>
       </div>
 
       {isLoading || !data ? (
-        <div className="mt-6 flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
+        <div className="mt-6 flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-text-3" /></div>
       ) : (
         <>
-          {/* Summary tiles — click to jump to that queue */}
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-6 gap-2 sm:gap-3">
-            <Tile icon={<ArrowDownCircle className="h-4 w-4 text-gray-500" />} label="Unmatched out" value={data.summary.unmatchedOutflows} sub={fmtRM0(data.summary.unmatchedOutflowValue)} tone="gray" onClick={() => setTab("categorise")} active={tab === "categorise"} />
-            <Tile icon={<ArrowDownCircle className="h-4 w-4 rotate-180 text-gray-500" />} label="Unmatched in" value={data.summary.unmatchedInflows} sub={fmtRM0(data.summary.unmatchedInflowValue)} tone="gray" onClick={() => setTab("categorise")} active={tab === "categorise"} />
-            <Tile icon={<HelpCircle className="h-4 w-4 text-amber-600" />} label="Needs review" value={data.summary.review} tone="amber" onClick={() => setTab("review")} active={tab === "review"} />
-            <Tile icon={<Copy className="h-4 w-4 text-red-600" />} label="Double payments" value={data.summary.doublePayments} tone={data.summary.doublePayments ? "red" : "gray"} onClick={() => setTab("review")} active={tab === "review"} />
-            <Tile icon={<CheckCircle2 className="h-4 w-4 text-green-600" />} label="Auto-matched" value={data.summary.auto} tone="green" onClick={() => setTab("review")} active={tab === "review"} />
-            <Tile icon={<AlertTriangle className="h-4 w-4 text-gray-500" />} label="Open invoices" value={data.summary.unmatchedInvoices} tone="gray" onClick={() => setTab("invoices")} active={tab === "invoices"} />
+          {/* Key numbers — tap one to open that queue */}
+          <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <button type="button" className="flex text-left [&>*]:flex-1" onClick={() => setTab("categorise")}>
+              <KeyNumber label="To categorise" value={String(data.summary.unmatchedOutflows + data.summary.unmatchedInflows)}
+                tone={data.summary.unmatchedOutflows + data.summary.unmatchedInflows > 0 ? "warn" : undefined}
+                note={<>{fmtRM0(data.summary.unmatchedOutflowValue)} out · {fmtRM0(data.summary.unmatchedInflowValue)} in</>} />
+            </button>
+            <button type="button" className="flex text-left [&>*]:flex-1" onClick={() => setTab("review")}>
+              <KeyNumber label="Needs review" value={String(data.summary.review)} tone={data.summary.review > 0 ? "warn" : undefined}
+                note={<><b className="font-semibold text-text-2">{data.summary.auto}</b> cleared on their own</>} />
+            </button>
+            <button type="button" className="flex text-left [&>*]:flex-1" onClick={() => setTab("review")}>
+              <KeyNumber label="Possible double payments" value={String(data.summary.doublePayments)} tone={data.summary.doublePayments > 0 ? "warn" : undefined}
+                note={data.summary.doublePayments > 0 ? "invoice already paid once" : "none found"} />
+            </button>
+            <button type="button" className="flex text-left [&>*]:flex-1" onClick={() => setTab("invoices")}>
+              <KeyNumber label="Open invoices" value={String(data.summary.unmatchedInvoices)}
+                note="no bank payment found yet" />
+            </button>
           </div>
 
           {/* Queue switcher — one focused table at a time */}
-          <nav className="mt-4 flex flex-wrap gap-1 border-b border-gray-200">
+          <nav className="mt-4 flex flex-wrap gap-1 border-b border-line">
             {([
               ["categorise", "To categorise", data.summary.unmatchedOutflows + data.summary.unmatchedInflows],
               ["review", "To review", data.summary.review + data.summary.doublePayments + data.summary.split],
               ["matched", "Matched", null],
               ["invoices", "Open invoices", data.summary.unmatchedInvoices],
-              ["cashin", "Cash-in", null],
+              ["cashin", "Cash in", null],
               ["bankrecon", "Bank recon", null],
             ] as [ReconTab, string, number | null][]).map(([id, label, count]) => (
               <button key={id} onClick={() => setTab(id)}
-                className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors ${tab === id ? "border-terracotta font-medium text-gray-900" : "border-transparent text-gray-500 hover:text-gray-800"}`}>
-                {label}{count != null && count > 0 ? <span className="ml-1.5 rounded-full bg-gray-100 px-1.5 text-[10px] text-gray-500">{count}</span> : null}
+                className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors ${tab === id ? "border-ink font-medium text-text" : "border-transparent text-text-2 hover:text-text"}`}>
+                {label}{count != null && count > 0 ? <span className="ml-1.5 rounded-full bg-sunken px-1.5 text-[10px] text-text-2">{count}</span> : null}
               </button>
             ))}
           </nav>
@@ -128,12 +140,12 @@ export default function ReconPage() {
             {tab === "categorise" && (
               <div className="space-y-4">
                 <QueueCard title="Unmatched outflows — cash out" desc="Bank payments with no matching invoice yet. Book a category, match to an invoice, or attach a receipt.">
-                  <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-2">
+                  <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2">
                     <button onClick={rerunRules} disabled={reclassifying}
-                      className="rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                      className="rounded-md border border-line bg-surface px-2.5 py-1 text-xs font-medium text-text-2 hover:bg-sunken disabled:opacity-50">
                       {reclassifying ? "Re-running rules…" : "Re-run classifier rules"}
                     </button>
-                    <span className="text-[11px] text-gray-400">{reclassNote ?? "Applies current rules first — known payees clear automatically."}</span>
+                    <span className="text-[11px] text-text-3">{reclassNote ?? "Applies current rules first — known payees clear automatically."}</span>
                   </div>
                   <UnmatchedTable rows={data.unmatchedOutflows} direction="DR" categories={OUTFLOW_CATEGORIES} accountNames={accountNames} onDone={() => mutate()} />
                 </QueueCard>
@@ -146,7 +158,7 @@ export default function ReconPage() {
             {tab === "review" && (
               <div className="space-y-4">
                 {data.doublePayments.length > 0 && (
-                  <QueueCard title="⚠ Possible double payments" desc="Invoice already settled but another bank payment matches it.">
+                  <QueueCard title="Possible double payments" desc="Invoice already settled but another bank payment matches it.">
                     <MatchTable rows={data.doublePayments} />
                   </QueueCard>
                 )}
@@ -179,28 +191,28 @@ export default function ReconPage() {
             {tab === "cashin" && (
               <QueueCard title={`Cash-in — sales vs settlements (${data.cashIn.from} → ${data.cashIn.to})`} desc="What the POS rang up vs what landed in the bank. The gap is fees + platform commission + cash-not-banked + settlement timing.">
                 <div className="grid grid-cols-3 gap-3 px-4 py-3">
-                  <div><p className="text-[11px] text-gray-500">Sales rung up</p><p className="font-mono text-sm font-semibold text-gray-900">{fmtRM(data.cashIn.salesGross)}</p></div>
-                  <div><p className="text-[11px] text-gray-500">Settled to bank</p><p className="font-mono text-sm font-semibold text-gray-900">{fmtRM(data.cashIn.settlementsTotal)}</p></div>
-                  <div><p className="text-[11px] text-gray-500">Gap</p><p className={`font-mono text-sm font-semibold ${Math.abs(data.cashIn.gapPct ?? 0) > 12 ? "text-red-600" : "text-amber-600"}`}>{fmtRM(data.cashIn.gap)}{data.cashIn.gapPct != null && <span className="text-[11px] font-normal text-gray-400"> ({data.cashIn.gapPct}%)</span>}</p></div>
+                  <div><p className="text-[11px] text-text-2">Sales rung up</p><p className="font-mono text-sm font-semibold text-text">{fmtRM(data.cashIn.salesGross)}</p></div>
+                  <div><p className="text-[11px] text-text-2">Settled to bank</p><p className="font-mono text-sm font-semibold text-text">{fmtRM(data.cashIn.settlementsTotal)}</p></div>
+                  <div><p className="text-[11px] text-text-2">Gap</p><p className={`font-mono text-sm font-semibold ${Math.abs(data.cashIn.gapPct ?? 0) > 12 ? "text-danger-text" : "text-warn-text"}`}>{fmtRM(data.cashIn.gap)}{data.cashIn.gapPct != null && <span className="text-[11px] font-normal text-text-3"> ({data.cashIn.gapPct}%)</span>}</p></div>
                 </div>
-                <div className="overflow-x-auto border-t border-gray-100">
+                <div className="overflow-x-auto border-t border-line">
                   <table className="w-full min-w-[480px] text-sm">
-                    <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+                    <thead><tr className="border-b bg-sunken/50 text-left text-text-2">
                       <th className="px-3 py-2 font-medium">Channel</th><th className="px-3 py-2 text-right font-medium">Settled</th><th className="px-3 py-2 text-right font-medium">Txns</th>
                     </tr></thead>
                     <tbody className="divide-y">
                       {data.cashIn.settlementsByChannel.map((c) => (
-                        <tr key={c.channel} className="hover:bg-gray-50">
-                          <td className="px-3 py-1.5 text-xs text-gray-700">{c.channel}</td>
-                          <td className="px-3 py-1.5 text-right font-mono text-xs text-green-700">+{fmtRM(c.amount)}</td>
-                          <td className="px-3 py-1.5 text-right text-[11px] text-gray-400">{c.n}</td>
+                        <tr key={c.channel} className="hover:bg-sunken">
+                          <td className="px-3 py-1.5 text-xs text-text-2">{c.channel}</td>
+                          <td className="px-3 py-1.5 text-right font-mono text-xs text-ok-text">+{fmtRM(c.amount)}</td>
+                          <td className="px-3 py-1.5 text-right text-[11px] text-text-3">{c.n}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
                 {data.cashIn.grab.deductionPct != null && (
-                  <p className={`border-t border-gray-100 px-4 py-2 text-[11px] ${data.cashIn.grab.deductionPct > 45 ? "text-red-600" : "text-gray-500"}`}>
+                  <p className={`border-t border-line px-4 py-2 text-[11px] ${data.cashIn.grab.deductionPct > 45 ? "text-danger-text" : "text-text-2"}`}>
                     Grab: gross {fmtRM(data.cashIn.grab.gross)} vs settled {fmtRM(data.cashIn.grab.settled)} → <strong>{data.cashIn.grab.deductionPct}% deducted</strong> at source (commission + promos + timing){data.cashIn.grab.deductionPct > 45 ? " — high, review" : ""}.
                   </p>
                 )}
@@ -260,17 +272,17 @@ function BankReconPanel() {
     finally { setBusy(null); }
   }
 
-  if (isLoading || !data) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>;
-  if (data.accounts.length === 0) return <p className="px-4 py-4 text-xs text-gray-400">No bank statements uploaded yet.</p>;
+  if (isLoading || !data) return <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-text-3" /></div>;
+  if (data.accounts.length === 0) return <p className="px-4 py-4 text-xs text-text-3">No bank statements uploaded yet.</p>;
 
   return (
     <div className="space-y-4">
-      {note && <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] text-rose-700">{note}</p>}
+      {note && <p className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-[11px] text-danger-text">{note}</p>}
       {data.accounts.map(({ account, months }) => (
         <QueueCard key={account} title={`Bank recon: ${account}`} desc="Opening balance plus the month's ledger lines must equal the statement close. Sign off each month once the delta is zero.">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px] text-sm">
-              <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+              <thead><tr className="border-b bg-sunken/50 text-left text-text-2">
                 <th className="px-3 py-2 font-medium">Month</th>
                 <th className="px-3 py-2 text-right font-medium">Opening</th>
                 <th className="px-3 py-2 text-right font-medium">Lines total</th>
@@ -284,53 +296,53 @@ function BankReconPanel() {
                   const key = account + m.month;
                   if (!m.hasStatement) {
                     return (
-                      <tr key={key} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{fmtMonth(m.month)}</td>
-                        <td colSpan={6} className="px-3 py-2 text-[11px] text-gray-400">no statement</td>
+                      <tr key={key} className="hover:bg-sunken">
+                        <td className="px-3 py-2 text-xs text-text-2 whitespace-nowrap">{fmtMonth(m.month)}</td>
+                        <td colSpan={6} className="px-3 py-2 text-[11px] text-text-3">no statement</td>
                       </tr>
                     );
                   }
                   const reconciled = m.delta != null && Math.abs(m.delta) <= 0.01;
                   return (
-                    <tr key={key} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-xs text-gray-700 whitespace-nowrap">{fmtMonth(m.month)}</td>
-                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">{m.opening == null ? <span className="text-gray-400">no prior statement</span> : fmtRM(m.opening)}</td>
-                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-600">
+                    <tr key={key} className="hover:bg-sunken">
+                      <td className="px-3 py-2 text-xs text-text-2 whitespace-nowrap">{fmtMonth(m.month)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{m.opening == null ? <span className="text-text-3">no prior statement</span> : fmtRM(m.opening)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-text-2">
                         {fmtRM(m.linesTotal)}
-                        {m.unclassified > 0 && <div className="text-[10px] font-sans text-amber-600">{m.unclassified} unclassified</div>}
+                        {m.unclassified > 0 && <div className="text-[10px] font-sans text-warn-text">{m.unclassified} unclassified</div>}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{m.computedClose == null ? "" : fmtRM(m.computedClose)}</td>
-                      <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{m.statedClose == null ? "" : fmtRM(m.statedClose)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{m.computedClose == null ? "" : fmtRM(m.computedClose)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{m.statedClose == null ? "" : fmtRM(m.statedClose)}</td>
                       <td className="px-3 py-2 text-right">
                         {m.delta == null ? (
-                          <span className="text-[11px] text-gray-400">n/a</span>
+                          <span className="text-[11px] text-text-3">n/a</span>
                         ) : reconciled ? (
-                          <CheckCircle2 className="ml-auto h-4 w-4 text-green-600" />
+                          <CheckCircle2 className="ml-auto h-4 w-4 text-ok-text" />
                         ) : (
-                          <span className="font-mono text-xs text-rose-600" title="lines missing or duplicated, or statement balance wrong">
+                          <span className="font-mono text-xs text-danger-text" title="lines missing or duplicated, or statement balance wrong">
                             {fmtRM(m.delta)}
-                            <div className="text-[10px] font-sans text-rose-400">lines missing or duplicated, or statement balance wrong</div>
+                            <div className="text-[10px] font-sans text-danger-text">lines missing or duplicated, or statement balance wrong</div>
                           </span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2">
                         {m.signedOffBy ? (
                           <span className="inline-flex items-center gap-1.5">
-                            <span className="rounded bg-green-50 px-1.5 py-0.5 text-[11px] font-medium text-green-700">
+                            <span className="rounded bg-ok-soft px-1.5 py-0.5 text-[11px] font-medium text-ok-text">
                               Reconciled by {m.signedOffBy}{m.signedOffAt ? ` on ${fmtDay(m.signedOffAt)}` : ""}
                             </span>
                             <button onClick={() => signOff(account, m.month, true)} disabled={busy === key}
-                              className="text-[10px] text-gray-400 underline hover:text-gray-600 disabled:opacity-50">
+                              className="text-[10px] text-text-3 underline hover:text-text-2 disabled:opacity-50">
                               undo
                             </button>
                           </span>
                         ) : reconciled ? (
                           <button onClick={() => signOff(account, m.month, false)} disabled={busy === key}
-                            className="rounded border border-green-600/30 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+                            className="rounded border border-ok bg-ok-soft px-2 py-0.5 text-[11px] font-medium text-ok-text hover:bg-ok-soft disabled:opacity-50">
                             {busy === key ? "Signing off" : "Sign off"}
                           </button>
                         ) : (
-                          <span className="text-[11px] text-gray-400">fix delta first</span>
+                          <span className="text-[11px] text-text-3">fix delta first</span>
                         )}
                       </td>
                     </tr>
@@ -407,45 +419,45 @@ function UnmatchedTable({ rows, direction, categories, accountNames, onDone }: {
 
   return (
     <div className="overflow-x-auto">
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search description, date or amount…"
-          className="h-7 w-64 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700"
+          className="h-7 w-64 rounded border border-line bg-surface px-2 text-xs text-text-2"
         />
-        <span className="text-[11px] text-gray-400 tabular-nums">
+        <span className="text-[11px] text-text-3 tabular-nums">
           {t ? `${filtered.length} of ${rows.length} lines` : `${rows.length} lines`}
         </span>
         <span className="ml-auto"><RowsPerPage value={pageSize} onChange={setPageSize} total={filtered.length} /></span>
       </div>
       {sel.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-terracotta/30 bg-terracotta/5 px-4 py-2">
-          <span className="text-xs font-medium text-gray-700">{sel.size} selected</span>
+        <div className="flex flex-wrap items-center gap-2 border-b border-ink/30 bg-brand-soft px-4 py-2">
+          <span className="text-xs font-medium text-text-2">{sel.size} selected</span>
           <select
             defaultValue=""
             disabled={busy}
             onChange={(e) => { bulkClassify(e.target.value); e.target.value = ""; }}
-            className="h-7 max-w-[260px] rounded border border-gray-200 bg-white px-1 text-xs text-gray-700 disabled:opacity-50"
+            className="h-7 max-w-[260px] rounded border border-line bg-surface px-1 text-xs text-text-2 disabled:opacity-50"
           >
             <option value="" disabled>Book all selected to…</option>
             {categories.map((c) => <option key={c} value={c}>{categoryLabel(c, accountNames)}</option>)}
           </select>
-          <button onClick={() => setSel(new Set())} disabled={busy} className="text-[11px] text-gray-500 underline">clear</button>
-          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+          <button onClick={() => setSel(new Set())} disabled={busy} className="text-[11px] text-text-2 underline">clear</button>
+          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-text-3" />}
         </div>
       )}
-      {note && <p className="border-b border-gray-100 px-4 py-1.5 text-[11px] text-gray-500">{note}</p>}
+      {note && <p className="border-b border-line px-4 py-1.5 text-[11px] text-text-2">{note}</p>}
       <table className="w-full min-w-[800px] text-sm">
-        <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
-          <th className="w-8 px-3 py-2"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="h-3.5 w-3.5 accent-terracotta" /></th>
+        <thead><tr className="border-b bg-sunken/50 text-left text-text-2">
+          <th className="w-8 px-3 py-2"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="h-3.5 w-3.5 accent-ink" /></th>
           <th className="px-3 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Description</th>
           <th className="px-3 py-2 font-medium">Category</th><th className="px-3 py-2 text-right font-medium">Amount</th>
           <th className="px-3 py-2 font-medium">Reconcile</th>
         </tr></thead>
         <tbody className="divide-y">
           {visible.length === 0 ? (
-            <tr><td colSpan={6} className="px-4 py-4 text-xs text-gray-400">{t ? "No lines match the search." : "Nothing here."}</td></tr>
+            <tr><td colSpan={6} className="px-4 py-4 text-xs text-text-3">{t ? "No lines match the search." : "Nothing here."}</td></tr>
           ) : visible.map((o) => (
             <LineRow key={o.bankLineId} row={o} direction={direction} categories={categories} accountNames={accountNames}
               selected={sel.has(o.bankLineId)} onToggle={() => toggle(o.bankLineId)} onDone={onDone} />
@@ -453,7 +465,7 @@ function UnmatchedTable({ rows, direction, categories, accountNames, onDone }: {
         </tbody>
       </table>
       {filtered.length > pageSize && (
-        <p className="px-3 py-2 text-[11px] text-gray-400">
+        <p className="px-3 py-2 text-[11px] text-text-3">
           Showing {pageSize} of {filtered.length} by amount. Select-all still selects every match, including rows not shown.
         </p>
       )}
@@ -572,31 +584,31 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
 
   return (
     <>
-      <tr className={selected ? "bg-terracotta/5" : "hover:bg-gray-50"}>
+      <tr className={selected ? "bg-brand-soft" : "hover:bg-sunken"}>
         <td className="px-3 py-2 align-top">
-          <input type="checkbox" checked={selected} onChange={onToggle} className="h-3.5 w-3.5 accent-terracotta" />
+          <input type="checkbox" checked={selected} onChange={onToggle} className="h-3.5 w-3.5 accent-ink" />
         </td>
-        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap align-top">
+        <td className="px-3 py-2 text-xs text-text-2 whitespace-nowrap align-top">
           {row.date}
           {row.expenseMonth && (
-            <div className="text-[10px] text-amber-600" title="Expense month override: this line sits in this month on the P&L">
+            <div className="text-[10px] text-warn-text" title="Expense month override: this line sits in this month on the P&L">
               → {row.expenseMonth}
             </div>
           )}
         </td>
-        <td className="px-3 py-2 text-xs text-gray-700 align-top">
+        <td className="px-3 py-2 text-xs text-text-2 align-top">
           {row.desc}
-          {note && <div className="mt-0.5 text-[10px] text-red-600">{note}</div>}
+          {note && <div className="mt-0.5 text-[10px] text-danger-text">{note}</div>}
         </td>
-        <td className="px-3 py-2 text-[11px] text-gray-400 align-top">{row.category ?? "Unclassified"}</td>
-        <td className={`px-3 py-2 text-right font-mono text-xs align-top ${direction === "DR" ? "text-red-700" : "text-green-700"}`}>{direction === "DR" ? "−" : "+"}{fmtRM(row.amount)}</td>
+        <td className="px-3 py-2 text-[11px] text-text-3 align-top">{row.category ?? "Unclassified"}</td>
+        <td className={`px-3 py-2 text-right font-mono text-xs align-top ${direction === "DR" ? "text-danger-text" : "text-ok-text"}`}>{direction === "DR" ? "−" : "+"}{fmtRM(row.amount)}</td>
         <td className="px-3 py-2 align-top">
           <div className="flex items-center gap-1.5">
             <select
               defaultValue=""
               disabled={busy}
               onChange={(e) => setCategory(e.target.value)}
-              className="h-6 max-w-[220px] rounded border border-gray-200 bg-white px-1 text-[11px] text-gray-700 disabled:opacity-50"
+              className="h-6 max-w-[220px] rounded border border-line bg-surface px-1 text-[11px] text-text-2 disabled:opacity-50"
               title="Book this line to a category — the label shows the COA account it posts to"
             >
               <option value="" disabled>Set category…</option>
@@ -606,7 +618,7 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
               <button
                 onClick={openMatch}
                 disabled={busy}
-                className={`h-6 rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${open ? "border-terracotta text-terracotta" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                className={`h-6 rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${open ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}
               >
                 Match…
               </button>
@@ -615,7 +627,7 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
               onClick={toggleAttach}
               disabled={busy}
               title="Attach the invoice or receipt behind this line (needed for bank fees & other non-supplier expenses)"
-              className={`flex h-6 items-center gap-0.5 rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${attachOpen ? "border-terracotta text-terracotta" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+              className={`flex h-6 items-center gap-0.5 rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${attachOpen ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}
             >
               <Paperclip className="h-3 w-3" />{attachments && attachments.length > 0 ? attachments.length : ""}
             </button>
@@ -623,7 +635,7 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
               onClick={toggleHistory}
               disabled={busy}
               title="Who changed this line's category or match, and when"
-              className={`flex h-6 items-center rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${historyOpen ? "border-terracotta text-terracotta" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+              className={`flex h-6 items-center rounded border px-1.5 text-[11px] font-medium disabled:opacity-50 ${historyOpen ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}
             >
               <History className="h-3 w-3" />
             </button>
@@ -637,27 +649,27 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
         </td>
       </tr>
       {open && (
-        <tr className="bg-gray-50/60">
+        <tr className="bg-sunken/60">
           <td colSpan={6} className="px-3 py-2">
             {!cands ? (
-              <span className="text-[11px] text-gray-400">Looking for candidate invoices…</span>
+              <span className="text-[11px] text-text-3">Looking for candidate invoices…</span>
             ) : cands.length === 0 ? (
-              <span className="text-[11px] text-gray-400">No candidate invoices near this amount/date. Set a category instead.</span>
+              <span className="text-[11px] text-text-3">No candidate invoices near this amount/date. Set a category instead.</span>
             ) : (
               <div className="flex flex-col gap-1">
                 {cands.map((c) => (
-                  <div key={c.invoiceId} className="flex flex-wrap items-center gap-2 rounded border border-gray-200 bg-white px-2 py-1">
-                    <span className="text-xs text-gray-700">{c.payee}{c.invoiceNumber ? <span className="text-gray-400"> · {c.invoiceNumber}</span> : ""}</span>
-                    <span className="font-mono text-[11px] text-gray-600">{fmtRM(c.amount)}</span>
-                    <span className="text-[10px] text-gray-400">{c.issueDate}</span>
-                    {c.amountExact && <span className="rounded bg-green-50 px-1 text-[10px] text-green-700">amount exact</span>}
-                    {c.refHit && <span className="rounded bg-green-50 px-1 text-[10px] text-green-700">invoice no in line</span>}
-                    {c.nameHit && <span className="rounded bg-green-50 px-1 text-[10px] text-green-700">name hit</span>}
-                    {c.linkOnly && <span className="rounded bg-amber-50 px-1 text-[10px] text-amber-700">already paid — link only</span>}
+                  <div key={c.invoiceId} className="flex flex-wrap items-center gap-2 rounded border border-line bg-surface px-2 py-1">
+                    <span className="text-xs text-text-2">{c.payee}{c.invoiceNumber ? <span className="text-text-3"> · {c.invoiceNumber}</span> : ""}</span>
+                    <span className="font-mono text-[11px] text-text-2">{fmtRM(c.amount)}</span>
+                    <span className="text-[10px] text-text-3">{c.issueDate}</span>
+                    {c.amountExact && <span className="rounded bg-ok-soft px-1 text-[10px] text-ok-text">amount exact</span>}
+                    {c.refHit && <span className="rounded bg-ok-soft px-1 text-[10px] text-ok-text">invoice no in line</span>}
+                    {c.nameHit && <span className="rounded bg-ok-soft px-1 text-[10px] text-ok-text">name hit</span>}
+                    {c.linkOnly && <span className="rounded bg-warn-soft px-1 text-[10px] text-warn-text">already paid — link only</span>}
                     <button
                       onClick={() => applyMatch(c.invoiceId)}
                       disabled={busy}
-                      className="ml-auto h-6 rounded bg-terracotta px-2 text-[11px] font-medium text-white disabled:opacity-50"
+                      className="ml-auto h-6 rounded bg-ink px-2 text-[11px] font-medium text-on-ink disabled:opacity-50"
                     >
                       Match
                     </button>
@@ -669,18 +681,18 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
         </tr>
       )}
       {attachOpen && (
-        <tr className="bg-gray-50/60">
+        <tr className="bg-sunken/60">
           <td colSpan={6} className="px-3 py-2">
             <div className="flex flex-col gap-1.5">
               {attachments === null ? (
-                <span className="text-[11px] text-gray-400">Loading attachments…</span>
+                <span className="text-[11px] text-text-3">Loading attachments…</span>
               ) : attachments.length === 0 ? (
-                <span className="text-[11px] text-gray-400">No invoice or receipt attached yet.</span>
+                <span className="text-[11px] text-text-3">No invoice or receipt attached yet.</span>
               ) : attachments.map((a) => (
                 <div key={a.id} className="flex items-center gap-2 text-xs">
-                  <Paperclip className="h-3 w-3 text-gray-400" />
-                  {a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="text-terracotta underline">{a.filename}</a> : <span className="text-gray-700">{a.filename}</span>}
-                  <button onClick={() => removeAttachment(a.id)} className="text-[10px] text-gray-400 underline hover:text-gray-600">remove</button>
+                  <Paperclip className="h-3 w-3 text-text-3" />
+                  {a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="text-brand-text underline">{a.filename}</a> : <span className="text-text-2">{a.filename}</span>}
+                  <button onClick={() => removeAttachment(a.id)} className="text-[10px] text-text-3 underline hover:text-text-2">remove</button>
                 </div>
               ))}
               <label
@@ -696,7 +708,7 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
                   if (f) upload(f);
                 }}
                 className={`mt-0.5 inline-flex w-fit cursor-pointer items-center gap-1 rounded border border-dashed px-2 py-1 text-[11px] transition-colors ${
-                  attachDragging ? "border-terracotta bg-terracotta/5 text-terracotta" : "border-gray-300 text-gray-600 hover:bg-white"
+                  attachDragging ? "border-text bg-raised font-semibold text-text" : "border-line-2 text-text-2 hover:bg-surface"
                 }`}
               >
                 {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Paperclip className="h-3 w-3" />}
@@ -709,17 +721,17 @@ function LineRow({ row, direction, categories, accountNames, selected, onToggle,
         </tr>
       )}
       {historyOpen && (
-        <tr className="bg-gray-50/60">
+        <tr className="bg-sunken/60">
           <td colSpan={6} className="px-3 py-2">
             {events === null ? (
-              <span className="text-[11px] text-gray-400">Loading history...</span>
+              <span className="text-[11px] text-text-3">Loading history...</span>
             ) : events.length === 0 ? (
-              <span className="text-[11px] text-gray-400">No manual changes recorded for this line yet.</span>
+              <span className="text-[11px] text-text-3">No manual changes recorded for this line yet.</span>
             ) : (
               <ul className="flex flex-col gap-0.5">
                 {events.map((e) => (
-                  <li key={e.id} className="flex items-center gap-1.5 text-[11px] text-gray-600">
-                    <History className="h-3 w-3 shrink-0 text-gray-400" />
+                  <li key={e.id} className="flex items-center gap-1.5 text-[11px] text-text-2">
+                    <History className="h-3 w-3 shrink-0 text-text-3" />
                     <span>{fmtEventDay(e.created_at)}, {eventLabel(e)} by {e.actor ?? "system"}</span>
                   </li>
                 ))}
@@ -758,27 +770,12 @@ function eventLabel(e: LineEvent): string {
   }
 }
 
-function Tile({ icon, label, value, sub, tone, onClick, active }: { icon: React.ReactNode; label: string; value: number; sub?: string; tone: "green" | "amber" | "red" | "gray"; onClick: () => void; active?: boolean }) {
-  const ring = tone === "green" ? "border-green-200" : tone === "amber" ? "border-amber-200" : tone === "red" ? "border-red-200" : "border-gray-200";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-lg border bg-white px-3 py-2.5 text-left transition-shadow cursor-pointer hover:shadow-md focus:outline-none focus:ring-2 focus:ring-terracotta/40 ${active ? "border-terracotta ring-1 ring-terracotta/30" : `${ring} hover:border-terracotta/40`}`}
-    >
-      <div className="flex items-center gap-1.5 text-xs text-gray-500">{icon}{label}</div>
-      <p className="mt-0.5 text-lg font-bold text-gray-900">{value}</p>
-      {sub && <p className="text-[10px] text-gray-400">{sub}</p>}
-    </button>
-  );
-}
-
 function QueueCard({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white">
-      <div className="border-b border-gray-100 px-4 py-2.5">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</p>
-        <p className="mt-0.5 text-[11px] text-gray-400">{desc}</p>
+    <div className="rounded-xl border border-line bg-surface">
+      <div className="border-b border-line px-4 py-2.5">
+        <p className="text-sm font-semibold text-text">{title}</p>
+        <p className="mt-0.5 text-[11px] text-text-3">{desc}</p>
       </div>
       {children}
     </div>
@@ -789,10 +786,10 @@ function QueueCard({ title, desc, children }: { title: string; desc: string; chi
 const PAGE_SIZES = [25, 50, 100] as const;
 function RowsPerPage({ value, onChange, total }: { value: number; onChange: (n: number) => void; total: number }) {
   return (
-    <span className="flex items-center gap-1 text-[11px] text-gray-400">
+    <span className="flex items-center gap-1 text-[11px] text-text-3">
       Rows
       <select value={value === Infinity ? "all" : value} onChange={(e) => onChange(e.target.value === "all" ? Infinity : Number(e.target.value))}
-        className="h-6 rounded border border-gray-200 bg-white px-1 text-[11px] text-gray-600">
+        className="h-6 rounded border border-line bg-surface px-1 text-[11px] text-text-2">
         {PAGE_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
         <option value="all">All</option>
       </select>
@@ -810,30 +807,30 @@ function OpenInvoicesTable({ rows }: { rows: { invoiceId: string; invoiceNumber:
   const visible = filtered.slice(0, pageSize);
   return (
     <div className="overflow-x-auto">
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search payee, invoice no, amount…" className="h-7 w-64 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700" />
-        <span className="text-[11px] text-gray-400 tabular-nums">{t ? `${filtered.length} of ${rows.length}` : `${rows.length} invoices`}</span>
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search payee, invoice no, amount…" className="h-7 w-64 rounded border border-line bg-surface px-2 text-xs text-text-2" />
+        <span className="text-[11px] text-text-3 tabular-nums">{t ? `${filtered.length} of ${rows.length}` : `${rows.length} invoices`}</span>
         <span className="ml-auto"><RowsPerPage value={pageSize} onChange={setPageSize} total={filtered.length} /></span>
       </div>
       <table className="w-full min-w-[560px] text-sm">
-        <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+        <thead><tr className="border-b bg-sunken/50 text-left text-text-2">
           <th className="px-3 py-2 font-medium">Payee</th><th className="px-3 py-2 font-medium">Invoice</th>
           <th className="px-3 py-2 font-medium">Issued</th><th className="px-3 py-2 text-right font-medium">Amount</th>
         </tr></thead>
         <tbody className="divide-y">
           {visible.length === 0 ? (
-            <tr><td colSpan={4} className="px-4 py-4 text-xs text-gray-400">{t ? "No invoices match the search." : "Nothing here."}</td></tr>
+            <tr><td colSpan={4} className="px-4 py-4 text-xs text-text-3">{t ? "No invoices match the search." : "Nothing here."}</td></tr>
           ) : visible.map((inv) => (
-            <tr key={inv.invoiceId} className="hover:bg-gray-50">
-              <td className="px-3 py-2 text-xs text-gray-700">{inv.payee}</td>
-              <td className="px-3 py-2 text-[11px] text-gray-400">{inv.invoiceNumber ?? "—"}</td>
-              <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{inv.issueDate}</td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{fmtRM(inv.amount)}</td>
+            <tr key={inv.invoiceId} className="hover:bg-sunken">
+              <td className="px-3 py-2 text-xs text-text-2">{inv.payee}</td>
+              <td className="px-3 py-2 text-[11px] text-text-3">{inv.invoiceNumber ?? "—"}</td>
+              <td className="px-3 py-2 text-xs text-text-2 whitespace-nowrap">{inv.issueDate}</td>
+              <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{fmtRM(inv.amount)}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      {filtered.length > pageSize && <p className="px-3 py-2 text-[11px] text-gray-400">Showing {pageSize} of {filtered.length}. Increase rows above to see more.</p>}
+      {filtered.length > pageSize && <p className="px-3 py-2 text-[11px] text-text-3">Showing {pageSize} of {filtered.length}. Increase rows above to see more.</p>}
     </div>
   );
 }
@@ -867,24 +864,24 @@ function ExpenseMonthControl({ bankLineId, txnMonth, override, onDone }: {
 
   return (
     <span className="flex items-center gap-1" title="Expense month: which month this payment's cost sits in on the P&L. Cash flow keeps the payment date.">
-      {override && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" title="Expense month overridden" />}
+      {override && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warn" title="Expense month overridden" />}
       <input
         type="month"
         key={override ?? "auto"}
         defaultValue={override ?? txnMonth}
         disabled={busy}
         onChange={(e) => { if (e.target.value && e.target.value !== (override ?? txnMonth)) save(e.target.value); }}
-        className="h-6 rounded border border-gray-200 bg-white px-1 text-[11px] text-gray-700 disabled:opacity-50"
+        className="h-6 rounded border border-line bg-surface px-1 text-[11px] text-text-2 disabled:opacity-50"
       />
       {override && (
         <button onClick={() => save(null)} disabled={busy}
           title="Clear the override (back to the automatic expense month)"
-          className="text-[11px] text-gray-400 hover:text-gray-600 disabled:opacity-50">
+          className="text-[11px] text-text-3 hover:text-text-2 disabled:opacity-50">
           ×
         </button>
       )}
-      {busy && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
-      {err && <span className="text-[10px] text-red-600">{err}</span>}
+      {busy && <Loader2 className="h-3 w-3 animate-spin text-text-3" />}
+      {err && <span className="text-[10px] text-danger-text">{err}</span>}
     </span>
   );
 }
@@ -960,33 +957,33 @@ function MatchTable({ rows, showReasons, actionable, onDone }: { rows: ApMatch[]
     onDone?.();
   }
 
-  if (rows.length === 0) return <p className="px-4 py-4 text-xs text-gray-400">Nothing here.</p>;
+  if (rows.length === 0) return <p className="px-4 py-4 text-xs text-text-3">Nothing here.</p>;
   return (
     <div className="overflow-x-auto">
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search payee, bank line, amount…" className="h-7 w-64 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700" />
-        <span className="text-[11px] text-gray-400 tabular-nums">{t ? `${filtered.length} of ${rows.length}` : `${rows.length} rows`}</span>
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2">
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search payee, bank line, amount…" className="h-7 w-64 rounded border border-line bg-surface px-2 text-xs text-text-2" />
+        <span className="text-[11px] text-text-3 tabular-nums">{t ? `${filtered.length} of ${rows.length}` : `${rows.length} rows`}</span>
         <span className="ml-auto"><RowsPerPage value={pageSize} onChange={setPageSize} total={filtered.length} /></span>
       </div>
       {actionable && sel.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-terracotta/30 bg-terracotta/5 px-4 py-2">
-          <span className="text-xs font-medium text-gray-700">{sel.size} selected</span>
+        <div className="flex flex-wrap items-center gap-2 border-b border-ink/30 bg-brand-soft px-4 py-2">
+          <span className="text-xs font-medium text-text-2">{sel.size} selected</span>
           <button onClick={() => bulk("confirm")} disabled={bulkBusy}
-            className="rounded border border-green-600/30 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+            className="rounded border border-ok bg-ok-soft px-2.5 py-1 text-xs font-medium text-ok-text hover:bg-ok-soft disabled:opacity-50">
             Confirm selected
           </button>
           <button onClick={() => bulk("reject")} disabled={bulkBusy}
-            className="rounded border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+            className="rounded border border-line bg-surface px-2.5 py-1 text-xs text-text-2 hover:bg-sunken disabled:opacity-50">
             Reject selected
           </button>
-          <button onClick={() => setSel(new Set())} disabled={bulkBusy} className="text-[11px] text-gray-500 underline">clear</button>
-          {bulkBusy && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+          <button onClick={() => setSel(new Set())} disabled={bulkBusy} className="text-[11px] text-text-2 underline">clear</button>
+          {bulkBusy && <Loader2 className="h-3.5 w-3.5 animate-spin text-text-3" />}
         </div>
       )}
-      {bulkNote && <p className="border-b border-gray-100 px-4 py-1.5 text-[11px] text-gray-500">{bulkNote}</p>}
+      {bulkNote && <p className="border-b border-line px-4 py-1.5 text-[11px] text-text-2">{bulkNote}</p>}
       <table className="w-full min-w-[720px] text-sm">
-        <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
-          {actionable && <th className="w-8 px-3 py-2"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="h-3.5 w-3.5 accent-terracotta" /></th>}
+        <thead><tr className="border-b bg-sunken/50 text-left text-text-2">
+          {actionable && <th className="w-8 px-3 py-2"><input type="checkbox" checked={allSelected} onChange={toggleAll} className="h-3.5 w-3.5 accent-ink" /></th>}
           <th className="px-3 py-2 font-medium">Invoice payee</th><th className="px-3 py-2 text-right font-medium">Amount</th>
           <th className="px-3 py-2 font-medium">Bank line</th><th className="px-3 py-2 font-medium">Category</th>
           <th className="px-3 py-2 text-right font-medium">Score</th>{showReasons && <th className="px-3 py-2 font-medium">Why</th>}
@@ -996,27 +993,27 @@ function MatchTable({ rows, showReasons, actionable, onDone }: { rows: ApMatch[]
           {visible.map((m) => {
             const key = matchKey(m);
             return (
-            <tr key={key} className={`hover:bg-gray-50 ${sel.has(key) ? "bg-terracotta/5" : ""}`}>
-              {actionable && <td className="px-3 py-2"><input type="checkbox" checked={sel.has(key)} onChange={() => toggle(key)} className="h-3.5 w-3.5 accent-terracotta" /></td>}
-              <td className="px-3 py-2 text-xs text-gray-700">{m.payee}{m.invoiceNumber ? <span className="text-gray-400"> · {m.invoiceNumber}</span> : ""}<div className="text-[10px] text-gray-400">{m.issueDate}</div></td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{fmtRM(m.amount)}</td>
-              <td className="px-3 py-2 text-xs text-gray-600">{m.bankDesc}<div className="text-[10px] text-gray-400">{m.bankDate}</div></td>
-              <td className="px-3 py-2 text-[11px] text-gray-400">{m.bankCategory ?? "—"}</td>
-              <td className="px-3 py-2 text-right font-mono text-xs"><span className={m.score >= 0.85 ? "text-green-700" : "text-amber-700"}>{m.score.toFixed(2)}</span></td>
-              {showReasons && <td className="px-3 py-2 text-[10px] text-gray-400">{m.reasons.join(", ")}</td>}
+            <tr key={key} className={`hover:bg-sunken ${sel.has(key) ? "bg-brand-soft" : ""}`}>
+              {actionable && <td className="px-3 py-2"><input type="checkbox" checked={sel.has(key)} onChange={() => toggle(key)} className="h-3.5 w-3.5 accent-ink" /></td>}
+              <td className="px-3 py-2 text-xs text-text-2">{m.payee}{m.invoiceNumber ? <span className="text-text-3"> · {m.invoiceNumber}</span> : ""}<div className="text-[10px] text-text-3">{m.issueDate}</div></td>
+              <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{fmtRM(m.amount)}</td>
+              <td className="px-3 py-2 text-xs text-text-2">{m.bankDesc}<div className="text-[10px] text-text-3">{m.bankDate}</div></td>
+              <td className="px-3 py-2 text-[11px] text-text-3">{m.bankCategory ?? "—"}</td>
+              <td className="px-3 py-2 text-right font-mono text-xs"><span className={m.score >= 0.85 ? "text-ok-text" : "text-warn-text"}>{m.score.toFixed(2)}</span></td>
+              {showReasons && <td className="px-3 py-2 text-[10px] text-text-3">{m.reasons.join(", ")}</td>}
               {actionable && (
                 <td className="whitespace-nowrap px-3 py-2">
-                  {notes[key] ? <span className="text-[10px] text-rose-600">{notes[key]}</span> : (
+                  {notes[key] ? <span className="text-[10px] text-danger-text">{notes[key]}</span> : (
                     <span className="flex items-center gap-1.5">
                       <button onClick={() => act(m, "confirm")} disabled={busy === key || bulkBusy}
-                        className="rounded border border-green-600/30 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+                        className="rounded border border-ok bg-ok-soft px-2 py-0.5 text-[11px] font-medium text-ok-text hover:bg-ok-soft disabled:opacity-50">
                         Confirm
                       </button>
                       <button onClick={() => act(m, "reject")} disabled={busy === key || bulkBusy}
-                        className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                        className="rounded border border-line bg-surface px-2 py-0.5 text-[11px] text-text-2 hover:bg-sunken disabled:opacity-50">
                         Reject
                       </button>
-                      {busy === key && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
+                      {busy === key && <Loader2 className="h-3 w-3 animate-spin text-text-3" />}
                     </span>
                   )}
                 </td>
@@ -1025,7 +1022,7 @@ function MatchTable({ rows, showReasons, actionable, onDone }: { rows: ApMatch[]
           );})}
         </tbody>
       </table>
-      {filtered.length > pageSize && <p className="px-3 py-2 text-[11px] text-gray-400">Showing {pageSize} of {filtered.length}. Increase rows above to see more.</p>}
+      {filtered.length > pageSize && <p className="px-3 py-2 text-[11px] text-text-3">Showing {pageSize} of {filtered.length}. Increase rows above to see more.</p>}
     </div>
   );
 }
@@ -1065,44 +1062,44 @@ function SplitTable({ rows, onDone }: { rows: ApSplitMatch[]; onDone?: () => voi
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[720px] text-sm">
-        <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+        <thead><tr className="border-b bg-sunken/50 text-left text-text-2">
           <th className="px-3 py-2 font-medium">Invoice payee</th><th className="px-3 py-2 text-right font-medium">Invoice</th>
           <th className="px-3 py-2 font-medium">Bank legs</th><th className="px-3 py-2 text-right font-medium">Legs total</th>
           <th className="px-3 py-2 font-medium">Outcome</th><th className="px-3 py-2 font-medium">Decide</th>
         </tr></thead>
         <tbody className="divide-y">
           {rows.map((m) => (
-            <tr key={m.invoiceId} className="hover:bg-gray-50 align-top">
-              <td className="px-3 py-2 text-xs text-gray-700">{m.payee}{m.invoiceNumber ? <span className="text-gray-400"> · {m.invoiceNumber}</span> : ""}<div className="text-[10px] text-gray-400">{m.issueDate}{m.tier === "auto" ? " · auto-tier" : ""}</div></td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{fmtRM(m.amount)}{m.previouslyPaid > 0 && <div className="text-[10px] font-sans text-gray-400">{fmtRM(m.previouslyPaid)} already paid</div>}</td>
-              <td className="px-3 py-2 text-xs text-gray-600">
+            <tr key={m.invoiceId} className="hover:bg-sunken align-top">
+              <td className="px-3 py-2 text-xs text-text-2">{m.payee}{m.invoiceNumber ? <span className="text-text-3"> · {m.invoiceNumber}</span> : ""}<div className="text-[10px] text-text-3">{m.issueDate}{m.tier === "auto" ? " · auto-tier" : ""}</div></td>
+              <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{fmtRM(m.amount)}{m.previouslyPaid > 0 && <div className="text-[10px] font-sans text-text-3">{fmtRM(m.previouslyPaid)} already paid</div>}</td>
+              <td className="px-3 py-2 text-xs text-text-2">
                 {m.legs.map((l) => (
                   <div key={l.bankLineId} className="flex items-baseline gap-2">
-                    <span className="font-mono text-[11px] text-gray-700 tabular-nums">{fmtRM(l.amount)}</span>
+                    <span className="font-mono text-[11px] text-text-2 tabular-nums">{fmtRM(l.amount)}</span>
                     <span className="truncate">{l.bankDesc}</span>
-                    <span className="text-[10px] text-gray-400 whitespace-nowrap">{l.bankDate}{l.refConfirmed ? " · inv no ✓" : ""}</span>
+                    <span className="text-[10px] text-text-3 whitespace-nowrap">{l.bankDate}{l.refConfirmed ? " · inv no ✓" : ""}</span>
                   </div>
                 ))}
               </td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{fmtRM(m.legsTotal)}</td>
+              <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{fmtRM(m.legsTotal)}</td>
               <td className="px-3 py-2 text-[11px]">
-                <span className={m.settles ? "text-green-700" : "text-amber-700"}>
+                <span className={m.settles ? "text-ok-text" : "text-warn-text"}>
                   {m.linkOnly ? (m.settles ? "link legs (already PAID)" : "PAID on register, bank short") : m.settles ? "→ PAID" : `→ partial, RM ${(m.amount - m.previouslyPaid - m.legsTotal).toFixed(2)} outstanding`}
                 </span>
-                <div className="text-[10px] text-gray-400">{m.reasons.join(", ")}</div>
+                <div className="text-[10px] text-text-3">{m.reasons.join(", ")}</div>
               </td>
               <td className="whitespace-nowrap px-3 py-2">
-                {notes[m.invoiceId] ? <span className="text-[10px] text-rose-600">{notes[m.invoiceId]}</span> : (
+                {notes[m.invoiceId] ? <span className="text-[10px] text-danger-text">{notes[m.invoiceId]}</span> : (
                   <span className="flex items-center gap-1.5">
                     <button onClick={() => act(m, "confirm")} disabled={busy === m.invoiceId}
-                      className="rounded border border-green-600/30 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-50">
+                      className="rounded border border-ok bg-ok-soft px-2 py-0.5 text-[11px] font-medium text-ok-text hover:bg-ok-soft disabled:opacity-50">
                       Confirm
                     </button>
                     <button onClick={() => act(m, "reject")} disabled={busy === m.invoiceId}
-                      className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                      className="rounded border border-line bg-surface px-2 py-0.5 text-[11px] text-text-2 hover:bg-sunken disabled:opacity-50">
                       Reject
                     </button>
-                    {busy === m.invoiceId && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
+                    {busy === m.invoiceId && <Loader2 className="h-3 w-3 animate-spin text-text-3" />}
                   </span>
                 )}
               </td>
@@ -1150,18 +1147,18 @@ function MatchedTable() {
 
   return (
     <div className="overflow-x-auto">
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search payee, invoice no, description or amount…"
-          className="h-7 w-72 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700" />
-        {data && <span className="text-[11px] text-gray-400 tabular-nums">{data.rows.length} shown · {data.total} matched in total</span>}
-        {note && <span className="text-[11px] text-gray-500">{note}</span>}
+          className="h-7 w-72 rounded border border-line bg-surface px-2 text-xs text-text-2" />
+        {data && <span className="text-[11px] text-text-3 tabular-nums">{data.rows.length} shown · {data.total} matched in total</span>}
+        {note && <span className="text-[11px] text-text-2">{note}</span>}
         <span className="ml-auto"><RowsPerPage value={limit} onChange={setLimit} total={data?.total ?? 0} /></span>
       </div>
-      {!data ? <p className="px-4 py-4 text-xs text-gray-400">Loading…</p> : data.rows.length === 0 ? (
-        <p className="px-4 py-4 text-xs text-gray-400">{q ? "No matches for the search." : "Nothing matched yet."}</p>
+      {!data ? <p className="px-4 py-4 text-xs text-text-3">Loading…</p> : data.rows.length === 0 ? (
+        <p className="px-4 py-4 text-xs text-text-3">{q ? "No matches for the search." : "Nothing matched yet."}</p>
       ) : (
         <table className="w-full min-w-[760px] text-sm">
-          <thead><tr className="border-b bg-gray-50/50 text-left text-gray-500">
+          <thead><tr className="border-b bg-sunken/50 text-left text-text-2">
             <th className="px-3 py-2 font-medium">Bank line</th>
             <th className="px-3 py-2 text-right font-medium">Amount</th>
             <th className="px-3 py-2 font-medium">Matched invoice</th>
@@ -1171,15 +1168,15 @@ function MatchedTable() {
           </tr></thead>
           <tbody className="divide-y">
             {data.rows.map((r) => (
-              <tr key={r.bankLineId} className="hover:bg-gray-50">
-                <td className="px-3 py-2 text-xs text-gray-600">{r.desc}<div className="text-[10px] text-gray-400">{r.date}</div></td>
-                <td className="px-3 py-2 text-right font-mono text-xs text-gray-700">{fmtRM(r.amount)}</td>
-                <td className="px-3 py-2 text-xs text-gray-700">{r.payee}{r.invoiceNumber ? <span className="text-gray-400"> · {r.invoiceNumber}</span> : ""}{r.invoiceAmount !== null && Math.abs(r.invoiceAmount - r.amount) > 0.01 && <span className="ml-1 text-[10px] text-amber-600">(invoice {fmtRM(r.invoiceAmount)})</span>}</td>
-                <td className="px-3 py-2 text-[11px] text-gray-400">{r.category ?? "—"}</td>
-                <td className="px-3 py-2 text-[10px] text-gray-400">{r.paidByMatch ? "match paid the invoice" : "link-only (paid elsewhere)"}{r.matchedAt ? ` · ${r.matchedAt}` : ""}</td>
+              <tr key={r.bankLineId} className="hover:bg-sunken">
+                <td className="px-3 py-2 text-xs text-text-2">{r.desc}<div className="text-[10px] text-text-3">{r.date}</div></td>
+                <td className="px-3 py-2 text-right font-mono text-xs text-text-2">{fmtRM(r.amount)}</td>
+                <td className="px-3 py-2 text-xs text-text-2">{r.payee}{r.invoiceNumber ? <span className="text-text-3"> · {r.invoiceNumber}</span> : ""}{r.invoiceAmount !== null && Math.abs(r.invoiceAmount - r.amount) > 0.01 && <span className="ml-1 text-[10px] text-warn-text">(invoice {fmtRM(r.invoiceAmount)})</span>}</td>
+                <td className="px-3 py-2 text-[11px] text-text-3">{r.category ?? "—"}</td>
+                <td className="px-3 py-2 text-[10px] text-text-3">{r.paidByMatch ? "match paid the invoice" : "link-only (paid elsewhere)"}{r.matchedAt ? ` · ${r.matchedAt}` : ""}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-right">
                   <button onClick={() => unmatch(r)} disabled={busy === r.bankLineId}
-                    className="rounded border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                    className="rounded border border-line bg-surface px-2 py-0.5 text-[11px] text-text-2 hover:bg-sunken disabled:opacity-50">
                     {busy === r.bankLineId ? "Unmatching…" : "Unmatch"}
                   </button>
                 </td>

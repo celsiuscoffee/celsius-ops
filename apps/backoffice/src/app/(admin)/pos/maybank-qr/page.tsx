@@ -106,30 +106,30 @@ export default function MaybankQrOrdersPage() {
   }
 
   return (
-    <div className="px-6 py-6 max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto px-4 pt-6 pb-10 md:px-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           <QrCode className="h-6 w-6 text-emerald-600" />
           Maybank QR — pending payments
         </h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-text-2 mt-1">
           Customer orders waiting for staff to confirm the Maybank transfer and release to the kitchen.
         </p>
       </header>
 
       {loading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+          <Loader2 className="h-6 w-6 animate-spin text-text-3" />
         </div>
       ) : error ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       ) : orders.length === 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white px-6 py-12 text-center">
+        <div className="rounded-xl border border-line bg-surface px-6 py-12 text-center">
           <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
-          <p className="text-sm font-medium text-gray-900">No pending Maybank QR payments</p>
-          <p className="text-xs text-gray-500 mt-1">Anything new will appear here in real-time.</p>
+          <p className="text-sm font-medium text-text">No pending Maybank QR payments</p>
+          <p className="text-xs text-text-2 mt-1">Anything new will appear here in real-time.</p>
         </div>
       ) : (
         <ul className="space-y-3">
@@ -142,25 +142,25 @@ export default function MaybankQrOrdersPage() {
             return (
               <li
                 key={o.id}
-                className="rounded-2xl border border-gray-200 bg-white p-4 flex items-center justify-between gap-4"
+                className="rounded-2xl border border-line bg-surface p-4 flex items-center justify-between gap-4"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-900">
+                    <span className="text-sm font-semibold text-text">
                       #{o.order_number}
                     </span>
-                    <span className="text-xs text-gray-500 inline-flex items-center gap-1">
+                    <span className="text-xs text-text-2 inline-flex items-center gap-1">
                       <Store className="h-3 w-3" />
                       {outlet}
                     </span>
-                    <span className="text-xs text-gray-400">{timeAgo(o.created_at)}</span>
+                    <span className="text-xs text-text-3">{timeAgo(o.created_at)}</span>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1 truncate">
+                  <div className="text-xs text-text-2 mt-1 truncate">
                     {o.customer_name || "Guest"} · {o.customer_phone || "—"}
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="font-mono text-sm font-semibold text-gray-900">
+                  <span className="font-mono text-sm font-semibold text-text">
                     RM {Number(o.total ?? 0).toFixed(2)}
                   </span>
                   <button

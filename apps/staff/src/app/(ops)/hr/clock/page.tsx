@@ -5,6 +5,7 @@ import { useFetch } from "@/lib/use-fetch";
 import Link from "next/link";
 import { Clock, MapPin, LogIn, LogOut, Loader2, CheckCircle2, AlertTriangle, Camera, RefreshCw, ArrowLeft } from "lucide-react";
 import { FetchError } from "@/components/fetch-error";
+import { formatClock, formatTime } from "@/lib/format-time";
 
 type ClockStatus = {
   activeLog: {
@@ -59,7 +60,7 @@ export default function ClockPage() {
   const staleDayLabel = staleLog
     ? new Date(mytDate(staleLog.clock_in) + "T00:00:00").toLocaleDateString("en-MY", { weekday: "short", day: "numeric", month: "short" })
     : "";
-  const staleEndLabel = staleLog?.scheduled_end ? staleLog.scheduled_end.slice(0, 5) : null;
+  const staleEndLabel = staleLog?.scheduled_end ? formatClock(staleLog.scheduled_end) : null;
 
   const closeStaleShift = useCallback(async () => {
     if (!staleLog) return;
@@ -269,7 +270,7 @@ export default function ClockPage() {
     <Link
       href="/hr"
       aria-label="Back"
-      className="absolute left-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-600 active:scale-95 active:bg-gray-200"
+      className="absolute left-2 top-3 flex h-11 w-11 items-center justify-center rounded-full text-text-2 active:bg-sunken"
     >
       <ArrowLeft className="h-5 w-5" />
     </Link>
@@ -281,8 +282,8 @@ export default function ClockPage() {
     return (
       <div className="relative flex min-h-[80vh] flex-col items-center justify-center px-4">
         {backBtn}
-        <Clock className="mb-3 h-10 w-10 text-gray-300" />
-        <h1 className="mb-4 text-xl font-bold">Time Clock</h1>
+        <Clock className="mb-3 h-10 w-10 text-line-ctl" />
+        <h1 className="mb-4 font-heading text-xl font-semibold text-text">Clock in and out</h1>
         <div className="w-full max-w-xs">
           <FetchError error={statusError} onRetry={() => mutate()} what="the time clock" />
         </div>
@@ -296,9 +297,9 @@ export default function ClockPage() {
     return (
       <div className="relative flex min-h-[80vh] flex-col items-center justify-center px-4">
         {backBtn}
-        <Clock className="mb-3 h-10 w-10 text-gray-300" />
-        <h1 className="mb-2 text-xl font-bold">Time Clock</h1>
-        <div className="max-w-xs rounded-xl bg-amber-50 px-5 py-3 text-center text-sm text-amber-700">
+        <Clock className="mb-3 h-10 w-10 text-line-ctl" />
+        <h1 className="mb-2 font-heading text-xl font-semibold text-text">Clock in and out</h1>
+        <div className="max-w-xs rounded-xl bg-warn-soft px-5 py-3 text-center text-sm text-warn-text">
           No outlet assigned. Time clock is for outlet staff only.
         </div>
       </div>
@@ -310,19 +311,19 @@ export default function ClockPage() {
       {backBtn}
       {/* Header */}
       <div className="mb-4 text-center">
-        <Clock className="mx-auto mb-2 h-8 w-8 text-terracotta" />
-        <h1 className="text-xl font-bold">Time Clock</h1>
+        <Clock className="mx-auto mb-2 h-8 w-8 text-brand-text" />
+        <h1 className="font-heading text-xl font-semibold text-text">Clock in and out</h1>
         {status?.geofence && (
-          <p className="mt-0.5 text-sm text-gray-500">{status.geofence.name}</p>
+          <p className="mt-0.5 text-sm text-text-3">{status.geofence.name}</p>
         )}
       </div>
 
       {/* GPS Status */}
       <div className={`mb-4 flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium ${
-        gpsLoading ? "bg-gray-100 text-gray-500" :
-        gpsError ? "bg-red-50 text-red-600" :
-        withinZone ? "bg-green-50 text-green-700" :
-        "bg-amber-50 text-amber-700"
+        gpsLoading ? "bg-sunken text-text-3" :
+        gpsError ? "bg-danger-soft text-danger-text" :
+        withinZone ? "bg-ok-soft text-ok-text" :
+        "bg-warn-soft text-warn-text"
       }`}>
         {gpsLoading ? (
           <><Loader2 className="h-3 w-3 animate-spin" /> Getting location...</>
@@ -336,7 +337,7 @@ export default function ClockPage() {
       </div>
 
       {/* Camera Preview / Captured Photo */}
-      <div className="relative mb-4 h-48 w-48 overflow-hidden rounded-2xl border-2 border-gray-200 bg-black">
+      <div className="relative mb-4 h-48 w-48 overflow-hidden rounded-2xl border-2 border-line bg-black">
         {capturedPhoto ? (
           <>
             <img src={capturedPhoto} alt="Captured" className="h-full w-full object-cover" />
@@ -348,7 +349,7 @@ export default function ClockPage() {
             </button>
           </>
         ) : cameraError ? (
-          <div className="flex h-full w-full flex-col items-center justify-center text-gray-400">
+          <div className="flex h-full w-full flex-col items-center justify-center text-text-3">
             <Camera className="mb-1 h-8 w-8" />
             <span className="text-xs">Camera unavailable</span>
           </div>
@@ -367,29 +368,29 @@ export default function ClockPage() {
 
       {/* Forgotten clock-out from a previous day */}
       {staleLog && (
-        <div className="mb-4 w-full max-w-xs rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center">
-          <p className="text-sm font-semibold text-amber-800">Still clocked in from {staleDayLabel}</p>
-          <p className="mt-0.5 text-xs text-amber-700">
+        <div className="mb-4 w-full max-w-xs rounded-xl border border-warn/30 bg-warn-soft px-4 py-3 text-center">
+          <p className="text-sm font-semibold text-warn-text">Still clocked in from {staleDayLabel}</p>
+          <p className="mt-0.5 text-xs text-warn-text">
             Looks like you forgot to clock out. End that shift {staleEndLabel ? `at ${staleEndLabel}` : "at its rostered end"} so you can clock in for today.
           </p>
           <button
             onClick={closeStaleShift}
             disabled={closingStale || loading}
-            className="mt-2 inline-flex items-center gap-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+            className="mt-2 inline-flex items-center gap-1 rounded-lg bg-warn px-3 py-1.5 text-xs font-semibold text-on-ink disabled:opacity-50"
           >
             {closingStale ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
             End {staleDayLabel} shift{staleEndLabel ? ` at ${staleEndLabel}` : ""}
           </button>
-          <p className="mt-1.5 text-[10px] text-amber-600">Worked later than that? Ask your manager to fix the times instead.</p>
+          <p className="mt-1.5 text-[10px] text-warn-text">Worked later than that? Ask your manager to fix the times instead.</p>
         </div>
       )}
 
       {/* Elapsed Time (when clocked in) */}
       {isClockedIn && !staleLog && elapsed && (
         <div className="mb-4 text-center">
-          <p className="text-3xl font-bold tabular-nums text-terracotta">{elapsed}</p>
-          <p className="mt-0.5 text-xs text-gray-500">
-            Since {new Date(status!.activeLog!.clock_in).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}
+          <p className="text-3xl font-bold tabular-nums text-brand-text">{elapsed}</p>
+          <p className="mt-0.5 text-xs text-text-3">
+            Since {formatTime(status!.activeLog!.clock_in)}
           </p>
         </div>
       )}
@@ -409,8 +410,8 @@ export default function ClockPage() {
         }
         className={`flex h-32 w-32 flex-col items-center justify-center rounded-full shadow-lg transition-all active:scale-95 disabled:opacity-50 ${
           isClockedIn
-            ? "bg-red-500 text-white hover:bg-red-600"
-            : "bg-terracotta text-white hover:bg-terracotta-dark"
+            ? "bg-danger text-on-ink hover:bg-danger"
+            : "bg-ink text-on-ink hover:bg-ink-hover"
         }`}
       >
         {loading ? (
@@ -418,19 +419,19 @@ export default function ClockPage() {
         ) : isClockedIn ? (
           <>
             <LogOut className="mb-1 h-8 w-8" />
-            <span className="text-sm font-bold">Clock Out</span>
+            <span className="text-sm font-bold">Clock out</span>
           </>
         ) : (
           <>
             <LogIn className="mb-1 h-8 w-8" />
-            <span className="text-sm font-bold">Clock In</span>
+            <span className="text-sm font-bold">Clock in</span>
           </>
         )}
       </button>
 
       {/* GPS warning — soft for clock-in, required for clock-out (server gate) */}
       {gpsError && (
-        <p className="mt-3 text-center text-xs font-medium text-amber-700">
+        <p className="mt-3 text-center text-xs font-medium text-warn-text">
           {isClockedIn
             ? "Location is needed to clock out. Enable it in your browser settings, or ask your manager to clock you out."
             : "No location detected. You can still clock in, but it will be flagged for review."}
@@ -439,7 +440,7 @@ export default function ClockPage() {
 
       {/* Outside geofence — clock-in still allowed, just flagged */}
       {!isClockedIn && !gpsLoading && !gpsError && status?.geofence && !withinZone && (
-        <p className="mt-3 text-center text-xs font-medium text-amber-700">
+        <p className="mt-3 text-center text-xs font-medium text-warn-text">
           You are {distanceInfo} from {status.geofence.name}. You can still clock in, but it will be flagged for review.
         </p>
       )}
@@ -447,18 +448,18 @@ export default function ClockPage() {
       {/* Result feedback */}
       {result && (
         <div className={`mt-4 rounded-xl px-5 py-2.5 text-center text-sm font-medium ${
-          result.success ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+          result.success ? "bg-ok-soft text-ok-text" : "bg-danger-soft text-danger-text"
         }`}>
           {result.message}
           {result.success && result.withinGeofence === false && (
-            <p className="mt-0.5 text-xs text-amber-600">Outside geofence zone</p>
+            <p className="mt-0.5 text-xs text-warn-text">Outside geofence zone</p>
           )}
         </div>
       )}
 
       {/* No outlet warning */}
       {status && !status.outletId && (
-        <div className="mt-4 rounded-xl bg-amber-50 px-5 py-2.5 text-center text-sm text-amber-700">
+        <div className="mt-4 rounded-xl bg-warn-soft px-5 py-2.5 text-center text-sm text-warn-text">
           No outlet assigned. Contact your manager.
         </div>
       )}

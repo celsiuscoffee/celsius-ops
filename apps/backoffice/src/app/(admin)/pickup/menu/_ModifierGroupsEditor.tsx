@@ -106,7 +106,7 @@ export function ModifierGroupsEditor({ value, onChange }: Props) {
                 type="button"
                 onClick={() => moveGroup(gIdx, -1)}
                 disabled={gIdx === 0}
-                className="text-muted-foreground hover:text-[#160800] disabled:opacity-30 disabled:cursor-not-allowed"
+                className="text-muted-foreground hover:text-text disabled:opacity-30 disabled:cursor-not-allowed"
                 title="Move up"
               >
                 <GripVertical className="h-3 w-3 -mb-1 rotate-90" />
@@ -115,7 +115,7 @@ export function ModifierGroupsEditor({ value, onChange }: Props) {
                 type="button"
                 onClick={() => moveGroup(gIdx, 1)}
                 disabled={gIdx === groups.length - 1}
-                className="text-muted-foreground hover:text-[#160800] disabled:opacity-30 disabled:cursor-not-allowed"
+                className="text-muted-foreground hover:text-text disabled:opacity-30 disabled:cursor-not-allowed"
                 title="Move down"
               >
                 <GripVertical className="h-3 w-3 -mt-1 -rotate-90" />
@@ -175,8 +175,8 @@ export function ModifierGroupsEditor({ value, onChange }: Props) {
                   }}
                   className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
                     on
-                      ? "bg-[#160800] text-white border-[#160800]"
-                      : "bg-white text-muted-foreground border-gray-200 hover:border-[#160800]"
+                      ? "bg-ink text-on-ink border-ink"
+                      : "bg-surface text-muted-foreground border-line hover:border-ink"
                   }`}
                   title={allSelected ? "All channels (default)" : on ? `Visible on ${label}` : `Hidden on ${label}`}
                 >
@@ -188,7 +188,7 @@ export function ModifierGroupsEditor({ value, onChange }: Props) {
               <button
                 type="button"
                 onClick={() => updateGroup(gIdx, { channels: undefined })}
-                className="text-[11px] text-muted-foreground hover:text-[#160800] underline"
+                className="text-[11px] text-muted-foreground hover:text-text underline"
                 title="Reset to all channels"
               >
                 reset
@@ -243,7 +243,7 @@ export function ModifierGroupsEditor({ value, onChange }: Props) {
             <button
               type="button"
               onClick={() => addOption(gIdx)}
-              className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-[#160800] transition-colors"
+              className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-text transition-colors"
             >
               <Plus className="h-3 w-3" /> Add option
             </button>
@@ -254,7 +254,7 @@ export function ModifierGroupsEditor({ value, onChange }: Props) {
       <button
         type="button"
         onClick={addGroup}
-        className="flex items-center gap-1.5 text-sm font-semibold text-[#160800] hover:text-[#2d1100] transition-colors"
+        className="flex items-center gap-1.5 text-sm font-semibold text-text hover:text-[#2d1100] transition-colors"
       >
         <Plus className="h-4 w-4" /> Add modifier group
       </button>

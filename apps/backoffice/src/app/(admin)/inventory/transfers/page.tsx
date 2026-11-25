@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Badge } from "@/components/ui/badge";
+import { KeyNumber } from "@/components/ui/key-number";
+import { summariseTransfers, LATE_DAYS } from "@/lib/inventory/transfer-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  ArrowLeftRight, Loader2, Search, ArrowRight,
-  CheckCircle2, Package, Eye, Truck, Plus, X, Ban, Trash2,
-  Clock, ShieldCheck, Send, PackageCheck, Sparkles, Zap,
+  ArrowLeft, ArrowLeftRight, Loader2, Search, ArrowRight,
+  CheckCircle2, Truck, Plus, Ban, Trash2,
+  ShieldCheck, Send, PackageCheck, Sparkles, Zap,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -46,21 +47,41 @@ type Product = { id: string; name: string; sku: string; baseUom: string; categor
 type CartItem = { productId: string; name: string; sku: string; uom: string; quantity: number; productPackageId: string | null; conversionFactor: number; availableStock: number };
 
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-gray-50 text-gray-600 border-gray-200",
-  PENDING_APPROVAL: "bg-amber-50 text-amber-700 border-amber-200",
-  APPROVED: "bg-blue-50 text-blue-700 border-blue-200",
-  IN_TRANSIT: "bg-purple-50 text-purple-700 border-purple-200",
-  RECEIVED: "bg-green-50 text-green-700 border-green-200",
-  COMPLETED: "bg-green-50 text-green-700 border-green-200",
-  CANCELLED: "bg-red-50 text-red-500 border-red-200",
-  PENDING: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  DRAFT: "bg-sunken text-text-2",
+  PENDING_APPROVAL: "bg-warn-soft text-warn-text",
+  APPROVED: "bg-info-soft text-info-text",
+  IN_TRANSIT: "bg-info-soft text-info-text",
+  RECEIVED: "bg-ok-soft text-ok-text",
+  COMPLETED: "bg-ok-soft text-ok-text",
+  CANCELLED: "bg-sunken text-text-3",
+  PENDING: "bg-warn-soft text-warn-text",
+};
+
+const FILTERS: { key: string; label: string; match: (s: string) => boolean }[] = [
+  { key: "PENDING_APPROVAL", label: "Waiting for approval", match: (s) => s === "PENDING_APPROVAL" || s === "PENDING" },
+  { key: "transit", label: "In transit", match: (s) => s === "APPROVED" || s === "IN_TRANSIT" },
+  { key: "received", label: "Received", match: (s) => s === "RECEIVED" || s === "COMPLETED" },
+  { key: "DRAFT", label: "Draft", match: (s) => s === "DRAFT" },
+  { key: "CANCELLED", label: "Cancelled", match: (s) => s === "CANCELLED" },
+];
+
+/** What the next person has to do, in words, for the detail page banner. */
+const NEXT_STEP: Record<string, string> = {
+  DRAFT: "Not sent yet. Submit it for approval when the list is right.",
+  PENDING_APPROVAL: "Waiting for a manager to approve or reject.",
+  PENDING: "Waiting to be completed or cancelled.",
+  APPROVED: "Approved. Mark it in transit when the stock leaves.",
+  IN_TRANSIT: "On its way. The receiving outlet confirms when it arrives.",
+  RECEIVED: "Received. Stock has moved.",
+  COMPLETED: "Completed. Stock has moved.",
+  CANCELLED: "Cancelled. No stock moved.",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: "Draft",
-  PENDING_APPROVAL: "Pending Approval",
+  PENDING_APPROVAL: "Waiting for approval",
   APPROVED: "Approved",
-  IN_TRANSIT: "In Transit",
+  IN_TRANSIT: "In transit",
   RECEIVED: "Received",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
@@ -72,7 +93,7 @@ function formatDate(iso: string) {
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kuala_Lumpur" });
 }
 
 export default function TransfersPage() {
@@ -152,6 +173,7 @@ export default function TransfersPage() {
   const loadSmartTransfers = async () => {
     setAiLoading(true);
     setAiOpen(true);
+    window.scrollTo(0, 0);
     try {
       const res = await fetch("/api/inventory/ai-decisions");
       if (res.ok) {
@@ -223,6 +245,7 @@ export default function TransfersPage() {
 
   const openCreate = () => {
     setCreateOpen(true);
+    window.scrollTo(0, 0);
     setFromOutletId("");
     setToOutletId("");
     setTransferNotes("");
@@ -295,7 +318,7 @@ export default function TransfersPage() {
 
   const filtered = useMemo(() => {
     return data.filter((t) => {
-      if (statusFilter !== "all" && t.status !== statusFilter) return false;
+      if (statusFilter !== "all" && !(FILTERS.find((f) => f.key === statusFilter)?.match(t.status) ?? true)) return false;
       if (search) {
         const q = search.toLowerCase();
         return t.fromOutlet.toLowerCase().includes(q) || t.toOutlet.toLowerCase().includes(q) || t.transferredBy.toLowerCase().includes(q);
@@ -304,16 +327,8 @@ export default function TransfersPage() {
     });
   }, [data, search, statusFilter]);
 
-  const stats = useMemo(() => ({
-    total: data.length,
-    draft: data.filter((t) => t.status === "DRAFT").length,
-    pendingApproval: data.filter((t) => t.status === "PENDING_APPROVAL").length,
-    approved: data.filter((t) => t.status === "APPROVED").length,
-    inTransit: data.filter((t) => t.status === "IN_TRANSIT").length,
-    received: data.filter((t) => t.status === "RECEIVED" || t.status === "COMPLETED").length,
-    cancelled: data.filter((t) => t.status === "CANCELLED").length,
-    pending: data.filter((t) => t.status === "PENDING").length,
-  }), [data]);
+  const [now] = useState(() => Date.now());
+  const summary = useMemo(() => summariseTransfers(data, now), [data, now]);
 
   async function updateTransferStatus(id: string, status: string, extra?: { rejectionReason?: string }) {
     if (status === "RECEIVED") {
@@ -361,443 +376,317 @@ export default function TransfersPage() {
     setRejectionReason("");
   };
 
-  const renderActionButtons = (t: Transfer, size: "sm" | "md" = "sm") => {
-    const iconSize = size === "sm" ? "h-3 w-3" : "h-4 w-4";
-
-    switch (t.status) {
-      case "DRAFT":
-        return (
-          <button
-            onClick={() => updateTransferStatus(t.id, "PENDING_APPROVAL")}
-            disabled={actionLoading}
-            className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-amber-500 hover:bg-amber-600"
-            title="Submit for Approval"
-          >
-            <Send className={iconSize} />
-          </button>
-        );
-      case "PENDING_APPROVAL":
-        return (
-          <>
-            <button
-              onClick={() => updateTransferStatus(t.id, "IN_TRANSIT")}
-              disabled={actionLoading}
-              className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-purple-500 hover:bg-purple-600"
-              title="Approve & Dispatch"
-            >
-              <Truck className={iconSize} />
-            </button>
-            <button
-              onClick={() => openRejectDialog(t.id)}
-              disabled={actionLoading}
-              className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50"
-              title="Reject"
-            >
-              <Ban className={iconSize} />
-            </button>
-          </>
-        );
-      case "APPROVED":
-        return (
-          <button
-            onClick={() => updateTransferStatus(t.id, "IN_TRANSIT")}
-            disabled={actionLoading}
-            className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-purple-500 hover:bg-purple-600"
-            title="Mark In Transit"
-          >
-            <Truck className={iconSize} />
-          </button>
-        );
-      case "IN_TRANSIT":
-        return (
-          <button
-            onClick={() => updateTransferStatus(t.id, "RECEIVED")}
-            disabled={actionLoading}
-            className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-green-500 hover:bg-green-600"
-            title="Confirm Received"
-          >
-            <PackageCheck className={iconSize} />
-          </button>
-        );
-      case "PENDING":
-        return (
-          <>
-            <button
-              onClick={() => updateTransferStatus(t.id, "COMPLETED")}
-              disabled={actionLoading}
-              className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-green-500 hover:bg-green-600"
-              title="Complete"
-            >
-              <CheckCircle2 className={iconSize} />
-            </button>
-            <button
-              onClick={() => { if (confirm("Cancel this transfer?")) updateTransferStatus(t.id, "CANCELLED"); }}
-              disabled={actionLoading}
-              className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50"
-              title="Cancel"
-            >
-              <Ban className={iconSize} />
-            </button>
-          </>
-        );
-      case "RECEIVED":
-      case "COMPLETED":
-        return <CheckCircle2 className={`${iconSize} text-green-500`} />;
-      case "CANCELLED":
-        return <Ban className={`${iconSize} text-gray-400`} />;
-      default:
-        return null;
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-32">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-text-3" />
       </div>
     );
   }
 
+  const days = (n: number | null) => (n == null ? "" : n === 0 ? "today" : n === 1 ? "1 day" : `${n} days`);
+  const inTransitDays = (t: Transfer) => Math.floor((now - Date.parse(t.approvedAt ?? t.createdAt)) / 86_400_000);
+
   return (
-    <div className="p-3 sm:p-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">Transfers</h2>
-          <p className="mt-0.5 text-sm text-gray-500">
-            {stats.total} transfers — {stats.draft} draft, {stats.pendingApproval} pending approval, {stats.inTransit} in transit, {stats.received} received
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button onClick={loadSmartTransfers} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
-            <Sparkles className="mr-1.5 h-4 w-4" />Smart Transfer
-          </Button>
-          <Button onClick={openCreate} className="bg-terracotta hover:bg-terracotta-dark">
-            <Plus className="mr-1.5 h-4 w-4" />New Transfer
-          </Button>
-        </div>
-      </div>
+    <div className="px-4 pt-6 pb-10 md:px-8">
+      {createOpen ? (
+        // ── New transfer: a full page (multi-row form) ──
+        <div className="max-w-[960px]">
+          <button onClick={() => setCreateOpen(false)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+            <ArrowLeft className="h-4 w-4" /> All transfers
+          </button>
+          <h1 className="mt-3 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">New transfer</h1>
+          <p className="mt-0.5 text-sm text-text-2">Pick where the stock leaves from and where it goes, then add items. It is saved as a draft.</p>
 
-      {/* Filters */}
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input placeholder="Search outlet or staff..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
-        <div className="flex gap-1.5 flex-wrap">
-          {[
-            { key: "all", label: `All (${stats.total})` },
-            { key: "DRAFT", label: `Draft (${stats.draft})` },
-            { key: "PENDING_APPROVAL", label: `Pending Approval (${stats.pendingApproval})` },
-            { key: "APPROVED", label: `Approved (${stats.approved})` },
-            { key: "IN_TRANSIT", label: `In Transit (${stats.inTransit})` },
-            { key: "RECEIVED", label: `Received (${stats.received})` },
-            { key: "CANCELLED", label: `Cancelled (${stats.cancelled})` },
-          ].map((t) => (
-            <button key={t.key} onClick={() => setStatusFilter(t.key)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === t.key ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500"}`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-[13px] font-medium text-text-2">From outlet</span>
+              <select className="mt-1 h-10 w-full rounded-ctl border border-line bg-surface px-3 text-sm text-text" value={fromOutletId}
+                onChange={(e) => { setFromOutletId(e.target.value); setCart([]); fetchStockForOutlet(e.target.value, setStockBalances); }}>
+                <option value="">Pick an outlet…</option>
+                {outlets.filter((o) => o.id !== toOutletId).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[13px] font-medium text-text-2">To outlet</span>
+              <select className="mt-1 h-10 w-full rounded-ctl border border-line bg-surface px-3 text-sm text-text" value={toOutletId}
+                onChange={(e) => { setToOutletId(e.target.value); fetchStockForOutlet(e.target.value, setToStockBalances); }}>
+                <option value="">Pick an outlet…</option>
+                {outlets.filter((o) => o.id !== fromOutletId).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            </label>
+          </div>
 
-      {/* Table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm min-w-[720px]">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Date</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Route</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Items</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Created By</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-400">
-                {data.length === 0 ? "No transfers yet. Click 'New Transfer' to move stock between outlets." : "No transfers match your filter."}
-              </td></tr>
-            )}
-            {filtered.map((t) => (
-              <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                <td className="px-4 py-3">
-                  <p className="font-medium text-gray-900">{formatDate(t.createdAt)}</p>
-                  <p className="text-[10px] text-gray-400">{formatTime(t.createdAt)}</p>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-gray-900">{t.fromOutlet}</span>
-                    <ArrowRight className="h-3.5 w-3.5 text-gray-400" />
-                    <span className="font-medium text-gray-900">{t.toOutlet}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    <Package className="h-3.5 w-3.5 text-gray-400" />
-                    <span className="font-medium">{t.items.length}</span>
-                    <span className="text-gray-400 text-xs">{t.items.length === 1 ? "item" : "items"}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-gray-600">{t.transferredBy}</td>
-                <td className="px-4 py-3">
-                  <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[t.status] ?? ""}`}>
-                    {STATUS_LABELS[t.status] ?? t.status}
-                  </Badge>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setSelected(t)}>
-                      <Eye className="h-3 w-3 mr-1" />View
-                    </Button>
-                    {renderActionButtons(t)}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Detail Dialog */}
-      <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
-          {selected && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <ArrowLeftRight className="h-5 w-5 text-terracotta" />
-                  Transfer Details
-                </DialogTitle>
-              </DialogHeader>
-
-              <div className="grid grid-cols-2 gap-3 mt-2">
-                <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-gray-500 uppercase">From</p>
-                  <p className="text-sm font-semibold">{selected.fromOutlet}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-gray-500 uppercase">To</p>
-                  <p className="text-sm font-semibold">{selected.toOutlet}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-gray-500 uppercase">Created By</p>
-                  <p className="text-sm font-semibold">{selected.transferredBy}</p>
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-[10px] text-gray-500 uppercase">Status</p>
-                  <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[selected.status] ?? ""}`}>
-                    {STATUS_LABELS[selected.status] ?? selected.status}
-                  </Badge>
-                </div>
-              </div>
-
-              {selected.notes && (
-                <p className="text-xs text-gray-500 mt-2 bg-gray-50 rounded-lg px-3 py-2">Note: {selected.notes}</p>
-              )}
-
-              {/* Approval info */}
-              {selected.approvedBy && selected.approvedAt && (
-                <p className="text-xs text-blue-600 mt-2 bg-blue-50 rounded-lg px-3 py-2">
-                  Approved by: {selected.approvedBy} on {formatDate(selected.approvedAt)} at {formatTime(selected.approvedAt)}
-                </p>
-              )}
-
-              {/* Received info */}
-              {selected.receivedBy && selected.receivedAt && (
-                <p className="text-xs text-green-600 mt-2 bg-green-50 rounded-lg px-3 py-2">
-                  Received by: {selected.receivedBy} on {formatDate(selected.receivedAt)} at {formatTime(selected.receivedAt)}
-                </p>
-              )}
-
-              {/* Rejection reason */}
-              {selected.status === "CANCELLED" && selected.rejectionReason && (
-                <p className="text-xs text-red-600 mt-2 bg-red-50 rounded-lg px-3 py-2">
-                  Rejection reason: {selected.rejectionReason}
-                </p>
-              )}
-
-              <div className="mt-3 rounded-lg border overflow-hidden overflow-x-auto">
-                <table className="w-full text-xs min-w-[720px]">
-                  <thead>
-                    <tr className="bg-gray-50 border-b">
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">Product</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">SKU</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">Package</th>
-                      <th className="px-3 py-2 text-right font-medium text-gray-500">Quantity</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selected.items.map((item) => (
-                      <tr key={item.id} className="border-b border-gray-50">
-                        <td className="px-3 py-2 font-medium text-gray-900">{item.product}</td>
-                        <td className="px-3 py-2 text-gray-500">{item.sku}</td>
-                        <td className="px-3 py-2 text-gray-500">{item.package || "—"}</td>
-                        <td className="px-3 py-2 text-right font-mono font-medium">{item.quantity}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Action buttons in detail dialog */}
-              {(selected.status === "DRAFT" || selected.status === "PENDING_APPROVAL" || selected.status === "APPROVED" || selected.status === "IN_TRANSIT" || selected.status === "PENDING") && (
-                <div className="mt-4 flex justify-end gap-2">
-                  {selected.status === "DRAFT" && (
-                    <Button
-                      onClick={() => updateTransferStatus(selected.id, "PENDING_APPROVAL")}
-                      disabled={actionLoading}
-                      className="bg-amber-500 hover:bg-amber-600"
-                    >
-                      {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
-                      Submit for Approval
-                    </Button>
-                  )}
-                  {selected.status === "PENDING_APPROVAL" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() => openRejectDialog(selected.id)}
-                        disabled={actionLoading}
-                        className="border-red-200 text-red-600 hover:bg-red-50"
-                      >
-                        <Ban className="h-4 w-4 mr-1" />Reject
-                      </Button>
-                      <Button
-                        onClick={() => updateTransferStatus(selected.id, "APPROVED")}
-                        disabled={actionLoading}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-1" />}
-                        Approve
-                      </Button>
-                    </>
-                  )}
-                  {selected.status === "APPROVED" && (
-                    <Button
-                      onClick={() => updateTransferStatus(selected.id, "IN_TRANSIT")}
-                      disabled={actionLoading}
-                      className="bg-purple-600 hover:bg-purple-700"
-                    >
-                      {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Truck className="h-4 w-4 mr-1" />}
-                      Mark In Transit
-                    </Button>
-                  )}
-                  {selected.status === "IN_TRANSIT" && (
-                    <Button
-                      onClick={() => updateTransferStatus(selected.id, "RECEIVED")}
-                      disabled={actionLoading}
-                      className="bg-green-600 hover:bg-green-700"
-                    >
-                      {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <PackageCheck className="h-4 w-4 mr-1" />}
-                      Confirm Received
-                    </Button>
-                  )}
-                  {selected.status === "PENDING" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() => { if (confirm("Cancel this transfer?")) updateTransferStatus(selected.id, "CANCELLED"); }}
-                        disabled={actionLoading}
-                        className="border-red-200 text-red-600 hover:bg-red-50"
-                      >
-                        <Ban className="h-4 w-4 mr-1" />Cancel
-                      </Button>
-                      <Button
-                        onClick={() => updateTransferStatus(selected.id, "COMPLETED")}
-                        disabled={actionLoading}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        {actionLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Truck className="h-4 w-4 mr-1" />}
-                        Mark as Completed
-                      </Button>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {selected.completedAt && (
-                <p className="text-xs text-green-600 mt-2 text-right">
-                  Completed on {formatDate(selected.completedAt)} at {formatTime(selected.completedAt)}
-                </p>
-              )}
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Reject Dialog */}
-      {/* Smart Transfer Dialog */}
-      <Dialog open={aiOpen} onOpenChange={setAiOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-blue-500" />
-              Smart Transfer Recommendations
-            </DialogTitle>
-          </DialogHeader>
-          {aiLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-              <span className="ml-2 text-sm text-gray-500">Analyzing stock levels across outlets...</span>
+          <div className="mt-5">
+            <span className="text-[13px] font-medium text-text-2">Add items</span>
+            <div className="relative mt-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
+              <Input placeholder={fromOutletId ? "Search items in stock at this outlet…" : "Pick the from outlet first"} className="pl-9"
+                value={productSearch} onChange={(e) => setProductSearch(e.target.value)} disabled={!fromOutletId} />
             </div>
+            {productSearch && (
+              <div className="mt-1 max-h-64 overflow-y-auto rounded-card border border-line bg-surface">
+                {filteredProducts.length === 0 && <p className="px-4 py-3 text-[13px] text-text-3">No items in stock match.</p>}
+                {filteredProducts.slice(0, 8).map((p) => {
+                  const pkg = p.packages.find((pk) => pk.isDefault) || p.packages[0];
+                  const pkgStock = Math.floor((stockBalances[p.id] ?? 0) / (pkg?.conversionFactor || 1));
+                  return (
+                    <button key={p.id} onClick={() => addToCart(p)} className="flex w-full items-center justify-between gap-3 border-b border-line px-4 py-2.5 text-left last:border-b-0 hover:bg-sunken/50">
+                      <span className="truncate text-sm text-text">{p.name}</span>
+                      <span className="shrink-0 text-[12px] text-text-3">{pkgStock} {pkg?.label || p.baseUom} in stock</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-card border border-line bg-surface">
+            <p className="border-b border-line px-4 py-3 text-sm font-semibold text-text">{cart.length === 0 ? "No items yet" : `${cart.length} ${cart.length === 1 ? "item" : "items"}`}</p>
+            {cart.map((item, idx) => {
+              const fromAfter = item.availableStock - item.quantity;
+              const toCurrent = Math.floor((toStockBalances[item.productId] ?? 0) / item.conversionFactor);
+              const over = item.quantity > item.availableStock;
+              return (
+                <div key={item.productId} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-text">{item.name} <span className="font-normal text-text-3">· {item.uom}</span></p>
+                    <p className={`mt-0.5 text-[12px] ${over ? "text-danger-text" : "text-text-3"}`}>
+                      {over ? `Only ${item.availableStock} in stock at the source` : <>From <span className="font-mono">{item.availableStock}→{fromAfter}</span>{toOutletId && <> · To <span className="font-mono">{toCurrent}→{toCurrent + item.quantity}</span></>}</>}
+                    </p>
+                  </div>
+                  <input type="number" min="1" max={item.availableStock} aria-label={`Quantity of ${item.name}`}
+                    className={`h-10 w-20 rounded-ctl border bg-surface px-2 text-right font-mono text-sm text-text ${over ? "border-danger-text" : "border-line"}`}
+                    value={item.quantity} onChange={(e) => updateCartQty(idx, parseInt(e.target.value) || 0)} />
+                  <button onClick={() => removeFromCart(idx)} aria-label={`Remove ${item.name}`} className="rounded-ctl p-2 text-text-3 hover:bg-sunken hover:text-danger-text">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          <label className="mt-5 block">
+            <span className="text-[13px] font-medium text-text-2">Note (optional)</span>
+            <Input className="mt-1" placeholder="Why this transfer…" value={transferNotes} onChange={(e) => setTransferNotes(e.target.value)} />
+          </label>
+
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreate} disabled={!fromOutletId || !toOutletId || cart.length === 0 || submitting} className="bg-ink text-on-ink hover:bg-ink-hover">
+              {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ArrowLeftRight className="mr-1.5 h-4 w-4" />}Save draft transfer
+            </Button>
+          </div>
+        </div>
+      ) : aiOpen ? (
+        // ── Smart transfer suggestions: a full page ──
+        <div className="max-w-[960px]">
+          <button onClick={() => setAiOpen(false)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+            <ArrowLeft className="h-4 w-4" /> All transfers
+          </button>
+          <h1 className="mt-3 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Smart transfer</h1>
+          <p className="mt-0.5 text-sm text-text-2">Suggested moves where one outlet has more than it needs and another is short. Each becomes a draft you can check before it goes.</p>
+
+          {aiLoading ? (
+            <div className="mt-8 flex items-center gap-2 text-sm text-text-2"><Loader2 className="h-4 w-4 animate-spin" /> Checking stock across outlets…</div>
           ) : aiTransfers.length === 0 ? (
-            <div className="py-12 text-center">
-              <CheckCircle2 className="mx-auto h-8 w-8 text-green-400" />
-              <p className="mt-2 text-sm text-gray-500">All outlets are balanced. No transfers needed.</p>
+            <div className="mt-5 flex gap-2.5 rounded-card bg-ok-soft px-4 py-3 text-ok-text">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              <p className="text-sm font-semibold">Outlets are balanced. Nothing to move.</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              <p className="text-xs text-gray-500">{aiTransfers.length} transfer{aiTransfers.length !== 1 ? "s" : ""} recommended based on stock imbalances</p>
-              {aiTransfers.map((t, idx) => (
-                <div key={idx} className="rounded-lg border border-blue-100 bg-blue-50/30 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
-                      <span>{t.fromOutletName}</span>
-                      <ArrowRight className="h-3.5 w-3.5 text-blue-500" />
-                      <span>{t.toOutletName}</span>
+            <>
+              <div className="mt-5 space-y-3">
+                {aiTransfers.map((t, idx) => (
+                  <div key={idx} className="overflow-hidden rounded-card border border-line bg-surface">
+                    <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="flex items-center gap-1.5 text-sm font-semibold text-text">{t.fromOutletName} <ArrowRight className="h-3.5 w-3.5 text-text-3" /> {t.toOutletName}</p>
+                        <p className="mt-0.5 text-[12px] text-text-3">{t.reason}</p>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => createSingleSmartTransfer(t)} disabled={aiCreating} className="shrink-0">
+                        {aiCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Make draft"}
+                      </Button>
                     </div>
-                    <button
-                      onClick={() => createSingleSmartTransfer(t)}
-                      disabled={aiCreating}
-                      className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {aiCreating ? <Loader2 className="h-3 w-3 animate-spin" /> : "Create Draft"}
-                    </button>
-                  </div>
-                  <p className="text-xs text-blue-600 mb-2">{t.reason}</p>
-                  <div className="space-y-1">
                     {t.items.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-700">{item.productName} <span className="text-gray-400">({item.productSku})</span></span>
-                        <span className="font-medium text-gray-900">{item.quantity} {item.packageName}</span>
+                      <div key={i} className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
+                        <span className="truncate text-sm text-text-2">{item.productName}</span>
+                        <span className="shrink-0 font-mono text-sm text-text">{item.quantity} {item.packageName}</span>
                       </div>
                     ))}
                   </div>
+                ))}
+              </div>
+              {aiTransfers.length > 1 && <div className="mt-5 flex justify-end">
+                <Button onClick={createAllSmartTransfers} disabled={aiCreating} className="bg-ink text-on-ink hover:bg-ink-hover">
+                  {aiCreating ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Zap className="mr-1.5 h-4 w-4" />}Make all {aiTransfers.length} drafts
+                </Button>
+              </div>}
+            </>
+          )}
+        </div>
+      ) : selected ? (
+        // ── Detail: a full page, not a modal ──
+        <div className="max-w-[960px]">
+          <button onClick={() => setSelected(null)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+            <ArrowLeft className="h-4 w-4" /> All transfers
+          </button>
+          <h1 className="mt-3 flex flex-wrap items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
+            {selected.fromOutlet} <ArrowRight className="h-5 w-5 text-text-3" /> {selected.toOutlet}
+          </h1>
+          <p className="mt-0.5 text-sm text-text-2">
+            {formatDate(selected.createdAt)} at {formatTime(selected.createdAt)} · by {selected.transferredBy} · {selected.items.length} {selected.items.length === 1 ? "item" : "items"}
+          </p>
+
+          <div className={`mt-5 rounded-card px-4 py-3 ${STATUS_STYLES[selected.status] ?? "bg-sunken text-text-2"}`}>
+            <p className="text-sm font-semibold">{STATUS_LABELS[selected.status] ?? selected.status}</p>
+            <p className="text-[13px] opacity-90">
+              {selected.status === "CANCELLED" && selected.rejectionReason ? `Rejected: ${selected.rejectionReason}` : NEXT_STEP[selected.status] ?? ""}
+            </p>
+          </div>
+
+          {(selected.approvedBy || selected.receivedBy || selected.completedAt || selected.notes) && (
+            <ul className="mt-4 space-y-1 text-[13px] text-text-2">
+              {selected.notes && <li>Note: {selected.notes}</li>}
+              {selected.approvedBy && selected.approvedAt && <li>Approved by {selected.approvedBy}, {formatDate(selected.approvedAt)} at {formatTime(selected.approvedAt)}</li>}
+              {selected.receivedBy && selected.receivedAt && <li>Received by {selected.receivedBy}, {formatDate(selected.receivedAt)} at {formatTime(selected.receivedAt)}</li>}
+              {selected.completedAt && <li>Completed {formatDate(selected.completedAt)} at {formatTime(selected.completedAt)}</li>}
+            </ul>
+          )}
+
+          <div className="mt-5 overflow-hidden rounded-card border border-line bg-surface">
+            <p className="border-b border-line px-4 py-3 text-sm font-semibold text-text">Items</p>
+            {selected.items.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-text">{item.product}</p>
+                  <p className="mt-0.5 truncate text-[12px] text-text-3">{item.package || "No package"} · {item.sku}</p>
                 </div>
+                <p className="shrink-0 font-mono text-sm font-semibold text-text">{item.quantity}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            {selected.status === "DRAFT" && (
+              <Button onClick={() => updateTransferStatus(selected.id, "PENDING_APPROVAL")} disabled={actionLoading} className="bg-ink text-on-ink hover:bg-ink-hover">
+                {actionLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}Submit for approval
+              </Button>
+            )}
+            {selected.status === "PENDING_APPROVAL" && (
+              <>
+                <Button variant="outline" onClick={() => openRejectDialog(selected.id)} disabled={actionLoading} className="text-danger-text">
+                  <Ban className="mr-1.5 h-4 w-4" />Reject
+                </Button>
+                <Button onClick={() => updateTransferStatus(selected.id, "APPROVED")} disabled={actionLoading} className="bg-ink text-on-ink hover:bg-ink-hover">
+                  {actionLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-1.5 h-4 w-4" />}Approve
+                </Button>
+              </>
+            )}
+            {selected.status === "APPROVED" && (
+              <Button onClick={() => updateTransferStatus(selected.id, "IN_TRANSIT")} disabled={actionLoading} className="bg-ink text-on-ink hover:bg-ink-hover">
+                {actionLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Truck className="mr-1.5 h-4 w-4" />}Mark in transit
+              </Button>
+            )}
+            {selected.status === "IN_TRANSIT" && (
+              <Button onClick={() => updateTransferStatus(selected.id, "RECEIVED")} disabled={actionLoading} className="bg-ink text-on-ink hover:bg-ink-hover">
+                {actionLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <PackageCheck className="mr-1.5 h-4 w-4" />}Confirm received
+              </Button>
+            )}
+            {selected.status === "PENDING" && (
+              <>
+                <Button variant="outline" onClick={() => { if (confirm("Cancel this transfer?")) updateTransferStatus(selected.id, "CANCELLED"); }} disabled={actionLoading} className="text-danger-text">
+                  <Ban className="mr-1.5 h-4 w-4" />Cancel transfer
+                </Button>
+                <Button onClick={() => updateTransferStatus(selected.id, "COMPLETED")} disabled={actionLoading} className="bg-ink text-on-ink hover:bg-ink-hover">
+                  {actionLoading ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-4 w-4" />}Mark as completed
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Transfers</h1>
+              <p className="mt-0.5 text-sm text-text-2">Stock moving between outlets: what is stuck, and for how long.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={loadSmartTransfers} variant="outline">
+                <Sparkles className="mr-1.5 h-4 w-4" />Smart transfer
+              </Button>
+              <Button onClick={openCreate} className="bg-ink text-on-ink hover:bg-ink-hover">
+                <Plus className="mr-1.5 h-4 w-4" />New transfer
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KeyNumber label="Waiting for approval" value={String(summary.approval.count)} tone={summary.approval.count > 0 ? "warn" : undefined}
+              note={summary.approval.count > 0 ? <>oldest <b className="font-semibold text-text-2">{days(summary.approval.oldestDays)}</b></> : "nothing waiting"} />
+            <KeyNumber label="In transit" value={String(summary.transit.count)} tone={summary.transit.late > 0 ? "warn" : undefined}
+              note={summary.transit.count === 0 ? "nothing on the road" : summary.transit.late > 0
+                ? <><b className="font-semibold text-text-2">{summary.transit.late}</b> over {LATE_DAYS} days, oldest {days(summary.transit.oldestDays)}</>
+                : <>oldest <b className="font-semibold text-text-2">{days(summary.transit.oldestDays)}</b></>} />
+            <KeyNumber label="Received, 30 days" value={String(summary.moved.count)}
+              note={<><b className="font-semibold text-text-2">{summary.moved.lines}</b> item lines moved</>} />
+            <KeyNumber label="Cancelled, 30 days" value={String(summary.cancelled.count)}
+              note={<>of <b className="font-semibold text-text-2">{summary.cancelled.of}</b> created</>} />
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <div className="relative w-full sm:max-w-sm sm:flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
+              <Input placeholder="Search outlet or staff..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {[{ key: "all", label: "All", match: () => true }, ...FILTERS].map((f) => (
+                <button key={f.key} onClick={() => setStatusFilter(f.key)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${statusFilter === f.key ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2"}`}>
+                  {f.label} ({data.filter((t) => f.match(t.status)).length})
+                </button>
               ))}
             </div>
-          )}
-          {aiTransfers.length > 0 && (
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setAiOpen(false)}>Close</Button>
-              <Button onClick={createAllSmartTransfers} disabled={aiCreating} className="bg-blue-600 hover:bg-blue-700">
-                {aiCreating ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Zap className="mr-1.5 h-4 w-4" />}
-                Create All ({aiTransfers.length}) Drafts
-              </Button>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
+          </div>
 
+          <div className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+            {filtered.length === 0 && (
+              <p className="px-4 py-12 text-center text-sm text-text-3">
+                {data.length === 0 ? "No transfers yet. Use New transfer to move stock between outlets." : "No transfers match your filter."}
+              </p>
+            )}
+            {filtered.map((t) => {
+              const late = (t.status === "IN_TRANSIT" || t.status === "APPROVED") && inTransitDays(t) > LATE_DAYS;
+              return (
+                <button key={t.id} onClick={() => { setSelected(t); window.scrollTo(0, 0); }}
+                  className="flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 hover:bg-sunken/50">
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-1.5 truncate text-sm font-medium text-text">
+                      {t.fromOutlet} <ArrowRight className="h-3.5 w-3.5 shrink-0 text-text-3" /> {t.toOutlet}
+                    </p>
+                    <p className="mt-0.5 truncate text-[12px] text-text-3">
+                      {formatDate(t.createdAt)} · {formatTime(t.createdAt)} · by {t.transferredBy} · {t.items.length} {t.items.length === 1 ? "item" : "items"}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] ${late ? "bg-warn-soft text-warn-text" : STATUS_STYLES[t.status] ?? "bg-sunken text-text-2"}`}>
+                    {late ? `In transit ${days(inTransitDays(t))}` : STATUS_LABELS[t.status] ?? t.status}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Reject Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Reject Transfer</DialogTitle>
+            <DialogTitle>Reject transfer</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-gray-500">Please provide a reason for rejecting this transfer.</p>
+          <p className="text-sm text-text-2">Please provide a reason for rejecting this transfer.</p>
           <textarea
-            className="mt-2 w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-terracotta focus:outline-none"
+            className="mt-2 w-full rounded-md border border-line px-3 py-2 text-sm bg-surface text-text focus:border-ink focus:outline-none"
             rows={3}
             placeholder="Reason for rejection..."
             value={rejectionReason}
@@ -808,180 +697,14 @@ export default function TransfersPage() {
             <Button
               onClick={handleReject}
               disabled={!rejectionReason.trim()}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-danger-text text-on-ink hover:opacity-90"
             >
-              Reject Transfer
+              Reject transfer
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Create Transfer Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ArrowLeftRight className="h-5 w-5 text-terracotta" />
-              New Transfer
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {/* Outlet selectors */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-gray-600">From Outlet</label>
-                <select
-                  className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                  value={fromOutletId}
-                  onChange={(e) => { setFromOutletId(e.target.value); setCart([]); fetchStockForOutlet(e.target.value, setStockBalances); }}
-                >
-                  <option value="">Select...</option>
-                  {outlets.filter((o) => o.id !== toOutletId).map((o) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600">To Outlet</label>
-                <select
-                  className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                  value={toOutletId}
-                  onChange={(e) => { setToOutletId(e.target.value); fetchStockForOutlet(e.target.value, setToStockBalances); }}
-                >
-                  <option value="">Select...</option>
-                  {outlets.filter((o) => o.id !== fromOutletId).map((o) => (
-                    <option key={o.id} value={o.id}>{o.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Product search + add */}
-            <div>
-              <label className="text-xs font-medium text-gray-600">Add Products</label>
-              {!fromOutletId && <p className="mt-1 text-xs text-amber-600">Select source outlet first</p>}
-              <div className="relative mt-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <Input
-                  placeholder={fromOutletId ? "Search product..." : "Select source outlet first..."}
-                  className="pl-9"
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  disabled={!fromOutletId}
-                />
-              </div>
-              {productSearch && (
-                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border bg-white shadow-sm">
-                  {filteredProducts.length === 0 && (
-                    <p className="px-3 py-2 text-xs text-gray-400">No products found</p>
-                  )}
-                  {filteredProducts.slice(0, 8).map((p) => {
-                    const pkg = p.packages.find((pk) => pk.isDefault) || p.packages[0];
-                    const conv = pkg?.conversionFactor || 1;
-                    const baseStock = stockBalances[p.id] ?? 0;
-                    const pkgStock = Math.floor(baseStock / conv);
-                    return (
-                      <button
-                        key={p.id}
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50"
-                        onClick={() => addToCart(p)}
-                      >
-                        <span className="text-gray-900">{p.name}</span>
-                        <span className="text-xs text-gray-400">{pkgStock} {pkg?.label || p.baseUom} · {p.sku}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Cart items */}
-            {cart.length > 0 && (
-              <div className="rounded-lg border overflow-hidden overflow-x-auto">
-                <table className="w-full text-xs min-w-[720px]">
-                  <thead>
-                    <tr className="bg-gray-50 border-b">
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">Product</th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-500">Pkg</th>
-                      <th className="px-3 py-2 text-right font-medium text-gray-500">From</th>
-                      <th className="px-3 py-2 text-right font-medium text-gray-500 w-20">Qty</th>
-                      <th className="px-3 py-2 text-right font-medium text-gray-500">To</th>
-                      <th className="px-3 py-2 w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cart.map((item, idx) => {
-                      const conv = item.conversionFactor;
-                      const fromAfter = item.availableStock - item.quantity;
-                      const toBase = toStockBalances[item.productId] ?? 0;
-                      const toCurrent = Math.floor(toBase / conv);
-                      const toAfter = toCurrent + item.quantity;
-                      return (
-                      <tr key={item.productId} className={`border-b border-gray-50 ${item.quantity > item.availableStock ? "bg-red-50" : ""}`}>
-                        <td className="px-3 py-2">
-                          <p className="font-medium text-gray-900">{item.name}</p>
-                          <p className="text-[10px] text-gray-400">{item.sku}</p>
-                        </td>
-                        <td className="px-3 py-2 text-gray-500">{item.uom}</td>
-                        <td className="px-3 py-2 text-right">
-                          <span className={item.availableStock <= 0 ? "text-red-600 font-medium" : "text-gray-500"}>{item.availableStock}</span>
-                          <span className="text-gray-300 mx-0.5">&rarr;</span>
-                          <span className={fromAfter <= 0 ? "text-red-600 font-medium" : "text-gray-700 font-medium"}>{fromAfter}</span>
-                        </td>
-                        <td className="px-3 py-2">
-                          <input
-                            type="number"
-                            min="1"
-                            max={item.availableStock}
-                            className="w-full rounded border border-gray-200 px-2 py-1 text-right text-xs focus:border-terracotta focus:outline-none"
-                            value={item.quantity}
-                            onChange={(e) => updateCartQty(idx, parseInt(e.target.value) || 0)}
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <span className="text-gray-500">{toCurrent}</span>
-                          <span className="text-gray-300 mx-0.5">&rarr;</span>
-                          <span className="text-green-600 font-medium">{toAfter}</span>
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <button onClick={() => removeFromCart(idx)} className="text-red-400 hover:text-red-600">
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Notes */}
-            <div>
-              <label className="text-xs font-medium text-gray-600">Notes (optional)</label>
-              <Input
-                className="mt-1"
-                placeholder="Reason for transfer..."
-                value={transferNotes}
-                onChange={(e) => setTransferNotes(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button
-              onClick={handleCreate}
-              disabled={!fromOutletId || !toOutletId || cart.length === 0 || submitting}
-              className="bg-terracotta hover:bg-terracotta-dark"
-            >
-              {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ArrowLeftRight className="mr-1.5 h-4 w-4" />}
-              Create Transfer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

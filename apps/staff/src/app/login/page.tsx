@@ -118,7 +118,9 @@ export default function LoginPage() {
         return;
       }
       localStorage.setItem("staff_outlet_id", outletId);
-      window.location.href = next;
+      // A PIN HR issued is a handover value — send them straight to replacing
+      // it. Middleware enforces this too, so skipping here only costs a hop.
+      window.location.href = data.mustChangePin ? "/change-pin" : next;
     } catch { setError("Connection error. Please try again."); }
     finally { setLoading(false); }
   };
@@ -137,17 +139,17 @@ export default function LoginPage() {
   }[mode];
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-brand-dark px-4">
+    <div className="flex min-h-screen items-center justify-center bg-bg px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <img src="/images/celsius-logo-sm.jpg" alt="Celsius Coffee" width={56} height={56} className="mx-auto rounded-xl" />
-          <h1 className="mt-4 font-heading text-xl font-bold text-white">Celsius Staff</h1>
-          <p className="mt-1 text-sm text-white/50">Outlet Operations</p>
-          <p className="mt-1 text-xs text-white/30">{subtitle}</p>
+          <h1 className="mt-4 font-heading text-xl font-bold text-text">Celsius Staff</h1>
+          <p className="mt-1 text-sm text-text-2">Outlet operations</p>
+          <p className="mt-1 text-xs text-text-3">{subtitle}</p>
         </div>
 
         {expired && (
-          <p className="mb-4 rounded-lg bg-amber-500/10 px-3 py-2 text-center text-xs text-amber-300">
+          <p className="mb-4 rounded-lg bg-warn-soft px-3 py-2 text-center text-xs text-warn-text">
             Your shift session timed out — sign in again to carry on. Anything
             you were part-way through saving needs doing again.
           </p>
@@ -155,33 +157,33 @@ export default function LoginPage() {
 
         {mode === "choose" && (
           <div className="space-y-3">
-            <Button className="w-full bg-terracotta hover:bg-terracotta-dark" onClick={() => { setMode("username"); setError(""); }}>
-              Manager / Admin Login
+            <Button className="w-full bg-ink hover:bg-ink-hover" onClick={() => { setMode("username"); setError(""); }}>
+              Manager sign-in
             </Button>
-            <Button variant="outline" className="w-full border-white/20 bg-transparent text-white hover:bg-white/10"
+            <Button variant="outline" className="w-full border-line-2 bg-transparent text-text hover:bg-sunken"
               onClick={() => { setMode("pin"); setPin(Array(PIN_LENGTH).fill("")); setError(""); }}>
-              Staff PIN Login
+              Sign in with your PIN
             </Button>
           </div>
         )}
 
         {mode === "username" && (
           <form onSubmit={handleUsernameLogin} className="space-y-4">
-            <button type="button" onClick={goBack} className="flex items-center gap-1 text-xs text-white/50 hover:text-white/70">
+            <button type="button" onClick={goBack} className="flex items-center gap-1 text-xs text-text-2 hover:text-text">
               <ArrowLeft className="h-3 w-3" />Back
             </button>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-white/70">Username</label>
+              <label className="mb-1.5 block text-xs font-medium text-text-2">Username</label>
               <Input type="text" placeholder="Enter username" value={username} onChange={(e) => setUsername(e.target.value)}
-                className="border-white/10 bg-white/5 text-white placeholder:text-white/30" autoFocus autoComplete="username" />
+                className="border-line-2 bg-surface text-text placeholder:text-text-3" autoFocus autoComplete="username" />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-white/70">Password</label>
+              <label className="mb-1.5 block text-xs font-medium text-text-2">Password</label>
               <Input type="password" placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)}
-                className="border-white/10 bg-white/5 text-white placeholder:text-white/30" autoComplete="current-password" />
+                className="border-line-2 bg-surface text-text placeholder:text-text-3" autoComplete="current-password" />
             </div>
-            {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</p>}
-            <Button type="submit" disabled={loading || !username.trim() || !password} className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50">
+            {error && <p className="rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
+            <Button type="submit" disabled={loading || !username.trim() || !password} className="w-full bg-ink hover:bg-ink-hover disabled:opacity-50">
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Sign In
             </Button>
           </form>
@@ -189,15 +191,15 @@ export default function LoginPage() {
 
         {mode === "pin" && (
           <div className="space-y-4">
-            <button onClick={goBack} className="flex items-center gap-1 text-xs text-white/50 hover:text-white/70">
+            <button onClick={goBack} className="flex items-center gap-1 text-xs text-text-2 hover:text-text">
               <ArrowLeft className="h-3 w-3" />Back
             </button>
             <select
               value={outletId}
               onChange={(e) => setOutletId(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white outline-none focus:border-terracotta"
+              className="w-full rounded-xl border border-line-2 bg-surface px-3 py-2.5 text-sm text-text outline-none focus:border-ink"
             >
-              <option value="" disabled>Select Outlet</option>
+              <option value="" disabled>Choose your outlet</option>
               {outlets.map((o) => (
                 <option key={o.id} value={o.id}>{o.name}</option>
               ))}
@@ -206,15 +208,15 @@ export default function LoginPage() {
               {pin.map((digit, i) => (
                 <input key={i} ref={(el) => { pinRefs.current[i] = el; }} type="password" inputMode="numeric" maxLength={1} value={digit}
                   onChange={(e) => handlePinChange(i, e.target.value)} onKeyDown={(e) => handlePinKeyDown(i, e)}
-                  className="h-12 w-12 rounded-xl border border-white/10 bg-white/5 text-center text-xl font-bold text-white outline-none focus:border-terracotta focus:ring-1 focus:ring-terracotta" />
+                  className="h-12 w-12 rounded-xl border border-line-2 bg-surface text-center text-xl font-bold text-text outline-none focus:border-ink focus:ring-1 focus:ring-text" />
               ))}
             </div>
-            {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</p>}
-            {loading && <div className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-white/50" /></div>}
+            {error && <p className="rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
+            {loading && <div className="flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-text-2" /></div>}
           </div>
         )}
 
-        <p className="mt-6 text-center text-xs text-white/30">
+        <p className="mt-6 text-center text-xs text-text-3">
           Contact admin if you don&apos;t have access
         </p>
       </div>

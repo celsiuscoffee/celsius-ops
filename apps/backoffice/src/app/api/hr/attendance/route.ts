@@ -7,7 +7,7 @@ import { getAccessibleOutletIds } from "@/lib/hr/scope";
 import { signAttendancePhotos } from "@/lib/hr/photos";
 import { deriveHours, mytDateString, mytInstant, computeLateMinutes } from "@/lib/hr/hours";
 import { haversineDistance, REST_DAY_ROLE_PATTERN } from "@/lib/hr/constants";
-import { approveOtForReviewedLog, logOtHours, type TailLog } from "@/lib/hr/ot-request-generator";
+import { fileOtForReviewedLog, logOtHours, type TailLog } from "@/lib/hr/ot-request-generator";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +40,10 @@ const mytDayStartMs = (ymd: string): number | null => {
   return Number.isNaN(ms) ? null : ms;
 };
 
+// Flags that describe how hours are paid, not a problem to decide on
+// (same set as lib/hr/agents/attendance-processor.ts).
+const INFORMATIONAL_FLAGS = new Set(["rest_day_work", "public_holiday"]);
+
 // GET: the review queue.
 //
 //   review=pending|reviewed|all   pending = closed-or-open logs nobody has
@@ -51,7 +55,6 @@ const mytDayStartMs = (ymd: string): number | null => {
 //   from=YYYY-MM-DD&to=YYYY-MM-DD MYT date range (inclusive). `date=` is the
 //                                 single-day form.
 //   user_id, outlet_id, flag      narrow to a person / outlet / one AI flag.
-//   has_ot=1                      only logs whose approval would pay OT.
 //   limit                         default 200, max 1000.
 //
 // Why the range and the default matter: the old queue returned the 50 newest
@@ -70,7 +73,6 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(searchParams.get("limit") || String(DEFAULT_LIMIT)) || DEFAULT_LIMIT));
   const userId = searchParams.get("user_id");
   const flag = searchParams.get("flag");
-  const hasOt = searchParams.get("has_ot") === "1";
 
   // MANAGER sees attendance across ALL their assigned outlets (outletId +
   // outletIds[]). A URL outlet_id param is honored only if accessible.
@@ -232,13 +234,24 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  const logs = hasOt ? enriched.filter((l) => (l.ot_tail_hours ?? 0) >= 0.5 || l.ot_tail_suspicious) : enriched;
+  // Clock-ins is for clock-in ISSUES (owner 19 Nov 2026). A closed log whose
+  // only finding is overtime is a true record; its OT is decided on the
+  // Overtime page (the daily sync files it there as pending), so it is not
+  // put in front of the manager here. A tail that looks like a missed
+  // tap-out stays: the times need fixing first.
+  const otOnly = (l: (typeof enriched)[number]) => {
+    const flags = (l.ai_flags ?? []).filter((f: string) => !INFORMATIONAL_FLAGS.has(f));
+    return l.final_status == null && !!l.clock_out && !l.ot_tail_suspicious &&
+      flags.length > 0 && flags.every((f: string) => f === "overtime_detected");
+  };
+  const hiddenOtOnly = enriched.filter(otOnly).length;
+  const logs = review === "pending" || review === "all" ? enriched.filter((l) => !otOnly(l)) : enriched;
 
   return NextResponse.json({
     logs,
     count: logs.length,
     summary: {
-      pending: pendingCount ?? 0,
+      pending: Math.max(0, (pendingCount ?? 0) - hiddenOtOnly),
       pendingOtHours: Math.round(pendingOtHours * 2) / 2,
       suspicious,
     },
@@ -271,7 +284,7 @@ type ReviewInput = {
 };
 
 type ReviewOutcome =
-  | { ok: true; log: unknown; otApprovedHours: number }
+  | { ok: true; log: unknown; otFiledHours: number }
   | { ok: false; status: number; error: string };
 
 // PATCH: review a log — or, with `ids`, the same decision on many at once.
@@ -298,27 +311,27 @@ export async function PATCH(req: NextRequest) {
     if (!BULK_ACTIONS.includes(body.action)) {
       return NextResponse.json({ error: "Bulk review supports acknowledge, excuse and reject only" }, { status: 400 });
     }
-    const results: { id: string; ok: boolean; otApprovedHours?: number; error?: string }[] = [];
-    let otApprovedHours = 0;
+    const results: { id: string; ok: boolean; otFiledHours?: number; error?: string }[] = [];
+    let otFiledHours = 0;
     // Sequential on purpose: each approval may write an OT request, and the
     // generator de-dupes per (person, day) — racing them would double-file.
     for (const id of ids) {
       const r = await reviewOne({ ...body, id }, session, allowedOutletIds);
       if (r.ok) {
-        otApprovedHours += r.otApprovedHours;
-        results.push({ id, ok: true, otApprovedHours: r.otApprovedHours });
+        otFiledHours += r.otFiledHours;
+        results.push({ id, ok: true, otFiledHours: r.otFiledHours });
       } else {
         results.push({ id, ok: false, error: r.error });
       }
     }
     const done = results.filter((r) => r.ok).length;
-    return NextResponse.json({ done, failed: results.length - done, otApprovedHours, results });
+    return NextResponse.json({ done, failed: results.length - done, otFiledHours, results });
   }
 
   if (!body.id) return NextResponse.json({ error: "id required" }, { status: 400 });
   const r = await reviewOne(body, session, allowedOutletIds);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
-  return NextResponse.json({ log: r.log, otApprovedHours: r.otApprovedHours });
+  return NextResponse.json({ log: r.log, otFiledHours: r.otFiledHours });
 }
 
 async function reviewOne(
@@ -378,19 +391,15 @@ async function reviewOne(
     .single();
   if (error) return { ok: false, status: 500, error: error.message };
 
-  // Owner 2026-09-03: "only the OT Ariff approves in attendance will be
-  // counted as OT on payroll." Confirming the day (approve / acknowledge /
-  // excuse / adjust) approves its OT tail: an approved hr_overtime_requests
-  // row is written and stamped onto the log, exactly as the OT queue would.
-  // Until now this approval set final_status and paid 0 OT — the tail is not
-  // on the row (paid-window rule), and only a request can put it there.
-  // Reject leaves nothing to approve. An implausible tail (missed tap-out)
-  // yields 0 from the generator, so a confirm never pays a day of phantom OT.
-  let otApprovedHours = 0;
+  // Confirming the day does NOT approve its OT (owner 19 Nov 2026: Clock-ins
+  // is for issues, Overtime approves OT). It files the tail as a pending
+  // request at the day's current hours, for the Overtime page. Reject leaves
+  // nothing to file. An implausible tail (missed tap-out) yields 0.
+  let otFiledHours = 0;
   if (action !== "reject") {
-    otApprovedHours = await approveOtForReviewedLog({ user_id: log.user_id, clock_in: log.clock_in }, session.id);
+    otFiledHours = await fileOtForReviewedLog({ user_id: log.user_id, clock_in: log.clock_in }, session.id);
   }
-  return { ok: true, log: data, otApprovedHours };
+  return { ok: true, log: data, otFiledHours };
 }
 
 // set_times: the manager fixes the real clock-in/out (or manually clocks out a
@@ -468,6 +477,6 @@ async function setTimes(
   if (setErr) return { ok: false, status: 500, error: setErr.message };
   // Corrected times are a manager's statement of what was worked: any tail
   // past the roster in the NEW times is approved OT (owner 2026-09-03).
-  const otApprovedHours = await approveOtForReviewedLog({ user_id: log.user_id, clock_in: ci.toISOString() }, session.id);
-  return { ok: true, log: updated, otApprovedHours };
+  const otFiledHours = await fileOtForReviewedLog({ user_id: log.user_id, clock_in: ci.toISOString() }, session.id);
+  return { ok: true, log: updated, otFiledHours };
 }

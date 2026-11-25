@@ -40,9 +40,9 @@ export default function RewardKindsPage() {
   }, []);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
           <Layers className="w-6 h-6" />
           Outcome Types
         </h1>
@@ -118,7 +118,7 @@ export default function RewardKindsPage() {
                     <span
                       className={cn(
                         "text-xs font-medium px-2 py-0.5 rounded",
-                        k.is_active ? "bg-emerald-100 text-emerald-900" : "bg-gray-100 text-gray-600",
+                        k.is_active ? "bg-emerald-100 text-emerald-900" : "bg-sunken text-text-2",
                       )}
                     >
                       {k.is_active ? "Active" : "Hidden"}

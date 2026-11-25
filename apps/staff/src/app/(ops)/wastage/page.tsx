@@ -152,9 +152,9 @@ export default function WastagePage() {
   if (loading) {
     return (
       <>
-        <TopBar title="Record Wastage" />
+        <TopBar title="Wastage" />
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       </>
     );
@@ -162,45 +162,45 @@ export default function WastagePage() {
 
   return (
     <>
-      <TopBar title="Record Wastage" />
+      <TopBar title="Wastage" />
       <PullToRefresh onRefresh={() => fetchWastage(user?.outletId)}>
       <div className="px-4 py-3">
         <div className="mx-auto max-w-lg space-y-4">
           {/* Summary */}
-          <Card className="bg-red-50 border-red-200 px-4 py-3">
+          <Card className="bg-danger-soft border-danger/30 px-4 py-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-red-500">Total Waste Cost</p>
-                <p className="text-xl font-bold text-red-700">RM {totalWaste.toFixed(2)}</p>
+                <p className="text-xs text-danger">Total waste cost</p>
+                <p className="text-xl font-bold text-danger-text">RM {totalWaste.toFixed(2)}</p>
               </div>
-              <AlertTriangle className="h-8 w-8 text-red-300" />
+              <AlertTriangle className="h-8 w-8 text-danger" />
             </div>
           </Card>
 
-          <Button onClick={() => setDialogOpen(true)} className="w-full bg-terracotta hover:bg-terracotta-dark">
+          <Button onClick={() => setDialogOpen(true)} className="w-full bg-ink hover:bg-ink-hover">
             <Plus className="mr-1.5 h-4 w-4" />
-            Record Wastage
+            Record wastage
           </Button>
 
           <div>
-            <h2 className="mb-2 text-sm font-semibold text-gray-900">Recent Wastage</h2>
+            <h2 className="mb-2 text-sm font-semibold text-text">Recent wastage</h2>
             <div className="space-y-1.5">
               {wastage.length === 0 && (
-                <p className="py-6 text-center text-sm text-gray-400">No wastage records yet</p>
+                <p className="py-6 text-center text-sm text-text-3">No wastage records yet</p>
               )}
               {wastage.map((w) => (
                 <Card key={w.id} className="px-3 py-2.5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{w.product}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-sm font-medium text-text">{w.product}</p>
+                      <p className="text-xs text-text-3">
                         {w.quantity} &middot; {w.reason ?? "—"} &middot; {formatDate(w.createdAt)}
                       </p>
-                      <p className="text-xs text-gray-400">by {w.adjustedBy}</p>
+                      <p className="text-xs text-text-3">by {w.adjustedBy}</p>
                     </div>
                     <div className="text-right">
                       {w.costAmount != null && (
-                        <p className="text-sm font-medium text-red-600">-RM {w.costAmount.toFixed(2)}</p>
+                        <p className="text-sm font-medium text-danger-text">-RM {w.costAmount.toFixed(2)}</p>
                       )}
                       {w.reason && <Badge variant="outline" className="text-[10px]">{w.reason}</Badge>}
                     </div>
@@ -215,12 +215,12 @@ export default function WastagePage() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="mx-auto max-w-sm">
-          <DialogHeader><DialogTitle>Record Wastage</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Record wastage</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div>
               <label className="text-sm font-medium">Product</label>
               <div className="relative mt-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
                 <Input
                   placeholder="Search product..."
                   className="pl-9"
@@ -232,27 +232,27 @@ export default function WastagePage() {
                 />
               </div>
               {productSearch && !selectedProductId && (
-                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border bg-white shadow-sm">
+                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border bg-surface shadow-sm">
                   {filteredProducts.length === 0 && (
-                    <p className="px-3 py-2 text-xs text-gray-400">No products found</p>
+                    <p className="px-3 py-2 text-xs text-text-3">No products found</p>
                   )}
                   {filteredProducts.slice(0, 10).map((p) => (
                     <button
                       key={p.id}
-                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50"
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-sunken/60"
                       onClick={() => {
                         setSelectedProductId(p.id);
                         setProductSearch(p.name);
                       }}
                     >
-                      <span className="text-gray-900">{p.name}</span>
-                      <span className="text-xs text-gray-400">{p.sku}</span>
+                      <span className="text-text">{p.name}</span>
+                      <span className="text-xs text-text-3">{p.sku}</span>
                     </button>
                   ))}
                 </div>
               )}
               {selectedProduct && (
-                <p className="mt-1 text-xs text-gray-500">SKU: {selectedProduct.sku} &middot; UOM: {selectedProduct.baseUom}</p>
+                <p className="mt-1 text-xs text-text-3">SKU: {selectedProduct.sku} &middot; UOM: {selectedProduct.baseUom}</p>
               )}
             </div>
             <div>
@@ -270,7 +270,7 @@ export default function WastagePage() {
               <label className="text-sm font-medium">Reason</label>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {REASONS.map((r) => (
-                  <button key={r} onClick={() => setReason(r)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${reason === r ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-600"}`}>{r}</button>
+                  <button key={r} onClick={() => setReason(r)} className={`rounded-full border px-3 py-1 text-xs transition-colors ${reason === r ? "border-ink bg-brand-soft text-brand-text" : "border-line text-text-2"}`}>{r}</button>
                 ))}
               </div>
             </div>
@@ -284,12 +284,12 @@ export default function WastagePage() {
               />
             </div>
             {submitError && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-text">
                 {submitError}
               </div>
             )}
             <Button
-              className="w-full bg-terracotta hover:bg-terracotta-dark"
+              className="w-full bg-ink hover:bg-ink-hover"
               disabled={!selectedProductId || !quantity || !reason || submitting}
               onClick={handleSubmit}
             >
@@ -298,7 +298,7 @@ export default function WastagePage() {
               ) : (
                 <Trash2 className="mr-1.5 h-4 w-4" />
               )}
-              {submitting ? "Submitting..." : "Record Wastage"}
+              {submitting ? "Submitting..." : "Record wastage"}
             </Button>
           </div>
         </DialogContent>

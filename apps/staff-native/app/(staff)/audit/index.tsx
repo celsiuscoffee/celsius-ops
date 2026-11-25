@@ -27,8 +27,16 @@ import {
   type AuditCoverageTemplate,
   type AuditListItem,
 } from "../../../lib/ops/audits";
+import { useCelsius } from "../../../lib/celsius-ui";
+import { useStaff } from "../../../lib/store";
+import { hasAccess } from "../../../lib/access";
 
 export default function AuditList() {
+  const C = useCelsius().color;
+  // Audits open from the Checks tab (a row on the checklists screen); only
+  // someone with audits but no checklists has this as their tab root.
+  const session = useStaff((s) => s.session);
+  const fromChecks = hasAccess(session?.role, session?.moduleAccess, "ops:checklists");
   const router = useRouter();
   const [items, setItems] = useState<AuditListItem[]>([]);
   const [coverage, setCoverage] = useState<AuditCoverageTemplate[]>([]);
@@ -65,9 +73,9 @@ export default function AuditList() {
   if (loading && items.length === 0) {
     return (
       <Screen edges={["top", "left", "right"]}>
-        <PageHeader title="Audits" />
+        <PageHeader title="Audits" back={fromChecks} />
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#A2492C" />
+          <ActivityIndicator color={C["text-3"]} />
         </View>
       </Screen>
     );
@@ -75,7 +83,7 @@ export default function AuditList() {
 
   return (
     <Screen edges={["top", "left", "right"]}>
-      <PageHeader title="Audits" />
+      <PageHeader title="Audits" back={fromChecks} />
       <FlatList
         data={[]}
         keyExtractor={() => ""}
@@ -88,7 +96,7 @@ export default function AuditList() {
               setRefreshing(true);
               load(true);
             }}
-            tintColor="#A2492C"
+            tintColor={C["text-3"]}
           />
         }
         ListHeaderComponent={
@@ -100,7 +108,7 @@ export default function AuditList() {
                 full auditee list with their individual status. */}
             {coverage.length > 0 ? (
               <View className="mb-4">
-                <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+                <Text className="mb-2 text-sm font-body-semi text-text-2">
                   Staff coverage
                 </Text>
                 <View className="gap-2">
@@ -125,7 +133,7 @@ export default function AuditList() {
 
             {inProgress.length > 0 ? (
               <View className="mb-4">
-                <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+                <Text className="mb-2 text-sm font-body-semi text-text-2">
                   In progress
                 </Text>
                 <View className="gap-2">
@@ -142,7 +150,7 @@ export default function AuditList() {
 
             {completed.length > 0 ? (
               <View>
-                <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+                <Text className="mb-2 text-sm font-body-semi text-text-2">
                   Completed
                 </Text>
                 <View className="gap-2">
@@ -159,13 +167,13 @@ export default function AuditList() {
 
             {items.length === 0 ? (
               <View className="mt-12 items-center px-6">
-                <View className="h-20 w-20 items-center justify-center rounded-3xl bg-primary-50">
-                  <ClipboardList color="#A2492C" size={32} />
+                <View className="h-20 w-20 items-center justify-center rounded-2xl bg-sunken">
+                  <ClipboardList color={C["text-2"]} size={32} />
                 </View>
-                <Text className="mt-4 text-base font-display text-espresso">
+                <Text className="mt-4 text-base font-display text-text">
                   No audits yet
                 </Text>
-                <Text className="mt-1 text-sm font-body text-muted-fg text-center">
+                <Text className="mt-1 text-sm font-body text-text-2 text-center">
                   Tap the button below to start a spot check.
                 </Text>
               </View>
@@ -179,13 +187,13 @@ export default function AuditList() {
           this screen's bottom already ends at the tab bar; a small pb-3 sits it
           just above, no useBottomTabBarHeight padding (that double-counted the
           tab bar and left a big frozen gap). */}
-      <View className="absolute inset-x-0 bottom-0 border-t border-border bg-background px-5 pt-3 pb-3">
+      <View className="absolute inset-x-0 bottom-0 border-t border-line bg-bg px-5 pt-3 pb-3">
         <Pressable
           onPress={() => router.push("/audit/new")}
-          className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-primary active:opacity-80"
+          className="h-14 flex-row items-center justify-center gap-2 rounded-2xl bg-ink active:opacity-80"
         >
-          <Plus color="#FFFFFF" size={20} />
-          <Text className="text-base font-body-bold text-white">
+          <Plus color={C["on-ink"]} size={20} />
+          <Text className="text-base font-body-bold text-on-ink">
             New audit
           </Text>
         </Pressable>
@@ -208,6 +216,7 @@ function CoverageCard({
   onToggle: () => void;
   onStartAudit: (auditeeId: string) => void;
 }) {
+  const C = useCelsius().color;
   const { totals } = tmpl;
   const needsAudit = totals.never + totals.stale;
   const Chevron = open ? ChevronUp : ChevronDown;
@@ -227,31 +236,31 @@ function CoverageCard({
   }, [tmpl.auditees]);
 
   return (
-    <View className="rounded-2xl border border-border bg-surface">
+    <View className="rounded-2xl border border-line bg-surface">
       <Pressable
         onPress={onToggle}
-        className="px-4 py-3 active:bg-primary-50"
+        className="px-4 py-3 active:bg-sunken"
       >
         <View className="flex-row items-center gap-3">
           <View
             className={`h-9 w-9 items-center justify-center rounded-xl ${
-              needsAudit > 0 ? "bg-amber-500/15" : "bg-success/10"
+              needsAudit > 0 ? "bg-warn-soft" : "bg-ok-soft"
             }`}
           >
             {needsAudit > 0 ? (
-              <AlertTriangle color="#D97706" size={16} />
+              <AlertTriangle color={C.warn} size={16} />
             ) : (
-              <CheckCircle2 color="#15803D" size={16} />
+              <CheckCircle2 color={C["ok-text"]} size={16} />
             )}
           </View>
           <View className="flex-1">
             <Text
-              className="text-base font-body-medium text-espresso"
+              className="text-base font-body-medium text-text"
               numberOfLines={1}
             >
               {tmpl.name}
             </Text>
-            <Text className="mt-0.5 text-[10px] font-body text-muted">
+            <Text className="mt-0.5 text-xs font-body text-text-3">
               {totals.eligible} staff · {totals.recent} recently audited
               {totals.avgScore != null
                 ? ` · avg ${totals.avgScore}%`
@@ -259,20 +268,20 @@ function CoverageCard({
             </Text>
           </View>
           {needsAudit > 0 ? (
-            <View className="rounded-full bg-amber-500/15 px-2 py-0.5">
-              <Text className="text-[10px] font-body-bold text-amber-700">
+            <View className="rounded-full bg-warn-soft px-2 py-0.5">
+              <Text className="text-xs font-body-bold text-warn-text">
                 {needsAudit} pending
               </Text>
             </View>
           ) : null}
-          <Chevron color="#9CA3AF" size={16} />
+          <Chevron color={C["text-3"]} size={16} />
         </View>
       </Pressable>
 
       {open ? (
-        <View className="border-t border-border px-4 py-2">
+        <View className="border-t border-line px-4 py-2">
           {sorted.length === 0 ? (
-            <Text className="py-3 text-center text-xs text-muted">
+            <Text className="py-3 text-center text-xs text-text-3">
               No eligible staff for this template at this outlet.
             </Text>
           ) : (
@@ -291,15 +300,16 @@ function AuditeeRow({
   a: AuditCoverageTemplate["auditees"][number];
   onStart: (auditeeId: string) => void;
 }) {
+  const C = useCelsius().color;
   const score = a.lastAudit?.overallScore;
   const scoreColor =
     score == null
-      ? "text-muted"
+      ? "text-text-3"
       : score >= 80
-        ? "text-success"
+        ? "text-ok-text"
         : score >= 60
-          ? "text-amber-700"
-          : "text-danger";
+          ? "text-warn-text"
+          : "text-danger-text";
   const statusLabel =
     a.status === "never"
       ? "Never audited"
@@ -308,26 +318,26 @@ function AuditeeRow({
         : `Audited ${a.lastAudit?.date ?? ""}`;
   const statusTone =
     a.status === "never"
-      ? "text-danger"
+      ? "text-danger-text"
       : a.status === "stale"
-        ? "text-amber-700"
-        : "text-success";
+        ? "text-warn-text"
+        : "text-ok-text";
   return (
     <Pressable
       onPress={() => onStart(a.userId)}
-      className="flex-row items-center gap-3 py-2.5 active:bg-primary-50"
+      className="flex-row items-center gap-3 py-2.5 active:bg-sunken"
     >
-      <View className="h-8 w-8 items-center justify-center rounded-full bg-primary-50">
-        <Users color="#A2492C" size={14} />
+      <View className="h-8 w-8 items-center justify-center rounded-full bg-sunken">
+        <Users color={C["text-2"]} size={14} />
       </View>
       <View className="flex-1">
         <Text
-          className="text-base font-body-medium text-espresso"
+          className="text-base font-body-medium text-text"
           numberOfLines={1}
         >
           {a.name}
         </Text>
-        <Text className={`text-[10px] font-body ${statusTone}`}>
+        <Text className={`text-xs font-body ${statusTone}`}>
           {statusLabel}
         </Text>
       </View>
@@ -336,7 +346,7 @@ function AuditeeRow({
           {score}%
         </Text>
       ) : null}
-      <ChevronRight color="#D1D5DB" size={14} />
+      <ChevronRight color={C["text-3"]} size={14} />
     </Pressable>
   );
 }
@@ -348,36 +358,37 @@ function AuditCard({
   audit: AuditListItem;
   onPress: () => void;
 }) {
+  const C = useCelsius().color;
   const done = audit.status === "COMPLETED";
   const Icon = done ? CheckCircle2 : Clock;
   return (
     <Pressable
       onPress={onPress}
-      className="rounded-2xl border border-border bg-surface px-3 py-2.5 active:bg-primary-50"
+      className="rounded-2xl border border-line bg-surface px-3 py-2.5 active:bg-sunken"
     >
       <View className="flex-row items-center gap-3">
         <View
-          className={`h-9 w-9 items-center justify-center rounded-xl ${done ? "bg-success/10" : "bg-blue-100"}`}
+          className={`h-9 w-9 items-center justify-center rounded-xl ${done ? "bg-ok-soft" : "bg-info-soft"}`}
         >
-          <Icon color={done ? "#15803D" : "#2563EB"} size={16} />
+          <Icon color={done ? C["ok-text"] : C.info} size={16} />
         </View>
         <View className="flex-1">
           <View className="flex-row items-center gap-1.5">
             <Text
-              className="flex-1 text-base font-body-medium text-espresso"
+              className="flex-1 text-base font-body-medium text-text"
               numberOfLines={1}
             >
               {audit.template.name}
             </Text>
             {audit.isMine ? (
-              <View className="rounded-full bg-primary-50 px-1.5 py-px">
-                <Text className="text-[9px] font-body-bold text-primary">
+              <View className="rounded-full bg-sunken px-1.5 py-px">
+                <Text className="text-xs font-body-bold text-text">
                   YOU
                 </Text>
               </View>
             ) : null}
           </View>
-          <Text className="mt-0.5 text-[10px] font-body text-muted">
+          <Text className="mt-0.5 text-xs font-body text-text-3">
             {audit.auditor.name} · {audit.date} · {audit.completedItems}/
             {audit.totalItems}
           </Text>
@@ -386,35 +397,35 @@ function AuditCard({
           <View
             className={`rounded-full px-2 py-0.5 ${
               (audit.overallScore ?? 0) >= 80
-                ? "bg-success/10"
+                ? "bg-ok-soft"
                 : (audit.overallScore ?? 0) >= 60
-                  ? "bg-amber-100"
-                  : "bg-danger/10"
+                  ? "bg-warn-soft"
+                  : "bg-danger-soft"
             }`}
           >
             <Text
               className={`text-xs font-body-bold ${
                 (audit.overallScore ?? 0) >= 80
-                  ? "text-success"
+                  ? "text-ok-text"
                   : (audit.overallScore ?? 0) >= 60
-                    ? "text-amber-700"
-                    : "text-danger"
+                    ? "text-warn-text"
+                    : "text-danger-text"
               }`}
             >
               {audit.overallScore ?? 0}%
             </Text>
           </View>
         ) : (
-          <Text className="text-base font-body-bold text-espresso">
+          <Text className="text-base font-body-bold text-text">
             {audit.progress}%
           </Text>
         )}
-        <ChevronRight color="#D1D5DB" size={14} />
+        <ChevronRight color={C["text-3"]} size={14} />
       </View>
       {!done ? (
-        <View className="mt-2 h-1 overflow-hidden rounded-full bg-primary-50">
+        <View className="mt-2 h-1 overflow-hidden rounded-full bg-sunken">
           <View
-            className="h-full bg-primary"
+            className="h-full bg-ink"
             style={{ width: `${audit.progress}%` }}
           />
         </View>

@@ -10,12 +10,12 @@ import { exportToCSV } from "@/lib/loyalty/export";
 
 const statusColors: Record<string, string> = {
   confirmed:
-    "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-  used: "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    "bg-ok-soft text-ok-text",
+  used: "bg-ok-soft text-ok-text",
   pending:
-    "bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+    "bg-warn-soft text-warn-text",
   cancelled:
-    "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-500",
+    "bg-sunken text-text-2",
 };
 
 type StatusFilter = "all" | "pending" | "confirmed" | "cancelled";
@@ -92,21 +92,21 @@ export default function AdminRedemptionsPage() {
   ).length;
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
             Redemptions
           </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-neutral-500">
-            View all reward redemptions and their verification codes
+          <p className="mt-1 text-sm text-text-2">
+            Points spent in the points shop: what was redeemed, by whom, and whether it was handed over.
           </p>
         </div>
         <button
           onClick={handleExport}
           disabled={filtered.length === 0}
-          className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-neutral-300 hover:bg-gray-50 dark:hover:bg-neutral-700 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-medium text-text-2 hover:bg-sunken transition-colors disabled:opacity-50"
         >
           <Download className="h-4 w-4" />
           Export CSV
@@ -114,26 +114,26 @@ export default function AdminRedemptionsPage() {
       </div>
 
       {/* Stats */}
-      <div className="mt-6 grid grid-cols-3 gap-4">
-        <div className="rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">
-          <p className="text-sm text-gray-500 dark:text-neutral-500">Total</p>
-          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
+      <div className="mt-6 grid grid-cols-3 gap-3">
+        <div className="rounded-xl border border-line bg-surface p-4">
+          <p className="text-sm text-text-2">Total</p>
+          <p className="mt-1 text-2xl font-bold text-text">
             {redemptions.length}
           </p>
         </div>
-        <div className="rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">
-          <p className="text-sm text-yellow-600 dark:text-yellow-400">
+        <div className="rounded-xl border border-line bg-surface p-4">
+          <p className="text-sm text-warn-text">
             Pending
           </p>
-          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
+          <p className="mt-1 text-2xl font-bold text-text">
             {pendingCount}
           </p>
         </div>
-        <div className="rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">
-          <p className="text-sm text-green-600 dark:text-green-400">
+        <div className="rounded-xl border border-line bg-surface p-4">
+          <p className="text-sm text-ok-text">
             Confirmed
           </p>
-          <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
+          <p className="mt-1 text-2xl font-bold text-text">
             {confirmedCount}
           </p>
         </div>
@@ -143,31 +143,31 @@ export default function AdminRedemptionsPage() {
       <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-center">
         {/* Search */}
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-neutral-500" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-text-3" />
           <input
             type="text"
             placeholder="Search by code, customer, or reward..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 pl-10 pr-4 py-2.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-[#C2452D]/40 focus:border-[#C2452D] transition-colors"
+            className="w-full rounded-xl border border-line bg-surface pl-10 pr-4 py-2.5 text-sm text-text placeholder:text-text-3 focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-ink transition-colors"
           />
         </div>
 
         {/* Status filter tabs */}
-        <div className="flex gap-1 rounded-xl bg-gray-100 dark:bg-neutral-800 p-1">
+        <div className="flex gap-1 rounded-xl bg-sunken p-1">
           {(["all", "pending", "confirmed", "cancelled"] as StatusFilter[]).map(
             (s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={cn(
-                  "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                  "min-h-9 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
                   statusFilter === s
-                    ? "bg-white dark:bg-neutral-700 text-gray-900 dark:text-white shadow-sm"
-                    : "text-gray-500 dark:text-neutral-400 hover:text-gray-700 dark:hover:text-neutral-200"
+                    ? "bg-surface text-text shadow-sm"
+                    : "text-text-2 hover:text-text-2"
                 )}
               >
-                {s.charAt(0).toUpperCase() + s.slice(1)}
+                {s === "all" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
               </button>
             )
           )}
@@ -175,129 +175,33 @@ export default function AdminRedemptionsPage() {
       </div>
 
       {/* Table */}
-      <div className="mt-4 overflow-hidden rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+      <div className="mt-4 overflow-hidden rounded-xl border border-line bg-surface">
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-6 w-6 animate-spin text-[#C2452D]" />
+            <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400 dark:text-neutral-500">
+          <div className="flex flex-col items-center justify-center py-16 text-text-3">
             <TicketCheck className="h-10 w-10 mb-2" />
             <p className="text-sm font-medium">No redemptions found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px] text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-800/50">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap">
-                    Code
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap">
-                    Customer
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap">
-                    Reward
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap">
-                    Points
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap">
-                    Created
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap">
-                    Confirmed
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-neutral-800">
-                {filtered.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-colors"
-                  >
-                    <td className="px-4 py-3">
-                      <span className="inline-block rounded bg-gray-100 dark:bg-neutral-700 px-2 py-0.5 text-xs font-bold font-mono tracking-wider text-gray-800 dark:text-neutral-200">
-                        {r.code}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white">
-                          {r.members?.name || "-"}
-                        </p>
-                        <p className="text-xs text-gray-400 dark:text-neutral-500">
-                          {r.members?.phone || "-"}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 dark:text-neutral-300">
-                      {r.rewards?.name || "-"}
-                    </td>
-                    <td className="px-4 py-3 font-medium font-mono text-gray-900 dark:text-white">
-                      {formatPoints(r.points_spent)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-                          statusColors[r.status] || statusColors.cancelled
-                        )}
-                      >
-                        {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 dark:text-neutral-400 text-xs whitespace-nowrap">
-                      {new Date(r.created_at).toLocaleDateString("en-MY", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                      <br />
-                      <span className="text-gray-400 dark:text-neutral-500">
-                        {new Date(r.created_at).toLocaleTimeString("en-MY", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 dark:text-neutral-400 text-xs whitespace-nowrap">
-                      {r.confirmed_at
-                        ? (
-                            <>
-                              {new Date(r.confirmed_at).toLocaleDateString(
-                                "en-MY",
-                                {
-                                  day: "numeric",
-                                  month: "short",
-                                  year: "numeric",
-                                }
-                              )}
-                              <br />
-                              <span className="text-gray-400 dark:text-neutral-500">
-                                {new Date(r.confirmed_at).toLocaleTimeString(
-                                  "en-MY",
-                                  {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  }
-                                )}
-                              </span>
-                            </>
-                          )
-                        : (
-                            <span className="text-gray-300 dark:text-neutral-600">
-                              -
-                            </span>
-                          )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div>
+            {filtered.map((r) => (
+              <div key={r.id} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0">
+                <span className="hidden shrink-0 rounded bg-sunken px-2 py-0.5 font-mono text-xs font-bold tracking-wider text-text sm:inline-block">{r.code}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-text">{r.rewards?.name || "Reward"} <span className="font-normal text-text-3">· {formatPoints(r.points_spent)} pts</span></p>
+                  <p className="mt-0.5 truncate text-[12px] text-text-3">
+                    <span className="font-mono sm:hidden">{r.code} · </span>{r.members?.name || "No name"} · {r.members?.phone || "-"} · {new Date(r.created_at).toLocaleString("en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kuala_Lumpur" })}
+                    {r.confirmed_at ? ` · confirmed ${new Date(r.confirmed_at).toLocaleString("en-US", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kuala_Lumpur" })}` : ""}
+                  </p>
+                </div>
+                <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-medium", statusColors[r.status] || statusColors.cancelled)}>
+                  {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>

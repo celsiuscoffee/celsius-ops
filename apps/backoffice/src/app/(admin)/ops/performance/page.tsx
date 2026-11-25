@@ -2,13 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  ClipboardCheck, CheckCircle2, Clock, AlertCircle, Camera,
-  Loader2, Users, Building2, TrendingUp, ChevronRight,
-} from "lucide-react";
+import { AlertCircle, Loader2, ChevronRight } from "lucide-react";
+import { KeyNumber } from "@/components/ui/key-number";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { useFetch } from "@/lib/use-fetch";
 
 type Outlet = { id: string; code: string; name: string };
@@ -57,231 +53,126 @@ export default function OpsPerformancePage() {
 
   const { data, isLoading } = useFetch<PerformanceData>(apiUrl);
 
-  const stats = data ? [
-    { label: "Total Checklists", value: data.summary.totalChecklists, icon: ClipboardCheck, color: "text-terracotta", bg: "bg-terracotta/10" },
-    { label: "Completed", value: data.summary.completedChecklists, icon: CheckCircle2, color: "text-green-600", bg: "bg-green-100" },
-    { label: "Completion Rate", value: `${data.summary.completionRate}%`, icon: TrendingUp, color: "text-blue-600", bg: "bg-blue-100" },
-    { label: "Photo Compliance", value: `${data.summary.photoRate}%`, icon: Camera, color: "text-purple-600", bg: "bg-purple-100" },
-  ] : [];
+  const sm = data?.summary;
+  const weakest = data && data.outletBreakdown.length > 1
+    ? [...data.outletBreakdown].sort((x, y) => x.completionRate - y.completionRate)[0]
+    : null;
+  const tone = (rate: number) => (rate >= 80 ? "text-ok-text" : rate >= 50 ? "text-warn-text" : "text-danger-text");
+  const bar = (rate: number) => (rate >= 80 ? "bg-ok" : rate >= 50 ? "bg-warn" : "bg-danger");
+  const staffRow = (s: PerformanceData["staffBreakdown"][number], low: boolean) => (
+    <Link key={s.id} href={`/ops/performance/staff/${s.id}`} className="flex min-h-12 items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0 hover:bg-sunken/50">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-text">{s.name}</p>
+        <p className="text-[12px] text-text-3">{s.role} · {s.completionRate}% of their checklists done · {s.photoRate}% with photos</p>
+      </div>
+      <p className={`shrink-0 font-mono text-sm font-semibold ${low ? "text-warn-text" : "text-text"}`}>{s.itemsCompleted}<span className="ml-1 font-sans text-[11px] font-normal text-text-3">tasks</span></p>
+      <ChevronRight className="h-4 w-4 shrink-0 text-text-3" />
+    </Link>
+  );
 
   return (
-    <div className="p-3 sm:p-6">
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Ops Performance</h2>
-        <p className="mt-0.5 text-sm text-gray-500">Monitor staff checklist completion and compliance</p>
-      </div>
-
-      {/* Filters */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <select
-          value={outletId}
-          onChange={(e) => setOutletId(e.target.value)}
-          className="rounded-md border border-gray-200 px-3 py-2 text-sm"
-        >
-          <option value="">All Outlets</option>
-          {outlets?.map((o) => (
-            <option key={o.id} value={o.id}>{o.name}</option>
-          ))}
-        </select>
-        <div className="flex items-center gap-2">
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-auto" />
-          <span className="text-sm text-gray-400">to</span>
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-auto" />
+    <div className="max-w-[1100px] space-y-5 px-4 pt-6 pb-10 md:px-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Outlet scorecard</h1>
+          <p className="mt-0.5 text-sm text-text-2">Whether each outlet does its checklists, with photo proof, and which are left half done.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={outletId} onChange={(e) => setOutletId(e.target.value)} aria-label="Outlet"
+            className="h-10 rounded-ctl border border-line bg-surface px-3 text-sm text-text">
+            <option value="">All outlets</option>
+            {outlets?.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+          <DateRangePicker start={from} end={to} onChange={(s, e) => { setFrom(s); setTo(e); }} />
         </div>
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
-        </div>
-      ) : !data ? (
-        <p className="text-sm text-gray-500">No data available</p>
+        <div className="flex justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-text-3" /></div>
+      ) : !data || !sm ? (
+        <p className="text-sm text-text-2">No checklists in this period.</p>
       ) : (
         <>
-          {/* Summary Stats */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-            {stats.map((stat) => (
-              <Card key={stat.label}>
-                <CardContent className="flex items-center gap-4 p-5">
-                  <div className={`rounded-lg p-2.5 ${stat.bg}`}>
-                    <stat.icon className={`h-5 w-5 ${stat.color}`} />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                    <p className="text-xs text-gray-500">{stat.label}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KeyNumber label="Checklists done" value={`${sm.completionRate}%`} tone={sm.completionRate < 80 ? "warn" : undefined}
+              note={<><b className="font-semibold text-text-2">{sm.completedChecklists}</b> of {sm.totalChecklists} finished</>} />
+            <KeyNumber label="With photo proof" value={`${sm.photoRate}%`} tone={sm.photoRate < 80 ? "warn" : undefined}
+              note={<><b className="font-semibold text-text-2">{sm.itemsWithPhotos}</b> of {sm.totalItems} tasks</>} />
+            <KeyNumber label="Left unfinished" value={String(data.incomplete.length)} tone={data.incomplete.length > 0 ? "warn" : undefined}
+              note={data.incomplete.length > 0 ? "listed below" : "nothing left half done"} />
+            <KeyNumber word label="Weakest outlet" value={weakest ? weakest.name : "–"} tone={weakest && weakest.completionRate < 80 ? "warn" : undefined}
+              note={weakest ? <><b className="font-semibold text-text-2">{weakest.completionRate}%</b> of checklists done</> : "needs two or more outlets"} />
           </div>
 
-          {/* Needs Attention — shown first */}
           {data.incomplete.length > 0 && (
-            <Card className="mb-8 border-yellow-200">
-              <CardContent className="p-5">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-yellow-500" />Needs Attention
-                  <Badge variant="outline" className="text-[10px] text-yellow-600 border-yellow-300 ml-auto">
-                    {data.incomplete.length}
-                  </Badge>
-                </h3>
-                <div className="space-y-2">
-                  {data.incomplete.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3 rounded-lg border border-yellow-100 bg-yellow-50/30 p-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">{item.sopTitle}</p>
-                        <p className="text-[10px] text-gray-400">
-                          {item.outlet} · {item.assignedTo} · {item.shift}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="text-[10px] text-yellow-600 border-yellow-300 shrink-0">
-                        {item.itemsCompleted}/{item.totalItems}
-                      </Badge>
-                    </div>
-                  ))}
+            <section aria-label="Left unfinished" className="overflow-hidden rounded-card border border-line bg-surface">
+              <h2 className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm font-semibold text-text">
+                <AlertCircle className="h-4 w-4 text-warn-text" />Left unfinished
+                <span className="rounded-full bg-warn-soft px-2 text-xs font-medium leading-5 text-warn-text">{data.incomplete.length}</span>
+              </h2>
+              {data.incomplete.map((item) => (
+                <div key={item.id} className="flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-b-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-text">{item.sopTitle}</p>
+                    <p className="truncate text-[12px] text-text-3">{item.outlet} · {item.assignedTo} · {item.shift}</p>
+                  </div>
+                  <span className="shrink-0 font-mono text-sm text-warn-text">{item.itemsCompleted}/{item.totalItems}</span>
                 </div>
-              </CardContent>
-            </Card>
+              ))}
+            </section>
           )}
 
-          {/* Daily Trend */}
+          <section aria-label="Outlets" className="overflow-hidden rounded-card border border-line bg-surface">
+            <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-text">Outlets, weakest first</h2>
+            {data.outletBreakdown.length === 0 ? <p className="px-4 py-6 text-center text-sm text-text-3">No outlet data.</p> :
+              [...data.outletBreakdown].sort((x, y) => x.completionRate - y.completionRate).map((o) => (
+                <div key={o.id} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-text">{o.name}</p>
+                    <p className="text-[12px] text-text-3">{o.completed} of {o.total} checklists done</p>
+                  </div>
+                  <div className="hidden h-2 w-24 overflow-hidden rounded-full bg-sunken sm:block">
+                    <div className={`h-full rounded-full ${bar(o.completionRate)}`} style={{ width: `${o.completionRate}%` }} />
+                  </div>
+                  <span className={`w-12 shrink-0 text-right font-mono text-sm font-semibold ${tone(o.completionRate)}`}>{o.completionRate}%</span>
+                </div>
+              ))}
+          </section>
+
           {data.dailyTrend.length > 0 && (
-            <Card className="mb-8">
-              <CardContent className="p-5">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">Daily Completion</h3>
-                <div className="flex items-end gap-1 h-32">
-                  {data.dailyTrend.map((d) => {
-                    const rate = d.total > 0 ? (d.completed / d.total) * 100 : 0;
-                    return (
-                      <div key={d.date} className="flex-1 flex flex-col items-center gap-1">
-                        <span className="text-[9px] text-gray-400">{Math.round(rate)}%</span>
-                        <div className="w-full bg-gray-100 rounded-t relative" style={{ height: "80px" }}>
-                          <div
-                            className="absolute bottom-0 w-full bg-terracotta rounded-t transition-all"
-                            style={{ height: `${rate}%` }}
-                          />
-                        </div>
-                        <span className="text-[9px] text-gray-400">
-                          {new Date(d.date).toLocaleDateString("en", { weekday: "short" })}
-                        </span>
+            <section aria-label="Day by day" className="rounded-card border border-line bg-surface px-4 py-3">
+              <h2 className="mb-3 text-sm font-semibold text-text">Checklists done, day by day</h2>
+              <div className="flex h-28 items-end gap-1">
+                {data.dailyTrend.map((d) => {
+                  const rate = d.total > 0 ? (d.completed / d.total) * 100 : 0;
+                  return (
+                    <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
+                      <span className="font-mono text-[10px] text-text-3">{Math.round(rate)}%</span>
+                      <div className="relative w-full rounded-t bg-sunken" style={{ height: "64px" }}>
+                        <div className="absolute bottom-0 w-full rounded-t bg-ink" style={{ height: `${rate}%` }} />
                       </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+                      <span className="text-[10px] text-text-3">{new Date(d.date + "T00:00:00Z").toLocaleDateString("en-GB", { timeZone: "UTC", weekday: "short" })}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           )}
 
-          <div className="grid gap-6 lg:grid-cols-2 mb-8">
-            {/* Staff Leaderboard */}
-            <Card>
-              <CardContent className="p-5">
-                {data.staffBreakdown.length === 0 ? (
-                  <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                        <Users className="h-4 w-4 text-gray-400" />Staff Performance
-                      </h3>
-                    </div>
-                    <p className="text-sm text-gray-400 text-center py-4">No staff data</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Top 3 */}
-                    <div className="mb-4">
-                      <h3 className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        🏆 Top Performers
-                      </h3>
-                      <div className="space-y-1.5">
-                        {data.staffBreakdown.slice(0, 3).map((s, i) => (
-                          <Link key={s.id} href={`/ops/performance/staff/${s.id}`}>
-                            <div className="flex items-center gap-3 rounded-lg border border-green-100 bg-green-50/50 p-3 hover:bg-green-50 transition-colors cursor-pointer">
-                              <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                                i === 0 ? "bg-yellow-400 text-white" : i === 1 ? "bg-gray-300 text-white" : "bg-amber-600 text-white"
-                              }`}>
-                                {i + 1}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
-                                <p className="text-[10px] text-gray-400">{s.role}</p>
-                              </div>
-                              <div className="text-right shrink-0">
-                                <p className="text-lg font-bold text-green-600">{s.itemsCompleted}</p>
-                                <p className="text-[10px] text-gray-400">tasks done</p>
-                              </div>
-                            </div>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Bottom 3 */}
-                    {data.staffBreakdown.length > 3 && (
-                      <div>
-                        <h3 className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                          ⚠️ Needs Improvement
-                        </h3>
-                        <div className="space-y-1.5">
-                          {data.staffBreakdown.slice(-3).reverse().map((s) => (
-                            <Link key={s.id} href={`/ops/performance/staff/${s.id}`}>
-                              <div className="flex items-center gap-3 rounded-lg border border-red-100 bg-red-50/50 p-3 hover:bg-red-50 transition-colors cursor-pointer">
-                                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-500">
-                                  {s.name.charAt(0)}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
-                                  <p className="text-[10px] text-gray-400">{s.role}</p>
-                                </div>
-                                <div className="text-right shrink-0">
-                                  <p className="text-lg font-bold text-red-500">{s.itemsCompleted}</p>
-                                  <p className="text-[10px] text-gray-400">tasks done</p>
-                                </div>
-                              </div>
-                            </Link>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Outlet Breakdown */}
-            <Card>
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-gray-400" />Outlet Compliance
-                  </h3>
-                </div>
-                {data.outletBreakdown.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-4">No outlet data</p>
-                ) : (
-                  <div className="space-y-2">
-                    {data.outletBreakdown.map((o) => (
-                      <div key={o.id} className="flex items-center gap-3 rounded-lg border border-gray-100 p-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">{o.name}</p>
-                          <p className="text-[10px] text-gray-400">{o.completed}/{o.total} completed</p>
-                        </div>
-                        <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${o.completionRate >= 80 ? "bg-green-500" : o.completionRate >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
-                            style={{ width: `${o.completionRate}%` }}
-                          />
-                        </div>
-                        <span className={`text-sm font-bold w-12 text-right ${o.completionRate >= 80 ? "text-green-600" : o.completionRate >= 50 ? "text-yellow-600" : "text-red-500"}`}>
-                          {o.completionRate}%
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
+          {data.staffBreakdown.length > 0 && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section aria-label="Most tasks done" className="overflow-hidden rounded-card border border-line bg-surface">
+                <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-text">Most tasks done</h2>
+                {data.staffBreakdown.slice(0, 3).map((s) => staffRow(s, false))}
+              </section>
+              {data.staffBreakdown.length > 3 && (
+                <section aria-label="Fewest tasks done" className="overflow-hidden rounded-card border border-line bg-surface">
+                  <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-text">Fewest tasks done</h2>
+                  {data.staffBreakdown.slice(-3).reverse().map((s) => staffRow(s, true))}
+                </section>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

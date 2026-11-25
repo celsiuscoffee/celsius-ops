@@ -72,18 +72,18 @@ export default function CogsReportPage() {
   const { data, error, isLoading: loading } = useFetch<CogsData>(url);
 
   return (
-    <div className="p-3 sm:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6 px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link
           href="/inventory/reports"
-          className="p-2 hover:bg-gray-100 rounded-lg transition"
+          className="p-2 hover:bg-sunken rounded-lg transition"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold">COGS Report</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">COGS Report</h1>
+          <p className="text-sm text-text-2">
             Cost of Goods Sold analysis by menu item
           </p>
         </div>
@@ -92,8 +92,8 @@ export default function CogsReportPage() {
       {/* Summary Cards */}
       {data?.summary && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white border rounded-xl p-4 space-y-1">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="bg-surface border rounded-xl p-4 space-y-1">
+            <div className="flex items-center gap-2 text-sm text-text-2">
               <DollarSign className="w-4 h-4" />
               Total Revenue
             </div>
@@ -101,8 +101,8 @@ export default function CogsReportPage() {
               RM {formatCurrency(data.summary.totalRevenue)}
             </p>
           </div>
-          <div className="bg-white border rounded-xl p-4 space-y-1">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="bg-surface border rounded-xl p-4 space-y-1">
+            <div className="flex items-center gap-2 text-sm text-text-2">
               <ShoppingCart className="w-4 h-4" />
               Total COGS
             </div>
@@ -110,8 +110,8 @@ export default function CogsReportPage() {
               RM {formatCurrency(data.summary.totalCogs)}
             </p>
           </div>
-          <div className="bg-white border rounded-xl p-4 space-y-1">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="bg-surface border rounded-xl p-4 space-y-1">
+            <div className="flex items-center gap-2 text-sm text-text-2">
               <TrendingUp className="w-4 h-4" />
               Gross Margin (RM)
             </div>
@@ -119,8 +119,8 @@ export default function CogsReportPage() {
               RM {formatCurrency(data.summary.grossMargin)}
             </p>
           </div>
-          <div className="bg-white border rounded-xl p-4 space-y-1">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="bg-surface border rounded-xl p-4 space-y-1">
+            <div className="flex items-center gap-2 text-sm text-text-2">
               <Percent className="w-4 h-4" />
               Gross Margin (%)
             </div>
@@ -134,13 +134,13 @@ export default function CogsReportPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-end">
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1 block">
+          <label className="text-xs font-medium text-text-2 mb-1 block">
             Outlet
           </label>
           <select
             value={outletId}
             onChange={(e) => setOutletId(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm bg-white min-w-[180px]"
+            className="border rounded-lg px-3 py-2 text-sm bg-surface min-w-[180px]"
           >
             <option value="">All Outlets</option>
             {data?.outlets?.map((o) => (
@@ -151,7 +151,7 @@ export default function CogsReportPage() {
           </select>
         </div>
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1 block">
+          <label className="text-xs font-medium text-text-2 mb-1 block">
             From
           </label>
           <Input
@@ -162,7 +162,7 @@ export default function CogsReportPage() {
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1 block">
+          <label className="text-xs font-medium text-text-2 mb-1 block">
             To
           </label>
           <Input
@@ -177,8 +177,8 @@ export default function CogsReportPage() {
       {/* Loading / Error */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-          <span className="ml-2 text-gray-500">Loading COGS data...</span>
+          <Loader2 className="w-6 h-6 animate-spin text-text-3" />
+          <span className="ml-2 text-text-2">Loading COGS data...</span>
         </div>
       )}
 
@@ -228,13 +228,13 @@ const cogsColumns: ReportColumn<CogsItem>[] = [
     render: (it) => (
       <>
         <div className="font-medium">{it.menuName}</div>
-        <div className="text-xs text-gray-400">{it.outletName}</div>
+        <div className="text-xs text-text-3">{it.outletName}</div>
       </>
     ),
   },
   {
     key: "category", header: "Category", sortValue: (it) => it.category,
-    render: (it) => it.category ? <Badge variant="outline">{it.category}</Badge> : <span className="text-gray-300">-</span>,
+    render: (it) => it.category ? <Badge variant="outline">{it.category}</Badge> : <span className="text-text-3">-</span>,
   },
   { key: "qtySold", header: "Qty Sold", align: "right", sortValue: (it) => it.qtySold, render: (it) => <span className="tabular-nums">{it.qtySold}</span> },
   { key: "revenue", header: "Revenue (RM)", align: "right", sortValue: (it) => it.revenue, render: (it) => <span className="tabular-nums">{formatCurrency(it.revenue)}</span> },

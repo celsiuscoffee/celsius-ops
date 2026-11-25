@@ -262,12 +262,12 @@ function ReportControlsBar({ c, outletApplies }: { c: ReturnType<typeof useRepor
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2">
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-surface p-2">
       <select
         value={c.consolidated ? "__consolidated__" : (co?.activeCompanyId ?? "")}
         onChange={(e) => switchCompany(e.target.value)}
         disabled={!co || switching}
-        className="h-8 rounded-md border bg-background px-2 text-sm font-semibold"
+        className="h-8 rounded-md border border-line bg-surface text-text px-2 text-sm font-semibold"
         title="Active company. Every report is scoped to this legal entity. Consolidated = all companies with inter-company legs eliminated (P&L, Balance Sheet and Cash Flow)."
       >
         {!co && <option value="">Company…</option>}
@@ -277,7 +277,7 @@ function ReportControlsBar({ c, outletApplies }: { c: ReturnType<typeof useRepor
       <select
         value={c.preset}
         onChange={(e) => c.setPreset(e.target.value as Preset)}
-        className="h-8 rounded-md border bg-background px-2 text-sm font-medium"
+        className="h-8 rounded-md border border-line bg-surface text-text px-2 text-sm font-medium"
         title="Report period"
       >
         {PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
@@ -285,12 +285,12 @@ function ReportControlsBar({ c, outletApplies }: { c: ReturnType<typeof useRepor
       {c.preset === "custom" && (
         <DateRangePicker start={c.customStart} end={c.customEnd} onChange={(s, e) => { c.setCustomStart(s); c.setCustomEnd(e); }} />
       )}
-      <span className="text-[11px] text-muted-foreground tabular-nums">{c.start} → {c.end}</span>
+      <span className="text-[11px] text-text-2 tabular-nums">{c.start} → {c.end}</span>
       <select
         value={outletApplies ? c.outletId : ""}
         onChange={(e) => c.setOutletId(e.target.value)}
         disabled={c.consolidated || !outletApplies}
-        className="ml-auto h-8 rounded-md border bg-background px-2 text-sm disabled:opacity-50"
+        className="ml-auto h-8 rounded-md border border-line bg-surface text-text px-2 text-sm disabled:opacity-50"
         title={c.consolidated
           ? "Consolidated view spans all outlets"
           : !outletApplies
@@ -417,8 +417,8 @@ function StatementHeader({ title, periodLine }: { title: string; periodLine: str
     <div className="space-y-0.5 pt-1 text-center">
       <div className="text-sm font-medium">{company || " "}</div>
       <div className="text-lg font-semibold">{title}</div>
-      <div className="text-sm text-muted-foreground tabular-nums">{periodLine}</div>
-      <div className="text-[11px] text-muted-foreground">Prepared on {longDate(todayMyt())}</div>
+      <div className="text-sm text-text-2 tabular-nums">{periodLine}</div>
+      <div className="text-[11px] text-text-2">Prepared on {longDate(todayMyt())}</div>
     </div>
   );
 }
@@ -426,13 +426,13 @@ function StatementHeader({ title, periodLine }: { title: string; periodLine: str
 // Headline tiles above the P&L, QuickBooks-style. Net Profit is signed:
 // emerald when positive, rose when negative.
 function KpiTile({ label, amount, prev, showCompare, signed }: { label: string; amount: number; prev?: number | null; showCompare?: boolean; signed?: boolean }) {
-  const tone = signed ? (amount < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400") : "";
+  const tone = signed ? (amount < 0 ? "text-danger-text" : "text-ok-text") : "";
   return (
-    <div className="rounded-lg border bg-card p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="rounded-lg border bg-surface p-3">
+      <div className="text-xs text-text-2">{label}</div>
       <div className={`truncate text-xl font-semibold tabular-nums ${tone}`}>{RM(amount)}</div>
       {showCompare && prev != null && (
-        <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+        <div className="mt-0.5 text-[11px] text-text-2 tabular-nums">
           vs {RM(prev)} {pctChange(amount, prev) && <span>({pctChange(amount, prev)})</span>}
         </div>
       )}
@@ -459,17 +459,17 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
   const ticks = [0, 1, 2, 3].map((i) => lo + (span * i) / 3);
   const bar = (v: number, x: number) => ({ x, y: Math.min(y(v), y(0)), h: Math.max(1, Math.abs(y(0) - y(v))) });
   return (
-    <div className="rounded-lg border bg-card p-3">
-      <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-emerald-500" /> Income</span>
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-rose-500" /> Expenses (COGS + opex)</span>
-        <span className="flex items-center gap-1"><span className="h-0.5 w-3 rounded bg-foreground" /> Net</span>
+    <div className="rounded-lg border bg-surface p-3">
+      <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-2">
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-ok" /> Income</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-danger" /> Expenses (COGS + opex)</span>
+        <span className="flex items-center gap-1"><span className="h-0.5 w-3 rounded bg-text" /> Net</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Monthly income, expenses and net profit">
         {ticks.map((t, i) => (
           <g key={i}>
             <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="currentColor" strokeWidth={0.5} className="text-border" />
-            <text x={padL - 6} y={y(t) + 3} textAnchor="end" fontSize={9} fill="currentColor" className="text-muted-foreground tabular-nums">{compactRm(t)}</text>
+            <text x={padL - 6} y={y(t) + 3} textAnchor="end" fontSize={9} fill="currentColor" className="text-text-2 tabular-nums">{compactRm(t)}</text>
           </g>
         ))}
         {lo < 0 && <line x1={padL} x2={W - padR} y1={y(0)} y2={y(0)} stroke="currentColor" strokeWidth={1} className="text-border" />}
@@ -478,19 +478,19 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
           const exp = bar(p.expense, cx(i) + 1);
           return (
             <g key={p.month}>
-              <rect x={inc.x} y={inc.y} width={barW} height={inc.h} rx={1} fill="currentColor" className="text-emerald-500">
+              <rect x={inc.x} y={inc.y} width={barW} height={inc.h} rx={1} fill="currentColor" className="text-ok-text">
                 <title>{`Income ${monthLabel(p.month)}: ${RM(p.income)}`}</title>
               </rect>
-              <rect x={exp.x} y={exp.y} width={barW} height={exp.h} rx={1} fill="currentColor" className="text-rose-500">
+              <rect x={exp.x} y={exp.y} width={barW} height={exp.h} rx={1} fill="currentColor" className="text-danger-text">
                 <title>{`Expenses ${monthLabel(p.month)}: ${RM(p.expense)}`}</title>
               </rect>
-              <text x={cx(i)} y={H - 8} textAnchor="middle" fontSize={9} fill="currentColor" className="text-muted-foreground">{monthLabel(p.month)}</text>
+              <text x={cx(i)} y={H - 8} textAnchor="middle" fontSize={9} fill="currentColor" className="text-text-2">{monthLabel(p.month)}</text>
             </g>
           );
         })}
-        <polyline fill="none" stroke="currentColor" strokeWidth={1.5} className="text-foreground" points={points.map((p, i) => `${cx(i)},${y(p.net)}`).join(" ")} />
+        <polyline fill="none" stroke="currentColor" strokeWidth={1.5} className="text-text" points={points.map((p, i) => `${cx(i)},${y(p.net)}`).join(" ")} />
         {points.map((p, i) => (
-          <circle key={p.month} cx={cx(i)} cy={y(p.net)} r={2.5} fill="currentColor" className="text-foreground">
+          <circle key={p.month} cx={cx(i)} cy={y(p.net)} r={2.5} fill="currentColor" className="text-text">
             <title>{`Net ${monthLabel(p.month)}: ${RM(p.net)}`}</title>
           </circle>
         ))}
@@ -509,12 +509,12 @@ type MonthAmount = number | undefined;
 function ReportRow({ line, totalIncome, onDrill, compareAmount, showCompare, showPct = true, monthAmounts, zebra, open }: { line: PnlLine; totalIncome: number; onDrill: (code: string) => void; compareAmount?: number | null; showCompare?: boolean; showPct?: boolean; monthAmounts?: MonthAmount[]; zebra?: boolean; open?: boolean }) {
   return (
     <tr
-      className={`group cursor-pointer border-t transition ${open ? "bg-muted/40" : zebra ? "bg-muted/20" : ""} hover:bg-muted/30`}
+      className={`group cursor-pointer border-t transition ${open ? "bg-sunken" : zebra ? "bg-sunken" : ""} hover:bg-muted/30`}
       onClick={() => onDrill(line.code)}
       title={open ? "Click to close this drill" : "Click to drill into this line"}
     >
       <td
-        className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground"
+        className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-text-2"
         style={{ paddingLeft: line.parentCode ? 32 : 12 }}
       >
         {line.code}
@@ -526,11 +526,11 @@ function ReportRow({ line, totalIncome, onDrill, compareAmount, showCompare, sho
       <td className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${monthAmounts ? "font-medium" : ""}`}>
         <span className="underline-offset-2 group-hover:underline">{RM(line.amount)}</span>
       </td>
-      {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">{compareAmount == null ? "" : RM(compareAmount)}</td>}
-      {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctChange(line.amount, compareAmount)}</td>}
-      {showPct && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctOfIncome(line.amount, totalIncome)}</td>}
+      {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-text-2">{compareAmount == null ? "" : RM(compareAmount)}</td>}
+      {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-text-2">{pctChange(line.amount, compareAmount)}</td>}
+      {showPct && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-text-2">{pctOfIncome(line.amount, totalIncome)}</td>}
       <td className="w-6 py-1.5 pr-2">
-        <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition ${open ? "rotate-90 opacity-100" : "opacity-0 group-hover:opacity-100"}`} />
+        <ChevronRight className={`h-3.5 w-3.5 text-text-3 transition ${open ? "rotate-90 opacity-100" : "opacity-0 group-hover:opacity-100"}`} />
       </td>
     </tr>
   );
@@ -538,17 +538,17 @@ function ReportRow({ line, totalIncome, onDrill, compareAmount, showCompare, sho
 
 function TotalRow({ label, amount, totalIncome, bold = true, compareAmount, showCompare, showPct = true, monthAmounts, signed }: { label: string; amount: number; totalIncome: number; bold?: boolean; compareAmount?: number | null; showCompare?: boolean; showPct?: boolean; monthAmounts?: MonthAmount[]; signed?: boolean }) {
   const f = bold ? "font-semibold" : "";
-  const tone = signed ? (amount < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400") : "";
+  const tone = signed ? (amount < 0 ? "text-danger-text" : "text-ok-text") : "";
   return (
-    <tr className="border-t bg-muted/30">
+    <tr className="border-t bg-sunken">
       <td colSpan={2} className={`px-3 py-2 ${f}`}>{label}</td>
       {monthAmounts?.map((a, i) => (
         <td key={i} className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${f} ${tone}`}>{a == null ? "" : RM(a)}</td>
       ))}
       <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${f} ${tone}`}>{RM(amount)}</td>
-      {showCompare && <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted-foreground ${f}`}>{compareAmount == null ? "" : RM(compareAmount)}</td>}
-      {showCompare && <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${f}`}>{pctChange(amount, compareAmount)}</td>}
-      {showPct && <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-muted-foreground ${f}`}>{pctOfIncome(amount, totalIncome)}</td>}
+      {showCompare && <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums text-text-3 ${f}`}>{compareAmount == null ? "" : RM(compareAmount)}</td>}
+      {showCompare && <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-text-3 ${f}`}>{pctChange(amount, compareAmount)}</td>}
+      {showPct && <td className={`whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-text-3 ${f}`}>{pctOfIncome(amount, totalIncome)}</td>}
       <td className="w-6 py-2 pr-2" />
     </tr>
   );
@@ -557,7 +557,7 @@ function TotalRow({ label, amount, totalIncome, bold = true, compareAmount, show
 function SectionHeader({ label, cols, collapsed, onToggle }: { label: string; cols: number; collapsed: boolean; onToggle: () => void }) {
   return (
     <tr>
-      <td colSpan={cols} className="bg-muted/50 px-3 py-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+      <td colSpan={cols} className="bg-sunken px-3 py-1.5 text-xs uppercase tracking-wide text-text-2">
         <button type="button" onClick={onToggle} className="flex items-center gap-1 uppercase tracking-wide" title={collapsed ? "Expand section" : "Collapse section"}>
           <ChevronDown className={`h-3 w-3 transition-transform ${collapsed ? "-rotate-90" : ""}`} />
           {label}
@@ -573,7 +573,7 @@ type PnlMonths = { report: PnlReport; months: { month: string; report: PnlReport
 
 // Sticky header cell: opaque background so rows never bleed through while the
 // table body scrolls underneath.
-const TH = "sticky top-0 z-10 bg-muted px-3 py-2";
+const TH = "sticky top-0 z-10 bg-sunken px-3 py-2";
 
 const PNL_CHART_KEY = "finance:reports:pnl-chart";
 const PNL_SECTIONS = ["income", "cogs", "expenses"] as const;
@@ -874,19 +874,19 @@ function PnlTab() {
     <div className="space-y-4">
       <StatementHeader title="Profit and Loss" periodLine={`${longDate(start)} to ${longDate(end)}`} />
       {consolidated && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[11px] text-text-2">
           Consolidated group P&amp;L: all companies summed with inter-company legs eliminated, so HQ-paid salary, Google Ads and management fees count once as group cost. Other tabs stay per-company; switch to a company to drill into a line.
         </p>
       )}
       {!consolidated && outletId && (
-        <p className="text-[11px] text-amber-600">
+        <p className="text-[11px] text-warn-text">
           Per-outlet view: revenue + COGS + outlet-tagged costs only (contribution margin). Shared/HQ opex is paid from the entity account and can&apos;t be split per outlet.
         </p>
       )}
 
-      {loading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+      {loading && <Loader2 className="h-5 w-5 animate-spin text-text-2" />}
       {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+        <div className="rounded-lg border border-transparent bg-danger-soft p-3 text-sm text-danger-text">
           Failed to load.
         </div>
       )}
@@ -896,28 +896,28 @@ function PnlTab() {
         <div className="grid gap-3 sm:grid-cols-3">
           <KpiTile label="Income" amount={totals.income} prev={cmp?.income.total} showCompare={showCompare} />
           <KpiTile label="Expenses" amount={totals.cogs + totals.expenses} prev={cmp ? cmp.cogs.total + cmp.expenses.total : null} showCompare={showCompare} />
-          <KpiTile label="Net Profit" amount={totals.netIncome} prev={cmp?.netIncome} showCompare={showCompare} signed />
+          <KpiTile label="Net profit" amount={totals.netIncome} prev={cmp?.netIncome} showCompare={showCompare} signed />
         </div>
         {byMonth && monthData?.truncated && (
-          <p className="text-[11px] text-amber-600">Range exceeds 12 months; showing the last 12.</p>
+          <p className="text-[11px] text-warn-text">Range exceeds 12 months; showing the last 12.</p>
         )}
         {byMonth && Math.abs(methodologyGap) > 0.01 && (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[11px] text-text-2">
             Totals here sum the month columns. Months with a usable stock count use count-adjusted COGS, so they can differ from the full-period statement (net {RM(report.netIncome)} for this range in Total columns mode).
           </p>
         )}
         {byMonth && showChart && <TrendChart points={trend} />}
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">Columns
+          <label className="flex items-center gap-1 text-[11px] text-text-2">Columns
             <select value={columns} onChange={(e) => setColumns(e.target.value as ColumnsMode)}
-              className="h-7 rounded-md border bg-background px-1.5 text-xs">
+              className="h-7 rounded-md border border-line bg-surface text-text px-1.5 text-xs">
               <option value="total">Total</option>
               <option value="month">By month</option>
             </select>
           </label>
-          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">Compare
+          <label className="flex items-center gap-1 text-[11px] text-text-2">Compare
             <select value={compare} onChange={(e) => setCompare(e.target.value as CompareMode)}
-              className="h-7 rounded-md border bg-background px-1.5 text-xs">
+              className="h-7 rounded-md border border-line bg-surface text-text px-1.5 text-xs">
               <option value="none">off</option>
               <option value="prev">previous period</option>
               <option value="year">previous year</option>
@@ -926,17 +926,17 @@ function PnlTab() {
           <button
             type="button"
             onClick={() => setCollapsed(allCollapsed ? {} : { income: true, cogs: true, expenses: true })}
-            className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            className="text-[11px] text-text-2 underline-offset-2 hover:text-text hover:underline"
           >
             {allCollapsed ? "Expand all" : "Collapse all"}
           </button>
-          {showCompareCols && cmpRange && <span className="text-[10px] text-muted-foreground tabular-nums">vs {cmpRange.s} → {cmpRange.e}</span>}
+          {showCompareCols && cmpRange && <span className="text-[10px] text-text-2 tabular-nums">vs {cmpRange.s} → {cmpRange.e}</span>}
           <div className="ml-auto flex items-center gap-2">
             {byMonth && (
               <button
                 type="button"
                 onClick={toggleChart}
-                className={`h-7 rounded-full border px-2.5 text-xs transition ${showChart ? "bg-muted/50" : "text-muted-foreground hover:text-foreground"}`}
+                className={`h-7 rounded-full border px-2.5 text-xs transition ${showChart ? "bg-sunken" : "text-text-2 hover:text-text"}`}
                 title="Show or hide the monthly trend chart"
               >
                 Chart
@@ -946,9 +946,9 @@ function PnlTab() {
             <ExportPdfButton build={buildPdf} />
           </div>
         </div>
-        <div className="max-h-[75vh] overflow-auto rounded-lg border bg-card">
+        <div className="max-h-[75vh] overflow-auto rounded-lg border bg-surface">
           <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <thead className="text-left text-xs uppercase tracking-wide text-text-2">
               <tr>
                 <th className={`${TH} whitespace-nowrap`}>Code</th>
                 <th className={TH}>Account</th>
@@ -974,7 +974,7 @@ function PnlTab() {
               {!collapsed.expenses && expenseGroups.map((g) => (
                 <Fragment key={g.label}>
                   <tr>
-                    <td colSpan={cols} className="px-3 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                    <td colSpan={cols} className="px-3 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wide text-text-2/80">
                       {g.label}
                     </td>
                   </tr>
@@ -1000,7 +1000,7 @@ function PnlTab() {
           </table>
         </div>
         {(report.notes ?? []).map((n) => (
-          <p key={n} className="text-[11px] text-muted-foreground">{n}</p>
+          <p key={n} className="text-[11px] text-text-2">{n}</p>
         ))}
         </>
       )}
@@ -1047,7 +1047,7 @@ function CategoryChip({ bankLineId, category, direction, accountNames, onSaved }
         onBlur={() => setEditing(false)}
         onKeyDown={(e) => { if (e.key === "Escape") setEditing(false); }}
         onClick={(e) => e.stopPropagation()}
-        className="h-6 max-w-[260px] rounded border bg-background px-1 text-[11px]"
+        className="h-6 max-w-[260px] rounded border border-line bg-surface text-text px-1 text-[11px]"
       >
         {!category && <option value="" disabled>unclassified…</option>}
         {(direction === "CR" ? INFLOW_CATEGORIES : OUTFLOW_CATEGORIES).map((c) => (
@@ -1063,12 +1063,12 @@ function CategoryChip({ bankLineId, category, direction, accountNames, onSaved }
         disabled={busy}
         onClick={(e) => { e.stopPropagation(); setEditing(true); }}
         title="Category this line is booked to. Click to recategorise."
-        className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground transition hover:text-foreground hover:ring-1 hover:ring-ring disabled:opacity-60"
+        className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-text-2 transition hover:text-text hover:ring-1 hover:ring-ring disabled:opacity-60"
       >
         {busy && <Loader2 className="h-3 w-3 animate-spin" />}
         {categoryChipLabel(category)}
       </button>
-      {err && <span className="text-[10px] text-rose-600">{err}</span>}
+      {err && <span className="text-[10px] text-danger-text">{err}</span>}
     </span>
   );
 }
@@ -1104,7 +1104,7 @@ function MatchedChip({ bankLineId, invoice, onSaved }: {
     <span className="inline-flex items-center gap-1">
       <span
         title={`Matched to ${label}${invoice.vendor ? ` from ${invoice.vendor}` : ""}, ${RM(invoice.amount)}`}
-        className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-400"
+        className="inline-flex items-center gap-1 rounded-full border border-warn bg-warn-soft px-2 py-0.5 text-[11px] text-warn-text"
       >
         Matched: {label}{invoice.vendor ? ` (${invoice.vendor})` : ""}
         <button
@@ -1112,12 +1112,12 @@ function MatchedChip({ bankLineId, invoice, onSaved }: {
           disabled={busy}
           onClick={(e) => { e.stopPropagation(); unmatch(); }}
           title="Unmatch this line from the invoice"
-          className="rounded-full transition hover:text-amber-900 disabled:opacity-60 dark:hover:text-amber-200"
+          className="rounded-full transition hover:text-warn-text disabled:opacity-60"
         >
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
         </button>
       </span>
-      {err && <span className="text-[10px] text-rose-600">{err}</span>}
+      {err && <span className="text-[10px] text-danger-text">{err}</span>}
     </span>
   );
 }
@@ -1151,14 +1151,14 @@ function ExpenseMonthControl({ bankLineId, effectiveMonth, overridden, onSaved }
 
   return (
     <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-      {overridden && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" title="Expense month overridden" />}
+      {overridden && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warn" title="Expense month overridden" />}
       <input
         type="month"
         key={`${overridden}-${effectiveMonth}`}
         defaultValue={effectiveMonth}
         disabled={busy}
         onChange={(e) => { if (e.target.value && e.target.value !== effectiveMonth) save(e.target.value); }}
-        className="h-6 rounded border bg-background px-1 text-[11px] disabled:opacity-60"
+        className="h-6 rounded border border-line bg-surface text-text px-1 text-[11px] disabled:opacity-60"
         title="Expense month: which month this payment's cost sits in on the P&L. Cash flow keeps the payment date."
       />
       {overridden && (
@@ -1167,13 +1167,13 @@ function ExpenseMonthControl({ bankLineId, effectiveMonth, overridden, onSaved }
           disabled={busy}
           onClick={() => save(null)}
           title="Clear the override (back to the automatic expense month)"
-          className="text-muted-foreground transition hover:text-foreground disabled:opacity-60"
+          className="text-text-2 transition hover:text-text disabled:opacity-60"
         >
           <X className="h-3 w-3" />
         </button>
       )}
       {busy && <Loader2 className="h-3 w-3 animate-spin" />}
-      {err && <span className="text-[10px] text-rose-600">{err}</span>}
+      {err && <span className="text-[10px] text-danger-text">{err}</span>}
     </span>
   );
 }
@@ -1199,13 +1199,13 @@ function AttachmentBadge({ bankLineId, count }: { bankLineId: string; count: num
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
         title={`${count} attachment${count > 1 ? "s" : ""}. Click to view.`}
-        className="inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:text-foreground hover:ring-1 hover:ring-ring"
+        className="inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[11px] text-text-2 transition hover:text-text hover:ring-1 hover:ring-ring"
       >
         <Paperclip className="h-3 w-3" /> {count}
       </button>
       {open && (
-        <span className="absolute left-0 top-full z-20 mt-1 w-56 rounded-md border bg-card p-2 shadow-lg">
-          {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+        <span className="absolute left-0 top-full z-20 mt-1 w-56 rounded-md border bg-surface p-2 shadow-lg">
+          {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-text-2" />}
           {(data?.attachments ?? []).map((a) =>
             a.url ? (
               <a key={a.id} href={a.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
@@ -1213,10 +1213,10 @@ function AttachmentBadge({ bankLineId, count }: { bankLineId: string; count: num
                 {a.filename}
               </a>
             ) : (
-              <span key={a.id} className="block truncate py-0.5 text-[11px] text-muted-foreground">{a.filename}</span>
+              <span key={a.id} className="block truncate py-0.5 text-[11px] text-text-2">{a.filename}</span>
             )
           )}
-          {data && data.attachments.length === 0 && <span className="text-[11px] text-muted-foreground">No attachments.</span>}
+          {data && data.attachments.length === 0 && <span className="text-[11px] text-text-2">No attachments.</span>}
         </span>
       )}
     </span>
@@ -1235,22 +1235,22 @@ function GlSourceLines({ transactionId, accountNames, onChanged }: {
     `/api/finance/gl-source-lines?transactionId=${encodeURIComponent(transactionId)}`
   );
   const refresh = async () => { await mutate(); onChanged(); };
-  if (isLoading) return <div className="px-3 py-2"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>;
+  if (isLoading) return <div className="px-3 py-2"><Loader2 className="h-4 w-4 animate-spin text-text-2" /></div>;
   const lines = data?.lines ?? [];
   if (lines.length === 0) {
-    return <div className="px-3 py-2 text-[11px] text-muted-foreground">No bank lines reference this journal. It may have just been re-keyed; the poster rebuilds it on the next run.</div>;
+    return <div className="px-3 py-2 text-[11px] text-text-2">No bank lines reference this journal. It may have just been re-keyed; the poster rebuilds it on the next run.</div>;
   }
   return (
     <div className="space-y-1.5 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Source bank lines</div>
+      <div className="text-[10px] uppercase tracking-wide text-text-2">Source bank lines</div>
       {lines.map((l) => (
         <div key={l.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-          <span className="whitespace-nowrap tabular-nums text-muted-foreground">{l.txnDate}</span>
+          <span className="whitespace-nowrap tabular-nums text-text-2">{l.txnDate}</span>
           <span className="min-w-0 flex-1 break-words">{l.description}</span>
           <CategoryChip bankLineId={l.id} category={l.category} direction={l.direction} accountNames={accountNames} onSaved={refresh} />
           {l.matchedInvoice && <MatchedChip bankLineId={l.id} invoice={l.matchedInvoice} onSaved={refresh} />}
           {l.attachments > 0 && <AttachmentBadge bankLineId={l.id} count={l.attachments} />}
-          <span className="whitespace-nowrap tabular-nums">{RM(l.amount)} <span className="text-[10px] text-muted-foreground">{l.direction}</span></span>
+          <span className="whitespace-nowrap tabular-nums">{RM(l.amount)} <span className="text-[10px] text-text-2">{l.direction}</span></span>
         </div>
       ))}
     </div>
@@ -1290,7 +1290,7 @@ function InvoiceDetail({ invoiceId, open }: { invoiceId: string; open: boolean }
   );
   if (isLoading || !data) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-text-2">
         {error ? "Could not load invoice detail." : <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading invoice detail...</>}
       </div>
     );
@@ -1300,27 +1300,27 @@ function InvoiceDetail({ invoiceId, open }: { invoiceId: string; open: boolean }
   return (
     <div className="space-y-3 px-3 py-2.5">
       <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-[11px]">
-        <dt className="text-muted-foreground">Supplier</dt><dd>{invoice.vendor ?? "(no vendor)"}</dd>
-        <dt className="text-muted-foreground">Invoice no.</dt><dd>{invoice.invoiceNumber}{invoice.orderNumber ? <span className="text-muted-foreground"> · PO {invoice.orderNumber}</span> : null}</dd>
-        <dt className="text-muted-foreground">Issue date</dt><dd className="tabular-nums">{invoice.issueDate ?? "n/a"}{invoice.dueDate ? <span className="text-muted-foreground"> · due {invoice.dueDate}</span> : null}</dd>
-        {invoice.outlet && (<><dt className="text-muted-foreground">Outlet</dt><dd>{invoice.outlet}</dd></>)}
-        <dt className="text-muted-foreground">Total</dt><dd className="tabular-nums">{RM(invoice.amount)}{invoice.deliveryCharge ? <span className="text-muted-foreground"> (incl. {RM(invoice.deliveryCharge)} delivery)</span> : null}</dd>
-        <dt className="text-muted-foreground">Status</dt>
+        <dt className="text-text-2">Supplier</dt><dd>{invoice.vendor ?? "(no vendor)"}</dd>
+        <dt className="text-text-2">Invoice no.</dt><dd>{invoice.invoiceNumber}{invoice.orderNumber ? <span className="text-text-2"> · PO {invoice.orderNumber}</span> : null}</dd>
+        <dt className="text-text-2">Issue date</dt><dd className="tabular-nums">{invoice.issueDate ?? "n/a"}{invoice.dueDate ? <span className="text-text-2"> · due {invoice.dueDate}</span> : null}</dd>
+        {invoice.outlet && (<><dt className="text-text-2">Outlet</dt><dd>{invoice.outlet}</dd></>)}
+        <dt className="text-text-2">Total</dt><dd className="tabular-nums">{RM(invoice.amount)}{invoice.deliveryCharge ? <span className="text-text-2"> (incl. {RM(invoice.deliveryCharge)} delivery)</span> : null}</dd>
+        <dt className="text-text-2">Status</dt>
         <dd>
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${isPaid ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-amber-500/15 text-amber-700 dark:text-amber-400"}`}>
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${isPaid ? "bg-ok-soft text-ok-text" : "bg-warn-soft text-warn-text"}`}>
             {invoice.status.toLowerCase().replace(/_/g, " ")}
           </span>
-          {!isPaid && invoice.amountPaid > 0 && <span className="ml-2 text-muted-foreground tabular-nums">{RM(invoice.amountPaid)} paid so far</span>}
+          {!isPaid && invoice.amountPaid > 0 && <span className="ml-2 text-text-2 tabular-nums">{RM(invoice.amountPaid)} paid so far</span>}
         </dd>
       </dl>
 
       <div>
-        <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Line items</div>
+        <div className="mb-1 text-[10px] uppercase tracking-wide text-text-2">Line items</div>
         {lines.length === 0 ? (
-          <div className="text-[11px] text-muted-foreground">No itemised lines recorded for this invoice.</div>
+          <div className="text-[11px] text-text-2">No itemised lines recorded for this invoice.</div>
         ) : (
           <table className="w-full text-[11px]">
-            <thead className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+            <thead className="text-left text-[10px] uppercase tracking-wide text-text-2">
               <tr className="border-b">
                 <th className="px-2 py-1 font-medium">Item</th>
                 <th className="whitespace-nowrap px-2 py-1 text-right font-medium">Qty</th>
@@ -1343,10 +1343,10 @@ function InvoiceDetail({ invoiceId, open }: { invoiceId: string; open: boolean }
       </div>
 
       <div>
-        <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Payment</div>
+        <div className="mb-1 text-[10px] uppercase tracking-wide text-text-2">Payment</div>
         {payments.length > 0 ? (
           <table className="w-full text-[11px]">
-            <thead className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+            <thead className="text-left text-[10px] uppercase tracking-wide text-text-2">
               <tr className="border-b">
                 <th className="whitespace-nowrap px-2 py-1 font-medium">Date</th>
                 <th className="px-2 py-1 font-medium">Bank line</th>
@@ -1357,23 +1357,23 @@ function InvoiceDetail({ invoiceId, open }: { invoiceId: string; open: boolean }
             <tbody>
               {payments.map((p) => (
                 <tr key={p.id} className="border-t">
-                  <td className="whitespace-nowrap px-2 py-1 tabular-nums text-muted-foreground">{p.txnDate ?? "n/a"}</td>
+                  <td className="whitespace-nowrap px-2 py-1 tabular-nums text-text-2">{p.txnDate ?? "n/a"}</td>
                   <td className="px-2 py-1">
                     <span className="break-words">{p.description}</span>
-                    {p.reference && <span className="block text-[10px] text-muted-foreground">ref {p.reference}</span>}
+                    {p.reference && <span className="block text-[10px] text-text-2">ref {p.reference}</span>}
                   </td>
-                  <td className="whitespace-nowrap px-2 py-1 text-muted-foreground">{p.account ?? "n/a"}</td>
+                  <td className="whitespace-nowrap px-2 py-1 text-text-2">{p.account ?? "n/a"}</td>
                   <td className="whitespace-nowrap px-2 py-1 text-right tabular-nums">{RM(p.amount)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : invoice.paidAt ? (
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-[11px] text-text-2">
             Marked paid {invoice.paidAt}{invoice.paidVia ? ` via ${invoice.paidVia}` : ""}{invoice.paymentRef ? ` (ref ${invoice.paymentRef})` : ""}, but not matched to a bank line.
           </div>
         ) : (
-          <div className="text-[11px] text-muted-foreground">Not yet matched to a bank payment.</div>
+          <div className="text-[11px] text-text-2">Not yet matched to a bank payment.</div>
         )}
       </div>
     </div>
@@ -1414,10 +1414,10 @@ function DrillDown({ code, name, start, end, outletId, consolidated, onChanged, 
   };
 
   return (
-    <div className="border-y bg-muted/10">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/40 px-3 py-1.5 text-xs">
+    <div className="border-y bg-sunken">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-sunken px-3 py-1.5 text-xs">
         <span className="font-semibold">{name ?? code}</span>
-        <span className="tabular-nums text-muted-foreground">{code} · {start} → {end}</span>
+        <span className="tabular-nums text-text-2">{code} · {start} → {end}</span>
         {data && lines.length > 0 && (
           <span className="ml-auto font-medium tabular-nums">
             {lines.length} entries · {oneSided ? RM(totalDebit + totalCredit) : `${RM(totalDebit)} DR / ${RM(totalCredit)} CR`}
@@ -1428,17 +1428,17 @@ function DrillDown({ code, name, start, end, outletId, consolidated, onChanged, 
             type="button"
             onClick={onClose}
             title="Close this drill"
-            className={`${data && lines.length > 0 ? "" : "ml-auto "}rounded text-muted-foreground transition hover:text-foreground`}
+            className={`${data && lines.length > 0 ? "" : "ml-auto "}rounded text-text-3 transition hover:text-text`}
           >
             <X className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
-      {isLoading && <div className="px-3 py-3"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>}
-      {data && lines.length === 0 && <div className="px-3 py-3 text-sm text-muted-foreground">No entries in this period.</div>}
+      {isLoading && <div className="px-3 py-3"><Loader2 className="h-4 w-4 animate-spin text-text-2" /></div>}
+      {data && lines.length === 0 && <div className="px-3 py-3 text-sm text-text-2">No entries in this period.</div>}
       {lines.length > 0 && (
         <table className="w-full text-sm">
-          <thead className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+          <thead className="text-left text-[10px] uppercase tracking-wide text-text-2">
             <tr className="border-b">
               <th className="whitespace-nowrap px-3 py-1.5 font-medium">Date</th>
               {showCompany && <th className="whitespace-nowrap px-3 py-1.5 font-medium">Company</th>}
@@ -1471,20 +1471,20 @@ function DrillDown({ code, name, start, end, outletId, consolidated, onChanged, 
               const open = openRow === key;
               return (
                 <Fragment key={key}>
-                <tr className={`border-t ${i % 2 === 1 ? "bg-muted/20" : ""} ${expandable ? "cursor-pointer hover:bg-muted/30" : ""}`}
+                <tr className={`border-t ${i % 2 === 1 ? "bg-sunken" : ""} ${expandable ? "cursor-pointer hover:bg-sunken" : ""}`}
                     onClick={expandable ? () => setOpenRow(open ? null : key) : undefined}
                     title={expandable ? (isBankJournal ? "Click to see the source bank lines" : isProcRow ? "Click to see the invoice and payment detail" : "Click to see the transaction detail") : undefined}>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-text-2">
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 text-[10px]">{expandable ? (open ? "▾" : "▸") : ""}</span>
                       {l.txnDate}
                     </span>
                   </td>
-                  {showCompany && <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground">{l.meta?.company ?? ""}</td>}
+                  {showCompany && <td className="whitespace-nowrap px-3 py-1.5 text-xs text-text-2">{l.meta?.company ?? ""}</td>}
                   <td className="w-full max-w-0 px-3 py-1.5" title={l.description}>
                     <span className="flex min-w-0 items-baseline gap-2">
                       <span className="truncate">{main}</span>
-                      {metaLine && <span className="min-w-0 truncate text-[11px] text-muted-foreground">{metaLine}</span>}
+                      {metaLine && <span className="min-w-0 truncate text-[11px] text-text-2">{metaLine}</span>}
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5">
@@ -1497,7 +1497,7 @@ function DrillDown({ code, name, start, end, outletId, consolidated, onChanged, 
                         onSaved={refresh}
                       />
                     ) : l.meta?.category ? (
-                      <span className="text-[11px] text-muted-foreground">{l.meta.category.toLowerCase().replace(/_/g, " ")}</span>
+                      <span className="text-[11px] text-text-2">{l.meta.category.toLowerCase().replace(/_/g, " ")}</span>
                     ) : null}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5">
@@ -1508,14 +1508,14 @@ function DrillDown({ code, name, start, end, outletId, consolidated, onChanged, 
                       {isBankRow && l.meta?.expenseMonth && l.meta.expenseMonth !== l.txnDate.slice(0, 7) && (
                         <span
                           title={`Recognised in ${monthLabel(l.meta.expenseMonth)}; paid ${l.txnDate}`}
-                          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground"
+                          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-text-2"
                         >
-                          {l.meta.expenseMonthOverride && <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />}
+                          {l.meta.expenseMonthOverride && <span className="h-1.5 w-1.5 rounded-full bg-warn" />}
                           in {monthLabel(l.meta.expenseMonth)}
                         </span>
                       )}
                       {isBankRow && l.meta?.expenseMonthOverride && l.meta.expenseMonth === l.txnDate.slice(0, 7) && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" title="Expense month overridden" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-warn" title="Expense month overridden" />
                       )}
                     </span>
                   </td>
@@ -1527,32 +1527,32 @@ function DrillDown({ code, name, start, end, outletId, consolidated, onChanged, 
                       </>}
                 </tr>
                 {open && isBankJournal && (
-                  <tr className="border-t bg-muted/20">
+                  <tr className="border-t bg-sunken">
                     <td colSpan={cols} className="p-0" onClick={(e) => e.stopPropagation()}>
                       <GlSourceLines transactionId={l.transactionId} accountNames={accountNames} onChanged={refresh} />
                     </td>
                   </tr>
                 )}
                 {open && isProcRow && (
-                  <tr className="border-t bg-muted/20">
+                  <tr className="border-t bg-sunken">
                     <td colSpan={cols} className="p-0" onClick={(e) => e.stopPropagation()}>
                       <InvoiceDetail invoiceId={l.transactionId} open={open} />
                     </td>
                   </tr>
                 )}
                 {open && hasDetail && l.meta && (
-                  <tr className="border-t bg-muted/20">
+                  <tr className="border-t bg-sunken">
                     <td colSpan={cols} className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                       <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1 text-[11px]">
-                        {l.meta.account && (<><dt className="text-muted-foreground">Bank account</dt><dd>{l.meta.account}</dd></>)}
-                        {l.meta.reference && (<><dt className="text-muted-foreground">Reference</dt><dd className="break-words">{l.meta.reference}</dd></>)}
-                        {l.meta.category !== undefined && (<><dt className="text-muted-foreground">Category</dt><dd>{l.meta.category ? l.meta.category.toLowerCase().replace(/_/g, " ") : "unclassified"}</dd></>)}
-                        {l.meta.matchedInvoice && (<><dt className="text-muted-foreground">Matched invoice</dt><dd>{l.meta.matchedInvoice.invoiceNumber ?? "(no number)"}{l.meta.matchedInvoice.vendor ? ` · ${l.meta.matchedInvoice.vendor}` : ""} · {RM(l.meta.matchedInvoice.amount)}</dd></>)}
-                        <><dt className="text-muted-foreground">Inter-company</dt><dd>{l.meta.isInterCo ? "yes" : "no"}</dd></>
-                        {(l.meta.classifiedBy || l.meta.ruleName) && (<><dt className="text-muted-foreground">Classified</dt><dd>{l.meta.classifiedBy ?? "rule"}{l.meta.ruleName ? ` · ${l.meta.ruleName}` : ""}</dd></>)}
+                        {l.meta.account && (<><dt className="text-text-2">Bank account</dt><dd>{l.meta.account}</dd></>)}
+                        {l.meta.reference && (<><dt className="text-text-2">Reference</dt><dd className="break-words">{l.meta.reference}</dd></>)}
+                        {l.meta.category !== undefined && (<><dt className="text-text-2">Category</dt><dd>{l.meta.category ? l.meta.category.toLowerCase().replace(/_/g, " ") : "unclassified"}</dd></>)}
+                        {l.meta.matchedInvoice && (<><dt className="text-text-2">Matched invoice</dt><dd>{l.meta.matchedInvoice.invoiceNumber ?? "(no number)"}{l.meta.matchedInvoice.vendor ? ` · ${l.meta.matchedInvoice.vendor}` : ""} · {RM(l.meta.matchedInvoice.amount)}</dd></>)}
+                        <><dt className="text-text-2">Inter-company</dt><dd>{l.meta.isInterCo ? "yes" : "no"}</dd></>
+                        {(l.meta.classifiedBy || l.meta.ruleName) && (<><dt className="text-text-2">Classified</dt><dd>{l.meta.classifiedBy ?? "rule"}{l.meta.ruleName ? ` · ${l.meta.ruleName}` : ""}</dd></>)}
                         {l.meta.bankLineId && l.meta.expenseMonth && (
                           <>
-                            <dt className="text-muted-foreground">Expense month</dt>
+                            <dt className="text-text-2">Expense month</dt>
                             <dd>
                               <ExpenseMonthControl
                                 bankLineId={l.meta.bankLineId}
@@ -1605,11 +1605,11 @@ type BsReport = {
 };
 
 function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, showCompare, signed }: { title: string; total: number; lines: BsLine[]; onDrill: (code: string) => void; cmpByCode?: Map<string, number>; cmpTotal?: number | null; showCompare?: boolean; signed?: boolean }) {
-  const tone = signed ? (total < 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400") : "";
+  const tone = signed ? (total < 0 ? "text-danger-text" : "text-ok-text") : "";
   return (
-    <div className="rounded-md border bg-card">
-      <header className="sticky top-0 z-10 rounded-t-md bg-card">
-        <div className="rounded-t-md border-b bg-muted/30 px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">
+    <div className="rounded-md border bg-surface">
+      <header className="sticky top-0 z-10 rounded-t-md bg-surface">
+        <div className="rounded-t-md border-b bg-sunken px-3 py-2 text-xs uppercase tracking-wide text-text-2">
           {title}
         </div>
       </header>
@@ -1619,9 +1619,9 @@ function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, sho
             {lines.map((l, i) => {
               const c = cmpByCode?.get(l.code);
               return (
-              <tr key={l.code} className={`group cursor-pointer border-t ${i % 2 === 1 ? "bg-muted/20" : ""} hover:bg-muted/30`} onClick={() => onDrill(l.code)} title="Open this account in the General Ledger">
+              <tr key={l.code} className={`group cursor-pointer border-t ${i % 2 === 1 ? "bg-sunken" : ""} hover:bg-muted/30`} onClick={() => onDrill(l.code)} title="Open this account in the General Ledger">
                 <td
-                  className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground"
+                  className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-text-2"
                   style={{ paddingLeft: l.parentCode ? 32 : 12 }}
                 >
                   {l.code}
@@ -1630,15 +1630,15 @@ function BsSectionTable({ title, total, lines, onDrill, cmpByCode, cmpTotal, sho
                 <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">
                   <span className="underline-offset-2 group-hover:underline">{RM(l.amount)}</span>
                 </td>
-                {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">{c == null ? "" : RM(c)}</td>}
-                {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctChange(l.amount, c)}</td>}
+                {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-text-2">{c == null ? "" : RM(c)}</td>}
+                {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-text-2">{pctChange(l.amount, c)}</td>}
               </tr>
             );})}
-            <tr className="border-t bg-muted/30">
+            <tr className="border-t bg-sunken">
               <td colSpan={2} className="px-3 py-2 font-semibold">Total {title}</td>
               <td className={`whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold ${tone}`}>{RM(total)}</td>
-              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold text-muted-foreground">{cmpTotal == null ? "—" : RM(cmpTotal)}</td>}
-              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums font-semibold text-muted-foreground">{pctChange(total, cmpTotal)}</td>}
+              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold text-text-2">{cmpTotal == null ? "—" : RM(cmpTotal)}</td>}
+              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums font-semibold text-text-2">{pctChange(total, cmpTotal)}</td>}
             </tr>
           </tbody>
         </table>
@@ -1725,41 +1725,41 @@ function BsTab({ onDrill }: { onDrill: (code: string) => void }) {
     <div className="space-y-4">
       <StatementHeader title="Balance Sheet" periodLine={`As of ${longDate(asOf)}`} />
       {consolidated && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[11px] text-text-2">
           Consolidated group balance sheet: all companies summed, inter-company (3600) balances netted to one line.
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-xs text-muted-foreground">Balance as of <span className="tabular-nums">{asOf}</span> (the period end). Click any line to open its account in the General Ledger, full width, with opening balance, every journal line and closing balance.</p>
-        <label className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">Compare
-          <select value={compare} onChange={(e) => setCompare(e.target.value as CompareMode)} className="h-7 rounded-md border bg-background px-1.5 text-xs">
+        <p className="text-xs text-text-2">Balance as of <span className="tabular-nums">{asOf}</span> (the period end). Click any line to open its account in the General Ledger, full width, with opening balance, every journal line and closing balance.</p>
+        <label className="ml-auto flex items-center gap-1 text-[11px] text-text-2">Compare
+          <select value={compare} onChange={(e) => setCompare(e.target.value as CompareMode)} className="h-7 rounded-md border border-line bg-surface text-text px-1.5 text-xs">
             <option value="none">off</option>
             <option value="prev">previous period-end</option>
             <option value="year">previous year</option>
           </select>
         </label>
-        {showCompare && cmpAsOf && <span className="text-[10px] text-muted-foreground tabular-nums">vs {cmpAsOf}</span>}
+        {showCompare && cmpAsOf && <span className="text-[10px] text-text-2 tabular-nums">vs {cmpAsOf}</span>}
         {data?.report && <ExportPdfButton build={buildPdf} />}
       </div>
-      {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+      {isLoading && <Loader2 className="h-5 w-5 animate-spin text-text-2" />}
       {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+        <div className="rounded-lg border border-transparent bg-danger-soft p-3 text-sm text-danger-text">
           Failed to load.
         </div>
       )}
       {data && (
         <>
           {data.report.imbalance !== 0 && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <div className="flex items-start gap-2 rounded-md border border-warn bg-warn-soft p-3 text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-warn-text" />
               <span>
                 Imbalance of {RM(data.report.imbalance)}, likely an unposted period or malformed manual journal.
               </span>
             </div>
           )}
           {data.report.intercoResidual != null && Math.abs(data.report.intercoResidual) > 0.01 && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <div className="flex items-start gap-2 rounded-md border border-warn bg-warn-soft p-3 text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-warn-text" />
               <span>
                 Inter-company balances do not fully offset: {RM(data.report.intercoResidual)} net remains. One entity is missing (or misbooking) its due-to or due-from leg.
               </span>
@@ -1770,10 +1770,10 @@ function BsTab({ onDrill }: { onDrill: (code: string) => void }) {
             <div className="space-y-3">
               <BsSectionTable title="Liabilities" total={data.report.liabilities.total} lines={data.report.liabilities.lines} onDrill={onDrill} cmpByCode={cmpByCode} cmpTotal={cmp?.liabilities.total} showCompare={showCompare} />
               <BsSectionTable title="Equity" total={data.report.equity.total} lines={data.report.equity.lines} onDrill={onDrill} cmpByCode={cmpByCode} cmpTotal={cmp?.equity.total} showCompare={showCompare} signed />
-              <div className="rounded-md border bg-muted/20 p-3 text-sm font-semibold">
+              <div className="rounded-md border bg-sunken p-3 text-sm font-semibold">
                 Liabilities + Equity:{" "}
-                <span className={`tabular-nums ${data.report.totalLiabilitiesAndEquity < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(data.report.totalLiabilitiesAndEquity)}</span>
-                {showCompare && cmp && <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">vs {RM(cmp.totalLiabilitiesAndEquity)} ({pctChange(data.report.totalLiabilitiesAndEquity, cmp.totalLiabilitiesAndEquity)})</span>}
+                <span className={`tabular-nums ${data.report.totalLiabilitiesAndEquity < 0 ? "text-danger-text" : ""}`}>{RM(data.report.totalLiabilitiesAndEquity)}</span>
+                {showCompare && cmp && <span className="ml-2 text-xs font-normal text-text-2 tabular-nums">vs {RM(cmp.totalLiabilitiesAndEquity)} ({pctChange(data.report.totalLiabilitiesAndEquity, cmp.totalLiabilitiesAndEquity)})</span>}
               </div>
             </div>
           </div>
@@ -1806,9 +1806,9 @@ function CfSectionTable({ s, cmp, showCompare }: { s: CfSection; cmp?: CfSection
   // present now but absent then reads as "new", and vice-versa.
   const cmpByLabel = new Map((cmp?.lines ?? []).map((l) => [l.label, l.amount] as const));
   return (
-    <div className="rounded-md border bg-card">
-      <header className="sticky top-0 z-10 rounded-t-md bg-card">
-        <div className="rounded-t-md border-b bg-muted/30 px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground">
+    <div className="rounded-md border bg-surface">
+      <header className="sticky top-0 z-10 rounded-t-md bg-surface">
+        <div className="rounded-t-md border-b bg-sunken px-3 py-2 text-xs uppercase tracking-wide text-text-2">
           {s.title}
         </div>
       </header>
@@ -1818,36 +1818,36 @@ function CfSectionTable({ s, cmp, showCompare }: { s: CfSection; cmp?: CfSection
             {s.lines.map((l, i) => {
               const prev = showCompare ? (cmpByLabel.has(l.label) ? cmpByLabel.get(l.label)! : null) : undefined;
               return (
-                <tr key={i} className={`border-t ${i % 2 === 1 ? "bg-muted/20" : ""} hover:bg-muted/30`}>
+                <tr key={i} className={`border-t ${i % 2 === 1 ? "bg-sunken" : ""} hover:bg-muted/30`}>
                   <td className="px-3 py-1.5">{l.label}</td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground tabular-nums">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-xs text-text-2 tabular-nums">
                     {l.code ?? ""}
                   </td>
                   <td
                     className={`whitespace-nowrap px-3 py-1.5 text-right tabular-nums ${
-                      l.amount < 0 ? "text-rose-600 dark:text-rose-400" : ""
+                      l.amount < 0 ? "text-danger-text" : ""
                     }`}
                   >
                     {RM(l.amount)}
                   </td>
-                  {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-muted-foreground">{prev == null ? "—" : RM(prev)}</td>}
-                  {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{pctChange(l.amount, prev)}</td>}
+                  {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-text-2">{prev == null ? "—" : RM(prev)}</td>}
+                  {showCompare && <td className="whitespace-nowrap px-3 py-1.5 text-right text-xs tabular-nums text-text-2">{pctChange(l.amount, prev)}</td>}
                 </tr>
               );
             })}
-            <tr className="border-t bg-muted/30">
+            <tr className="border-t bg-sunken">
               <td colSpan={2} className="px-3 py-2 font-semibold">
                 Net cash from {s.title.toLowerCase()}
               </td>
               <td
                 className={`whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold ${
-                  s.total < 0 ? "text-rose-600 dark:text-rose-400" : ""
+                  s.total < 0 ? "text-danger-text" : ""
                 }`}
               >
                 {RM(s.total)}
               </td>
-              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold text-muted-foreground">{cmp == null ? "—" : RM(cmp.total)}</td>}
-              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums font-semibold text-muted-foreground">{pctChange(s.total, cmp?.total)}</td>}
+              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-semibold text-text-2">{cmp == null ? "—" : RM(cmp.total)}</td>}
+              {showCompare && <td className="whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums font-semibold text-text-2">{pctChange(s.total, cmp?.total)}</td>}
             </tr>
           </tbody>
         </table>
@@ -1857,13 +1857,13 @@ function CfSectionTable({ s, cmp, showCompare }: { s: CfSection; cmp?: CfSection
 }
 
 function CfSummaryCard({ label, amount, prev, showCompare, negative }: { label: string; amount: number; prev?: number | null; showCompare?: boolean; negative?: boolean }) {
-  const tone = !negative ? "" : amount < 0 ? "text-rose-600 dark:text-rose-400" : amount > 0 ? "text-emerald-600 dark:text-emerald-400" : "";
+  const tone = !negative ? "" : amount < 0 ? "text-danger-text" : amount > 0 ? "text-ok-text" : "";
   return (
-    <div className="rounded-md border bg-card p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="rounded-md border bg-surface p-3">
+      <div className="text-xs text-text-2">{label}</div>
       <div className={`truncate text-lg font-semibold tabular-nums ${tone}`}>{RM(amount)}</div>
       {showCompare && (
-        <div className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+        <div className="mt-0.5 text-[11px] text-text-2 tabular-nums">
           {prev == null ? "vs —" : `vs ${RM(prev)}`} {pctChange(amount, prev) && <span>({pctChange(amount, prev)})</span>}
         </div>
       )}
@@ -1955,28 +1955,28 @@ function CfTab() {
     <div className="space-y-4">
       <StatementHeader title="Cash Flow Statement" periodLine={`${longDate(start)} to ${longDate(end)}`} />
       {consolidated && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[11px] text-text-2">
           Consolidated group cash flow: all companies summed, inter-company transfer legs cancel so only external movements show. Cash at start and end is the group&apos;s total bank position.
         </p>
       )}
-      {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+      {isLoading && <Loader2 className="h-5 w-5 animate-spin text-text-2" />}
       {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+        <div className="rounded-lg border border-transparent bg-danger-soft p-3 text-sm text-danger-text">
           Failed to load.
         </div>
       )}
       {data && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <label className="flex items-center gap-1 text-[11px] text-muted-foreground">Compare
+            <label className="flex items-center gap-1 text-[11px] text-text-2">Compare
               <select value={compare} onChange={(e) => setCompare(e.target.value as CompareMode)}
-                className="h-7 rounded-md border bg-background px-1.5 text-xs">
+                className="h-7 rounded-md border border-line bg-surface text-text px-1.5 text-xs">
                 <option value="none">off</option>
                 <option value="prev">previous period</option>
                 <option value="year">previous year</option>
               </select>
             </label>
-            {showCompare && cmpRange && <span className="text-[10px] text-muted-foreground tabular-nums">vs {cmpRange.s} → {cmpRange.e}</span>}
+            {showCompare && cmpRange && <span className="text-[10px] text-text-2 tabular-nums">vs {cmpRange.s} → {cmpRange.e}</span>}
             <ExportPdfButton build={buildPdf} />
           </div>
           <CfSectionTable s={data.report.operating} cmp={cmp?.operating} showCompare={showCompare} />
@@ -1988,8 +1988,8 @@ function CfTab() {
             <CfSummaryCard label="Cash at end" amount={data.report.cashAtEnd} prev={cmp?.cashAtEnd} showCompare={showCompare} />
           </div>
           {Math.abs(data.report.reconciliationGap) > 0.01 && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+            <div className="flex items-start gap-2 rounded-md border border-warn bg-warn-soft p-3 text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-warn-text" />
               <span>
                 Reconciliation gap of {RM(data.report.reconciliationGap)} between
                 operating+investing+financing and bank-account ∆.
@@ -2027,12 +2027,12 @@ function AuditorPack() {
   }
 
   return (
-    <section className="rounded-lg border bg-card">
+    <section className="rounded-lg border bg-surface">
       <header className="flex flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <FileText className="h-4 w-4 shrink-0" />
           <span className="font-medium">Auditor pack</span>
-          <span className="hidden sm:inline text-xs text-muted-foreground truncate">
+          <span className="hidden sm:inline text-xs text-text-2 truncate">
             CSV bundle for external audit
           </span>
         </div>
@@ -2041,7 +2041,7 @@ function AuditorPack() {
             type="number"
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
-            className="h-8 w-24 rounded-md border bg-background px-2 text-sm"
+            className="h-8 w-24 rounded-md border border-line bg-surface text-text px-2 text-sm"
           />
           <Button onClick={build} disabled={busy} size="sm">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
@@ -2049,7 +2049,7 @@ function AuditorPack() {
           </Button>
         </div>
       </header>
-      {errMsg && <div className="px-4 py-2 text-sm text-destructive">{errMsg}</div>}
+      {errMsg && <div className="px-4 py-2 text-sm text-danger-text">{errMsg}</div>}
       {files.length > 0 && (
         <ul className="divide-y">
           {files.map((f) => (
@@ -2112,11 +2112,11 @@ function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by code or account…" className="h-8 w-56 rounded-md border bg-background px-2 text-sm" />
-        <span className="text-xs text-muted-foreground">as of <span className="tabular-nums">{asOf}</span></span>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by code or account…" className="h-8 w-56 rounded-md border border-line bg-surface text-text px-2 text-sm" />
+        <span className="text-xs text-text-2">as of <span className="tabular-nums">{asOf}</span></span>
         {data?.report && (
           <div className="ml-auto flex items-center gap-2">
-            <span className={`rounded px-2 py-1 text-xs font-medium ${data.report.balanced ? "bg-green-500/10 text-green-700 dark:text-green-400" : "bg-red-500/10 text-red-600"}`}>
+            <span className={`rounded px-2 py-1 text-xs font-medium ${data.report.balanced ? "bg-ok-soft text-ok-text" : "bg-danger-soft text-danger-text"}`}>
               {data.report.balanced ? "Balanced" : "Out of balance"}
             </span>
             <ExportCsvButton onExport={() => {
@@ -2130,17 +2130,17 @@ function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
           </div>
         )}
       </div>
-      {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
+      {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-text-2">Loading…</div> : (
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full min-w-[560px] text-sm">
-            <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+            <thead><tr className="border-b bg-sunken text-left text-text-2">
               <th className="px-3 py-2 font-medium">Code</th><th className="px-3 py-2 font-medium">Account</th>
               <th className="px-3 py-2 text-right font-medium">Debit</th><th className="px-3 py-2 text-right font-medium">Credit</th>
             </tr></thead>
             <tbody className="divide-y">
               {rows.map((r) => (
-                <tr key={r.code} className="cursor-pointer hover:bg-muted/40" onClick={() => onDrill(r.code)} title="Open in General Ledger">
-                  <td className="whitespace-nowrap px-3 py-1.5 text-xs text-muted-foreground tabular-nums">{r.code}</td>
+                <tr key={r.code} className="cursor-pointer hover:bg-sunken" onClick={() => onDrill(r.code)} title="Open in General Ledger">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-xs text-text-2 tabular-nums">{r.code}</td>
                   <td className="px-3 py-1.5">{r.name}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{r.debit ? RM(r.debit) : ""}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{r.credit ? RM(r.credit) : ""}</td>
@@ -2155,7 +2155,7 @@ function TbTab({ onDrill }: { onDrill: (code: string) => void }) {
           </table>
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">Click any account to open its General Ledger. Fills in as the bank→GL bridge posts.</p>
+      <p className="text-[11px] text-text-2">Click any account to open its General Ledger. Fills in as the bank→GL bridge posts.</p>
     </div>
   );
 }
@@ -2220,20 +2220,20 @@ function AccountPicker({ value, onChange, placeholder, exclude }: { value: strin
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
         onBlur={() => { setOpen(false); setQ(null); }}
         placeholder={placeholder ?? "Search account code or name…"}
-        className="h-8 w-64 sm:w-80 rounded-md border bg-background px-2 text-sm"
+        className="h-8 w-64 sm:w-80 rounded-md border border-line bg-surface text-text px-2 text-sm"
       />
       {open && matches.length > 0 && (
-        <ul className="absolute z-20 mt-1 max-h-72 w-72 sm:w-96 overflow-y-auto rounded-md border bg-card shadow-lg">
+        <ul className="absolute z-20 mt-1 max-h-72 w-72 sm:w-96 overflow-y-auto rounded-md border bg-surface shadow-lg">
           {matches.map((a) => (
             <li key={a.code}>
               <button
                 type="button"
                 onMouseDown={(e) => { e.preventDefault(); onChange(a.code); setOpen(false); setQ(null); }}
-                className={`flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-sm hover:bg-muted/50 ${a.code === value ? "bg-muted/30" : ""}`}
+                className={`flex w-full items-baseline gap-2 px-3 py-1.5 text-left text-sm hover:bg-muted/50 ${a.code === value ? "bg-sunken" : ""}`}
               >
-                <span className="w-16 shrink-0 text-xs tabular-nums text-muted-foreground">{a.code}</span>
+                <span className="w-16 shrink-0 text-xs tabular-nums text-text-2">{a.code}</span>
                 <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                <span className="shrink-0 text-[10px] uppercase text-muted-foreground">{a.type}</span>
+                <span className="shrink-0 text-[10px] uppercase text-text-2">{a.type}</span>
               </button>
             </li>
           ))}
@@ -2275,10 +2275,10 @@ function JournalPanel({ transactionId, currentAccount, accountNames, detail, onL
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fetch keyed on id + cache presence only
   }, [transactionId, detail]);
 
-  if (err) return <div className="px-4 py-2 text-xs text-rose-600">{err}</div>;
+  if (err) return <div className="px-4 py-2 text-xs text-danger-text">{err}</div>;
   if (!detail) {
     return (
-      <div className="flex items-center gap-2 px-4 py-2.5 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 px-4 py-2.5 text-xs text-text-2">
         <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading journal…
       </div>
     );
@@ -2287,17 +2287,17 @@ function JournalPanel({ transactionId, currentAccount, accountNames, detail, onL
   const t = detail.transaction;
   return (
     <div className="space-y-2 px-4 py-3">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-        <span className="font-medium text-foreground">Journal {t.id.slice(0, 8).toUpperCase()}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-2">
+        <span className="font-medium text-text">Journal {t.id.slice(0, 8).toUpperCase()}</span>
         <span className="tabular-nums">{t.txn_date}</span>
         <span>{t.txn_type}</span>
         <span>Posted by {glAgentLine(t.posted_by_agent, t.agent_version)}</span>
-        {t.status !== "posted" && <span className="uppercase text-amber-600">{t.status}</span>}
+        {t.status !== "posted" && <span className="uppercase text-warn-text">{t.status}</span>}
       </div>
       {t.description && <div className="text-xs">{t.description}</div>}
       <table className="w-full max-w-3xl text-xs">
         <thead>
-          <tr className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+          <tr className="text-left text-[10px] uppercase tracking-wide text-text-2">
             <th className="py-1 pr-2 font-medium">Account</th>
             <th className="py-1 pr-2 font-medium">Memo</th>
             <th className="w-24 py-1 pr-2 text-right font-medium">Debit</th>
@@ -2308,13 +2308,13 @@ function JournalPanel({ transactionId, currentAccount, accountNames, detail, onL
           {detail.lines.map((l) => {
             const mine = l.account_code === currentAccount;
             return (
-              <tr key={l.id} className={mine ? "bg-muted/60 font-medium" : ""}>
+              <tr key={l.id} className={mine ? "bg-sunken font-medium" : ""}>
                 <td className="whitespace-nowrap py-1 pr-2">
-                  <span className="tabular-nums text-muted-foreground">{l.account_code}</span>{" "}
+                  <span className="tabular-nums text-text-2">{l.account_code}</span>{" "}
                   {l.account_name ?? accountNames.get(l.account_code) ?? ""}
-                  {mine && <span className="ml-1.5 rounded-full border px-1.5 text-[10px] font-normal text-muted-foreground">this account</span>}
+                  {mine && <span className="ml-1.5 rounded-full border px-1.5 text-[10px] font-normal text-text-2">this account</span>}
                 </td>
-                <td className="py-1 pr-2 text-muted-foreground">{l.memo ?? ""}</td>
+                <td className="py-1 pr-2 text-text-2">{l.memo ?? ""}</td>
                 <td className="whitespace-nowrap py-1 pr-2 text-right tabular-nums">{Number(l.debit) ? RM(Number(l.debit)) : ""}</td>
                 <td className="whitespace-nowrap py-1 text-right tabular-nums">{Number(l.credit) ? RM(Number(l.credit)) : ""}</td>
               </tr>
@@ -2323,7 +2323,7 @@ function JournalPanel({ transactionId, currentAccount, accountNames, detail, onL
         </tbody>
       </table>
       {t.posted_by_agent === "bank" && (
-        <div className="rounded-md border bg-background/60">
+        <div className="rounded-md border border-line bg-surface text-text/60">
           <GlSourceLines transactionId={transactionId} accountNames={accountNames} onChanged={onFixed} />
         </div>
       )}
@@ -2345,18 +2345,18 @@ function GlAccountCard({ section, start, openRows, onToggle, detailCache, onDeta
 }) {
   const a = section.account;
   return (
-    <section className="rounded-lg border bg-card">
-      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b bg-muted/40 px-3 py-2">
+    <section className="rounded-lg border bg-surface">
+      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b bg-sunken px-3 py-2">
         <span className="text-sm font-semibold tabular-nums">{a.code}</span>
         <span className="text-sm font-medium">{a.name}</span>
-        <span className="text-[10px] uppercase text-muted-foreground">{a.type}</span>
-        <span className="ml-auto text-xs text-muted-foreground">
-          Opening <span className="font-medium tabular-nums text-foreground">{RM(section.opening)}</span>
+        <span className="text-[10px] uppercase text-text-2">{a.type}</span>
+        <span className="ml-auto text-xs text-text-2">
+          Opening <span className="font-medium tabular-nums text-text">{RM(section.opening)}</span>
         </span>
       </header>
       <div className="max-h-[70vh] overflow-auto">
         <table className="w-full min-w-[880px] text-sm">
-          <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <thead className="text-left text-xs uppercase tracking-wide text-text-2">
             <tr>
               <th className={`${TH} w-6`} />
               <th className={`${TH} whitespace-nowrap`}>Date</th>
@@ -2369,7 +2369,7 @@ function GlAccountCard({ section, start, openRows, onToggle, detailCache, onDeta
             </tr>
           </thead>
           <tbody>
-            <tr className="border-t bg-muted/20 text-muted-foreground">
+            <tr className="border-t bg-sunken text-text-2">
               <td className="py-1.5" />
               <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums">{start}</td>
               <td colSpan={3} className="px-3 py-1.5 text-xs">Opening balance</td>
@@ -2378,7 +2378,7 @@ function GlAccountCard({ section, start, openRows, onToggle, detailCache, onDeta
             </tr>
             {section.entries.length === 0 && (
               <tr className="border-t">
-                <td colSpan={8} className="px-3 py-4 text-center text-xs text-muted-foreground">
+                <td colSpan={8} className="px-3 py-4 text-center text-xs text-text-2">
                   No movements in this period. Opening equals closing.
                 </td>
               </tr>
@@ -2389,18 +2389,18 @@ function GlAccountCard({ section, start, openRows, onToggle, detailCache, onDeta
               return (
                 <Fragment key={key}>
                   <tr
-                    className={`cursor-pointer border-t align-top transition ${i % 2 === 1 ? "bg-muted/20" : ""} hover:bg-muted/30`}
+                    className={`cursor-pointer border-t align-top transition ${i % 2 === 1 ? "bg-sunken" : ""} hover:bg-muted/30`}
                     onClick={() => onToggle(key)}
                     title="Click to see the full journal entry"
                   >
-                    <td className="py-1.5 pl-2 text-[10px] text-muted-foreground">{open ? "▾" : "▸"}</td>
-                    <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground">{e.date}</td>
-                    <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-muted-foreground" title={e.transactionId}>{e.reference}</td>
+                    <td className="py-1.5 pl-2 text-[10px] text-text-2">{open ? "▾" : "▸"}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-text-2">{e.date}</td>
+                    <td className="whitespace-nowrap px-3 py-1.5 text-xs tabular-nums text-text-2" title={e.transactionId}>{e.reference}</td>
                     <td className="max-w-[13rem] truncate px-3 py-1.5 text-xs" title={e.contact ?? undefined}>{e.contact ?? ""}</td>
                     <td className="px-3 py-1.5 text-xs">
                       {e.description}
                       {e.memo && e.memo !== e.description && (
-                        <span className="block text-[11px] leading-snug text-muted-foreground">{e.memo}</span>
+                        <span className="block text-[11px] leading-snug text-text-2">{e.memo}</span>
                       )}
                     </td>
                     <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{e.debit ? RM(e.debit) : ""}</td>
@@ -2408,7 +2408,7 @@ function GlAccountCard({ section, start, openRows, onToggle, detailCache, onDeta
                     <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums">{RM(e.balance)}</td>
                   </tr>
                   {open && (
-                    <tr className="border-t bg-muted/20">
+                    <tr className="border-t bg-sunken">
                       <td colSpan={8} className="p-0" onClick={(ev) => ev.stopPropagation()}>
                         <JournalPanel
                           transactionId={e.transactionId}
@@ -2426,7 +2426,7 @@ function GlAccountCard({ section, start, openRows, onToggle, detailCache, onDeta
             })}
           </tbody>
           <tfoot>
-            <tr className="border-t bg-muted/20 text-muted-foreground">
+            <tr className="border-t bg-sunken text-text-2">
               <td className="py-1.5" />
               <td colSpan={4} className="px-3 py-1.5 text-xs">Closing balance</td>
               <td colSpan={2} />
@@ -2486,23 +2486,23 @@ function GlTab({ accounts, setAccounts }: { accounts: string[]; setAccounts: (co
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">Accounts</span>
+        <span className="text-xs text-text-2">Accounts</span>
         {accounts.map((code) => (
-          <span key={code} className="inline-flex items-center gap-1 rounded-full border bg-muted/30 px-2 py-0.5 text-xs">
-            <span className="tabular-nums text-muted-foreground">{code}</span>
+          <span key={code} className="inline-flex items-center gap-1 rounded-full border bg-sunken px-2 py-0.5 text-xs">
+            <span className="tabular-nums text-text-2">{code}</span>
             <span className="max-w-[14rem] truncate">{accountNames.get(code) ?? ""}</span>
             <button
               type="button"
               onClick={() => removeAccount(code)}
               title="Remove this account from the view"
-              className="rounded-full text-muted-foreground transition hover:text-foreground"
+              className="rounded-full text-text-2 transition hover:text-text"
             >
               <X className="h-3 w-3" />
             </button>
           </span>
         ))}
         <AccountPicker value="" onChange={addAccount} placeholder="Add account…" exclude={accounts} />
-        <span className="text-xs text-muted-foreground tabular-nums">{start} → {end}</span>
+        <span className="text-xs text-text-2 tabular-nums">{start} → {end}</span>
         {data?.report && (
           <div className="ml-auto">
             <ExportCsvButton onExport={exportCsv} />
@@ -2511,17 +2511,17 @@ function GlTab({ accounts, setAccounts }: { accounts: string[]; setAccounts: (co
       </div>
 
       {accounts.length === 0 && (
-        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-text-2">
           No accounts selected. Add an account above to see its ledger.
         </div>
       )}
       {error && accounts.length > 0 && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+        <div className="rounded-lg border border-transparent bg-danger-soft p-3 text-sm text-danger-text">
           Failed to load the ledger. Check the account codes and try again.
         </div>
       )}
       {!error && accounts.length > 0 && !data?.report && (
-        <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div>
+        <div className="py-12 text-center text-sm text-text-2">Loading…</div>
       )}
       {!error && data?.report && (
         <div className={`space-y-4 ${isLoading ? "opacity-60" : ""}`}>
@@ -2540,7 +2540,7 @@ function GlTab({ accounts, setAccounts }: { accounts: string[]; setAccounts: (co
           ))}
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-[11px] text-text-2">
         Click any row to open the full journal entry: every leg, who posted it, and the source bank lines with fix-in-place category chips. Contact is best effort, derived from the bank payee, the matched invoice supplier, the sales channel, or the manual actor.
       </p>
     </div>
@@ -2568,11 +2568,11 @@ function ApTab() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by supplier…" className="h-8 w-56 rounded-md border bg-background px-2 text-sm" />
-        <span className="text-xs text-muted-foreground">as of <span className="tabular-nums">{asOf}</span></span>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by supplier…" className="h-8 w-56 rounded-md border border-line bg-surface text-text px-2 text-sm" />
+        <span className="text-xs text-text-2">as of <span className="tabular-nums">{asOf}</span></span>
         {data?.report && (
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{data.report.invoiceCount} open bills · <span className="font-medium text-foreground">{RM(data.report.grandTotal)}</span> outstanding</span>
+            <span className="text-xs text-text-2">{data.report.invoiceCount} open bills · <span className="font-medium text-text">{RM(data.report.grandTotal)}</span> outstanding</span>
             <ExportCsvButton onExport={() => {
               const r = data.report;
               const rows: Array<Array<string | number>> = [["Supplier", "Bills", "Current", "1-30", "31-60", "61-90", "90+", "Total"]];
@@ -2583,19 +2583,19 @@ function ApTab() {
           </div>
         )}
       </div>
-      {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
+      {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-text-2">Loading…</div> : (
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full min-w-[720px] text-sm">
-            <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+            <thead><tr className="border-b bg-sunken text-left text-text-2">
               <th className="px-3 py-2 font-medium">Supplier</th>
               {AP_COLS.map((c) => <th key={c.key} className="px-3 py-2 text-right font-medium">{c.label}</th>)}
               <th className="px-3 py-2 text-right font-medium">Total</th>
             </tr></thead>
             <tbody className="divide-y">
               {rows.map((r) => (
-                <tr key={r.vendor} className="hover:bg-muted/40">
-                  <td className="px-3 py-1.5">{r.vendor} <span className="text-[10px] text-muted-foreground">({r.count})</span></td>
-                  {AP_COLS.map((c) => <td key={c.key} className={`px-3 py-1.5 text-right tabular-nums ${c.key === "d90_plus" && r[c.key] ? "text-red-600" : ""}`}>{r[c.key] ? RM(r[c.key]) : ""}</td>)}
+                <tr key={r.vendor} className="hover:bg-sunken">
+                  <td className="px-3 py-1.5">{r.vendor} <span className="text-[10px] text-text-2">({r.count})</span></td>
+                  {AP_COLS.map((c) => <td key={c.key} className={`px-3 py-1.5 text-right tabular-nums ${c.key === "d90_plus" && r[c.key] ? "text-danger-text" : ""}`}>{r[c.key] ? RM(r[c.key]) : ""}</td>)}
                   <td className="px-3 py-1.5 text-right font-medium tabular-nums">{RM(r.total)}</td>
                 </tr>
               ))}
@@ -2608,7 +2608,7 @@ function ApTab() {
           </table>
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">Open supplier bills by how overdue they are (from due date). Aged Receivables is not shown because sales settle same-day via card/QR/grab, so there is no open receivables ledger.</p>
+      <p className="text-[11px] text-text-2">Open supplier bills by how overdue they are (from due date). Aged Receivables is not shown because sales settle same-day via card/QR/grab, so there is no open receivables ledger.</p>
     </div>
   );
 }
@@ -2664,7 +2664,7 @@ function ChannelSettlementCard({ title, channels, entityNet, totalCommission, en
       <h4 className="text-sm font-semibold">{title}</h4>
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full min-w-[760px] text-sm">
-          <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+          <thead><tr className="border-b bg-sunken text-left text-text-2">
             <th className="px-3 py-2 font-medium">Channel</th>
             <th className="px-3 py-2 text-right font-medium">Sales accrued</th>
             <th className="px-3 py-2 text-right font-medium">Cash settled</th>
@@ -2675,25 +2675,25 @@ function ChannelSettlementCard({ title, channels, entityNet, totalCommission, en
           <tbody className="divide-y">
             {channels.map((c) => (
               <Fragment key={c.code}>
-                <tr className="cursor-pointer hover:bg-muted/40" onClick={() => setOpen(open === c.code ? null : c.code)} title="Show monthly breakdown">
+                <tr className="cursor-pointer hover:bg-sunken" onClick={() => setOpen(open === c.code ? null : c.code)} title="Show monthly breakdown">
                   <td className="px-3 py-1.5">
                     <span className="font-medium">{c.label}</span>
-                    <span className="ml-2 text-xs text-muted-foreground tabular-nums">{c.code}</span>
+                    <span className="ml-2 text-xs text-text-2 tabular-nums">{c.code}</span>
                   </td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{RM(c.accrued)}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{RM(c.settled)}</td>
-                  <td className={`px-3 py-1.5 text-right tabular-nums ${c.residual < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(c.residual)}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{RM(c.commission)}</td>
-                  <td className={`px-3 py-1.5 text-right tabular-nums ${c.residualAfterCommission < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(c.residualAfterCommission)}</td>
+                  <td className={`px-3 py-1.5 text-right tabular-nums ${c.residual < 0 ? "text-danger-text" : ""}`}>{RM(c.residual)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums text-text-2">{RM(c.commission)}</td>
+                  <td className={`px-3 py-1.5 text-right tabular-nums ${c.residualAfterCommission < 0 ? "text-danger-text" : ""}`}>{RM(c.residualAfterCommission)}</td>
                 </tr>
                 {open === c.code && c.months.map((m) => (
-                  <tr key={`${idPrefix}-${c.code}-${m.month}`} className="bg-muted/20 text-xs">
-                    <td className="px-3 py-1 pl-8 text-muted-foreground tabular-nums">{m.month}</td>
+                  <tr key={`${idPrefix}-${c.code}-${m.month}`} className="bg-sunken text-xs">
+                    <td className="px-3 py-1 pl-8 text-text-2 tabular-nums">{m.month}</td>
                     <td className="px-3 py-1 text-right tabular-nums">{RM(m.accrued)}</td>
                     <td className="px-3 py-1 text-right tabular-nums">{RM(m.settled)}</td>
-                    <td className={`px-3 py-1 text-right tabular-nums ${m.residual < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(m.residual)}</td>
+                    <td className={`px-3 py-1 text-right tabular-nums ${m.residual < 0 ? "text-danger-text" : ""}`}>{RM(m.residual)}</td>
                     <td className="px-3 py-1 text-right tabular-nums">{RM(m.commission)}</td>
-                    <td className={`px-3 py-1 text-right tabular-nums ${m.residualAfterCommission < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(m.residualAfterCommission)}</td>
+                    <td className={`px-3 py-1 text-right tabular-nums ${m.residualAfterCommission < 0 ? "text-danger-text" : ""}`}>{RM(m.residualAfterCommission)}</td>
                   </tr>
                 ))}
               </Fragment>
@@ -2704,16 +2704,16 @@ function ChannelSettlementCard({ title, channels, entityNet, totalCommission, en
               <td className="px-3 py-1.5">All channels</td>
               <td className="px-3 py-1.5 text-right tabular-nums">{RM(totAccrued)}</td>
               <td className="px-3 py-1.5 text-right tabular-nums">{RM(totSettled)}</td>
-              <td className={`px-3 py-1.5 text-right tabular-nums ${totResidual < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(totResidual)}</td>
-              <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{RM(totalCommission)}</td>
-              <td className={`px-3 py-1.5 text-right tabular-nums ${totAfterComm < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(totAfterComm)}</td>
+              <td className={`px-3 py-1.5 text-right tabular-nums ${totResidual < 0 ? "text-danger-text" : ""}`}>{RM(totResidual)}</td>
+              <td className="px-3 py-1.5 text-right tabular-nums text-text-2">{RM(totalCommission)}</td>
+              <td className={`px-3 py-1.5 text-right tabular-nums ${totAfterComm < 0 ? "text-danger-text" : ""}`}>{RM(totAfterComm)}</td>
             </tr>
-            <tr className="border-t-2 bg-muted/30 font-semibold">
+            <tr className="border-t-2 bg-sunken font-semibold">
               <td className="px-3 py-2" title="Total across the three debtors of accrued minus settled. The true unreconciled figure, since per-channel splits are noisy.">Entity net (real unreconciled)</td>
               <td className="px-3 py-2" colSpan={2} />
-              <td className={`px-3 py-2 text-right tabular-nums ${entityNet < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(entityNet)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{RM(totalCommission)}</td>
-              <td className={`px-3 py-2 text-right tabular-nums ${entityNetAfterCommission < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(entityNetAfterCommission)}</td>
+              <td className={`px-3 py-2 text-right tabular-nums ${entityNet < 0 ? "text-danger-text" : ""}`}>{RM(entityNet)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-text-2">{RM(totalCommission)}</td>
+              <td className={`px-3 py-2 text-right tabular-nums ${entityNetAfterCommission < 0 ? "text-danger-text" : ""}`}>{RM(entityNetAfterCommission)}</td>
             </tr>
           </tfoot>
         </table>
@@ -2725,14 +2725,14 @@ function ChannelSettlementCard({ title, channels, entityNet, totalCommission, en
 function ChannelSettlementSection({ start, end }: { start: string; end: string }) {
   const { data, isLoading } = useFetch<{ report: ChannelSettlement }>(`/api/finance/reports/channel-settlement?start=${start}&end=${end}`);
   if (isLoading || !data?.report) {
-    return <div className="py-8 text-center text-sm text-muted-foreground">Loading channel settlement…</div>;
+    return <div className="py-8 text-center text-sm text-text-2">Loading channel settlement…</div>;
   }
   const r = data.report;
   return (
     <div className="mt-6 space-y-4">
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-semibold">Channel settlement reconciliation</h3>
-        <span className="text-[11px] text-muted-foreground">accrued vs settled per channel debtor, by entity</span>
+        <span className="text-[11px] text-text-2">accrued vs settled per channel debtor, by entity</span>
       </div>
       <ChannelSettlementCard
         title="Consolidated (all entities)"
@@ -2753,7 +2753,7 @@ function ChannelSettlementSection({ start, end }: { start: string; end: string }
           idPrefix={co.companyId}
         />
       ))}
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-[11px] text-text-2">
         Sales are accrued as a debit to each channel debtor (Card 1006, GrabFood 1005, Cash &amp; QR 1000-02); bank settlements credit it. The residual splits into three causes. Per-channel gaps are inflated by settlement cash arriving under a different channel label than the sale was accrued under (for example a Grab payout crediting Card 1006 instead of 1005), so the per-channel columns are noisy and the <span className="font-medium">entity net</span> across all three debtors is the real unreconciled figure. Commission is the expected permanent portion, already expensed (GrabFood commission at the payout-derived rate applied to gross Grab accrual, card MDR as bank fees), so residual after commission is the misattribution-plus-timing part; whatever remains after that is timing (recent sales not yet settled). This view is strictly read-only. The clearing actions (retag misattributed settlements, post commission clearing) are a deliberate follow-up and are not done here.
       </p>
     </div>
@@ -2782,25 +2782,25 @@ type CashInReport = { from: string; to: string; rows: CashInRow[]; totals: { rev
 const CASHIN_ENTITY: Record<string, string> = {
   celsius: "Shah Alam + Nilai (SB)",
   celsiusconezion: "Putrajaya (Conezion)",
-  celsiustamarind: "Cyberjaya (Tamarind)",
+  celsiustamarind: "Tamarind",
   group: "Group",
 };
 const CASHIN_CHANNEL: Record<string, string> = { card: "Card", qr: "DuitNow QR", online: "Online (RM)", grab: "GrabFood", consignment: "Consignment" };
 
 function CashInByChannelSection({ start, end }: { start: string; end: string }) {
   const { data, isLoading } = useFetch<{ report: CashInReport }>(`/api/finance/reports/cash-in?start=${start}&end=${end}`);
-  if (isLoading) return <div className="py-8 text-center text-sm text-muted-foreground">Loading cash-in…</div>;
+  if (isLoading) return <div className="py-8 text-center text-sm text-text-2">Loading cash-in…</div>;
   if (!data?.report) return null;
   const { rows, totals } = data.report;
   return (
     <div className="space-y-2">
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-semibold">Cash-in by channel, per entity</h3>
-        <span className="text-[11px] text-muted-foreground">revenue rung vs cash banked</span>
+        <span className="text-[11px] text-text-2">revenue rung vs cash banked</span>
       </div>
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full min-w-[720px] text-sm">
-          <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+          <thead><tr className="border-b bg-sunken text-left text-text-2">
             <th className="px-3 py-2 font-medium">Entity</th>
             <th className="px-3 py-2 font-medium">Channel</th>
             <th className="px-3 py-2 text-right font-medium">Revenue</th>
@@ -2811,15 +2811,15 @@ function CashInByChannelSection({ start, end }: { start: string; end: string }) 
           </tr></thead>
           <tbody className="divide-y">
             {rows.map((r) => (
-              <tr key={`${r.company}-${r.channel}`} className="hover:bg-muted/40" title={r.note}>
+              <tr key={`${r.company}-${r.channel}`} className="hover:bg-sunken" title={r.note}>
                 <td className="px-3 py-1.5">{CASHIN_ENTITY[r.company] ?? r.company}</td>
                 <td className="px-3 py-1.5">{CASHIN_CHANNEL[r.channel] ?? r.channel}</td>
                 <td className="px-3 py-1.5 text-right tabular-nums">{RM(r.revenue)}</td>
                 <td className="px-3 py-1.5 text-right tabular-nums">{RM(r.banked)}</td>
                 <td className="px-3 py-1.5 text-right tabular-nums">{RM(r.gap)}</td>
-                <td className="px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{r.gapPct === null ? "" : `${r.gapPct}%`}</td>
+                <td className="px-3 py-1.5 text-right text-xs tabular-nums text-text-2">{r.gapPct === null ? "" : `${r.gapPct}%`}</td>
                 <td className="px-3 py-1.5">
-                  <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${r.status === "review" ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"}`}>
+                  <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${r.status === "review" ? "bg-warn-soft text-warn-text" : "bg-ok-soft text-ok-text"}`}>
                     {r.status === "review" ? "Review" : "OK"}
                   </span>
                 </td>
@@ -2835,7 +2835,7 @@ function CashInByChannelSection({ start, end }: { start: string; end: string }) 
           </tr></tfoot>
         </table>
       </div>
-      <p className="text-[11px] text-muted-foreground">Revenue is what the till/app rang; banked is the classified bank credit for that channel. The gap is the expected fee/commission (card MDR ~1%, QR free, online ~2%, Grab ~45% incl. GrabAds, consignment ~30%). Where the bank line carries a sales date — Maybank card and Revenue Monster — each credit is matched to the day it settles, so the residual is the true fee, not a timing tail. DuitNow QR is real-time and free (residual is window-edge timing); Shah Alam card settles through NTT as an undated batch, so it reconciles on cash received in the window and lags. Rows flagged <span className="font-medium">Review</span> exceed the band, meaning money rung has not fully arrived (worth confirming). Grab is group-level because Conezion and Shah Alam Grab both settle into HQ&apos;s account.</p>
+      <p className="text-[11px] text-text-2">Revenue is what the till/app rang; banked is the classified bank credit for that channel. The gap is the expected fee/commission (card MDR ~1%, QR free, online ~2%, Grab ~45% incl. GrabAds, consignment ~30%). Where the bank line carries a sales date — Maybank card and Revenue Monster — each credit is matched to the day it settles, so the residual is the true fee, not a timing tail. DuitNow QR is real-time and free (residual is window-edge timing); Shah Alam card settles through NTT as an undated batch, so it reconciles on cash received in the window and lags. Rows flagged <span className="font-medium">Review</span> exceed the band, meaning money rung has not fully arrived (worth confirming). Grab is group-level because Conezion and Shah Alam Grab both settle into HQ&apos;s account.</p>
     </div>
   );
 }
@@ -2851,14 +2851,14 @@ function ReconTab() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">Period</span>
+        <span className="text-xs text-text-2">Period</span>
         <DateRangePicker start={start} end={end} onChange={(s, e) => { setStart(s); setEnd(e); }} />
       </div>
       <CashInByChannelSection start={start} end={end} />
-      {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-muted-foreground">Loading…</div> : (
+      {isLoading || !data?.report ? <div className="py-12 text-center text-sm text-text-2">Loading…</div> : (
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full min-w-[640px] text-sm">
-            <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+            <thead><tr className="border-b bg-sunken text-left text-text-2">
               <th className="px-3 py-2 font-medium">Channel</th>
               <th className="px-3 py-2 text-right font-medium">Sales recognised</th>
               <th className="px-3 py-2 text-right font-medium">Settled to bank</th>
@@ -2868,23 +2868,23 @@ function ReconTab() {
             <tbody className="divide-y">
               {data.report.channels.map((c) => (
                 <Fragment key={c.code}>
-                  <tr className="cursor-pointer hover:bg-muted/40" onClick={() => setOpen(open === c.code ? null : c.code)} title="Show monthly breakdown">
+                  <tr className="cursor-pointer hover:bg-sunken" onClick={() => setOpen(open === c.code ? null : c.code)} title="Show monthly breakdown">
                     <td className="px-3 py-1.5">
                       <span className="font-medium">{c.label}</span>
-                      <span className="ml-2 text-xs text-muted-foreground tabular-nums">{c.code}</span>
-                      <div className="text-[11px] text-muted-foreground">{c.note}</div>
+                      <span className="ml-2 text-xs text-text-2 tabular-nums">{c.code}</span>
+                      <div className="text-[11px] text-text-2">{c.note}</div>
                     </td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{RM(c.salesRecognised)}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{RM(c.settledToBank)}</td>
-                    <td className={`px-3 py-1.5 text-right tabular-nums ${c.unreconciled < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(c.unreconciled)}</td>
-                    <td className="px-3 py-1.5 text-right text-xs tabular-nums text-muted-foreground">{c.pct === null ? "" : `${c.pct}%`}</td>
+                    <td className={`px-3 py-1.5 text-right tabular-nums ${c.unreconciled < 0 ? "text-danger-text" : ""}`}>{RM(c.unreconciled)}</td>
+                    <td className="px-3 py-1.5 text-right text-xs tabular-nums text-text-2">{c.pct === null ? "" : `${c.pct}%`}</td>
                   </tr>
                   {open === c.code && c.months.map((m) => (
-                    <tr key={`${c.code}-${m.month}`} className="bg-muted/20 text-xs">
-                      <td className="px-3 py-1 pl-8 text-muted-foreground tabular-nums">{m.month}</td>
+                    <tr key={`${c.code}-${m.month}`} className="bg-sunken text-xs">
+                      <td className="px-3 py-1 pl-8 text-text-2 tabular-nums">{m.month}</td>
                       <td className="px-3 py-1 text-right tabular-nums">{RM(m.sales)}</td>
                       <td className="px-3 py-1 text-right tabular-nums">{RM(m.settled)}</td>
-                      <td className={`px-3 py-1 text-right tabular-nums ${m.net < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(m.net)}</td>
+                      <td className={`px-3 py-1 text-right tabular-nums ${m.net < 0 ? "text-danger-text" : ""}`}>{RM(m.net)}</td>
                       <td className="px-3 py-1" />
                     </tr>
                   ))}
@@ -2901,17 +2901,17 @@ function ReconTab() {
           </table>
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">Each sales channel is a debtor account: sales debit it, the bank settlement credits it. The unreconciled net is the expected economics (card timing, Grab commission, cash-not-banked), not an error. Click a channel for the monthly breakdown. Defaults to 2026-01 onward, where both the sales archive and the bank feed exist.</p>
+      <p className="text-[11px] text-text-2">Each sales channel is a debtor account: sales debit it, the bank settlement credits it. The unreconciled net is the expected economics (card timing, Grab commission, cash-not-banked), not an error. Click a channel for the monthly breakdown. Defaults to 2026-01 onward, where both the sales archive and the bank feed exist.</p>
 
       {data?.report?.qrTender && (
         <div className="mt-4 space-y-2">
           <div className="flex items-baseline justify-between">
             <h3 className="text-sm font-semibold">DuitNow QR tender reconciliation</h3>
-            <span className="text-[11px] text-muted-foreground">from tender source, exact to the cent</span>
+            <span className="text-[11px] text-text-2">from tender source, exact to the cent</span>
           </div>
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full min-w-[520px] text-sm">
-              <thead><tr className="border-b bg-muted/40 text-left text-muted-foreground">
+              <thead><tr className="border-b bg-sunken text-left text-text-2">
                 <th className="px-3 py-2 font-medium">Month</th>
                 <th className="px-3 py-2 text-right font-medium">QR sales rung</th>
                 <th className="px-3 py-2 text-right font-medium">QR settled to bank</th>
@@ -2919,11 +2919,11 @@ function ReconTab() {
               </tr></thead>
               <tbody className="divide-y">
                 {data.report.qrTender.months.map((m) => (
-                  <tr key={m.month} className="hover:bg-muted/40">
+                  <tr key={m.month} className="hover:bg-sunken">
                     <td className="px-3 py-1.5 tabular-nums">{m.month}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{RM(m.sales)}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{RM(m.settled)}</td>
-                    <td className={`px-3 py-1.5 text-right tabular-nums ${Math.abs(m.net) < 1 ? "text-green-700 dark:text-green-400" : m.net < 0 ? "text-rose-600 dark:text-rose-400" : ""}`}>{RM(m.net)}</td>
+                    <td className={`px-3 py-1.5 text-right tabular-nums ${Math.abs(m.net) < 1 ? "text-ok-text" : m.net < 0 ? "text-danger-text" : ""}`}>{RM(m.net)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -2935,7 +2935,7 @@ function ReconTab() {
               </tr></tfoot>
             </table>
           </div>
-          <p className="text-[11px] text-muted-foreground">DuitNow QR settles same-day at full value (no commission), so QR sales rung should equal QR settled to the cent. Read from the tender source (StoreHub archive + POS-native QR vs the bank QR category) rather than the commingled Cash &amp; QR ledger account. Each month nets to a small settlement-timing gap; the first month also carries the prior-December QR that settled in January.</p>
+          <p className="text-[11px] text-text-2">DuitNow QR settles same-day at full value (no commission), so QR sales rung should equal QR settled to the cent. Read from the tender source (StoreHub archive + POS-native QR vs the bank QR category) rather than the commingled Cash &amp; QR ledger account. Each month nets to a small settlement-timing gap; the first month also carries the prior-December QR that settled in January.</p>
         </div>
       )}
 
@@ -3005,23 +3005,23 @@ export default function FinanceReportsPage() {
   }, [glHydrated, tab, glAccounts, controls.start, controls.end]);
 
   return (
-    <div className="space-y-4 p-3 sm:p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <header>
-        <h1 className="text-xl sm:text-2xl font-semibold">Reports</h1>
-        <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
-          P&L is source-driven (sales, procurement, ads, bank). Balance Sheet &amp; Cash Flow are ledger-based and fill in as journals post.
+        <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Reports</h1>
+        <p className="mt-0.5 text-sm text-text-2">
+          Profit, what we own and owe, and where cash went, for any dates. Profit comes from sales, purchases, ads and the bank; the balance sheet and cash flow come from the ledger.
         </p>
       </header>
 
-      <nav className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
-        <div className="flex min-w-max gap-1 border-b">
+      <nav className="overflow-x-auto">
+        <div className="flex min-w-max gap-1 border-b border-line">
           {[
-            { id: "pnl", label: "Profit & Loss" },
-            { id: "bs", label: "Balance Sheet" },
-            { id: "cf", label: "Cash Flow" },
-            { id: "tb", label: "Trial Balance" },
-            { id: "gl", label: "General Ledger" },
-            { id: "ap", label: "Aged Payables" },
+            { id: "pnl", label: "Profit and loss" },
+            { id: "bs", label: "Balance sheet" },
+            { id: "cf", label: "Cash flow" },
+            { id: "tb", label: "Trial balance" },
+            { id: "gl", label: "General ledger" },
+            { id: "ap", label: "Aged payables" },
             { id: "recon", label: "Reconciliation" },
             { id: "audit", label: "Auditor pack" },
           ].map((t) => (
@@ -3030,8 +3030,8 @@ export default function FinanceReportsPage() {
               onClick={() => setTab(t.id as typeof tab)}
               className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition ${
                 tab === t.id
-                  ? "border-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  ? "border-text font-semibold text-text"
+                  : "border-transparent text-text-2 hover:text-text"
               }`}
             >
               {t.label}
@@ -3043,14 +3043,14 @@ export default function FinanceReportsPage() {
       {usesControls && <ReportControlsBar c={controls} outletApplies={tab === "pnl" || tab === "ap"} />}
 
       {(tab === "bs" || tab === "cf") && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs sm:text-sm text-amber-700 dark:text-amber-400">
+        <div className="rounded-lg border border-warn bg-warn-soft p-3 text-xs sm:text-sm text-warn-text">
           <span className="font-medium">Ledger-based.</span>{" "}
-          Bank activity, payroll accruals and sales settlements now post to the ledger automatically. Two known gaps remain: unclassified inflows sit in <strong>Suspense (1999)</strong> until they are reconciled (clear them on the Recon page), and pre-June sales journals are partial. Cross-check cash against the <strong>Cashflow</strong> page.
+          Bank activity, payroll accruals and sales settlements now post to the ledger automatically. Two known gaps remain: unclassified inflows sit in <strong>Suspense (1999)</strong> until they are reconciled (clear them on the Bank inbox page), and pre-June sales journals are partial. Cross-check cash against the <strong>Cash flow</strong> page.
         </div>
       )}
 
       {usesControls && controls.consolidated && tab !== "pnl" && (
-        <p className="text-[11px] text-amber-600">
+        <p className="text-[11px] text-warn-text">
           Consolidated view applies to the P&amp;L only. This tab shows the active company.
         </p>
       )}

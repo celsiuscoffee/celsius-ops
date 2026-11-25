@@ -69,7 +69,7 @@ export default function CompanySettingsPage() {
 
   if (!settings) {
     return (
-      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+      <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
         <SettingsNav />
         <div className="rounded-lg border bg-muted/10 p-12 text-center">
           {data ? (
@@ -159,18 +159,18 @@ export default function CompanySettingsPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <SettingsNav />
 
       <div className="flex items-center justify-between">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <Building2 className="h-6 w-6 text-terracotta" />
+        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
+          <Building2 className="h-6 w-6 text-brand-text" />
           Company Settings
         </h1>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save
@@ -277,14 +277,14 @@ export default function CompanySettingsPage() {
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div
-            className="flex h-24 w-64 items-center justify-center rounded-lg border-2 border-dashed bg-muted/20 cursor-pointer hover:border-terracotta hover:bg-terracotta/5 transition-colors"
+            className="flex h-24 w-64 items-center justify-center rounded-lg border-2 border-dashed bg-muted/20 cursor-pointer hover:border-ink hover:bg-brand-soft transition-colors"
             onClick={() => !uploadingSig && sigInputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add("border-terracotta", "bg-terracotta/10"); }}
-            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove("border-terracotta", "bg-terracotta/10"); }}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add("border-ink", "bg-brand-soft"); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove("border-ink", "bg-brand-soft"); }}
             onDrop={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              e.currentTarget.classList.remove("border-terracotta", "bg-terracotta/10");
+              e.currentTarget.classList.remove("border-ink", "bg-brand-soft");
               const f = e.dataTransfer.files?.[0];
               if (f) handleUploadSignature(f);
             }}
@@ -317,7 +317,7 @@ export default function CompanySettingsPage() {
               type="button"
               onClick={() => sigInputRef.current?.click()}
               disabled={uploadingSig}
-              className="flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-xs font-medium hover:bg-muted/40 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg border bg-surface px-3 py-2 text-xs font-medium hover:bg-muted/40 disabled:opacity-50"
             >
               {uploadingSig ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
               {form.confirmation_signature_path ? "Replace signature" : "Upload signature (PNG)"}
@@ -327,7 +327,7 @@ export default function CompanySettingsPage() {
                 type="button"
                 onClick={handleClearSignature}
                 disabled={uploadingSig}
-                className="flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg border border-red-200 bg-surface px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
               >
                 <Trash2 className="h-3.5 w-3.5" /> Clear
               </button>
@@ -427,7 +427,7 @@ export default function CompanySettingsPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 rounded-lg bg-terracotta px-6 py-2.5 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg bg-ink px-6 py-2.5 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save

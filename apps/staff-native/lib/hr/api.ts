@@ -139,8 +139,12 @@ export type AttendanceResponse = {
   stats?: {
     totalHours: number;
     totalOT: number;
+    /** OT still waiting for a manager on the Overtime page. */
+    pendingOT?: number;
     daysWorked: number;
   };
+  /** Pending OT hours by Malaysia date (YYYY-MM-DD). */
+  pendingOtByDate?: Record<string, number>;
 };
 
 export function fetchShifts() {
@@ -457,43 +461,3 @@ export function clearDateAvailability(date: string) {
   });
 }
 
-// ── Open slots (unfilled shifts; PTs REQUEST, manager assigns) ───
-export type OpenSlot = {
-  id: string;
-  outlet_id: string;
-  outlet_name: string;
-  shift_date: string;
-  start_time: string;
-  end_time: string;
-  hours: number;
-  station: string; // 'barista' | 'kitchen'
-  role_type: string | null;
-  blocked: string | null; // reason this user can't request it, null = requestable
-  my_request: "pending" | "assigned" | null;
-  pending_requests: number;
-};
-
-export type OpenSlotsResponse = {
-  shifts: OpenSlot[];
-  is_pt: boolean;
-  week_hours: number;
-  week_days: number;
-};
-
-export function fetchOpenSlots() {
-  return api<OpenSlotsResponse>("/api/hr/open-shifts");
-}
-
-// Raise a hand for a slot — the manager assigns one requester.
-export function requestOpenSlot(id: string) {
-  return api<{ success: boolean; status: string }>("/api/hr/open-shifts", {
-    method: "POST",
-    body: JSON.stringify({ id }),
-  });
-}
-
-export function withdrawOpenSlotRequest(id: string) {
-  return api<{ success: boolean }>(`/api/hr/open-shifts?id=${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
-}

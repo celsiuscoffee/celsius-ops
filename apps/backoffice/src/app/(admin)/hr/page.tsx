@@ -1,9 +1,12 @@
 "use client";
 
 import { useFetch } from "@/lib/use-fetch";
-import { Clock, CalendarOff, CalendarDays, Banknote, Bot, Loader2, BarChart3, Cake, PartyPopper, Users, TrendingUp, Settings, UserCheck } from "lucide-react";
+import { Clock, CalendarOff, CalendarDays, Banknote, Bot, Loader2, BarChart3, Cake, PartyPopper, Users, TrendingUp, Settings } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { KeyNumber } from "@/components/ui/key-number";
+
+const when12 = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
 // Module hub cards — mirror the sidebar IA ((admin)/layout.tsx HR section) and
 // the in-module tab strips (components/hr/module-tabs.tsx) so all three
@@ -14,7 +17,7 @@ const MODULES = [
     description: "Profiles, documents, certifications",
     href: "/hr/employees",
     icon: Users,
-    color: "text-terracotta bg-orange-50",
+    color: "text-brand-text bg-warn-soft",
     links: [
       { label: "Employees", href: "/hr/employees" },
       { label: "Certifications", href: "/hr/certifications" },
@@ -26,7 +29,7 @@ const MODULES = [
     description: "Requests, balances, policies",
     href: "/hr/leave",
     icon: CalendarOff,
-    color: "text-amber-600 bg-amber-50",
+    color: "text-warn-text bg-warn-soft",
     links: [
       { label: "Requests", href: "/hr/leave" },
       { label: "Balances", href: "/hr/settings" },
@@ -35,15 +38,15 @@ const MODULES = [
     ],
   },
   {
-    label: "Time & Attendance",
+    label: "Time and attendance",
     description: "Clock-ins, overtime, swaps",
     href: "/hr/attendance",
     icon: Clock,
-    color: "text-blue-600 bg-blue-50",
+    color: "text-info-text bg-info-soft",
     links: [
       { label: "Attendance", href: "/hr/attendance" },
       { label: "Overtime", href: "/hr/overtime" },
-      { label: "Shift Swaps", href: "/hr/shift-swaps" },
+      { label: "Shift swaps", href: "/hr/shift-swaps" },
     ],
   },
   {
@@ -51,7 +54,7 @@ const MODULES = [
     description: "Rosters, availability, coverage",
     href: "/hr/schedules",
     icon: CalendarDays,
-    color: "text-indigo-600 bg-indigo-50",
+    color: "text-info-text bg-info-soft",
     links: [
       { label: "Schedules", href: "/hr/schedules" },
       { label: "Availability", href: "/hr/availability" },
@@ -63,12 +66,12 @@ const MODULES = [
     description: "Runs, allowances, statutory",
     href: "/hr/payroll",
     icon: Banknote,
-    color: "text-green-600 bg-green-50",
+    color: "text-ok-text bg-ok-soft",
     links: [
       { label: "Monthly", href: "/hr/payroll" },
       { label: "Weekly", href: "/hr/payroll/weekly" },
       { label: "Allowances", href: "/hr/allowances" },
-      { label: "Statutory Calendar", href: "/hr/compliance" },
+      { label: "Statutory calendar", href: "/hr/compliance" },
     ],
   },
   {
@@ -76,10 +79,10 @@ const MODULES = [
     description: "Scores, review penalties",
     href: "/hr/performance",
     icon: TrendingUp,
-    color: "text-purple-600 bg-purple-50",
+    color: "text-info-text bg-info-soft",
     links: [
       { label: "Performance", href: "/hr/performance" },
-      { label: "Review Penalties", href: "/hr/review-penalties" },
+      { label: "Review penalties", href: "/hr/review-penalties" },
     ],
   },
   {
@@ -87,7 +90,7 @@ const MODULES = [
     description: "Headcount, turnover, payroll trend",
     href: "/hr/analytics",
     icon: BarChart3,
-    color: "text-cyan-700 bg-cyan-50",
+    color: "text-info-text bg-info-soft",
     links: [{ label: "Analytics", href: "/hr/analytics" }],
   },
   {
@@ -95,11 +98,11 @@ const MODULES = [
     description: "Policies, holidays, company",
     href: "/hr/settings",
     icon: Settings,
-    color: "text-gray-600 bg-gray-100",
+    color: "text-text-2 bg-sunken",
     links: [
-      { label: "Time Off", href: "/hr/settings" },
-      { label: "Shift Templates", href: "/hr/settings/shift-templates" },
-      { label: "Working Time", href: "/hr/settings/working-time" },
+      { label: "Time off", href: "/hr/settings" },
+      { label: "Shift templates", href: "/hr/settings/shift-templates" },
+      { label: "Working time", href: "/hr/settings/working-time" },
       { label: "Company", href: "/hr/settings/company" },
     ],
   },
@@ -137,115 +140,57 @@ export default function HRDashboardPage() {
     }
   };
 
-  const cards = [
-    {
-      label: "Attendance Flags",
-      value: data?.flaggedAttendance ?? "—",
-      icon: Clock,
-      href: "/hr/attendance",
-      color: (data?.flaggedAttendance ?? 0) > 0 ? "text-red-600 bg-red-50" : "text-green-600 bg-green-50",
-      subtitle: (data?.flaggedAttendance ?? 0) > 0 ? "Need review" : "All clear",
-    },
-    {
-      label: "Leave Escalated",
-      value: data?.escalatedLeave ?? "—",
-      icon: CalendarOff,
-      href: "/hr/leave",
-      color: (data?.escalatedLeave ?? 0) > 0 ? "text-amber-600 bg-amber-50" : "text-green-600 bg-green-50",
-      subtitle: (data?.escalatedLeave ?? 0) > 0 ? "AI needs your input" : "All clear",
-    },
-    {
-      label: "Schedule",
-      value: data?.scheduleStatus === "published" ? "Published" : data?.scheduleStatus === "ai_generated" ? "Ready" : "—",
-      icon: CalendarDays,
-      href: "/hr/schedules",
-      color: data?.scheduleStatus === "published" ? "text-green-600 bg-green-50" : "text-blue-600 bg-blue-50",
-      subtitle: data?.scheduleStatus === "published" ? "This week" : "Not generated",
-    },
-    {
-      label: "Payroll",
-      value: data?.payrollStatus === "confirmed" ? "Confirmed" : data?.payrollStatus === "ai_computed" ? "Ready" : "—",
-      icon: Banknote,
-      href: "/hr/payroll",
-      color: data?.payrollStatus === "confirmed" ? "text-green-600 bg-green-50" : "text-gray-600 bg-gray-50",
-      subtitle: data?.payrollStatus === "not_started" ? "Not started" : data?.payrollStatus || "",
-    },
-    // Probation ends only on confirmation, and until then payroll withholds the
-    // performance allowance — this tile is the worklist that stops one being
-    // forgotten. Links straight into the Probation tab on Employees.
-    {
-      label: "On Probation",
-      value: data?.onProbation ?? "—",
-      icon: UserCheck,
-      href: "/hr/employees?filter=probation",
-      color: (data?.onProbation ?? 0) > 0 ? "text-amber-600 bg-amber-50" : "text-green-600 bg-green-50",
-      subtitle: (data?.onProbation ?? 0) > 0 ? "Awaiting confirmation" : "All confirmed",
-    },
-  ];
+  const flagged = data?.flaggedAttendance ?? 0;
+  const escalated = data?.escalatedLeave ?? 0;
+  const probation = data?.onProbation ?? 0;
+  const scheduleWord = data?.scheduleStatus === "published" ? "Published" : data?.scheduleStatus === "ai_generated" ? "Drafted" : "Not made";
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="max-w-[1100px] space-y-5 px-4 pt-6 pb-10 md:px-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">HR Dashboard</h1>
-          <p className="text-sm text-muted-foreground">AI-managed, human-reviewed</p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Team overview</h1>
+          <p className="mt-0.5 text-sm text-text-2">What needs a decision today, where each part of Team lives, and who is celebrating.</p>
         </div>
         <button
           onClick={runProcessor}
           disabled={processing}
-          className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+          className="inline-flex h-10 items-center gap-2 self-start rounded-ctl bg-ink px-4 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
         >
           {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-          Run Attendance AI
+          Check clock-ins now
         </button>
       </div>
 
-      {/* Status Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
-        {cards.filter((card) => canSeePayroll || card.label !== "Payroll").map((card) => {
-          const Icon = card.icon;
-          return (
-            <Link
-              key={card.label}
-              href={card.href}
-              className="rounded-xl border bg-card p-5 shadow-sm transition-all hover:shadow-md"
-            >
-              <div className="flex items-center justify-between">
-                <div className={`rounded-lg p-2 ${card.color}`}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <span className="text-3xl font-bold">{card.value}</span>
-              </div>
-              <p className="mt-3 font-medium">{card.label}</p>
-              <p className="text-sm text-muted-foreground">{card.subtitle}</p>
-            </Link>
-          );
-        })}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber href="/hr/attendance" label="Clock-ins flagged" value={data ? String(flagged) : null} tone={flagged > 0 ? "warn" : undefined}
+          note={flagged > 0 ? "need a look before payroll" : "all clear"} />
+        <KeyNumber href="/hr/leave" label="Leave escalated" value={data ? String(escalated) : null} tone={escalated > 0 ? "warn" : undefined}
+          note={escalated > 0 ? "the leave agent needs you" : "all clear"} />
+        <KeyNumber href="/hr/schedules" word label="This week's roster" value={data ? scheduleWord : null} tone={data && data.scheduleStatus !== "published" ? "warn" : undefined}
+          note={data?.scheduleStatus === "published" ? "staff can see their shifts" : "staff cannot see shifts yet"} />
+        <KeyNumber href="/hr/employees?filter=probation" label="On probation" value={data ? String(probation) : null} tone={probation > 0 ? "warn" : undefined}
+          note={probation > 0 ? "waiting to be confirmed" : "everyone confirmed"} />
       </div>
 
-      {/* Module hub — BrioHR-style: one card per module, sub-pages as inline
-          links (same groups as the sidebar + in-module tab strips). */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {/* Where each part of Team lives: one list, sub-pages as links. */}
+      <section aria-label="Team pages" className="overflow-hidden rounded-card border border-line bg-surface">
+        <h2 className="border-b border-line px-4 py-3 text-sm font-semibold text-text">Team pages</h2>
         {MODULES.filter((m) => canSeePayroll || m.label !== "Payroll").map((m) => {
           const Icon = m.icon;
           return (
-            <div key={m.label} className="rounded-xl border bg-card p-4 shadow-sm transition hover:shadow-md">
-              <Link href={m.href} className="flex items-center gap-3">
-                <div className={`rounded-lg p-2 ${m.color}`}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-medium">{m.label}</p>
-                  <p className="text-xs text-muted-foreground">{m.description}</p>
+            <div key={m.label} className="flex flex-col gap-2 border-b border-line px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-4">
+              <Link href={m.href} className="flex min-w-0 items-center gap-3 sm:w-64 sm:shrink-0">
+                <Icon className="h-4 w-4 shrink-0 text-text-3" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-text">{m.label}</p>
+                  <p className="truncate text-[12px] text-text-3">{m.description}</p>
                 </div>
               </Link>
-              <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-2.5">
+              <div className="flex flex-wrap gap-1.5 sm:justify-end sm:flex-1">
                 {m.links.map((l) => (
-                  <Link
-                    key={l.href}
-                    href={l.href}
-                    className="rounded-full border px-2.5 py-0.5 text-[11px] text-muted-foreground transition hover:border-terracotta hover:text-terracotta"
-                  >
+                  <Link key={l.href} href={l.href}
+                    className="inline-flex h-8 items-center rounded-full border border-line px-3 text-[12px] text-text-2 transition hover:border-text hover:text-text">
                     {l.label}
                   </Link>
                 ))}
@@ -253,41 +198,21 @@ export default function HRDashboardPage() {
             </div>
           );
         })}
-      </div>
+      </section>
 
       {/* Celebrations widget — birthdays + anniversaries */}
       <CelebrationsWidget />
 
-      {/* Last AI Run Info */}
       {data?.lastAgentRun && (
-        <div className="rounded-xl border bg-card p-5">
-          <h3 className="mb-2 flex items-center gap-2 font-semibold">
-            <Bot className="h-5 w-5 text-terracotta" />
-            Last Attendance AI Run
-          </h3>
-          <div className="grid grid-cols-4 gap-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">When</p>
-              <p className="font-medium">
-                {data.lastAgentRun.completed_at
-                  ? new Date(data.lastAgentRun.completed_at).toLocaleString("en-MY")
-                  : "Running..."}
-              </p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Processed</p>
-              <p className="font-medium">{data.lastAgentRun.items_processed}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Auto-approved</p>
-              <p className="font-medium text-green-600">{data.lastAgentRun.items_auto_approved}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Flagged</p>
-              <p className="font-medium text-red-600">{data.lastAgentRun.items_flagged}</p>
-            </div>
-          </div>
-        </div>
+        <section aria-label="Last clock-in check" className="rounded-card border border-line bg-surface px-4 py-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-text"><Bot className="h-4 w-4 text-text-3" />Last clock-in check</h2>
+          <p className="mt-1 text-[13px] text-text-2">
+            {data.lastAgentRun.completed_at ? when12(data.lastAgentRun.completed_at) : "Running now"}
+            {" · "}<span className="font-mono">{data.lastAgentRun.items_processed}</span> checked
+            {" · "}<span className="font-mono">{data.lastAgentRun.items_auto_approved}</span> approved on their own
+            {" · "}<span className={`font-mono ${data.lastAgentRun.items_flagged ? "text-warn-text" : ""}`}>{data.lastAgentRun.items_flagged}</span> flagged for you
+          </p>
+        </section>
       )}
     </div>
   );
@@ -310,27 +235,27 @@ function CelebrationsWidget() {
   if (today.length === 0 && upcoming.length === 0) return null;
 
   return (
-    <div className="rounded-xl border bg-card p-5">
-      <h3 className="mb-3 flex items-center gap-2 font-semibold">
-        <PartyPopper className="h-5 w-5 text-pink-500" />
-        Celebrations
-      </h3>
+    <section aria-label="Celebrations" className="rounded-card border border-line bg-surface px-4 py-3">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text">
+        <PartyPopper className="h-4 w-4 text-text-3" />
+        Birthdays and work anniversaries
+      </h2>
       {today.length > 0 && (
         <div className="mb-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-pink-700">Today</p>
+          <p className="mb-2 text-[12px] font-semibold text-text-2">Today</p>
           <div className="flex flex-wrap gap-2">
             {today.map((c) => (
               <Link
                 key={`${c.user_id}-${c.type}`}
                 href={`/hr/employees/${c.user_id}`}
-                className="flex items-center gap-2 rounded-full border border-pink-200 bg-pink-50 px-3 py-1.5 text-xs hover:bg-pink-100"
+                className="flex min-h-9 items-center gap-2 rounded-full bg-brand-soft px-3 py-1.5 text-xs text-text hover:opacity-90"
               >
-                {c.type === "birthday" ? <Cake className="h-3 w-3 text-pink-600" /> : <PartyPopper className="h-3 w-3 text-amber-600" />}
+                {c.type === "birthday" ? <Cake className="h-3 w-3 text-danger-text" /> : <PartyPopper className="h-3 w-3 text-warn-text" />}
                 <span className="font-semibold">{c.name}</span>
                 {c.type === "anniversary" && c.years && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">{c.years}y</span>
+                  <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[9px] font-bold text-warn-text">{c.years}y</span>
                 )}
-                {c.outlet && <span className="text-[10px] text-gray-500">· {c.outlet}</span>}
+                {c.outlet && <span className="text-[10px] text-text-2">· {c.outlet}</span>}
               </Link>
             ))}
           </div>
@@ -338,22 +263,22 @@ function CelebrationsWidget() {
       )}
       {upcoming.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Next 14 days</p>
-          <ul className="space-y-1 text-xs">
+          <p className="mb-2 text-[12px] font-semibold text-text-2">Next 14 days</p>
+          <ul className="space-y-1.5 text-[13px]">
             {upcoming.map((c) => (
               <li key={`${c.user_id}-${c.type}-${c.on}`} className="flex items-center gap-2">
-                {c.type === "birthday" ? <Cake className="h-3 w-3 text-pink-500" /> : <PartyPopper className="h-3 w-3 text-amber-600" />}
-                <span className="font-mono text-gray-500 w-16">{c.on}</span>
-                <Link href={`/hr/employees/${c.user_id}`} className="font-medium text-blue-600 hover:underline">{c.name}</Link>
+                {c.type === "birthday" ? <Cake className="h-3 w-3 text-danger-text" /> : <PartyPopper className="h-3 w-3 text-warn-text" />}
+                <span className="w-16 shrink-0 font-mono text-text-2">{c.on}</span>
+                <Link href={`/hr/employees/${c.user_id}`} className="font-medium text-text hover:underline">{c.name}</Link>
                 {c.type === "anniversary" && c.years && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">{c.years}y anniversary</span>
+                  <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[9px] font-bold text-warn-text">{c.years} years</span>
                 )}
-                <span className="text-gray-400">· in {c.days_until} day{c.days_until === 1 ? "" : "s"}</span>
+                <span className="text-text-3">· in {c.days_until} day{c.days_until === 1 ? "" : "s"}</span>
               </li>
             ))}
           </ul>
         </div>
       )}
-    </div>
+    </section>
   );
 }

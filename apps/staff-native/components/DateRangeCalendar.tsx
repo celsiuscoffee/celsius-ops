@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
+import { useCelsius } from "../lib/celsius-ui";
 
 // Inline month calendar with range selection — pure JS/RN, no native module,
 // so it ships over-the-air. Replaces the old two free-text date boxes on the
@@ -28,6 +29,7 @@ export function DateRangeCalendar({
   value: DateRange;
   onChange: (r: DateRange) => void;
 }) {
+  const C = useCelsius().color;
   // Open on the month of the current selection, else today's month.
   const init = value.start ? new Date(`${value.start}T00:00:00`) : new Date();
   const [view, setView] = useState({ y: init.getFullYear(), m: init.getMonth() });
@@ -56,30 +58,30 @@ export function DateRangeCalendar({
   };
 
   return (
-    <View className="rounded-2xl border border-border bg-surface p-3">
+    <View className="rounded-2xl border border-line bg-surface p-3">
       <View className="mb-2 flex-row items-center justify-between">
         <Pressable
           onPress={() => changeMonth(-1)}
           hitSlop={10}
-          className="h-9 w-9 items-center justify-center rounded-full active:bg-primary-50"
+          className="h-11 w-11 items-center justify-center rounded-full active:bg-sunken"
         >
-          <ChevronLeft color="#A2492C" size={20} />
+          <ChevronLeft color={C["text-2"]} size={20} />
         </Pressable>
-        <Text className="text-base font-body-bold text-espresso">
+        <Text className="text-base font-body-bold text-text">
           {MONTHS[view.m]} {view.y}
         </Text>
         <Pressable
           onPress={() => changeMonth(1)}
           hitSlop={10}
-          className="h-9 w-9 items-center justify-center rounded-full active:bg-primary-50"
+          className="h-11 w-11 items-center justify-center rounded-full active:bg-sunken"
         >
-          <ChevronRight color="#A2492C" size={20} />
+          <ChevronRight color={C["text-2"]} size={20} />
         </Pressable>
       </View>
 
       <View className="flex-row">
         {WEEKDAYS.map((w) => (
-          <Text key={w} className="flex-1 text-center text-[11px] font-body-semi text-muted">
+          <Text key={w} className="flex-1 text-center text-xs font-body-semi text-text-3">
             {w}
           </Text>
         ))}
@@ -98,16 +100,16 @@ export function DateRangeCalendar({
               key={dISO}
               onPress={() => pick(d)}
               style={{ width: `${100 / 7}%` }}
-              className="h-10 items-center justify-center"
+              className="h-11 items-center justify-center"
             >
               <View
                 className={`h-9 w-9 items-center justify-center rounded-full ${
-                  edge ? "bg-primary" : between ? "bg-primary-50" : ""
+                  edge ? "bg-ink" : between ? "bg-sunken" : ""
                 }`}
               >
                 <Text
                   className={`text-sm ${
-                    edge ? "font-body-bold text-white" : between ? "text-primary" : "font-body text-espresso"
+                    edge ? "font-body-bold text-on-ink" : between ? "text-text" : "font-body text-text"
                   }`}
                 >
                   {d}

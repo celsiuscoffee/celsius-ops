@@ -31,26 +31,39 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Aggregate stats for the period. OT rules:
-  //   1. Must be approved (AI or manager) — pending/flagged/rejected don't count
-  //   2. Must be >= one 30-min bracket — matches payroll's OT_MIN_HOURS
-  //      (owner 2026-09-03: "pay the 0.5h"; was 1h)
+  // Overtime, shown the way Gosamē's Staff app shows it (owner 20 Nov 2026):
+  // approved hours, plus the hours still waiting for a manager on the
+  // Overtime page. Since 19 Nov a clocked OT tail is not on the log until it
+  // is approved there — the pending part lives in hr_overtime_requests.
+  //   1. Approved = payroll's rule: the manager's decision wins; the AI's
+  //      approval counts only while no manager has decided.
+  //   2. At least one 30-min bracket (owner 2026-09-03: "pay the 0.5h").
   const OT_MIN_HOURS = 0.5;
+  const toHalf = (h: unknown) => Math.floor((Number(h) || 0) * 2) / 2;
   const isApproved = (a: { ai_status: string | null; final_status: string | null }) =>
-    a.ai_status === "approved" || a.final_status === "approved";
+    a.final_status === "approved" || a.final_status === "adjusted" || (a.ai_status === "approved" && !a.final_status);
   const countableOT = (a: { overtime_hours: number | null }) => {
-    const h = Number(a.overtime_hours) || 0;
+    const h = toHalf(a.overtime_hours);
     return h >= OT_MIN_HOURS ? h : 0;
   };
   const totalHours = (data || []).reduce((sum, a) => sum + (Number(a.total_hours) || 0), 0);
   const totalOT = (data || []).reduce(
-    (sum, a) => sum + (isApproved(a) ? countableOT(a) : 0),
+    (sum, a) => sum + (isApproved(a) && a.final_status !== "rejected" ? countableOT(a) : 0),
     0,
   );
-  const pendingOT = (data || []).reduce(
-    (sum, a) => sum + (!isApproved(a) ? countableOT(a) : 0),
-    0,
-  );
+  const mytDay = (iso: string) => new Date(new Date(iso).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const { data: pendingReqs } = await supabase
+    .from("hr_overtime_requests")
+    .select("date, hours_requested")
+    .eq("user_id", session.id)
+    .eq("status", "pending")
+    .gte("date", mytDay(since.toISOString()));
+  const pendingByDate: Record<string, number> = {};
+  for (const r of (pendingReqs || []) as { date: string; hours_requested: number | null }[]) {
+    const h = toHalf(r.hours_requested);
+    if (h >= OT_MIN_HOURS) pendingByDate[r.date] = (pendingByDate[r.date] ?? 0) + h;
+  }
+  const pendingOT = Object.values(pendingByDate).reduce((s, h) => s + h, 0);
   // Distinct MYT calendar days worked (clock_in is UTC timestamptz; morning
   // shifts would otherwise fall on the previous UTC date).
   const daysWorked = new Set(
@@ -61,6 +74,8 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     logs: data || [],
+    // OT waiting for a manager, by Malaysia date (YYYY-MM-DD).
+    pendingOtByDate: pendingByDate,
     stats: {
       totalHours: Math.round(totalHours * 100) / 100,
       totalOT: Math.round(totalOT * 100) / 100,

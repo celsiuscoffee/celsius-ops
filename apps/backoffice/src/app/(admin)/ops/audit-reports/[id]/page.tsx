@@ -63,7 +63,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 function renderRating(item: ReportItem) {
   if (item.rating === null) {
-    return <span className="text-xs text-gray-400">Not rated</span>;
+    return <span className="text-xs text-text-3">Not rated</span>;
   }
   if (item.ratingType === "pass_fail") {
     return item.rating === 1 ? (
@@ -85,11 +85,11 @@ function renderRating(item: ReportItem) {
             className={`h-4 w-4 ${
               n <= (item.rating ?? 0)
                 ? "fill-amber-400 text-amber-400"
-                : "text-gray-200"
+                : "text-text-3"
             }`}
           />
         ))}
-        <span className="ml-1 text-xs text-gray-500">{item.rating}/5</span>
+        <span className="ml-1 text-xs text-text-2">{item.rating}/5</span>
       </div>
     );
   }
@@ -97,7 +97,7 @@ function renderRating(item: ReportItem) {
     const labels = ["", "Poor", "Fair", "Good"];
     const colors = ["", "text-red-600", "text-amber-600", "text-green-600"];
     return (
-      <span className={`text-xs font-medium ${colors[item.rating] ?? "text-gray-600"}`}>
+      <span className={`text-xs font-medium ${colors[item.rating] ?? "text-text-2"}`}>
         {labels[item.rating] ?? item.rating}
       </span>
     );
@@ -119,21 +119,21 @@ export default function AuditReportDetailPage({
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
 
   if (!report) {
     return (
-      <div className="p-6">
+      <div className="px-4 pt-6 pb-10 md:px-8">
         <Card>
           <CardContent className="py-12 text-center">
-            <AlertCircle className="mx-auto h-10 w-10 text-gray-300" />
-            <p className="mt-3 text-sm text-gray-500">Audit report not found</p>
+            <AlertCircle className="mx-auto h-10 w-10 text-text-3" />
+            <p className="mt-3 text-sm text-text-2">Audit report not found</p>
             <Link
               href="/ops/audit-reports"
-              className="mt-3 inline-block text-sm text-terracotta hover:underline"
+              className="mt-3 inline-block text-sm text-brand-text hover:underline"
             >
               ← Back to reports
             </Link>
@@ -146,18 +146,18 @@ export default function AuditReportDetailPage({
   const isDone = report.status === "COMPLETED";
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <Link
             href="/ops/audit-reports"
-            className="mb-2 inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+            className="mb-2 inline-flex items-center gap-1 text-xs text-text-2 hover:text-text-2"
           >
             <ArrowLeft className="h-3 w-3" /> All audit reports
           </Link>
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
               {report.template.name}
             </h2>
             <Badge className={`text-[10px] ${ROLE_COLORS[report.template.roleType]}`}>
@@ -172,9 +172,9 @@ export default function AuditReportDetailPage({
             </Badge>
           </div>
           {report.template.description && (
-            <p className="mt-1 text-sm text-gray-500">{report.template.description}</p>
+            <p className="mt-1 text-sm text-text-2">{report.template.description}</p>
           )}
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-2">
             <span className="flex items-center gap-1">
               <Building2 className="h-3 w-3" /> {report.outlet.name}
             </span>
@@ -205,33 +205,33 @@ export default function AuditReportDetailPage({
       {/* Summary */}
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
         <Card><CardContent className="p-3">
-          <div className="text-[11px] font-medium text-gray-500">Overall Score</div>
+          <div className="text-[11px] font-medium text-text-2">Overall Score</div>
           <div className="mt-0.5 text-xl font-semibold">
             {report.overallScore !== null ? report.overallScore.toFixed(1) : "—"}
           </div>
         </CardContent></Card>
         <Card><CardContent className="p-3">
-          <div className="text-[11px] font-medium text-gray-500">Items Rated</div>
+          <div className="text-[11px] font-medium text-text-2">Items Rated</div>
           <div className="mt-0.5 text-xl font-semibold">
             {report.summary.ratedItems}
-            <span className="ml-1 text-xs font-normal text-gray-400">/ {report.summary.totalItems}</span>
+            <span className="ml-1 text-xs font-normal text-text-3">/ {report.summary.totalItems}</span>
           </div>
         </CardContent></Card>
         <Card><CardContent className="p-3">
-          <div className="text-[11px] font-medium text-gray-500">Pass / Fail</div>
+          <div className="text-[11px] font-medium text-text-2">Pass / Fail</div>
           <div className="mt-0.5 text-xl font-semibold">
             <span className="text-green-600">{report.summary.passed}</span>
-            <span className="mx-1 text-gray-300">/</span>
+            <span className="mx-1 text-text-3">/</span>
             <span className="text-red-600">{report.summary.failed}</span>
           </div>
         </CardContent></Card>
         <Card><CardContent className="p-3">
-          <div className="text-[11px] font-medium text-gray-500">Photos</div>
+          <div className="text-[11px] font-medium text-text-2">Photos</div>
           <div className="mt-0.5 text-xl font-semibold">{report.summary.totalPhotos}</div>
         </CardContent></Card>
         <Card><CardContent className="p-3">
-          <div className="text-[11px] font-medium text-gray-500">Missing Photos</div>
-          <div className={`mt-0.5 text-xl font-semibold ${report.summary.missingPhotos > 0 ? "text-amber-600" : "text-gray-900"}`}>
+          <div className="text-[11px] font-medium text-text-2">Missing Photos</div>
+          <div className={`mt-0.5 text-xl font-semibold ${report.summary.missingPhotos > 0 ? "text-amber-600" : "text-text"}`}>
             {report.summary.missingPhotos}
           </div>
         </CardContent></Card>
@@ -241,10 +241,10 @@ export default function AuditReportDetailPage({
       {report.overallNotes && (
         <Card className="mb-4">
           <CardContent className="p-4">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+            <div className="text-[11px] font-medium uppercase tracking-wide text-text-2">
               Auditor Notes
             </div>
-            <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">
+            <p className="mt-1 text-sm text-text-2 whitespace-pre-wrap">
               {report.overallNotes}
             </p>
           </CardContent>
@@ -256,22 +256,22 @@ export default function AuditReportDetailPage({
         {report.sections.map((sec) => (
           <Card key={sec.name}>
             <CardContent className="p-0">
-              <div className="border-b border-gray-100 px-4 py-3">
-                <h3 className="text-sm font-semibold text-gray-900">{sec.name}</h3>
-                <p className="text-[11px] text-gray-500">
+              <div className="border-b border-line px-4 py-3">
+                <h3 className="text-sm font-semibold text-text">{sec.name}</h3>
+                <p className="text-[11px] text-text-2">
                   {sec.items.length} item{sec.items.length !== 1 ? "s" : ""}
                 </p>
               </div>
 
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-line">
                 {sec.items.map((item) => (
                   <div key={item.id} className="p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium text-gray-900">{item.title}</span>
+                          <span className="text-sm font-medium text-text">{item.title}</span>
                           {item.photoRequired && (
-                            <Badge className="text-[9px] bg-gray-100 text-gray-600">
+                            <Badge className="text-[9px] bg-sunken text-text-2">
                               <Camera className="mr-0.5 h-2.5 w-2.5" /> Photo required
                             </Badge>
                           )}
@@ -282,7 +282,7 @@ export default function AuditReportDetailPage({
                           )}
                         </div>
                         {item.notes && (
-                          <p className="mt-1 text-xs text-gray-600 whitespace-pre-wrap">
+                          <p className="mt-1 text-xs text-text-2 whitespace-pre-wrap">
                             {item.notes}
                           </p>
                         )}
@@ -297,7 +297,7 @@ export default function AuditReportDetailPage({
                           <button
                             key={idx}
                             onClick={() => setPhotoPreview(url)}
-                            className="relative h-20 w-20 overflow-hidden rounded-md border border-gray-200 bg-gray-50 hover:opacity-80"
+                            className="relative h-20 w-20 overflow-hidden rounded-md border border-line bg-sunken hover:opacity-80"
                           >
                             <img
                               src={url}
@@ -311,7 +311,7 @@ export default function AuditReportDetailPage({
                   </div>
                 ))}
                 {sec.items.length === 0 && (
-                  <div className="px-4 py-6 text-center text-xs text-gray-400">
+                  <div className="px-4 py-6 text-center text-xs text-text-3">
                     <ImageIcon className="mx-auto mb-1 h-5 w-5" />
                     No items
                   </div>
@@ -330,7 +330,7 @@ export default function AuditReportDetailPage({
         >
           <button
             onClick={() => setPhotoPreview(null)}
-            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
+            className="absolute right-4 top-4 rounded-full bg-surface/10 p-2 text-white hover:bg-surface/20"
           >
             <X className="h-5 w-5" />
           </button>

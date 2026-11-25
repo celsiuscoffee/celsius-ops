@@ -66,16 +66,16 @@ export default function StockCountSettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-5 w-5 animate-spin text-terracotta" />
+        <Loader2 className="h-5 w-5 animate-spin text-brand-text" />
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-6 max-w-2xl">
+    <div className="max-w-2xl px-4 pt-6 pb-10 md:px-8">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Stock Count Schedule</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Stock Count Schedule</h2>
+        <p className="mt-1 text-sm text-text-2">
           Set which days staff should do stock counts
         </p>
       </div>
@@ -83,11 +83,11 @@ export default function StockCountSettingsPage() {
       {/* Weekly Days */}
       <Card className="mb-4 p-5">
         <div className="mb-3">
-          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-            <CalendarDays className="h-4 w-4 text-terracotta" />
+          <h3 className="text-sm font-semibold text-text flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 text-brand-text" />
             Weekly Count Days
           </h3>
-          <p className="mt-0.5 text-xs text-gray-500">Regular stock count on these days</p>
+          <p className="mt-0.5 text-xs text-text-2">Regular stock count on these days</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {WEEKDAYS.map((d) => (
@@ -96,8 +96,8 @@ export default function StockCountSettingsPage() {
               onClick={() => toggleDay(d.value)}
               className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
                 weeklyDays.includes(d.value)
-                  ? "border-terracotta bg-terracotta text-white"
-                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  ? "border-ink bg-ink text-on-ink"
+                  : "border-line bg-surface text-text-2 hover:bg-sunken"
               }`}
             >
               {d.label}
@@ -109,11 +109,11 @@ export default function StockCountSettingsPage() {
       {/* End of Month Days */}
       <Card className="mb-6 p-5">
         <div className="mb-3">
-          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-text flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-blue-500" />
             End of Month Full Count
           </h3>
-          <p className="mt-0.5 text-xs text-gray-500">Full stock count on these dates each month</p>
+          <p className="mt-0.5 text-xs text-text-2">Full stock count on these dates each month</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {MONTH_DAYS.map((d) => (
@@ -123,7 +123,7 @@ export default function StockCountSettingsPage() {
               className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
                 endOfMonthDays.includes(d)
                   ? "border-blue-500 bg-blue-500 text-white"
-                  : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                  : "border-line bg-surface text-text-2 hover:bg-sunken"
               }`}
             >
               {d}
@@ -132,7 +132,7 @@ export default function StockCountSettingsPage() {
         </div>
       </Card>
 
-      <Button onClick={handleSave} disabled={saving} className="bg-terracotta hover:bg-terracotta-dark">
+      <Button onClick={handleSave} disabled={saving} className="bg-ink hover:bg-ink-hover">
         {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : saved ? <Check className="mr-1.5 h-4 w-4" /> : null}
         {saved ? "Saved" : "Save Schedule"}
       </Button>

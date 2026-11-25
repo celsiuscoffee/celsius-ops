@@ -12,7 +12,6 @@ import {
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useColorScheme } from "nativewind";
 import { Screen } from "../../components/Screen";
 import { PageHeader } from "../../components/PageHeader";
 import * as Haptics from "expo-haptics";
@@ -22,6 +21,7 @@ import {
   saveProfile,
   type Profile,
 } from "../../lib/hr/profile";
+import { useCelsius } from "../../lib/celsius-ui";
 
 const GENDERS = ["Male", "Female"];
 const RACES = ["Malay", "Chinese", "Indian", "Bumiputera", "Other"];
@@ -37,6 +37,7 @@ const TSHIRT = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
 type Field = keyof Profile;
 
 export default function PersonalScreen() {
+  const C = useCelsius().color;
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [percent, setPercent] = useState(0);
@@ -88,7 +89,7 @@ export default function PersonalScreen() {
     return (
       <Screen edges={["top", "left", "right"]}>
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#C2452D" />
+          <ActivityIndicator color={C["text-3"]} />
         </View>
       </Screen>
     );
@@ -114,22 +115,22 @@ export default function PersonalScreen() {
       showsVerticalScrollIndicator={false}
     >
           {/* Completeness */}
-          <View className="rounded-2xl border border-border bg-surface p-4">
+          <View className="rounded-2xl border border-line bg-surface p-4">
             <View className="flex-row items-center justify-between">
-              <Text className="text-base font-body-semi text-espresso">
+              <Text className="text-base font-body-semi text-text">
                 Profile completeness
               </Text>
-              <Text className="text-sm font-body-bold text-primary">
+              <Text className="text-sm font-body-bold text-text">
                 {percent}%
               </Text>
             </View>
-            <View className="mt-2 h-2 overflow-hidden rounded-full bg-primary-50">
+            <View className="mt-2 h-2 overflow-hidden rounded-full bg-sunken">
               <View
-                className="h-full rounded-full bg-primary"
+                className="h-full rounded-full bg-ink"
                 style={{ width: `${percent}%` }}
               />
             </View>
-            <Text className="mt-2 text-xs font-body text-muted-fg">
+            <Text className="mt-2 text-xs font-body text-text-2">
               HR uses this for statutory + payroll. Fill it once and forget it.
             </Text>
           </View>
@@ -274,24 +275,24 @@ export default function PersonalScreen() {
       <View
         style={{
           paddingBottom: 12,
-          shadowColor: "#160800",
+          shadowColor: C.text,
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: 0.06,
           shadowRadius: 12,
         }}
-        className="absolute inset-x-0 bottom-0 bg-background px-4 pt-3 pb-3"
+        className="absolute inset-x-0 bottom-0 bg-bg px-4 pt-3 pb-3"
       >
         <Pressable
           onPress={() => onSave(percent === 100)}
           disabled={saving}
           className={`h-14 flex-row items-center justify-center gap-2 rounded-2xl ${
-            saving ? "bg-primary/50" : "bg-primary active:opacity-90"
+            saving ? "bg-ink opacity-50" : "bg-ink active:opacity-90"
           }`}
         >
           {saving ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={C["on-ink"]} />
           ) : (
-            <Text className="text-base font-body-bold text-white">
+            <Text className="text-base font-body-bold text-on-ink">
               {Object.keys(dirty).length > 0 ? "Save changes" : "Done"}
             </Text>
           )}
@@ -304,7 +305,7 @@ export default function PersonalScreen() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View className="mt-6">
-      <Text className="mb-2 text-xs font-body-semi uppercase tracking-wide text-muted">
+      <Text className="mb-2 text-sm font-body-semi text-text-2">
         {title}
       </Text>
       <View className="gap-2">{children}</View>
@@ -327,18 +328,19 @@ function TextField({
   autoCapitalize?: "none" | "sentences";
   maxLength?: number;
 }) {
+  const C = useCelsius().color;
   return (
     <View>
-      <Text className="mb-1 text-xs font-body text-muted">{label}</Text>
+      <Text className="mb-1 text-xs font-body text-text-3">{label}</Text>
       <TextInput
         value={value ?? ""}
         onChangeText={(t) => onChange(t === "" ? null : t)}
         placeholder="-"
-        placeholderTextColor="#9B9B9B"
+        placeholderTextColor={C["text-3"]}
         keyboardType={keyboardType ?? "default"}
         autoCapitalize={autoCapitalize ?? "sentences"}
         maxLength={maxLength}
-        className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso"
+        className="h-14 rounded-2xl border border-line bg-surface px-4 text-base font-body text-text"
       />
     </View>
   );
@@ -353,6 +355,7 @@ function DateField({
   value: string | null;
   onChange: (v: string | null) => void;
 }) {
+  const C = useCelsius().color;
   const [open, setOpen] = useState(false);
 
   // Default to a sensible adult DOB (25 years ago) if nothing set yet.
@@ -409,20 +412,20 @@ function DateField({
 
   return (
     <View>
-      <Text className="mb-1 text-xs font-body text-muted">{label}</Text>
+      <Text className="mb-1 text-xs font-body text-text-3">{label}</Text>
       <Pressable
         onPress={() => setOpen(true)}
         accessibilityLabel={label}
-        className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50"
+        className="h-14 flex-row items-center justify-between rounded-2xl border border-line bg-surface px-4 active:bg-sunken"
       >
         <Text
           className={`flex-1 text-base font-body ${
-            display ? "text-espresso" : "text-muted"
+            display ? "text-text" : "text-text-3"
           }`}
         >
           {display ?? "Select date"}
         </Text>
-        <ChevronDown color="#9CA3AF" size={20} />
+        <ChevronDown color={C["text-3"]} size={20} />
       </Pressable>
 
       <Modal
@@ -431,14 +434,14 @@ function DateField({
         presentationStyle="pageSheet"
         onRequestClose={() => setOpen(false)}
       >
-        <View className="flex-1 bg-background">
-          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Pressable onPress={() => setOpen(false)} className="px-2 py-1">
-              <Text className="text-sm font-body-bold text-muted">Cancel</Text>
+        <View className="flex-1 bg-bg">
+          <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+            <Pressable onPress={() => setOpen(false)} className="min-h-11 justify-center px-3">
+              <Text className="text-sm font-body-bold text-text-3">Cancel</Text>
             </Pressable>
-            <Text className="text-base font-display text-espresso">{label}</Text>
-            <Pressable onPress={confirm} className="px-2 py-1">
-              <Text className="text-sm font-body-bold text-primary">Done</Text>
+            <Text className="text-base font-display text-text">{label}</Text>
+            <Pressable onPress={confirm} className="min-h-11 justify-center px-3">
+              <Text className="text-sm font-body-bold text-text">Done</Text>
             </Pressable>
           </View>
 
@@ -455,12 +458,12 @@ function DateField({
                     key={d}
                     onPress={() => setDay(d)}
                     className={`mb-1 h-12 items-center justify-center rounded-xl ${
-                      active ? "bg-primary" : ""
+                      active ? "bg-ink" : ""
                     }`}
                   >
                     <Text
                       className={`text-base font-body-bold tabular-nums ${
-                        active ? "text-white" : "text-espresso"
+                        active ? "text-on-ink" : "text-text"
                       }`}
                     >
                       {d}
@@ -483,12 +486,12 @@ function DateField({
                     key={m}
                     onPress={() => setMonth(v)}
                     className={`mb-1 h-12 items-center justify-center rounded-xl ${
-                      active ? "bg-primary" : ""
+                      active ? "bg-ink" : ""
                     }`}
                   >
                     <Text
                       className={`text-base font-body-bold ${
-                        active ? "text-white" : "text-espresso"
+                        active ? "text-on-ink" : "text-text"
                       }`}
                     >
                       {m}
@@ -510,12 +513,12 @@ function DateField({
                     key={y}
                     onPress={() => setYear(y)}
                     className={`mb-1 h-12 items-center justify-center rounded-xl ${
-                      active ? "bg-primary" : ""
+                      active ? "bg-ink" : ""
                     }`}
                   >
                     <Text
                       className={`text-base font-body-bold tabular-nums ${
-                        active ? "text-white" : "text-espresso"
+                        active ? "text-on-ink" : "text-text"
                       }`}
                     >
                       {y}
@@ -527,8 +530,8 @@ function DateField({
           </View>
 
           {/* Preview */}
-          <View className="border-t border-border px-5 py-4">
-            <Text className="text-center text-base font-body-bold text-espresso">
+          <View className="border-t border-line px-5 py-4">
+            <Text className="text-center text-base font-body-bold text-text">
               {new Date(year, month - 1, safeDay).toLocaleDateString([], {
                 weekday: "long",
                 day: "numeric",
@@ -554,23 +557,24 @@ function PickerField({
   options: string[];
   onChange: (v: string | null) => void;
 }) {
+  const C = useCelsius().color;
   const [open, setOpen] = useState(false);
   const display = value ? value[0].toUpperCase() + value.slice(1) : null;
   return (
     <View>
-      <Text className="mb-1 text-xs font-body text-muted">{label}</Text>
+      <Text className="mb-1 text-xs font-body text-text-3">{label}</Text>
       <Pressable
         onPress={() => setOpen(true)}
-        className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50"
+        className="h-14 flex-row items-center justify-between rounded-2xl border border-line bg-surface px-4 active:bg-sunken"
       >
         <Text
           className={`flex-1 text-base font-body ${
-            display ? "text-espresso" : "text-muted"
+            display ? "text-text" : "text-text-3"
           }`}
         >
           {display ?? "Select"}
         </Text>
-        <ChevronDown color="#9CA3AF" size={20} />
+        <ChevronDown color={C["text-3"]} size={20} />
       </Pressable>
       <Modal
         visible={open}
@@ -578,11 +582,11 @@ function PickerField({
         presentationStyle="pageSheet"
         onRequestClose={() => setOpen(false)}
       >
-        <View className="flex-1 bg-background">
-          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-xl font-display text-espresso">{label}</Text>
-            <Pressable onPress={() => setOpen(false)} className="px-2 py-1">
-              <Text className="text-sm font-body-bold text-primary">Close</Text>
+        <View className="flex-1 bg-bg">
+          <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+            <Text className="text-xl font-display text-text">{label}</Text>
+            <Pressable onPress={() => setOpen(false)} className="min-h-11 justify-center px-3">
+              <Text className="text-sm font-body-bold text-text">Close</Text>
             </Pressable>
           </View>
           <ScrollView className="flex-1" contentContainerClassName="px-5 py-4"
@@ -597,16 +601,16 @@ function PickerField({
                     onChange(opt);
                     setOpen(false);
                   }}
-                  className={`mb-2 h-14 flex-row items-center justify-between rounded-2xl border px-4 active:bg-primary-50 ${
+                  className={`mb-2 h-14 flex-row items-center justify-between rounded-2xl border px-4 active:bg-sunken ${
                     active
-                      ? "border-primary bg-primary-50"
-                      : "border-border bg-surface"
+                      ? "border-ink bg-sunken"
+                      : "border-line bg-surface"
                   }`}
                 >
-                  <Text className="flex-1 text-base font-body-semi text-espresso">
+                  <Text className="flex-1 text-base font-body-semi text-text">
                     {opt}
                   </Text>
-                  {active ? <Check color="#C2452D" size={20} /> : null}
+                  {active ? <Check color={C["text-2"]} size={20} /> : null}
                 </Pressable>
               );
             })}
@@ -628,7 +632,7 @@ function BoolField({
 }) {
   return (
     <View>
-      <Text className="mb-1 text-xs font-body text-muted">{label}</Text>
+      <Text className="mb-1 text-xs font-body text-text-3">{label}</Text>
       <View className="flex-row gap-2">
         {[
           { label: "Yes", v: true },
@@ -641,13 +645,13 @@ function BoolField({
               onPress={() => onChange(v)}
               className={`h-14 flex-1 items-center justify-center rounded-2xl border-2 ${
                 active
-                  ? "border-primary bg-primary-50"
-                  : "border-border bg-surface"
+                  ? "border-ink bg-sunken"
+                  : "border-line bg-surface"
               }`}
             >
               <Text
                 className={`text-base font-body-bold ${
-                  active ? "text-primary" : "text-muted-fg"
+                  active ? "text-text" : "text-text-2"
                 }`}
               >
                 {l}
@@ -669,24 +673,24 @@ function StepperField({
   value: number;
   onChange: (v: number) => void;
 }) {
-  const { colorScheme } = useColorScheme();
-  const iconColor = colorScheme === "dark" ? "#FAFAFA" : "#160800";
+  const C = useCelsius().color;
+  const iconColor = C.text;
   return (
     <View>
-      <Text className="mb-1 text-xs font-body text-muted">{label}</Text>
-      <View className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-2">
+      <Text className="mb-1 text-xs font-body text-text-3">{label}</Text>
+      <View className="h-14 flex-row items-center justify-between rounded-2xl border border-line bg-surface px-2">
         <Pressable
           onPress={() => onChange(Math.max(0, value - 1))}
-          className="h-10 w-10 items-center justify-center rounded-xl active:bg-primary-50"
+          className="h-11 w-11 items-center justify-center rounded-xl active:bg-sunken"
         >
           <Minus color={iconColor} size={20} />
         </Pressable>
-        <Text className="text-2xl font-display-medium text-espresso">
+        <Text className="text-2xl font-display-medium text-text">
           {value}
         </Text>
         <Pressable
           onPress={() => onChange(value + 1)}
-          className="h-10 w-10 items-center justify-center rounded-xl active:bg-primary-50"
+          className="h-11 w-11 items-center justify-center rounded-xl active:bg-sunken"
         >
           <Plus color={iconColor} size={20} />
         </Pressable>

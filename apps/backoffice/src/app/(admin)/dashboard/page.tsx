@@ -6,6 +6,7 @@ import { RefreshCw, Boxes, Trash2, Users, Timer, HeartHandshake } from "lucide-r
 import { BarChart, Bar, XAxis, ResponsiveContainer, Cell } from "recharts";
 import { useFetch } from "@/lib/use-fetch";
 import { Card } from "@/components/ui/card";
+import { NeedsYou } from "@/components/needs-you";
 
 type UserProfile = { id: string; name: string; role: string };
 
@@ -91,11 +92,11 @@ export default function DashboardPage() {
   const refreshAll = () => { mutate(); mutateReviews(); mutateLenses(); };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 overflow-x-hidden space-y-6">
+    <div className="overflow-x-hidden space-y-6 px-4 pt-6 pb-10 md:px-8">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="font-heading text-xl sm:text-2xl font-bold text-foreground">
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
             {greeting}{user?.name ? `, ${user.name}` : ""}
           </h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
@@ -106,7 +107,7 @@ export default function DashboardPage() {
           <div className="inline-flex rounded-lg border p-0.5">
             {PERIODS.map((p) => (
               <button key={p.key} onClick={() => setPeriod(p.key)}
-                className={`rounded-md px-3 py-1 text-xs transition ${period === p.key ? "bg-terracotta text-white" : "text-muted-foreground hover:bg-muted"}`}>
+                className={`rounded-md px-3 py-1 text-xs transition ${period === p.key ? "bg-ink text-on-ink" : "text-muted-foreground hover:bg-muted"}`}>
                 {p.label}
               </button>
             ))}
@@ -122,28 +123,31 @@ export default function DashboardPage() {
       {data && data.canSeeAllOutlets && (
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setOutlet("all")}
-            className={`rounded-full border px-3 py-1 text-xs ${outlet === "all" ? "border-terracotta bg-terracotta/10 text-terracotta" : "text-muted-foreground hover:bg-muted"}`}>
+            className={`rounded-full border px-3 py-1 text-xs ${outlet === "all" ? "border-text bg-raised font-semibold text-text" : "text-muted-foreground hover:bg-muted"}`}>
             All outlets
           </button>
           {data.outlets.map((o) => (
             <button key={o.id} onClick={() => setOutlet(o.id)}
-              className={`rounded-full border px-3 py-1 text-xs ${outlet === o.id ? "border-terracotta bg-terracotta/10 text-terracotta" : "text-muted-foreground hover:bg-muted"}`}>
+              className={`rounded-full border px-3 py-1 text-xs ${outlet === o.id ? "border-text bg-raised font-semibold text-text" : "text-muted-foreground hover:bg-muted"}`}>
               {o.name}
             </button>
           ))}
         </div>
       )}
 
-      {/* Pulse */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Sales" value={view ? formatRM(view.revenue) : "—"}
-          sub={view ? `${view.pctOfTarget}% of ${formatRM(selected ? selected.periodTarget : data?.company.target ?? 0)}` : ""}
-          good={view ? view.onPace : undefined} progress={view?.pctOfTarget} />
-        <Stat label="Avg order" value={view ? `RM ${view.aov}` : "—"} sub={`target RM ${AOV_TARGET}`}
-          good={view ? view.aov >= AOV_TARGET : undefined} />
-        <Stat label="Orders" value={view ? view.orders.toLocaleString() : "—"} sub={data ? `${data.period.days} days` : ""} />
-        <Stat label="Growth" value={view?.growthPct != null ? `${view.growthPct > 0 ? "+" : ""}${view.growthPct}%` : "—"}
-          sub="vs last period" good={view?.growthPct != null ? view.growthPct >= 0 : undefined} />
+      {/* Pulse + Needs you (the Inbox's top five, beside the numbers on desktop) */}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
+          <Stat label="Sales" value={view ? formatRM(view.revenue) : "—"}
+            sub={view ? `${view.pctOfTarget}% of ${formatRM(selected ? selected.periodTarget : data?.company.target ?? 0)}` : ""}
+            good={view ? view.onPace : undefined} progress={view?.pctOfTarget} />
+          <Stat label="Avg order" value={view ? `RM ${view.aov}` : "—"} sub={`target RM ${AOV_TARGET}`}
+            good={view ? view.aov >= AOV_TARGET : undefined} />
+          <Stat label="Orders" value={view ? view.orders.toLocaleString() : "—"} sub={data ? `${data.period.days} days` : ""} />
+          <Stat label="Growth" value={view?.growthPct != null ? `${view.growthPct > 0 ? "+" : ""}${view.growthPct}%` : "—"}
+            sub="vs last period" good={view?.growthPct != null ? view.growthPct >= 0 : undefined} />
+        </div>
+        <NeedsYou />
       </div>
 
       {/* Branch league — company view */}

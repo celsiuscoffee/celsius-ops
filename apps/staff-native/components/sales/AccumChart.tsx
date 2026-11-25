@@ -2,11 +2,8 @@ import { useMemo, useState } from "react";
 import { PanResponder, Text, View } from "react-native";
 import Svg, { Path, Line, Circle, Text as SvgText } from "react-native-svg";
 import type { SeriesPoint } from "@/lib/sales/dashboard";
+import { useCelsius } from "@/lib/celsius-ui";
 
-const CUR = "#FBBF24"; // amber, current period
-const PREV = "#8FB3F0"; // blue, previous period
-const GRID = "rgba(245,243,240,0.08)";
-const AXIS = "rgba(245,243,240,0.40)";
 
 function niceMax(v: number): number {
   if (v <= 0) return 100;
@@ -23,7 +20,8 @@ function rmShort(v: number): string {
 }
 
 /**
- * Cumulative ("running total") overlay: current (amber) vs previous (blue),
+ * Cumulative ("running total") overlay: current (--c1, the focus series) vs
+ * previous (--c2),
  * with a draggable hour marker + tooltip showing each period's total at that
  * point. The marker defaults to the latest point that has data ("now").
  */
@@ -38,6 +36,11 @@ export function AccumChart({
   prevLabel?: string;
   height?: number;
 }) {
+  const C = useCelsius().color;
+  const CUR = C.c1;
+  const PREV = C.c2;
+  const GRID = C.grid;
+  const AXIS = C["text-3"];
   const [w, setW] = useState(0);
   const [active, setActive] = useState<number | null>(null);
 
@@ -131,16 +134,16 @@ export function AccumChart({
               left: tipLeft,
               top: padT + 6,
               width: TW,
-              backgroundColor: "#1d1109f2",
+              backgroundColor: C.raised,
               borderRadius: 12,
               borderWidth: 1,
-              borderColor: "rgba(245,243,240,0.12)",
+              borderColor: C.line,
               paddingVertical: 8,
               paddingHorizontal: 11,
               gap: 5,
             }}
           >
-            <Text style={{ color: AXIS, fontSize: 11, fontFamily: "SpaceGrotesk_600SemiBold" }}>
+            <Text style={{ color: AXIS, fontSize: 12, fontFamily: "SpaceGrotesk_600SemiBold" }}>
               {series[idx]?.label ?? ""}
             </Text>
             <TipRow color={CUR} label={curLabel} value={curV != null ? rmShort(curV) : "-"} />
@@ -155,11 +158,12 @@ export function AccumChart({
 }
 
 function TipRow({ color, label, value }: { color: string; label: string; value: string }) {
+  const C = useCelsius().color;
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
       <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }} />
-      <Text numberOfLines={1} style={{ color: "#F5F3F0", fontSize: 12.5, fontFamily: "SpaceGrotesk_500Medium", flex: 1 }}>{label}</Text>
-      <Text numberOfLines={1} style={{ color: "#F5F3F0", fontSize: 12.5, fontFamily: "SpaceGrotesk_700Bold" }}>{value}</Text>
+      <Text numberOfLines={1} style={{ color: C.text, fontSize: 13, fontFamily: "SpaceGrotesk_500Medium", flex: 1 }}>{label}</Text>
+      <Text numberOfLines={1} style={{ color: C.text, fontSize: 13, fontFamily: "SpaceGrotesk_700Bold", fontVariant: ["tabular-nums"] }}>{value}</Text>
     </View>
   );
 }

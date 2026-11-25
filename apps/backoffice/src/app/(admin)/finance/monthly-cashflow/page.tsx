@@ -82,30 +82,30 @@ export default function MonthlyCashflowPage() {
   );
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <Link href="/finance/cashflow" className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
-            <ChevronLeft className="h-3 w-3" /> Cashflow
+          <Link href="/finance/cashflow" className="inline-flex items-center gap-1 text-[13px] text-text-2 hover:text-text">
+            <ChevronLeft className="h-3.5 w-3.5" /> Cash flow
           </Link>
-          <h2 className="mt-1 text-lg sm:text-xl font-semibold text-gray-900">Monthly Cash Flow</h2>
-          <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
-            Consolidated net cash flow from Maybank statements (gross — includes inter-company transfers between entities, matching the cash-tracking spreadsheet). Group bank balance is the sum of each entity&rsquo;s month-end balance.
+          <h1 className="mt-1 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Monthly cash flow</h1>
+          <p className="mt-0.5 text-sm text-text-2">
+            Net cash in and out each month across all companies, from the Maybank statements. Transfers between our own companies are included, as in the cash-tracking sheet; the group balance adds up each company&rsquo;s month-end balance.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setCompare((v) => !v)}
-            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${compare ? "border-terracotta bg-terracotta text-white" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+            className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${compare ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-text-2 hover:bg-sunken"}`}
           >
             <ArrowRightLeft className="h-3.5 w-3.5" /> Compare vs prev
           </button>
-          <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
+          <div className="flex rounded-lg border border-line bg-surface p-0.5">
             {Object.keys(PRESETS).map((p) => (
               <button
                 key={p}
                 onClick={() => setPreset(p as keyof typeof PRESETS)}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${preset === p ? "bg-terracotta text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${preset === p ? "bg-ink text-on-ink" : "text-text-2 hover:bg-sunken"}`}
               >
                 {p}
               </button>
@@ -119,7 +119,7 @@ export default function MonthlyCashflowPage() {
         <div className="mt-4 flex flex-wrap gap-1.5">
           <button
             onClick={() => setAccount(null)}
-            className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${account === null ? "border-terracotta bg-terracotta text-white" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+            className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${account === null ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-text-2 hover:bg-sunken"}`}
           >
             All entities
           </button>
@@ -127,7 +127,7 @@ export default function MonthlyCashflowPage() {
             <button
               key={a.code}
               onClick={() => setAccount(a.code)}
-              className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${account === a.code ? "border-terracotta bg-terracotta text-white" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}
+              className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${account === a.code ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-text-2 hover:bg-sunken"}`}
             >
               {a.name} ··{a.code}
             </button>
@@ -136,12 +136,12 @@ export default function MonthlyCashflowPage() {
       )}
 
       {isLoading || !data ? (
-        <div className="mt-6 flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-gray-400" /></div>
+        <div className="mt-6 flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-text-3" /></div>
       ) : data.monthly.length === 0 ? (
-        <div className="mt-6 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center">
-          <p className="text-sm text-gray-500">No bank statements in this period.</p>
-          <p className="mt-1 text-xs text-gray-400">
-            Drop a Maybank PDF on the <Link href="/finance/bank-statements" className="text-terracotta hover:underline">Bank Statements</Link> page, or let the watcher pick up new files.
+        <div className="mt-6 rounded-lg border border-dashed border-line-2 bg-sunken px-4 py-8 text-center">
+          <p className="text-sm text-text-2">No bank statements in this period.</p>
+          <p className="mt-1 text-xs text-text-3">
+            Drop a Maybank PDF on the <Link href="/finance/bank-statements" className="text-brand-text hover:underline">Bank Statements</Link> page, or let the watcher pick up new files.
           </p>
         </div>
       ) : (
@@ -155,9 +155,9 @@ export default function MonthlyCashflowPage() {
           </div>
 
           {/* Monthly table */}
-          <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200 bg-white">
+          <div className="mt-4 overflow-x-auto rounded-lg border border-line bg-surface">
             <table className="min-w-full text-xs sm:text-sm">
-              <thead className="bg-gray-50 text-gray-600">
+              <thead className="bg-sunken text-text-2">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Month</th>
                   <th className="px-3 py-2 text-right font-medium">Inflow</th>
@@ -169,28 +169,28 @@ export default function MonthlyCashflowPage() {
               </thead>
               <tbody>
                 {data.monthly.map((m) => (
-                  <tr key={m.month} className="border-t border-gray-100 hover:bg-gray-50">
-                    <td className="px-3 py-2 font-medium text-gray-900">{monthLabel(m.month)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-green-700">{fmtMYR(m.inflow)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-red-700">{fmtMYR(m.outflow)}</td>
-                    <td className={`px-3 py-2 text-right font-semibold tabular-nums ${m.net >= 0 ? "text-green-700" : "text-red-700"}`}>{fmtMYR(m.net)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-900">{fmtMYR(m.closingBalance)}</td>
+                  <tr key={m.month} className="border-t border-line hover:bg-sunken">
+                    <td className="px-3 py-2 font-medium text-text">{monthLabel(m.month)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-ok-text">{fmtMYR(m.inflow)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-danger-text">{fmtMYR(m.outflow)}</td>
+                    <td className={`px-3 py-2 text-right font-semibold tabular-nums ${m.net >= 0 ? "text-ok-text" : "text-danger-text"}`}>{fmtMYR(m.net)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-text">{fmtMYR(m.closingBalance)}</td>
                     <td className="hidden px-3 py-2 sm:table-cell">
-                      <div className="flex h-3 w-40 overflow-hidden rounded-sm bg-gray-100">
-                        <div className="bg-green-400" style={{ width: `${(m.inflow / maxBar) * 50}%` }} />
-                        <div className="bg-red-400" style={{ width: `${(m.outflow / maxBar) * 50}%` }} />
+                      <div className="flex h-3 w-40 overflow-hidden rounded-sm bg-sunken">
+                        <div className="bg-ok" style={{ width: `${(m.inflow / maxBar) * 50}%` }} />
+                        <div className="bg-danger" style={{ width: `${(m.outflow / maxBar) * 50}%` }} />
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
-                  <td className="px-3 py-2 text-gray-900">Total</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-green-700">{fmtMYR(data.totals.inflow)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-red-700">{fmtMYR(data.totals.outflow)}</td>
-                  <td className={`px-3 py-2 text-right tabular-nums ${data.totals.net >= 0 ? "text-green-700" : "text-red-700"}`}>{fmtMYR(data.totals.net)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-900">{fmtMYR(data.totals.closingBalance)}</td>
+                <tr className="border-t-2 border-line-2 bg-sunken font-semibold">
+                  <td className="px-3 py-2 text-text">Total</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-ok-text">{fmtMYR(data.totals.inflow)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-danger-text">{fmtMYR(data.totals.outflow)}</td>
+                  <td className={`px-3 py-2 text-right tabular-nums ${data.totals.net >= 0 ? "text-ok-text" : "text-danger-text"}`}>{fmtMYR(data.totals.net)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-text">{fmtMYR(data.totals.closingBalance)}</td>
                   <td className="hidden sm:table-cell" />
                 </tr>
               </tfoot>
@@ -203,7 +203,7 @@ export default function MonthlyCashflowPage() {
             <CategoryPanel title="Top outflow categories" rows={data.topOutflow} max={maxOut} tone="out" />
           </div>
 
-          <p className="mt-2 text-[11px] text-gray-400">
+          <p className="mt-2 text-[11px] text-text-3">
             Inflow/outflow include inter-company transfers between entities (gross). Where an account-month has both an early spreadsheet upload and the PDF import, the richer (PDF) statement is used so totals never double-count.
           </p>
         </>
@@ -223,15 +223,15 @@ function SummaryCard({
   tone: "in" | "out" | "net" | "bal";
   invertDelta?: boolean;
 }) {
-  const color = tone === "in" ? "text-green-700" : tone === "out" ? "text-red-700" : tone === "net" ? (value >= 0 ? "text-green-700" : "text-red-700") : "text-gray-900";
+  const color = tone === "in" ? "text-ok-text" : tone === "out" ? "text-danger-text" : tone === "net" ? (value >= 0 ? "text-ok-text" : "text-danger-text") : "text-text";
   const delta = compare && prev != null && prev !== 0 ? ((value - prev) / Math.abs(prev)) * 100 : null;
   const good = delta == null ? false : invertDelta ? delta < 0 : delta > 0;
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3">
-      <div className="flex items-center gap-1.5 text-xs text-gray-500">{icon}{label}</div>
+    <div className="rounded-lg border border-line bg-surface p-3">
+      <div className="flex items-center gap-1.5 text-xs text-text-2">{icon}{label}</div>
       <div className={`mt-1 text-lg font-semibold tabular-nums ${color}`}>{fmtMYR(value)}</div>
       {delta != null && (
-        <div className={`mt-0.5 text-[11px] font-medium ${good ? "text-green-600" : "text-red-600"}`}>
+        <div className={`mt-0.5 text-[11px] font-medium ${good ? "text-ok-text" : "text-danger-text"}`}>
           {delta >= 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(0)}% vs prev
         </div>
       )}
@@ -241,19 +241,19 @@ function SummaryCard({
 
 function CategoryPanel({ title, rows, max, tone }: { title: string; rows: CatRow[]; max: number; tone: "in" | "out" }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</h3>
+    <div className="rounded-lg border border-line bg-surface p-3">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-2">{title}</h3>
       <div className="mt-2 space-y-1.5">
         {rows.slice(0, 10).map((r) => (
           <div key={r.category} className="flex items-center gap-2">
-            <div className="w-32 shrink-0 truncate text-xs text-gray-700" title={catLabel(r.category)}>{catLabel(r.category)}</div>
-            <div className="relative h-4 flex-1 overflow-hidden rounded-sm bg-gray-100">
-              <div className={`h-full ${tone === "in" ? "bg-green-300" : "bg-red-300"}`} style={{ width: `${(r.amount / max) * 100}%` }} />
+            <div className="w-32 shrink-0 truncate text-xs text-text-2" title={catLabel(r.category)}>{catLabel(r.category)}</div>
+            <div className="relative h-4 flex-1 overflow-hidden rounded-sm bg-sunken">
+              <div className={`h-full ${tone === "in" ? "bg-ok" : "bg-danger"}`} style={{ width: `${(r.amount / max) * 100}%` }} />
             </div>
-            <div className="w-24 shrink-0 text-right text-xs tabular-nums text-gray-900">{fmtMYR(r.amount)}</div>
+            <div className="w-24 shrink-0 text-right text-xs tabular-nums text-text">{fmtMYR(r.amount)}</div>
           </div>
         ))}
-        {rows.length === 0 && <p className="text-xs text-gray-400">No data.</p>}
+        {rows.length === 0 && <p className="text-xs text-text-3">No data.</p>}
       </div>
     </div>
   );

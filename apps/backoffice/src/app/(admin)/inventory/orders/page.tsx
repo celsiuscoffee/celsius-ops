@@ -2,14 +2,13 @@
 
 import { formatRM } from "@celsius/shared";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { useFetch } from "@/lib/use-fetch";
-import { Card } from "@/components/ui/card";
+import { KeyNumber } from "@/components/ui/key-number";
 import { EditOrderModal } from "@/components/inventory/EditOrderModal";
 import {
   Search,
@@ -21,7 +20,6 @@ import {
   Clock,
   FileText,
   Loader2,
-  Package,
   AlertTriangle,
   Plus,
   Trash2,
@@ -91,14 +89,14 @@ type Order = {
 // ── Constants ─────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof Clock }> = {
-  DRAFT: { label: "Draft", color: "bg-gray-400", icon: FileText },
-  PENDING_APPROVAL: { label: "Pending Approval", color: "bg-amber-500", icon: Clock },
-  APPROVED: { label: "Confirmed", color: "bg-blue-500", icon: CheckCircle2 },
-  SENT: { label: "Sent", color: "bg-green-500", icon: MessageCircle },
-  AWAITING_DELIVERY: { label: "Awaiting Delivery", color: "bg-purple-500", icon: Truck },
-  PARTIALLY_RECEIVED: { label: "Partially Received", color: "bg-amber-600", icon: AlertTriangle },
-  COMPLETED: { label: "Completed", color: "bg-gray-500", icon: CheckCircle2 },
-  CANCELLED: { label: "Cancelled", color: "bg-red-500", icon: AlertTriangle },
+  DRAFT: { label: "Draft", color: "bg-sunken text-text-2", icon: FileText },
+  PENDING_APPROVAL: { label: "Waiting for approval", color: "bg-warn-soft text-warn-text", icon: Clock },
+  APPROVED: { label: "Confirmed", color: "bg-info-soft text-info-text", icon: CheckCircle2 },
+  SENT: { label: "Sent", color: "bg-info-soft text-info-text", icon: MessageCircle },
+  AWAITING_DELIVERY: { label: "Awaiting delivery", color: "bg-info-soft text-info-text", icon: Truck },
+  PARTIALLY_RECEIVED: { label: "Short delivered", color: "bg-warn-soft text-warn-text", icon: AlertTriangle },
+  COMPLETED: { label: "Completed", color: "bg-ok-soft text-ok-text", icon: CheckCircle2 },
+  CANCELLED: { label: "Cancelled", color: "bg-sunken text-text-3", icon: AlertTriangle },
 };
 
 const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof Clock; color: string }[]> = {
@@ -112,7 +110,7 @@ const NEXT_ACTIONS: Record<string, { status: string; label: string; icon: typeof
   // the total already reflects what arrived, so the payable stays right.
   // (Cancel is blocked once goods are received: it would delete the payable.)
   PARTIALLY_RECEIVED: [
-    { status: "COMPLETED", label: "Close short (no more coming)", icon: CheckCircle2, color: "bg-gray-600 hover:bg-gray-700" },
+    { status: "COMPLETED", label: "Close short (no more coming)", icon: CheckCircle2, color: "bg-ink text-on-ink hover:bg-ink-hover" },
   ],
   COMPLETED: [],
   CANCELLED: [],
@@ -154,7 +152,6 @@ export default function OrdersPage() {
   const { data, isLoading: loading, mutate: loadOrders } = useFetch<OrdersResponse>(url);
   const orders: Order[] = data?.orders ?? [];
   const summary = data?.summary ?? { total: 0, draft: 0, active: 0, completed: 0, totalValue: 0 };
-  const [cardFilter, setCardFilter] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
@@ -214,322 +211,177 @@ export default function OrdersPage() {
 
   // ── Computed from API-filtered results ───────────────────────────────────
 
-  const totalValue = orders.reduce((a, o) => a + o.totalAmount, 0);
-  const pendingCount = orders.filter((o) => ["DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "AWAITING_DELIVERY"].includes(o.status)).length;
 
   // ── Render ──────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
 
+  const onTheWay = orders.filter((o) => ["APPROVED", "SENT", "AWAITING_DELIVERY"].includes(o.status));
+  const shortDelivered = orders.filter((o) => o.status === "PARTIALLY_RECEIVED").length;
+  const waitingApproval = orders.filter((o) => o.status === "PENDING_APPROVAL").length;
+  const btn = "inline-flex h-9 items-center gap-1.5 rounded-ctl px-3 text-[13px] font-medium disabled:opacity-50";
+
   return (
-    <div className="p-3 sm:p-6">
-      {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="px-4 pt-6 pb-10 md:px-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">PO Lists</h2>
-          <p className="mt-0.5 text-xs sm:text-sm text-gray-500">
-            {summary.total} {summary.total === 1 ? 'order' : 'orders'} &middot; {summary.active} active
-          </p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Supplier orders</h1>
+          <p className="mt-0.5 text-sm text-text-2">Every order to a supplier: what is still to arrive, and what came short.</p>
         </div>
-        <Link href="/inventory/orders/create" className="sm:w-auto">
-          <Button className="bg-terracotta hover:bg-terracotta-dark w-full sm:w-auto">
-            <Plus className="mr-1.5 h-4 w-4" />Create Order
-          </Button>
+        <Link href="/inventory/orders/create" className="self-start">
+          <Button className="bg-ink text-on-ink hover:bg-ink-hover"><Plus className="mr-1.5 h-4 w-4" />Create order</Button>
         </Link>
       </div>
 
-      {/* Summary cards */}
-      <div className="mt-4 grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-4">
-        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === null ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(null)}>
-          <p className="text-xs text-gray-500">Total Orders</p>
-          <p className="text-xl font-bold text-gray-900">{summary.total}</p>
-        </Card>
-        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "DRAFT" ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(cardFilter === "DRAFT" ? null : "DRAFT")}>
-          <p className="text-xs text-gray-500">Draft</p>
-          <p className="text-xl font-bold text-gray-500">{summary.draft}</p>
-        </Card>
-        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "active" ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(cardFilter === "active" ? null : "active")}>
-          <p className="text-xs text-gray-500">Active / In Progress</p>
-          <p className="text-xl font-bold text-terracotta">{summary.active}</p>
-        </Card>
-        <Card className={`px-4 py-3 cursor-pointer transition-colors ${cardFilter === "COMPLETED" ? "ring-2 ring-terracotta" : "hover:bg-gray-50"}`} onClick={() => setCardFilter(cardFilter === "COMPLETED" ? null : "COMPLETED")}>
-          <p className="text-xs text-gray-500">Completed</p>
-          <p className="text-xl font-bold text-green-600">{summary.completed}</p>
-        </Card>
-        <Card className="px-4 py-3">
-          <p className="text-xs text-gray-500">Total Value</p>
-          <p className="text-xl font-bold text-gray-900">RM {summary.totalValue.toFixed(2)}</p>
-        </Card>
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label="Open orders" value={String(summary.active)}
+          note={<><b className="font-semibold text-text-2">{summary.draft}</b> {summary.draft === 1 ? "draft" : "drafts"} not sent yet</>} />
+        <KeyNumber label="On the way" value={String(onTheWay.length)}
+          note={<><b className="font-semibold text-text-2">{formatRM(onTheWay.reduce((a, o) => a + o.totalAmount, 0))}</b> of stock to receive</>} />
+        <KeyNumber label="Short delivered" value={String(shortDelivered)} tone={shortDelivered > 0 ? "warn" : undefined}
+          note={shortDelivered > 0 ? "chase the rest or close short" : "nothing came short"} />
+        <KeyNumber label="Waiting for approval" value={String(waitingApproval)} tone={waitingApproval > 0 ? "warn" : undefined}
+          note={<>orders in this view: <b className="font-semibold text-text-2">{formatRM(summary.totalValue)}</b></>} />
       </div>
 
-      {/* Filters */}
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-        <div className="relative w-full sm:flex-1 sm:max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input placeholder="Search by PO#, supplier, or outlet..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        <div className="relative w-full sm:max-w-md sm:flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
+          <Input placeholder="Search by PO number, supplier or outlet..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex gap-1.5">
-          {([["active", "Active"], ["completed", "Completed"], ["all", "All"]] as const).map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setTab(value)}
-              className={`rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
-            >
+        <div className="flex flex-wrap gap-1.5">
+          {([["active", "Open"], ["completed", "Completed"], ["all", "All"]] as const).map(([value, label]) => (
+            <button key={value} onClick={() => setTab(value)}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}>
               {label}
             </button>
           ))}
-        </div>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={`relative flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${showFilters || activeOrderFilterCount > 0 ? "border-blue-400 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
-        >
-          <Filter className="h-3 w-3" />
-          Filters
-          {activeOrderFilterCount > 0 && (
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">{activeOrderFilterCount}</span>
-          )}
-        </button>
-        {activeOrderFilterCount > 0 && (
-          <button
-            onClick={() => { setCreatedFrom(""); setCreatedTo(""); }}
-            className="flex items-center gap-1 rounded-full border border-gray-200 px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-50"
-          >
-            <X className="h-3 w-3" /> Clear filters
+          <button onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${showFilters || activeOrderFilterCount > 0 ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}>
+            <Filter className="h-3 w-3" />Dates{activeOrderFilterCount > 0 && ` (${activeOrderFilterCount})`}
           </button>
-        )}
+          {activeOrderFilterCount > 0 && (
+            <button onClick={() => { setCreatedFrom(""); setCreatedTo(""); }} className="flex items-center gap-1 rounded-full border border-line px-3 py-1 text-xs text-text-2 hover:bg-sunken">
+              <X className="h-3 w-3" /> Clear
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Expanded filter panel */}
       {showFilters && (
-        <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/30 p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
-                <CalendarDays className="h-3 w-3" /> Created From
-              </label>
-              <input
-                type="date"
-                value={createdFrom}
-                onChange={(e) => setCreatedFrom(e.target.value)}
-                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
-                <CalendarDays className="h-3 w-3" /> Created To
-              </label>
-              <input
-                type="date"
-                value={createdTo}
-                onChange={(e) => setCreatedTo(e.target.value)}
-                min={createdFrom || undefined}
-                className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-              />
-            </div>
-          </div>
+        <div className="mt-3 grid gap-3 rounded-card border border-line bg-surface p-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 flex items-center gap-1 text-[13px] font-medium text-text-2"><CalendarDays className="h-3.5 w-3.5" /> Created from</span>
+            <input type="date" value={createdFrom} onChange={(e) => setCreatedFrom(e.target.value)} className="h-10 w-full rounded-ctl border border-line bg-surface px-3 text-sm text-text focus:border-ink focus:outline-none" />
+          </label>
+          <label className="block">
+            <span className="mb-1 flex items-center gap-1 text-[13px] font-medium text-text-2"><CalendarDays className="h-3.5 w-3.5" /> Created to</span>
+            <input type="date" value={createdTo} onChange={(e) => setCreatedTo(e.target.value)} min={createdFrom || undefined} className="h-10 w-full rounded-ctl border border-line bg-surface px-3 text-sm text-text focus:border-ink focus:outline-none" />
+          </label>
         </div>
       )}
 
-      {/* Orders table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
-        <table className="w-full min-w-[820px] text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="w-8 px-3 py-3"></th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">PO Number</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Supplier</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-right font-medium text-gray-500">Amount</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Items</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Delivery</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.length === 0 && (
-              <tr>
-                <td colSpan={9} className="px-4 py-12 text-center">
-                  <ShoppingCart className="mx-auto h-8 w-8 text-gray-300" />
-                  <p className="mt-2 text-sm text-gray-500">
-                    {!debouncedSearch && tab === "all" ? "No orders yet. Click 'Create Order' to get started." : "No orders match your filter."}
+      <div className="mt-4 overflow-hidden rounded-card border border-line bg-surface">
+        {orders.length === 0 && (
+          <div className="px-4 py-12 text-center">
+            <ShoppingCart className="mx-auto h-8 w-8 text-text-3" />
+            <p className="mt-2 text-sm text-text-2">{!debouncedSearch && tab === "all" ? "No orders yet. Use Create order to start one." : "No orders match your filter."}</p>
+          </div>
+        )}
+        {orders.map((order) => {
+          const config = STATUS_CONFIG[order.status] ?? { label: order.status, color: "bg-sunken text-text-2", icon: Clock };
+          const actions = NEXT_ACTIONS[order.status] ?? [];
+          const open = expandedId === order.id;
+          return (
+            <div key={order.id} className="border-b border-line last:border-b-0">
+              <button onClick={() => setExpandedId(open ? null : order.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-sunken/50">
+                <ChevronDown className={`h-4 w-4 shrink-0 text-text-3 transition-transform ${open ? "rotate-180" : ""}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-text">{order.supplier} <span className="font-normal text-text-3">· {order.outlet}</span></p>
+                  <p className="mt-0.5 truncate text-[12px] text-text-3">
+                    {order.orderNumber} · {order.items.length} {order.items.length === 1 ? "item" : "items"}{order.deliveryDate ? ` · delivery ${order.deliveryDate}` : ""}
                   </p>
-                </td>
-              </tr>
-            )}
-            {orders.filter((o) => {
-              if (!cardFilter) return true;
-              if (cardFilter === "DRAFT") return o.status === "DRAFT";
-              if (cardFilter === "COMPLETED") return o.status === "COMPLETED";
-              if (cardFilter === "active") return !["DRAFT", "COMPLETED", "CANCELLED"].includes(o.status);
-              return true;
-            }).map((order) => {
-              const config = STATUS_CONFIG[order.status] ?? { label: order.status, color: "bg-gray-400", icon: Clock };
-              const actions = NEXT_ACTIONS[order.status] ?? [];
-              return (
-                <Fragment key={order.id}>
-                  <tr className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer" onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}>
-                    <td className="px-3 py-3">
-                      <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${expandedId === order.id ? "rotate-180" : ""}`} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link href={`/inventory/orders/${order.id}`} onClick={(e) => e.stopPropagation()} className="hover:underline">
-                        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-terracotta">{order.orderNumber}</code>
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{order.outlet}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-900">{order.supplier}</span>
-                        {order.supplierPhone && ["APPROVED", "SENT", "AWAITING_DELIVERY"].includes(order.status) && (
-                          <a href={buildWhatsAppUrl(order)} target="_blank" onClick={(e) => e.stopPropagation()} className="text-green-600 hover:text-green-700" title="Send via WhatsApp">
-                            <MessageCircle className="h-3.5 w-3.5" />
-                          </a>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3"><Badge className={`text-[10px] ${config.color}`}>{config.label}</Badge></td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-900">RM {order.totalAmount.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-gray-600">
-                      <span className="flex items-center gap-1 text-xs"><Package className="h-3 w-3" />{order.items.length}</span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{order.deliveryDate ?? "—"}</td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center gap-1">
-                        {actions.map((a) => (
-                          <button key={a.status} onClick={() => {
-                            updateStatus(order.id, a.status);
-                          }} disabled={updatingId === order.id} className={`rounded-md px-2 py-1 text-[10px] font-medium text-white ${a.color} disabled:opacity-50`} title={a.label}>
-                            {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : a.label}
-                          </button>
-                        ))}
-                        {/* Upload Invoice — replaces the old "Confirm Order" CTA. Shows on every
-                            in-flight PO state so procurement can fill in supplier invoice details
-                            whenever they arrive (before delivery, on delivery, or days after).
-                            Hidden once the invoice is paid (no need to upload anymore) or once a
-                            real invoice is fully attached (has dueDate set). */}
-                        {["AWAITING_DELIVERY", "PARTIALLY_RECEIVED", "COMPLETED", "SENT", "APPROVED"].includes(order.status)
-                          && order.invoice?.status !== "PAID"
-                          && !order.invoice?.dueDate && (
-                          <button onClick={() => openEditDialog(order)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-white bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50" title="Upload Invoice">
-                            {updatingId === order.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Upload Invoice"}
-                          </button>
-                        )}
-                        {order.status === "DRAFT" && (
-                          <Link href={`/inventory/orders/create?draft=${order.id}`} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50" title="Edit Draft">
-                            <Pencil className="h-3 w-3" />
-                          </Link>
-                        )}
-                        {["SENT", "APPROVED", "AWAITING_DELIVERY"].includes(order.status) && order.invoice?.status !== "PAID" && (
-                          <button onClick={() => openEditDialog(order)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-50" title="Edit Order">
-                            <Pencil className="h-3 w-3" />
-                          </button>
-                        )}
-                        {/* Cancel hidden once a committed invoice exists (INITIATED/DEPOSIT_PAID/PAID).
-                            API also enforces this — frontend hide is just for UX. */}
-                        {["SENT", "APPROVED", "AWAITING_DELIVERY"].includes(order.status)
-                          && !["INITIATED", "DEPOSIT_PAID", "PAID"].includes(order.invoice?.status ?? "") && (
-                          <button onClick={() => { if (confirm("Cancel this order?")) updateStatus(order.id, "CANCELLED"); }} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Cancel Order">
-                            Cancel
-                          </button>
-                        )}
-                        {["DRAFT", "CANCELLED"].includes(order.status) && (
-                          <button onClick={() => deleteOrder(order.id)} disabled={updatingId === order.id} className="rounded-md px-2 py-1 text-[10px] font-medium text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50" title="Delete">
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  {expandedId === order.id && (
-                    <tr>
-                      <td colSpan={9} className="bg-gray-50 px-8 py-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-semibold text-gray-500 uppercase">Order Items</p>
-                          <div className="flex gap-2 text-xs text-gray-400">
-                            <span>Created by: {order.createdBy}</span>
-                            {order.approvedBy && <span>&middot; Approved by: {order.approvedBy}</span>}
-                            {order.sentAt && <span>&middot; Sent: {new Date(order.sentAt).toLocaleDateString("en-MY")}</span>}
-                          </div>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <span className="font-mono text-sm font-semibold text-text">{formatRM(order.totalAmount)}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] ${config.color}`}>{config.label}</span>
+                </div>
+              </button>
+              {open && (
+                <div className="border-t border-line bg-sunken/40 px-4 py-3">
+                  <div className="divide-y divide-line rounded-ctl border border-line bg-surface">
+                    {order.items.map((item) => (
+                      <div key={item.id} className="flex items-center gap-3 px-3 py-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm text-text">{item.product}</p>
+                          <p className="text-[12px] text-text-3">{item.quantity} × {item.uom || item.package} at {formatRM(item.unitPrice)}</p>
                         </div>
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="text-gray-400">
-                              <th className="pb-1 text-left font-medium">Product</th>
-                              <th className="pb-1 text-left font-medium">SKU</th>
-                              <th className="pb-1 text-left font-medium">Package</th>
-                              <th className="pb-1 text-right font-medium">Qty</th>
-                              <th className="pb-1 text-right font-medium">Unit Price</th>
-                              <th className="pb-1 text-right font-medium">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {order.items.map((item) => (
-                              <tr key={item.id} className="border-t border-gray-200/50">
-                                <td className="py-1.5 text-gray-700">{item.product}</td>
-                                <td className="py-1.5"><code className="text-gray-500">{item.sku}</code></td>
-                                <td className="py-1.5 text-gray-500">{item.uom || item.package}</td>
-                                <td className="py-1.5 text-right text-gray-700">{item.quantity}</td>
-                                <td className="py-1.5 text-right text-gray-600">RM {item.unitPrice.toFixed(2)}</td>
-                                <td className="py-1.5 text-right text-gray-900 font-medium">RM {item.totalPrice.toFixed(2)}</td>
-                              </tr>
-                            ))}
-                            <tr className="border-t border-gray-300">
-                              <td colSpan={5} className="py-1.5 font-semibold text-gray-700">Total</td>
-                              <td className="py-1.5 text-right font-semibold text-gray-900">RM {order.totalAmount.toFixed(2)}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                        {order.notes && <p className="mt-2 text-xs text-gray-500">Notes: {order.notes}</p>}
-                        {order.receivingCount > 0 && <p className="mt-2 text-xs text-green-600">{order.receivingCount} receiving record(s) linked</p>}
-                        {order.photos && order.photos.length > 0 && (
-                          <div className="mt-2">
-                            <p className="text-xs text-gray-500 mb-1">Attached documents ({order.photos.length})</p>
-                            <div className="flex gap-2 flex-wrap">
-                              {order.photos.map((url, i) => {
-                                const isRaw = url.includes("/raw/upload/") || url.endsWith(".pdf");
-                                const displayUrl = isRaw ? url : url.replace("/raw/upload/", "/image/upload/");
-                                return (
-                                <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="relative h-16 w-16 rounded-md overflow-hidden border border-gray-200 hover:border-blue-400 transition-colors">
-                                  {isRaw ? (
-                                    <div className="h-full w-full flex items-center justify-center bg-gray-50">
-                                      <FileText className="h-6 w-6 text-red-400" />
-                                    </div>
-                                  ) : (
-                                    <Image src={displayUrl} alt={`Doc ${i + 1}`} fill className="object-cover" sizes="64px" />
-                                  )}
-                                </a>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                        {order.invoice && (
-                          <div className="mt-2 flex items-center gap-3 rounded-md bg-white px-3 py-2 border border-gray-200">
-                            <Receipt className="h-4 w-4 text-gray-400" />
-                            <div className="flex-1 flex items-center gap-4 text-xs">
-                              <span className="font-medium text-gray-700">{order.invoice.invoiceNumber}</span>
-                              <span className="text-gray-500">RM {order.invoice.amount.toFixed(2)}</span>
-                              <Badge className={`text-[9px] ${order.invoice.status === "PAID" ? "bg-green-500" : order.invoice.status === "OVERDUE" ? "bg-blue-500" : "bg-terracotta"}`}>{{ PENDING: "Payment", OVERDUE: "Initiated", PAID: "Paid" }[order.invoice.status] || order.invoice.status}</Badge>
-                              {order.invoice.dueDate && <span className="text-gray-400">Due: {order.invoice.dueDate}</span>}
-                              {order.invoice.photoCount > 0 && <span className="text-gray-400">{order.invoice.photoCount} photo(s)</span>}
-                            </div>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
+                        <span className="shrink-0 font-mono text-sm text-text">{formatRM(item.totalPrice)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[12px] text-text-3">
+                    Created by {order.createdBy}{order.approvedBy ? ` · approved by ${order.approvedBy}` : ""}{order.sentAt ? ` · sent ${new Date(order.sentAt).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}` : ""}
+                    {order.receivingCount > 0 ? ` · ${order.receivingCount} ${order.receivingCount === 1 ? "receiving" : "receivings"} linked` : ""}
+                  </p>
+                  {order.notes && <p className="mt-1 text-[13px] text-text-2">Note: {order.notes}</p>}
+                  {order.invoice && (
+                    <p className="mt-1 flex items-center gap-1.5 text-[13px] text-text-2">
+                      <Receipt className="h-3.5 w-3.5 text-text-3" /> Invoice {order.invoice.invoiceNumber} · {formatRM(order.invoice.amount)} · {{ PENDING: "Payment", OVERDUE: "Initiated", PAID: "Paid" }[order.invoice.status] || order.invoice.status}{order.invoice.dueDate ? ` · due ${order.invoice.dueDate}` : ""}
+                    </p>
                   )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                  {order.photos && order.photos.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {order.photos.map((url, i) => {
+                        const isRaw = url.includes("/raw/upload/") || url.endsWith(".pdf");
+                        return (
+                          <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="relative h-16 w-16 overflow-hidden rounded-ctl border border-line hover:border-line-2">
+                            {isRaw ? <div className="flex h-full w-full items-center justify-center bg-sunken"><FileText className="h-6 w-6 text-text-3" /></div>
+                              : <Image src={url} alt={`Document ${i + 1}`} fill className="object-cover" sizes="64px" />}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Link href={`/inventory/orders/${order.id}`} className={`${btn} border border-line bg-surface text-text hover:bg-sunken`}>Open order</Link>
+                    {order.supplierPhone && ["APPROVED", "SENT", "AWAITING_DELIVERY"].includes(order.status) && (
+                      <a href={buildWhatsAppUrl(order)} target="_blank" className={`${btn} border border-line bg-surface text-text hover:bg-sunken`}><MessageCircle className="h-4 w-4" />WhatsApp supplier</a>
+                    )}
+                    {actions.map((a) => (
+                      <button key={a.status} onClick={() => updateStatus(order.id, a.status)} disabled={updatingId === order.id} className={`${btn} ${a.color}`}>
+                        {updatingId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : a.label}
+                      </button>
+                    ))}
+                    {/* Upload invoice: every in-flight PO until the invoice is paid or fully attached (dueDate set). */}
+                    {["AWAITING_DELIVERY", "PARTIALLY_RECEIVED", "COMPLETED", "SENT", "APPROVED"].includes(order.status) && order.invoice?.status !== "PAID" && !order.invoice?.dueDate && (
+                      <button onClick={() => openEditDialog(order)} disabled={updatingId === order.id} className={`${btn} bg-ink text-on-ink hover:bg-ink-hover`}>Upload invoice</button>
+                    )}
+                    {order.status === "DRAFT" && (
+                      <Link href={`/inventory/orders/create?draft=${order.id}`} className={`${btn} border border-line bg-surface text-text hover:bg-sunken`}><Pencil className="h-4 w-4" />Edit draft</Link>
+                    )}
+                    {["SENT", "APPROVED", "AWAITING_DELIVERY"].includes(order.status) && order.invoice?.status !== "PAID" && (
+                      <button onClick={() => openEditDialog(order)} disabled={updatingId === order.id} className={`${btn} border border-line bg-surface text-text hover:bg-sunken`}><Pencil className="h-4 w-4" />Edit order</button>
+                    )}
+                    {/* Cancel hidden once a committed invoice exists; the API enforces it too. */}
+                    {["SENT", "APPROVED", "AWAITING_DELIVERY"].includes(order.status) && !["INITIATED", "DEPOSIT_PAID", "PAID"].includes(order.invoice?.status ?? "") && (
+                      <button onClick={() => { if (confirm("Cancel this order?")) updateStatus(order.id, "CANCELLED"); }} disabled={updatingId === order.id} className={`${btn} border border-line bg-surface text-danger-text hover:bg-danger-soft`}>Cancel order</button>
+                    )}
+                    {["DRAFT", "CANCELLED"].includes(order.status) && (
+                      <button onClick={() => deleteOrder(order.id)} disabled={updatingId === order.id} className={`${btn} border border-line bg-surface text-danger-text hover:bg-danger-soft`}><Trash2 className="h-4 w-4" />Delete</button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Edit Order Dialog — shared component (also used in supplier-chats) */}

@@ -102,13 +102,13 @@ export default function StaffAllowancesPage() {
   const defaults = data?.defaults;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <BackToHR />
       <AllowanceTabs />
 
       <div className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold">Flat Allowances (Per Staff)</h2>
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Flat Allowances (Per Staff)</h2>
           <p className="text-sm text-muted-foreground">
             A value here pays <strong>flat</strong> — the full amount every month, with no KPI
             scoring and no lateness/absence or review deductions. Meant for roles the levers
@@ -162,7 +162,7 @@ export default function StaffAllowancesPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                        <span className="rounded-full bg-sunken px-2 py-0.5 text-[10px] font-medium text-text-2">
                           {s.role}
                         </span>{" "}
                         {s.outletName || "HQ"}
@@ -200,7 +200,7 @@ export default function StaffAllowancesPage() {
                           <button
                             onClick={() => saveRow(s.userId)}
                             disabled={saving}
-                            className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-xs font-semibold text-white hover:bg-terracotta/90 disabled:opacity-50"
+                            className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-semibold text-on-ink hover:bg-ink/90 disabled:opacity-50"
                           >
                             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                             Save

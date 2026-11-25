@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Animated, View, type ViewStyle } from "react-native";
+import { useCelsius } from "../../lib/celsius-ui";
 
 type Props = {
   /** Width: number (px) or string ("100%", "50%") */
@@ -12,7 +13,7 @@ type Props = {
   className?: string;
 };
 
-// Branded skeleton loader, soft pulsing terracotta-tinted block.
+// Skeleton loader: a soft pulsing sunken block at the size of what loads.
 // Use in place of <ActivityIndicator /> on list-shaped screens; the
 // shape-of-the-content telegraphs what's loading instead of a blank
 // spinner.
@@ -22,6 +23,7 @@ export function Skeleton({
   radius = 8,
   className = "",
 }: Props) {
+  const C = useCelsius().color;
   const pulse = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function Skeleton({
     width: width as ViewStyle["width"],
     height,
     borderRadius: radius,
-    backgroundColor: "#FBE9E4",
+    backgroundColor: C.sunken,
     opacity: pulse as unknown as number,
   };
 
@@ -63,7 +65,7 @@ export function Skeleton({
 // the transition from loading → loaded feels seamless.
 export function SkeletonRow() {
   return (
-    <View className="flex-row items-center gap-3 rounded-xl border border-border bg-surface px-3 py-3">
+    <View className="flex-row items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
       <Skeleton width={40} height={40} radius={8} />
       <View className="flex-1 gap-2">
         <Skeleton width="60%" height={12} />

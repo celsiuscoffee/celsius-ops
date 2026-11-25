@@ -141,44 +141,44 @@ export default function RulesPage() {
   if (!rules) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-text-3" />
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Approval Rules</h2>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Approval Rules</h2>
+          <p className="mt-0.5 text-sm text-text-2">
             Configure approval workflows for orders, adjustments, and transfers
           </p>
         </div>
-        <Button onClick={openCreate} className="bg-terracotta hover:bg-terracotta-dark">
+        <Button onClick={openCreate} className="bg-ink hover:bg-ink-hover">
           <Plus className="mr-1.5 h-4 w-4" />
           Create New Rule
         </Button>
       </div>
 
       {rules.length === 0 ? (
-        <div className="mt-12 text-center text-sm text-gray-400">
-          <ShieldCheck className="mx-auto h-8 w-8 text-gray-300" />
+        <div className="mt-12 text-center text-sm text-text-3">
+          <ShieldCheck className="mx-auto h-8 w-8 text-text-3" />
           <p className="mt-2">No approval rules configured yet</p>
           <p className="mt-0.5 text-xs">Create a rule to require approvals for orders, adjustments, or transfers</p>
         </div>
       ) : (
         <div className="mt-4 space-y-3">
           {rules.map((rule) => (
-            <div key={rule.id} className="rounded-xl border border-gray-200 bg-white p-4">
+            <div key={rule.id} className="rounded-xl border border-line bg-surface p-4">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-terracotta/10 text-terracotta">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-soft text-brand-text">
                     <ShieldCheck className="h-5 w-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-gray-900">{rule.name}</h3>
+                      <h3 className="font-semibold text-text">{rule.name}</h3>
                       <Badge variant="outline" className="text-[10px]">
                         {ruleTypeLabel(rule.ruleType)}
                       </Badge>
@@ -188,20 +188,20 @@ export default function RulesPage() {
                         </Badge>
                       </button>
                     </div>
-                    <p className="mt-0.5 text-xs text-gray-500">Condition: {rule.condition}</p>
+                    <p className="mt-0.5 text-xs text-text-2">Condition: {rule.condition}</p>
                   </div>
                 </div>
                 <div className="flex gap-1">
                   <button
                     onClick={() => openEdit(rule)}
-                    className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100"
+                    className="rounded-md p-1.5 text-text-3 hover:bg-sunken"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={() => handleDelete(rule.id)}
                     disabled={deleting === rule.id}
-                    className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                    className="rounded-md p-1.5 text-text-3 hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
                   >
                     {deleting === rule.id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -213,7 +213,7 @@ export default function RulesPage() {
               </div>
               <div className="mt-3 flex flex-wrap gap-4 text-xs">
                 <div>
-                  <span className="text-gray-400">Outlets:</span>
+                  <span className="text-text-3">Outlets:</span>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {rule.outlets.length === 0 ? (
                       <Badge variant="outline" className="text-[10px]">All outlets</Badge>
@@ -227,13 +227,13 @@ export default function RulesPage() {
                   </div>
                 </div>
                 <div>
-                  <span className="text-gray-400">Approvers:</span>
+                  <span className="text-text-3">Approvers:</span>
                   <div className="mt-1 flex gap-1">
                     {rule.approvers.length === 0 ? (
-                      <span className="text-gray-300">None set</span>
+                      <span className="text-text-3">None set</span>
                     ) : (
                       rule.approvers.map((a) => (
-                        <Badge key={a.id} className="bg-terracotta/10 text-[10px] text-terracotta-dark">
+                        <Badge key={a.id} className="bg-brand-soft text-[10px] text-brand-text">
                           {a.name}
                         </Badge>
                       ))
@@ -264,7 +264,7 @@ export default function RulesPage() {
             <div>
               <label className="text-sm font-medium">Rule Type</label>
               <select
-                className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm"
                 value={formType}
                 onChange={(e) => setFormType(e.target.value)}
               >
@@ -291,7 +291,7 @@ export default function RulesPage() {
                 value={formThreshold}
                 onChange={(e) => setFormThreshold(e.target.value)}
               />
-              <p className="mt-0.5 text-[10px] text-gray-400">Numeric value for the condition (optional)</p>
+              <p className="mt-0.5 text-[10px] text-text-3">Numeric value for the condition (optional)</p>
             </div>
             <div>
               <label className="text-sm font-medium">Outlets</label>
@@ -303,15 +303,15 @@ export default function RulesPage() {
                     onClick={() => setFormOutlets(toggleArrayItem(formOutlets, b.id))}
                     className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                       formOutlets.includes(b.id)
-                        ? "border-terracotta bg-terracotta/10 text-terracotta-dark"
-                        : "border-gray-200 text-gray-500 hover:border-gray-300"
+                        ? "border-text bg-raised font-semibold text-text"
+                        : "border-line text-text-2 hover:border-line-2"
                     }`}
                   >
                     {b.name.replace("Celsius Coffee ", "")}
                   </button>
                 ))}
               </div>
-              <p className="mt-0.5 text-[10px] text-gray-400">Leave empty to apply to all outlets</p>
+              <p className="mt-0.5 text-[10px] text-text-3">Leave empty to apply to all outlets</p>
             </div>
             <div>
               <label className="text-sm font-medium">Approvers</label>
@@ -323,8 +323,8 @@ export default function RulesPage() {
                     onClick={() => setFormApprovers(toggleArrayItem(formApprovers, m.id))}
                     className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                       formApprovers.includes(m.id)
-                        ? "border-terracotta bg-terracotta/10 text-terracotta-dark"
-                        : "border-gray-200 text-gray-500 hover:border-gray-300"
+                        ? "border-text bg-raised font-semibold text-text"
+                        : "border-line text-text-2 hover:border-line-2"
                     }`}
                   >
                     {m.name}
@@ -335,7 +335,7 @@ export default function RulesPage() {
             <Button
               onClick={handleSave}
               disabled={saving || !formName.trim() || !formCondition.trim()}
-              className="w-full bg-terracotta hover:bg-terracotta-dark disabled:opacity-50"
+              className="w-full bg-ink hover:bg-ink-hover disabled:opacity-50"
             >
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {editingRule ? "Save Changes" : "Create Rule"}

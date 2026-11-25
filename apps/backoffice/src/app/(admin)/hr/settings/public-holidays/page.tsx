@@ -90,13 +90,13 @@ export default function PublicHolidaysPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
       <SettingsNav />
 
       <div className="flex items-center justify-between">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <CalendarDays className="h-6 w-6 text-terracotta" />
+        <h1 className="flex items-center gap-2 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">
+          <CalendarDays className="h-6 w-6 text-brand-text" />
           Public Holidays
         </h1>
         <div className="flex items-center gap-2">
@@ -112,7 +112,7 @@ export default function PublicHolidaysPage() {
           {!showAdd && (
             <button
               onClick={() => { setDate(`${year}-01-01`); setShowAdd(true); }}
-              className="flex items-center gap-1 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:bg-terracotta-dark"
+              className="flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ink-hover"
             >
               <Plus className="h-4 w-4" /> Add
             </button>
@@ -147,11 +147,11 @@ export default function PublicHolidaysPage() {
           </div>
           {err && <p className="mt-3 text-xs text-red-600">{err}</p>}
           <div className="mt-4 flex justify-end gap-2">
-            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50">Cancel</button>
+            <button onClick={reset} className="rounded-lg border px-3 py-1.5 text-sm hover:bg-sunken">Cancel</button>
             <button
               onClick={handleAdd}
               disabled={saving}
-              className="flex items-center gap-2 rounded-lg bg-terracotta px-3 py-1.5 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save
@@ -175,7 +175,7 @@ export default function PublicHolidaysPage() {
               <ul className="divide-y">
                 {list.map((h) => (
                   <li key={h.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                    <span className="font-mono text-xs text-gray-500 w-24">{h.date}</span>
+                    <span className="font-mono text-xs text-text-2 w-24">{h.date}</span>
                     <span className="flex-1 font-medium">{h.name}</span>
                     {h.is_national ? (
                       <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">Nationwide</span>

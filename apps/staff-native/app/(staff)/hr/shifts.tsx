@@ -14,6 +14,7 @@ import { PageHeader } from "../../../components/PageHeader";
 import { fetchShifts, type Shift } from "../../../lib/hr/api";
 import { buildShiftIcsUrl, formatDuration } from "../../../lib/hr/calendar";
 import { calendarDayParts, isRestDayRow, mytToday, wallTime } from "../../../lib/hr/myt";
+import { hm12, useCelsius } from "../../../lib/celsius-ui";
 
 export default function ShiftsScreen() {
   const { data, isLoading, error } = useQuery({
@@ -26,23 +27,23 @@ export default function ShiftsScreen() {
 
   return (
     <Screen edges={["top", "left", "right"]}>
-      <PageHeader title="My Shifts" back />
+      <PageHeader title="My shifts" back />
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator />
         </View>
       ) : error ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-sm text-danger text-center">
+          <Text className="text-sm text-danger-text text-center">
             {(error as Error).message}
           </Text>
         </View>
       ) : shifts.length === 0 ? (
         <View className="flex-1 items-center justify-center px-6">
-          <Text className="text-base font-display-medium text-espresso">
+          <Text className="text-base font-display-medium text-text">
             No upcoming shifts
           </Text>
-          <Text className="mt-1 text-sm text-muted-fg text-center">
+          <Text className="mt-1 text-sm text-text-2 text-center">
             Once your manager publishes the next schedule, it'll show up here.
           </Text>
         </View>
@@ -72,6 +73,7 @@ function relativeDay(dateISO: string): string | null {
 }
 
 function ShiftCard({ shift }: { shift: Shift }) {
+  const C = useCelsius().color;
   // Never `new Date("YYYY-MM-DD")`: that is UTC midnight, the previous evening
   // on any phone west of Greenwich, so the card showed the wrong day.
   const { dayName, dayNum, monthName } = calendarDayParts(shift.shift_date);
@@ -89,50 +91,50 @@ function ShiftCard({ shift }: { shift: Shift }) {
   };
 
   return (
-    <View className="rounded-3xl border border-border bg-surface p-4">
+    <View className="rounded-2xl border border-line bg-surface p-4">
       <View className="flex-row items-center">
         {/* Date chip */}
-        <View className="w-16 items-center justify-center rounded-2xl bg-primary-50 py-2">
-          <Text className="text-xs font-body-semi text-primary uppercase">
+        <View className="w-16 items-center justify-center rounded-2xl bg-sunken py-2">
+          <Text className="text-xs font-body-semi text-text">
             {dayName}
           </Text>
-          <Text className="text-xl font-display-medium text-espresso">
+          <Text className="text-xl font-display-medium text-text">
             {dayNum}
           </Text>
-          <Text className="text-[10px] font-body text-muted uppercase">
+          <Text className="text-xs font-body text-text-3">
             {monthName}
           </Text>
         </View>
 
         {/* Time + role */}
         <View className="ml-4 flex-1 justify-center">
-          <Text className="text-base font-display-medium text-espresso">
+          <Text className="text-base font-display-medium text-text">
             {fmtTime(shift.start_time)} – {fmtTime(shift.end_time)}
           </Text>
           <View className="mt-1.5 flex-row items-center gap-2">
             <View className="flex-row items-center gap-1">
-              <Clock color="#6B6B6B" size={13} />
-              <Text className="text-xs font-body-medium text-muted-fg">
+              <Clock color={C["text-2"]} size={13} />
+              <Text className="text-xs font-body-medium text-text-2">
                 {duration}
               </Text>
             </View>
             {shift.position ? (
-              <View className="rounded-full bg-primary-100 px-2 py-0.5">
-                <Text className="text-[11px] font-body-semi text-primary-900">
+              <View className="rounded-full bg-sunken px-2 py-0.5">
+                <Text className="text-xs font-body-semi text-text-2">
                   {shift.position}
                 </Text>
               </View>
             ) : null}
           </View>
           {shift.outlet_name ? (
-            <Text className="mt-1 text-xs font-body-medium text-muted-fg">{shift.outlet_name}</Text>
+            <Text className="mt-1 text-xs font-body-medium text-text-2">{shift.outlet_name}</Text>
           ) : null}
         </View>
 
         {/* Relative-day badge */}
         {rel ? (
-          <View className="self-start rounded-full bg-espresso px-2.5 py-1">
-            <Text className="text-[11px] font-body-semi text-background">
+          <View className="self-start rounded-full bg-ink px-2.5 py-1">
+            <Text className="text-xs font-body-semi text-on-ink">
               {rel}
             </Text>
           </View>
@@ -145,10 +147,10 @@ function ShiftCard({ shift }: { shift: Shift }) {
         accessibilityRole="button"
         accessibilityLabel="Add this shift to your calendar"
         hitSlop={6}
-        className="mt-3 flex-row items-center justify-center gap-2 rounded-2xl border border-primary-100 bg-primary-50 py-2.5 active:opacity-70"
+        className="mt-3 flex-row items-center justify-center gap-2 rounded-2xl border border-line bg-sunken py-2.5 active:opacity-70"
       >
-        <CalendarPlus color="#A2492C" size={16} />
-        <Text className="text-sm font-body-semi text-primary">
+        <CalendarPlus color={C["text-2"]} size={16} />
+        <Text className="text-sm font-body-semi text-text">
           Add to calendar
         </Text>
       </Pressable>
@@ -158,7 +160,7 @@ function ShiftCard({ shift }: { shift: Shift }) {
 
 // Roster times are Malaysia wall-clock strings already; show them as such.
 function fmtTime(t: string): string {
-  return wallTime(t);
+  return hm12(wallTime(t));
 }
 
 // Route-level boundary: a throw in this screen degrades to an inline retry

@@ -93,7 +93,7 @@ export default function CoveragePage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <HrPageHeader
         title="Outlet Coverage Rules"
         description="Minimum staffing needs per outlet per day/slot. Scheduling flags slots that don't hit the minimum."
@@ -116,24 +116,24 @@ export default function CoveragePage() {
               {DAYS.map((d, i) => {
                 const slots = (byDay.get(i) ?? []).sort((a, b) => a.slot_start.localeCompare(b.slot_start));
                 return (
-                  <div key={i} className="rounded-md border border-gray-200 bg-gray-50 p-2">
+                  <div key={i} className="rounded-md border border-line bg-sunken p-2">
                     <p className="mb-1.5 font-semibold">{d}</p>
                     {slots.length === 0 ? (
-                      <p className="text-[10px] text-gray-400 italic">No rules</p>
+                      <p className="text-[10px] text-text-3 italic">No rules</p>
                     ) : (
                       <div className="space-y-1">
                         {slots.map((s) => (
-                          <div key={s.id} className={`rounded px-1.5 py-1 text-[11px] ${s.is_peak ? "bg-amber-100" : "bg-white"}`}>
+                          <div key={s.id} className={`rounded px-1.5 py-1 text-[11px] ${s.is_peak ? "bg-amber-100" : "bg-surface"}`}>
                             <div className="flex items-center justify-between">
                               <span className="font-mono">{s.slot_start.slice(0, 5)}–{s.slot_end.slice(0, 5)}</span>
                               <div className="flex items-center gap-0.5">
                                 {s.is_peak && <Flame className="h-2.5 w-2.5 text-amber-500" />}
-                                <button onClick={() => remove(s.id)} className="rounded p-0.5 text-gray-400 hover:bg-red-50 hover:text-red-600">
+                                <button onClick={() => remove(s.id)} className="rounded p-0.5 text-text-3 hover:bg-red-50 hover:text-red-600">
                                   <Trash2 className="h-2.5 w-2.5" />
                                 </button>
                               </div>
                             </div>
-                            <p className="text-gray-500">
+                            <p className="text-text-2">
                               ≥ {s.min_staff} staff{s.slot_label ? ` · ${s.slot_label}` : ""}
                             </p>
                           </div>
@@ -175,7 +175,7 @@ export default function CoveragePage() {
             </div>
             <div className="mt-3 flex items-center justify-end gap-2">
               {err && <span className="text-xs text-red-600">{err}</span>}
-              <button onClick={add} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50">
+              <button onClick={add} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Add Rule
               </button>

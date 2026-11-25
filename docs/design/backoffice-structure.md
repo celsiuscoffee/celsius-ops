@@ -1,0 +1,565 @@
+# Back-office structure: applying the "office structure" template to Celsius
+
+Status: **2026-11-11. Step 1 (the menu shell) is built** (see section 2a). The rest is a proposal.
+Source: the Gosamē "Office structure: a template for the Celsius back office" note,
+checked here against what `apps/backoffice` really contains today
+(`src/lib/nav.tsx`, 175 `page.tsx` routes).
+
+---
+
+## 1. What the audit found
+
+| Measure | Today | Gosamē before its fix |
+|---|---|---|
+| Routes (`page.tsx`) | **175** (13 of them detail pages such as `/hr/employees/[id]`) | ~97 |
+| Sidebar links (visible) | **86** across 9 sections (103 registered, 17 hidden) | 72 |
+| Pages missing from the nav registry | **~60**, so ⌘K can't find them. **26** of these aren't under any registered URL either, so the client-side route gate in `(admin)/layout.tsx` doesn't check them (all `/finance/*` extras, `/pos/z-report`, `/pos/tax-report`, `/pos/maybank-qr`, `/pickup/customers`, `/pickup/analytics`, `/ops/audit-*`, `/ops/compliance`, `/ops/schedules`, `/ops/staff-skills`, `/inventory/ai-decisions`, `/inventory/agent-qa`, `/inventory/categories`, `/loyalty/insights`, `/loyalty/push-reminders`) | ~25 |
+| Page-view data | **None.** `ActivityLog` records actions (create, approve), not visits | Had a usage page |
+
+What Celsius already does well, and should keep:
+
+- **One nav registry** (`nav.tsx`) that drives the sidebar, ⌘K and the route gate. Changing
+  labels and grouping never breaks URLs. That makes Step 1 below cheap.
+- **`/dashboard` is already most of "Today":** sales against target by outlet, a dine-in /
+  takeaway / delivery split, serve time, COGS %, wastage and people cost.
+- **HR already uses tabs inside the module** (`components/hr/module-tabs.tsx`), with one
+  sidebar entry for each module. That is the template's tab rule; the other sections don't
+  follow it yet.
+- **A Settings section, with the hub tile page hidden.**
+
+### Same problems as Gosamē, with Celsius page names
+
+| Problem | Where it shows up |
+|---|---|
+| **One job spread over many pages** | **Buying:** 10 pages (Purchase Orders chat, PO List, Create PO, Receivings, Invoices, Reconciliation, Payment Requests, payment batches, AI Decisions, Agent QA). **Stock:** 9 pages plus 7 report sub-pages (Stock Count, Wastage, Par Levels, Perishables, Transfers, Ingredients, Groups & Storage, Categories, Reports). **Sales:** 8 pages from 2 sources (`/dashboard`, `/sales/dashboard`, `/sales/compare`, `/pos/reports`, `/pos/z-report`, `/pos/tax-report`, `/pickup/analytics`, `/pickup`) |
+| **One clock-in checked in several places** | `/hr/attendance`, `/hr/roster-attendance`, `/hr/pt-hours`, `/hr/overtime`, and the shift report in `/pos/z-report` |
+| **Several scoring systems** | `/hr/performance` (Allowance + Scorecard), `/ops/performance` (+ `/ops/performance/staff/[id]`), `/pos/cashier-performance`, `/loyalty/dashboard` ("Area Scorecard"), `/reviews/scoreboard` ("Rank Scoreboard"), `/hr/review-penalties`, `/ops/staff-skills` |
+| **Two pages with the same name** | "Reconciliation" (`/inventory/reconciliation` = invoice against PO, `/finance/recon` = bank against books). "Campaigns" (`/loyalty/loops` and `/ads/campaigns`). "Reports" in 4 sections. "Dashboard" in 5 |
+| **Two customer pages** | `/loyalty/members` (in the nav) and `/pickup/customers` (not in the nav) |
+| **Decisions scattered** | Leave, overtime and shift swaps (HR) · Payment Requests (Procurement) · invoice mismatches · finance exceptions (`/finance`, hidden) · agent proposals (`agent_actions`, shown under Settings → AI Agents) · Feedback Management (Marketing) · audit follow-ups (Ops). **Nothing shows a manager everything waiting on them in one place** |
+| **Settings scattered** | 8 HR settings pages under `/hr/settings/*` (only one is in the nav), loyalty set-up mixed into Settings, Grab integration on its own page |
+
+---
+
+## 2. The menu for Celsius
+
+The template's menu, changed in three places for Celsius:
+
+- **No CK.** Celsius has no central kitchen (owner, 17 Nov 2026). Prep recipes (raw →
+  prepped) are made at the outlets and live under Menu › Recipes.
+- **Colony becomes "Agents".** Celsius runs AI agents (procurement, finance, ops pulse,
+  verifier). It isn't settings, so it moves out of Settings → System.
+- **Growth.** Celsius spends real effort on loyalty loops, SMS/push, Google and Grab ads,
+  and local rank. Gosamē's "Customers" section can't hold all of that, so the work splits
+  in two: **Customers** (who they are, reviews) and **Growth** (campaigns, ads, rank).
+
+```
+Today        How are we doing, and what needs me?          /dashboard
+Inbox        What is waiting for my decision?               (new)
+Agents       What are the agents doing, and why?            /agents, /inventory/ai-decisions, /inventory/agent-qa
+
+Sell
+  Sales      How much did we sell, and through which channel?
+  Service    How fast did we hand over, and what ran out?
+  Customers  Who are they, are they happy, do they come back?
+  Growth     What brings them in and back, and does it pay?
+
+Make and supply
+  Menu       What do we sell, how is it made, what does it earn?
+  CK         What do we prep, and did it reach the outlets?
+  Stock      What do we hold, where, and where does it leak?
+  Orders     Right items, right price, paid correctly?
+
+Run the business
+  Team       Right people, on time, paid right, performing?
+  Money      Where is our cash, and are the books right?
+  Standards  Is every outlet running to standard?
+
+⚙ Settings
+```
+
+That makes **13 sidebar entries instead of ~85 links**. Every page below becomes a tab in
+its section.
+
+---
+
+## 2a. What was built first (Step 1), and the Celsius logic behind it
+
+The first build follows how Celsius runs, not the Gosamē template word for word:
+
+- **The back office is for HQ.** `lib/staff-access-presets.ts` gives crew, leads and outlet
+  managers the floor work (counts, wastage, receiving, transfers, checklists, claims) in the
+  staff apps. HOD, accountant, executive and director roles live in the back office. So the
+  back office is for reviewing and deciding, not for entering data.
+- **The team's own words stay:** HR, Procurement, Finance, Ops, "Purchase Orders" /
+  "PO List". "Orders" already means customer orders here, so the template's "Orders"
+  section stays **Procurement**.
+- **No CK section.** `OutletType.CENTRAL_KITCHEN` exists, but no code acts on it. Prep
+  Recipes sits under Menu → Recipes until the CK really runs transfers to outlets.
+- **Rewards is split by job:** Customers (members, reviews, reward history) and Marketing
+  (campaigns, reward channels, Google and Grab ads, local rank).
+
+What changed (`lib/nav.tsx`, `components/section-tabs.tsx`, `(admin)/layout.tsx`):
+
+| Before | After |
+|---|---|
+| 86 sidebar links in 9 expandable sections | **10 sidebar entries**: Sales · Customers · Marketing │ Menu · Stock · Procurement │ HR · Finance · Ops │ Agents |
+| Settings was a sidebar section | **⚙ Settings** in the sidebar footer |
+| Pages listed in the sidebar | **Tabs across the top of the page** (6 at most), with a lighter second row for related pages |
+| Two pages called "Reconciliation" | **Invoice Match** (Procurement) and **Bank Match** (Finance) |
+| Two pages called "Campaigns" | Campaigns (Marketing, the loops) and **Google Campaigns** |
+| Area Scorecard under Rewards | Under **Ops → Performance** (it scores outlets) |
+| AI Agents under Settings → System | Its own **Agents** entry |
+
+All 103 registered pages keep the same URL, permission (`moduleKey`) and hidden setting;
+this was checked mechanically before and after. HR keeps its own module tabs.
+`nav-structure.test.ts` keeps every section at 6 tabs or fewer and stops a page from being
+listed twice.
+
+**Follow-up:** the Staff & Access editor (`lib/modules.ts`, the grant cards) still groups
+permissions under the old section names. It works, but it should be regrouped to match.
+
+---
+
+## 2b. Approved plan and progress (owner review, 11–12 Nov 2026)
+
+The owner reviewed 45 page mockups (Gosamē UI rules, Celsius brand: light rail,
+espresso main buttons, terracotta only for the logo, active dot and one highlight;
+Peachi wordmark, Space Grotesk, Geist Mono) and approved this order:
+
+| Step | What | Status |
+|---|---|---|
+| 1 | Remove the pure duplicates (list A) and fix dead links (list D) | **Done 12 Nov** |
+| 2 | Celsius UI foundation: tokens, fonts, rail (open section's pages nested), header; phone layout checked on every change | **Done 12 Nov** |
+| 3 | Today + Inbox (one queue of decisions) | **Done 12 Nov** (v1 read-only) |
+| 4 | HR › Roster (replaces Schedules, Attendance, Roster attendance, Overtime, Leave, Shift swaps) + staff-app shift card with Clock in | **Done 16 Nov** (A. Roster; B. staff-app shift on the Today clock card) |
+| 4½ | Declutter: menu regrouped by first principles (87 links → 36 pages), page-visit tracking (§2c) | **Done 17 Nov** |
+| 5 | Merges (list B): Perishables → Items, Pickup landing/analytics, SOP compliance, Monthly cashflow, one SMS tool | **Done 17 Nov** (§2d) |
+| 6 | Remaining sections moved to the new UI | **Part 1 done 17 Nov** (§2e: every page on the Celsius UI palette) |
+
+**List A, removed 12 Nov** (each old URL redirects; no feature lived only there):
+
+| Removed | Redirects to | Why |
+|---|---|---|
+| `/inventory/categories` (+ `api/inventory/categories`) | `/inventory/groups` | Copy of Groups & Storage (same `itemGroup` table) |
+| `/ops/dashboard` | `/ops/performance` | Same `/api/ops/performance` data |
+| `/settings` (tile hub) | `/settings/outlets` | Repeated the Settings menu; step 2 brings a settings index back here |
+| `/pos` | `/pos/reports` | Link cards only |
+| `/inventory/ai-decisions` | `/inventory/orders/create` | Same recommendations shown on Create PO, Transfers, Wastage; the API stays |
+| `/loyalty/insights` (+ `api/loyalty/admin/ai-insights`) | `/loyalty/members` | No links in; its actions pointed at `/admin/*` (404) |
+
+**List D, fixed 12 Nov:** the purchasing-manager Telegram digest linked
+`/finance/inbox` (no such page): now `/finance`, where its findings
+(`fin_agent_decisions`) show; step 3 repoints it to the Inbox. The `/pickup` low-stock
+link pointed at `/inventory` (no page): now `/inventory/dashboard`.
+
+**Step 2, built 12 Nov:**
+- `src/styles/celsius-ui/tokens.css`: Gosamē UI token names with Celsius values, light
+  and dark (`.dark`). Tailwind gets token classes (`bg-surface`, `text-text-2`,
+  `border-line`, `bg-rail` …). The shared shadcn variables now read the tokens, so every
+  page has the paper/espresso palette and the espresso main action; the old cool-grey dark
+  overrides read the warm tokens too.
+- Geist Mono is loaded (it was referenced but never loaded).
+- `components/office-shell.tsx`: 236 px paper rail (groups Sell, Make and supply, Run the
+  business; the open section's pages nested; ⌘K "Jump to…"; user, Settings gear, Change
+  password, theme, sign out in the foot), 56 px header with the crumb, underline tabs for a
+  page's related views, and on a phone a top bar, the section's pages as a scrolling row,
+  and a 4-tab bar (Today · Sales · Procurement · More). `lib/nav.tsx` `locate()` and
+  `railPages()` decide all of it; `nav-structure.test.ts` pins them.
+- Not yet moved: page insides (step 6), the Inbox tab on the phone bar (step 3 swaps
+  Procurement for Inbox).
+
+**Step 3, built 12 Nov (Inbox v1, read only):** `GET /api/inbox` (`lib/inbox/sources.ts`)
+reads the existing queues and links each card to the page where it is decided today:
+leave (pending/escalated), overtime, clock-ins to review (one card), shift swaps awaiting
+approval, pay-rate changes, POs awaiting approval, deliveries with no supplier invoice after
+5 days (one card), overdue supplier invoices (one card) and flagged invoices, payment
+requests awaiting approval, stock transfers to approve or receive, drafted Google review
+replies, low QR feedback, and open finance exceptions (owners/admins). Each source runs only
+if the user can open its page (`canAccess`); managers see only their outlets / team; one
+failing source is named, never hides the rest. `/inbox` page, "Needs you" on Today (top 5),
+Inbox in the rail with its count and in the phone tab bar (replacing Procurement).
+Left out on purpose: agent questions answered on Telegram (`agent_prompts`, no page to open)
+and purchasing-manager findings (`fin_agent_decisions`, never marked handled, so all of them
+would show) — the procurement Telegram digest therefore still links to `/finance`.
+Next: one-tap actions in the Inbox for safe kinds (owner to choose), then step 4.
+
+**Step 4A, built 16 Nov:** `/hr/roster` (HR's first page; Scheduling tab group), on existing
+APIs only: the week grid from `/api/hr/schedules/roster-attendance` (rostered vs clocked, late,
+did not come, approved leave), a day card on click, Today (in now / did not come), Leave to
+decide and Shift swaps with Approve/Decline in place (same PATCH calls as their pages), and
+Overtime and Clock-ins as counts with "Review" to their pages (they feed payroll and keep their
+partial-approve / excuse / payroll-sync flows). The six old pages stay until the owner has
+checked Roster against real data; then they redirect.
+
+**Step 4B, built 16 Nov:** the staff app's (`apps/staff-native`) Today clock card now shows
+today's rostered shift ("Your shift · 7:30 AM – 3:30 PM · Shah Alam", "Starts in 12 min";
+"Ends 3:30 PM" once clocked in), from the existing `/api/hr/shifts`. JS only, app.json
+untouched, so it ships as an OTA on merge (merging = production deploy to manager phones;
+see the ota-release skill). The clock-in itself (selfie, location, optional biometric) is
+unchanged.
+
+---
+
+## 2c. Declutter (owner, 16–17 Nov 2026)
+
+Owner: "declutter based on the functions used and needed only … check Gosamē
+Office as ref … use first principle to group them together better … remove the
+ones redundant."
+
+**No usage data existed** (Vercel Web Analytics off for the backoffice, no
+Celsius DB access from the cloud session, `ActivityLog` held actions only), so
+pages were judged by job, and page-visit tracking was added to decide the rest.
+
+**Grouping.** Each section answers one manager question and follows the life of
+one thing: a customer is sold to and kept (Sales · Customers · Marketing); an
+ingredient becomes an item, is held, bought and paid for (Menu · Stock ·
+Procurement); a person is rostered, paid and scored (Team, was HR); money
+(Money, was Finance); an outlet is held to standard (Standards, was Ops).
+Moves: Store/Menu Status → Menu; Local Rank + Rank Scoreboard → Customers ›
+Reviews; Google and GrabFood ads → one Ads page; Prep Recipes + Packaging →
+Recipes; Manual Grant → Members; Leave/Clock-ins/Overtime/Shift swaps/Edit
+schedules → the Roster tab strip; HR overview → People strip. Set-up behind ⚙:
+Challenges, Mystery Pool, Admin Claimables, Splash Posters, Groups & Storage,
+Chart of Accounts. Procurement keeps its name (the team's word).
+
+**Redundancy, checked before removing.** Of the candidates in the owner's
+picture, only push reminders and the pickup Customers page were true
+duplicates, and both already redirected. Kept, because they are not duplicates:
+Cashier Performance (per-cashier till metrics, also read by the till's own
+scorecard; now under Sales › Reports), Area Scorecard (`/api/scorecard`, the
+data the ops scoreboard job sends; now under Standards › Outlet Scorecard),
+Perishables (separate editor; under Ingredients until list B merges it), the ops
+reminders job (live Ops Workspace feature with WhatsApp ack; just unused so far).
+
+**Usage tracking.** `components/usage-tracker.tsx` → `POST /api/usage` →
+`ActivityLog` (module `usage`, action `view`, one per page per 30 s, no schema
+change). Settings › System › Office Usage shows views, people, phone share and
+the menu pages nobody opened in 30 days. **Around 17 Dec 2026: remove or
+re-home what nobody opened.** Pinned by `lib/nav-structure.test.ts` (≤ 36 menu
+pages) and `lib/usage.test.ts`.
+
+## 2d. Step 5: merges (17 Nov 2026)
+
+| Merge | What changed | Why |
+|---|---|---|
+| Perishables → Ingredients | One editor, `components/inventory/items-page.tsx` (`ItemsPage kind`); both URLs and grants kept | Perishables was a 1,058-line drifted copy: no supplier search, no package-linked supplier prices, and its edit form opened with an empty supplier list, so saving dropped the item's suppliers |
+| Pickup dashboard → Pickup app | `/pickup` redirects to `/pickup/analytics`, now Sales › Reports › Pickup App (`sales:reports`) | Its charts repeated analytics; its other cards (live orders, low stock, new members) already live in Sales › Orders, Stock › Overview, Customers › Members |
+| SOP Compliance → SOP Schedules | Coverage panel on top of `/ops/schedules` (gaps first, covered on request; refreshes after each schedule change); `/ops/compliance` redirects; Schedules is now Standards › SOPs › Schedules (`ops:checklists`, which had no menu home) | Both were linked from nowhere; the gaps are fixed on Schedules |
+| Monthly cash flow | Already a tab under Money › Cash Flow (step 4½) | — |
+| One SMS tool | Customers › Members "Send SMS" hands the picked phones to Marketing › Messages (`lib/sms-handoff.ts`, sessionStorage, 30 min); the Members blast composer is gone | The Members sender skipped the PDPA opt-out filter, the credit check, the sender name and the confirm step that Messages applies |
+
+## 2e. Step 6, part 1: every page on the Celsius UI palette (17 Nov 2026)
+
+A codemod moved 176 page and component files (about 5,300 classes) off the old
+fixed palette onto the Celsius UI tokens, so every page follows light and dark
+mode and the brand rules: grey text → `text-text` / `text-text-2` /
+`text-text-3`, white and grey surfaces → `bg-surface` / `bg-sunken`, grey
+borders → `border-line` / `border-line-2`, terracotta and `#C2452D` main
+buttons → espresso `bg-ink` with `text-on-ink`, terracotta accent text →
+`text-brand-text`, faint terracotta tints → `bg-brand-soft`. Dark-only
+overrides of the old greys were dropped (the tokens already adapt). Signals
+(red, amber, green, blue) are untouched. `components/ui` (shadcn) already read
+the tokens. `lib/celsius-ui-palette.test.ts` keeps the old classes out.
+
+**Part 2 (17 Nov):** one page title style on 138 pages (`text-2xl font-semibold
+leading-[30px] tracking-[-0.01em] text-text`) and one page margin on 135 pages
+(`px-4 pt-6 pb-10 md:px-8`, the same as Inbox and Roster; cards, pop-ups and
+centred loading states untouched).
+
+**Part 3 (17 Nov):** one selected-chip style (the Inbox's), tabular figures app-wide.
+
+**Stock › Overview rebuilt (17 Nov)** as the first page on the full pattern: title
+"Stock" + one line; four key numbers each with a reference (stock value → days
+of cover at this month's rate; cost of goods month-to-date → per day; waste last
+7 days → % of purchases in the same 7 days, amber above 3%; today's count →
+done / not yet); a needs-you strip (approvals, overdue invoices, deliveries);
+one list (recent purchase orders). Same two APIs; the purchasing totals that
+repeated Procurement were dropped. The 3% waste line is a starting guess for
+the owner to set.
+
+**Stock › Wastage rebuilt (17 Nov)**: "What we threw away, why, and whether it
+is going down." Four key numbers: last 7 days against the 7 before (amber when
+up more than 10%), this month against last month, top reason by cost with its
+share, and the most-wasted item. One list, newest first. Maths in
+`lib/inventory/waste-summary.ts` (Malaysia time, tested); same API.
+
+**Stock › Stock Count rebuilt (17 Nov)**: "Whether outlets count, whether the
+shelf matches the system, and every gap explained." Four key numbers: counts in
+the last 7 days with outlets covered; counts waiting for a variance reason
+(amber); share of compared items that matched the system over 30 days (amber
+under 90%); items counted with no expected stock to compare (amber, the
+Tamarind blind spot). The table became one list with one signal per count;
+tapping a row opens the same review. Maths in `lib/inventory/count-summary.ts`
+(tested). The key-number tile is now shared: `components/ui/key-number.tsx`.
+The review is now a full page (back link, one banner saying what is left to
+do, gaps first as a list with the reason picker under each, Save reasons /
+Approve and close), replacing the modal whose table was cut off on a phone.
+
+**Stock › Transfers rebuilt (17 Nov)**: "Stock moving between outlets: what is
+stuck, and for how long." Four key numbers: waiting for approval (oldest age),
+in transit (late when over 2 days since approval, amber), received in 30 days
+(item lines moved), cancelled in 30 days of those created. Filters cut from 7
+statuses to 5 plain ones. One list; a late transfer says "In transit 4 days".
+The detail is a full page with a banner naming the next step and the same
+actions; the small colour-coded action icons on each row are gone (actions
+live on the detail page). Maths in `lib/inventory/transfer-summary.ts`
+(tested). New transfer and Smart transfer are full pages too (were modals):
+the new-transfer rows show source and destination stock before → after and
+flag a quantity over what the source holds; smart suggestions each become a
+draft on one tap. Only the one-field reject box stays a dialog.
+
+**Menu › Items rebuilt (17 Nov)**: "What customers can order in the app, in
+what order, and what is switched off." Four key numbers: on the menu (of all
+items, categories), switched off (amber), best sellers, no photo (amber: blank
+tiles in the app). Tabs renamed Catalog/Availability → All items/By outlet.
+Drag-to-reorder, best-seller star, on/off switch, edit and delete all kept;
+"86'd" became an "Off" tag by the name; touch targets 36 px.
+
+**Every other page (17 Nov, "do all")**: the same pattern applied section by
+section. Rail pages got a one-line purpose, up to four key numbers from data
+the page already loads, one list and full-page forms: Sales dashboard, Orders,
+Sales reports, Recipes, Prep recipes, Packaging, Menu status, Ingredients and
+Perishables, Purchase orders, Suppliers, Members, Vouchers, Reviews,
+Campaigns, Messages, Ads, People, Team overview, Outlet scorecard, Audits,
+SOPs, AI agents. Light pass (title + line, tokens, sentence case, 12-hour
+times, phone fit) on the rest. New tested helpers: `lib/orders-summary.ts`,
+`lib/inventory/items-summary.ts`, `lib/loyalty/vouchers-summary.ts`,
+`lib/reviews-summary.ts`. Untouched until the owner decides: payroll and pay
+pages (payroll, allowances, PT rates, performance, review penalties,
+compliance), Payment requests, the Money section, and the Invoices payment
+pop-ups. Thresholds approved by the owner (17 Nov 2026), along with waste over +10%, in transit over 2 days and count match under 90%: food cost amber above
+35% (Recipes), order waiting amber over 15 minutes (Orders), outlets under 80%
+of round target (Sales dashboard). Prep recipes' "Central Prep price" is now
+"Listed price" (owner approved, 17 Nov) (the field is still `transferPrice`; Celsius has no central
+kitchen). Tidy-up done the same day: `pos/_ReportsTabs.tsx` uses underline tabs,
+`components/hr/page-header.tsx` uses the page title style (back link reads
+"Team"), `EditOrderModal.tsx` is on tokens with an espresso save button, and
+every nav label is sentence case. Procurement's first page is now named
+"Supplier chats" (it was a second "Purchase orders"). The Compare page looked
+up its default preset by the old Title Case label; fixed. Wide tables kept on
+Members, Google campaigns, Rank scoreboard, GrabFood and the sales report.
+
+Still to do in step 6: page-by-page layout (title + one line, at most four key
+numbers each against a reference, one list), section by section, starting with
+the most-used pages once Office Usage has data.
+
+## 2f. Menu follows Gosamē Office (owner, 18 Nov 2026)
+
+Owner: "Can we only follow the ones that gosame did. Restructure everything back."
+The menu now uses Gosamē Office's sections, page names and order. Page URLs and
+access keys did not change, so bookmarks and staff grants still work.
+
+| Gosamē section | Celsius pages (tabs inside) |
+| --- | --- |
+| Today, Inbox, Agents (Gosamē: Colony) | home, inbox, AI agents |
+| Sell › Sales | Sales (Compare, Orders, Reports, Cashier performance, Pickup app) |
+| Sell › Customers | Profiles (Manual grant), Rewards (Redemptions), Reviews (Feedback, Search position, Scoreboard), Messages (Campaigns) |
+| Make and supply › Food | Menu (Menu status), Recipes (Prep recipes, Packaging) |
+| Make and supply › Stock | Food cost (Reports), Items (Reserve levels, Perishables, Transfers), Counts, Waste |
+| Make and supply › Orders | Supplier chats, Supplier orders (Deliveries), Invoices (Invoice match), Suppliers |
+| Run the business › Team | Roster, Payroll, Performance, People |
+| Run the business › Money | Overview (Tax & close), Bank inbox, Cash flow (Cash tracking, Monthly, Bank statements, Regular bills), Payment requests, Reports (Ledger, Fixed assets) |
+| Run the business › Standards | Checklists, What happened, Audits (Outlet scorecard, Area scorecard), SOPs |
+| Settings (gear) | Outlet, Company and people, Stock, Customers, Office |
+
+Where Celsius differs, and why:
+- No CK section: Celsius has no central kitchen. Gosamē's Service page (table
+  service timings) has no Celsius counterpart either.
+- Ads (Google, GrabFood, optimizer, ad invoices) have no Gosamē home: hidden
+  from the menu, still open by URL and ⌘K. Ads settings sit in Settings › Customers.
+- Kept Celsius-only views as tabs on the nearest Gosamē page: Menu status (Food ›
+  Menu), Transfers (Stock › Items), Campaigns (Customers › Messages), Pickup app
+  and Cashier performance (Sales).
+- Kept "Invoice match" (Gosamē says "Supplier statements" at the same URL, but the
+  Celsius page matches invoices to orders) and "Payment requests" (owner-approved
+  17 Nov; Gosamē says Bills › Staff claims).
+- Money gains Overview, Tax & close, Bank statements and Regular bills, which
+  Gosamē lists and Celsius had taken off the menu.
+- Page headings renamed to match: Bank inbox, Supplier orders, Deliveries,
+  Counts, Food cost, Reserve levels, Menu, Profiles, Rewards, Search position,
+  Scoreboard, Checklists.
+
+Follow-up (owner, 19 Nov 2026: "ads: keep", "for money pages, follow exactly how gosame did"):
+Ads are back in the menu as Customers › Ads (Google, Google campaigns, Optimizer, GrabFood,
+Ad invoices). Money is Overview (Tax & close), Bank inbox, Cash flow (Bank statements, Regular
+bills), Bills (the pay-and-claim page), Reports (Ledger, Fixed assets). Cash tracking and
+Monthly are off the menu, still open by URL and ⌘K. Gosamē's Today page has no Celsius
+counterpart, so Tax & close sits under Overview.
+
+## 3. Every page, sorted into its section
+
+Key: **Keep** = becomes a tab · **Merge** = folds into the named page · **Retire** = hide,
+then delete if nobody asks for it within 30 days of page-view logging · **Move** = goes
+behind the gear.
+
+### Today and Inbox
+| Page | Decision |
+|---|---|
+| `/dashboard` | **Keep as Today.** Add a "Needs you" strip (count of Inbox cards) |
+| `/`, `/pickup`, `/pos`, `/finance` (landing pages) | `/` and `/pos` redirect to Today. Mine `/finance` (the exceptions view) for Inbox cards, then retire it |
+| Inbox (new) | Built from sources that already exist: `agent_actions` (pending), leave, overtime, shift swaps, pay-and-claim, invoice mismatches, finance exceptions, review feedback, audit follow-ups, stuck POs |
+
+### Sales
+| Page | Decision |
+|---|---|
+| `/sales/dashboard` | **Keep: Overview** (period against last period, outlet table, hour × weekday) |
+| `/sales/compare` | Merge into Overview as a "compare" toggle |
+| `/pos/reports`, `/pickup/analytics` | Merge into one **Items and payments** tab, whatever the source |
+| `/pos/z-report`, `/pos/tax-report` | Move to **Money → Close** (they are cash-up and tax) |
+| `/pos/maybank-qr` | Move to Money → Bank inbox |
+| Grab / delivery app (new tab) | **Delivery apps:** orders, commission, payouts against the statement (`grab-reconcile.ts` exists already) |
+| `/pos/cashier-performance` | Merge into Team → Performance (one scoring system) |
+
+### Service
+| Page | Decision |
+|---|---|
+| `/pickup/orders` (+ `[id]`) | **Keep: Order queue** (order → made → handed over, % within target) |
+| `/pos/store-menu-status` | **Keep: Sold out** (timeline of what was switched off and for how long) |
+
+### Customers
+| Page | Decision |
+|---|---|
+| `/loyalty/members` | **Keep: Profiles** (one home page per customer) |
+| `/pickup/customers` | Merge into Profiles |
+| `/reviews`, `/reviews/feedback` | **Keep: Reviews.** Feedback Management becomes the "Make it right" view; reply decisions go to the Inbox |
+| `/loyalty/vouchers`, `/loyalty/redemptions`, `/loyalty/points-log` | Merge into one **Rewards history** tab, with a filter |
+
+### Growth
+| Page | Decision |
+|---|---|
+| `/loyalty/loops` | **Keep: Campaigns** (the only page called that) |
+| `/loyalty/engage` (+ `/loyalty/push-reminders`, `/loyalty/engage/test`) | Keep as **Messages**; push reminders becomes a tab inside it |
+| `/loyalty/missions`, `/loyalty/mystery`, `/loyalty/admin-claimables`, `/loyalty/manual-grant` | One **Rewards** tab, with a second row: Challenges · Mystery · Claimables · Grant |
+| `/ads`, `/ads/campaigns`, `/ads/optimizer`, `/ads/grab` | One **Ads** tab, with a second row: Google · Grab · Optimizer. Rename "Campaigns" here to "Google campaigns" |
+| `/ads/invoices` | Move to Orders → Invoices (it's a bill) |
+| `/reviews/geogrid` (+4 sub-pages), `/reviews/scoreboard` | One **Local rank** tab, with a second row |
+| `/loyalty/dashboard` (Area Scorecard) | It scores outlets, so merge it into Standards → Scorecard |
+| `/loyalty/insights`, `/loyalty/campaigns` (already redirects) | Retire |
+
+### Menu (today's "Catalog")
+| Page | Decision |
+|---|---|
+| `/pickup/menu` (+ `[id]`, `new`) | **Keep: Items**: one page per item with tabs (details · recipe · packaging · channels · margin) |
+| `/inventory/menus`, `/inventory/menus/cards` | Become the **Recipe** tab on the item page; recipe cards become a "Print" button |
+| `/inventory/packaging` | Packaging tab on the item page, plus a rules list |
+| `/pickup/splash-posters` | Move to Settings → Apps |
+| Menu matrix (new) | popular × margin, using the BOM costs that already exist |
+
+### CK
+| Page | Decision |
+|---|---|
+| `/inventory/prep-recipes` | **Keep: Prep** |
+| `/inventory/reports/prep-labour` | Keep as a tab |
+| Runs and charges to outlets | Only if the CK really sends stock to outlets; otherwise merge into Stock |
+
+### Stock
+| Page | Decision |
+|---|---|
+| `/inventory/dashboard` | **Keep: Overview** (food cost: should cost against did cost) |
+| `/inventory/products`, `/inventory/perishables` | Merge into **Items**: one page per ingredient (par level, stock by outlet, suppliers, price history) |
+| `/inventory/par-levels` | Becomes a column/tab on Items |
+| `/inventory/stock-count` | **Keep: Counts** |
+| `/inventory/wastage` | **Keep: Waste** |
+| `/inventory/transfers` | **Keep: Transfers** (and fix the pending-transfer backlog noted in STATE.md) |
+| `/inventory/reports` + 7 sub-pages | Not a tab. Each report goes onto the tab it explains (COGS and variance → Overview, valuation → Counts, wastage → Waste, scorecard → Suppliers) |
+| `/inventory/groups`, `/inventory/categories` | Move to Settings → Stock |
+
+### Orders (today's "Procurement")
+Keep the team's own words: **"Purchase Orders"** (the WhatsApp chat) and **"PO List"**,
+as the comment in `nav.tsx` asks.
+
+| Page | Decision |
+|---|---|
+| `/inventory/supplier-chats` | **Keep: Purchase Orders** |
+| `/inventory/orders` (+ `create`, `[id]`), `/inventory/receivings` | Merge into **PO List as a board**: Draft → Approved → Sent → Delivered → Invoiced → Matched → Paid, with stuck cards turning red. Receiving becomes a step on the card |
+| `/inventory/invoices`, `/inventory/reconciliation` | One **Invoices** tab. Rename "Reconciliation" to **"Invoice match"** |
+| `/inventory/pay-and-claim` (+ batches) | **Keep: Payments** (one weekly bank file) |
+| `/inventory/suppliers` | **Keep: Suppliers**: one page per supplier with a report card |
+| `/inventory/ai-decisions`, `/inventory/agent-qa` | Move to Agents |
+
+### Team (today's "HR")
+| Page | Decision |
+|---|---|
+| `/hr` | **Keep: Overview**; `/hr/analytics` becomes a tab on it |
+| `/hr/schedules` (+ availability, coverage, shift swaps) | **Keep: Roster**; swaps go to the Inbox |
+| `/hr/attendance`, `/hr/roster-attendance`, `/hr/pt-hours`, `/hr/overtime` | Merge into one **Attendance** tab, with views. Overtime approval goes to the Inbox |
+| `/hr/leave` | Approval goes to the Inbox; the page becomes a view under Roster |
+| `/hr/payroll` (+ run, weekly), `/hr/pt-rates`, `/hr/allowances`, `/hr/compliance` | **Keep: Payroll**, with a second row: Runs · Rates · Allowances · Statutory |
+| `/hr/performance`, `/hr/review-penalties`, `/pos/cashier-performance`, `/ops/performance/staff/[id]`, `/ops/staff-skills` | **One Performance tab, one score**. Biggest people decision: see Q2 in section 6 |
+| `/hr/employees` (+ `[id]`, import, certifications, access-presets), `/hr/memos` | **Keep: People** (one page per person: profile · access · certificates · memos · performance) |
+
+### Money (today's "Finance")
+| Page | Decision |
+|---|---|
+| `/finance/cashflow`, `/finance/cash-tracking`, `/finance/monthly-cashflow` | **Keep: Cash flow**, with a second row |
+| `/finance/bank-statements`, `/finance/payouts`, `/pos/maybank-qr` | **Bank inbox** (card, QR and delivery-app payouts matched to sales). Brings the hidden pages back with a clear job |
+| `/finance/recon` | Rename to **"Bank match"** and merge into Bank inbox |
+| `/pos/z-report`, `/pos/tax-report`, `/finance/compliance` | **Close**: daily cash-up per outlet, SST, monthly tax |
+| `/finance/transactions`, `/finance/reports`, `/finance/coa`, `/finance/fixed-assets` | **Books**, with a second row: Ledger · P&L/BS · Accounts · Fixed assets |
+| `/finance/recurring-expenses` | Bills tab |
+
+### Standards (today's "Ops")
+| Page | Decision |
+|---|---|
+| `/ops/performance` | **Keep: Scorecard** (outlet-level); add the Area Scorecard here |
+| `/ops/dashboard` | Retire (already hidden; same data as Performance) |
+| `/ops/chat-inbox` ("Ops Workspace") | **Keep: What happened** (incidents and messages); items that need a decision go to the Inbox |
+| `/ops/audit`, `/ops/audit-reports`, `/ops/audit-templates` | **Keep: Audits**; templates move to Settings |
+| `/ops/compliance`, `/ops/schedules` | **Checklists** (by station and shift) |
+| `/ops/sops` (+ new, `[id]`) | **Keep: SOPs** |
+
+### ⚙ Settings (out of the sidebar, behind the gear)
+Outlet operations (`/settings/outlets`, `/pos/settings`, `/pos/printers`, `/pos/table-qr`,
+`/pickup/settings`) · Company and people (`/settings/staff`, `/settings/rules`,
+`/hr/settings` + its 8 sub-pages) · Stock (`/settings/stock-count`, groups, categories) ·
+Customers (tiers, discount engine, all rewards, outcome types, birthday, earn rate, reviews
+settings, ads settings) · Standards (SOP categories, audit templates) · Apps (splash posters)
+· Integrations (`/settings/integrations`, Grab) · System. Bring back the hidden hub
+(`/settings`) as the gear's landing page, with a search box.
+
+---
+
+## 4. Order of work for Celsius
+
+The template's order, changed to reuse what Celsius already has. Each step is its own PR.
+
+| Step | What | Size | Notes |
+|---|---|---|---|
+| **0a** | **Page-view logging.** One `ActivityLog` row (`action: "view"`) per route change, written from `(admin)/layout.tsx`, plus a Settings → Usage page (views per page and per role, last 30 days) | Small | Without it, "Retire" is a guess. Let it run **2–4 weeks before retiring anything** |
+| **0b** | **Register the ~60 unregistered pages in `nav.tsx`** (as `hidden`, with the right `moduleKey`), so ⌘K finds them and the route gate covers them | Small | Most important for the 26 pages the client gate doesn't check. Check that each one's API checks permissions on the server too |
+| **0c** | **Rename the clashes:** Invoice match / Bank match, Google campaigns, and one "Dashboard" per section | Small | Labels only |
+| **1** ✅ | **Menu shell** (built, see 2a): sections, tab strips (generalise `hr/module-tabs.tsx` into a `SectionTabs` driven by `nav.tsx`), Settings behind the gear | Medium | Labels and grouping only. URLs, data and permissions (`moduleKey`) don't change |
+| **2** | **Inbox** over the existing sources (see section 3) + a "Needs you" strip on Today and on each tab | Medium | Read-only first (links to the existing approval page); one-tap actions after that |
+| **3** | **One page per thing:** item (menu), ingredient, supplier, person, customer | Large | |
+| **4** | **Rebuild the jobs, riskiest first:** PO board + Invoice match → one score in Performance → one Attendance → Bank inbox / Close → Reviews → Standards | Large, several PRs | Payroll and payments need an owner's approval at each step (CLAUDE.md hard rule 6) |
+| **5** | Staff app (`apps/staff`, `staff-native`): Today · Shifts · Pay · Me | Medium | Check against what Celsius Manager already does before building |
+| **6** | Insights (findings in RM a month) | Large, phased | The finance-warehouse and ops-pulse agents already produce findings that can feed it |
+
+**Don't change during any of this:** URLs (bookmarks and WhatsApp links point at them),
+`moduleKey` grants, "Purchase Orders" / "PO List".
+
+---
+
+## 5. What not to copy from Gosamē
+
+- **Gosamē's "Food"** becomes "Menu" here; drinks need recipes per size and per hot/iced,
+  and costed modifiers.
+- **Gosamē's "Service" by table** fits Celsius only for QR dine-in. Most Celsius volume is
+  counter, pickup and delivery, so the order queue matters more than tables.
+- **A small team of 5:** Celsius has outlet managers with partial grants. Every section must
+  keep hiding the tabs a user can't open (`visibleItems` already does this).
+
+---
+
+## 6. Questions for the owner before Step 1
+
+1. ~~Does the central kitchen send stock to outlets?~~ **Answered (owner, 17 Nov 2026):
+   Celsius has no central kitchen.** No CK section; Prep Recipes stays under Menu ›
+   Recipes; the outlet type picker is gone from Settings › Outlets.
+2. Which score should stay: the allowance scorecard (`/hr/performance`), ops performance, or
+   cashier performance? Allowance pay depends on it, so this is a payroll decision.
+3. Is "Growth" the right word, or would the team say "Marketing"? (Naming test: understood
+   at midnight on a phone.)
+4. Do outlet managers get the Inbox, or only owners? (It changes which card sources are in
+   scope.)

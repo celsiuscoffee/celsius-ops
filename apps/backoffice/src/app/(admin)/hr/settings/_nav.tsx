@@ -68,8 +68,8 @@ export function SettingsNav() {
               className={
                 "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition " +
                 (isActive
-                  ? "bg-terracotta text-white"
-                  : "text-gray-600 hover:bg-gray-100")
+                  ? "bg-ink text-on-ink"
+                  : "text-text-2 hover:bg-sunken")
               }
             >
               <Icon className="h-4 w-4" />
@@ -92,7 +92,7 @@ export function SettingsNav() {
                   "rounded px-2 py-1 transition " +
                   (active
                     ? "bg-gray-900 text-white"
-                    : "text-gray-500 hover:bg-gray-100 hover:text-gray-800")
+                    : "text-text-2 hover:bg-sunken hover:text-text")
                 }
               >
                 {i.label}

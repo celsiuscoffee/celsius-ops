@@ -21,17 +21,17 @@ function SmartPhoto({ url, alt }: { url: string; alt: string }) {
   const imgUrl = url.replace("/raw/upload/", "/image/upload/");
   if (failed || isPdf(url)) {
     return (
-      <div className="overflow-hidden rounded-lg border border-gray-200 flex flex-col flex-1 min-h-0">
+      <div className="overflow-hidden rounded-lg border border-line flex flex-col flex-1 min-h-0">
         <iframe src={url} className="flex-1 w-full min-h-[75vh]" title={alt} />
-        <div className="flex items-center justify-between border-t bg-gray-50 px-3 py-1.5 shrink-0">
-          <span className="flex items-center gap-1.5 text-xs text-gray-500"><FileDown className="h-3.5 w-3.5" />Document</span>
-          <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-blue-600 hover:text-blue-700">Open in new tab &rarr;</a>
+        <div className="flex items-center justify-between border-t bg-sunken px-3 py-1.5 shrink-0">
+          <span className="flex items-center gap-1.5 text-xs text-text-2"><FileDown className="h-3.5 w-3.5" />Document</span>
+          <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-info-text hover:text-info-text">Open in new tab &rarr;</a>
         </div>
       </div>
     );
   }
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="group relative block overflow-hidden rounded-lg border border-gray-200 hover:border-blue-300">
+    <a href={url} target="_blank" rel="noopener noreferrer" className="group relative block overflow-hidden rounded-lg border border-line hover:border-line">
       <img src={imgUrl} alt={alt} className="h-auto w-full object-contain" onError={() => setFailed(true)} />
       <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/10 group-hover:opacity-100">
         <ZoomIn className="h-6 w-6 text-white drop-shadow-md" />
@@ -399,10 +399,10 @@ export default function InvoicesPage() {
     : filteredInvoices;
 
   const SortIcon = ({ col }: { col: SortKey }) => {
-    if (sortKey !== col) return <ArrowUpDown className="h-3 w-3 text-gray-300" />;
+    if (sortKey !== col) return <ArrowUpDown className="h-3 w-3 text-text-3" />;
     return sortDir === "desc"
-      ? <ArrowDown className="h-3 w-3 text-gray-700" />
-      : <ArrowUp className="h-3 w-3 text-gray-700" />;
+      ? <ArrowDown className="h-3 w-3 text-text-2" />
+      : <ArrowUp className="h-3 w-3 text-text-2" />;
   };
 
   const activeFilterCount = [outletFilter.length > 0, supplierFilter.length > 0, bankFilter !== "all", dueDateFrom, dueDateTo, paidDateFrom, paidDateTo].filter(Boolean).length;
@@ -1086,14 +1086,14 @@ export default function InvoicesPage() {
 
   const statusColor = (status: string) => {
     switch (status) {
-      case "PAID": return "bg-green-500";
-      case "INITIATED": return "bg-blue-500";
-      case "PENDING": return "bg-terracotta";
-      case "PARTIALLY_PAID": return "bg-amber-500";
-      case "DEPOSIT_PAID": return "bg-amber-500";
-      case "OVERDUE": return "bg-red-500";
-      case "DRAFT": return "bg-gray-400";
-      default: return "bg-gray-400";
+      case "PAID": return "bg-ok-soft text-ok-text";
+      case "INITIATED": return "bg-info-soft text-info-text";
+      case "PENDING": return "bg-sunken text-text-2";
+      case "PARTIALLY_PAID": return "bg-warn-soft text-warn-text";
+      case "DEPOSIT_PAID": return "bg-warn-soft text-warn-text";
+      case "OVERDUE": return "bg-danger-soft text-danger-text";
+      case "DRAFT": return "bg-sunken text-text-3";
+      default: return "bg-sunken text-text-3";
     }
   };
 
@@ -1122,13 +1122,13 @@ export default function InvoicesPage() {
 
     switch (status) {
       case "PENDING": return [
-        { status: "INITIATED", label: pendingDepositLabel, color: "bg-blue-500 hover:bg-blue-600" },
+        { status: "INITIATED", label: pendingDepositLabel, color: "bg-ink text-on-ink hover:bg-ink-hover" },
       ];
       case "INITIATED": {
         // Balance leg — deposit already settled.
         if ((inv.amountPaid ?? 0) > 0) {
           return [
-            { status: "PAID", label: balanceMarkLabel, color: "bg-green-500 hover:bg-green-600" },
+            { status: "PAID", label: balanceMarkLabel, color: "bg-ink text-on-ink hover:bg-ink-hover" },
           ];
         }
         // Deposit leg — single button, no "Pay Full" override (edit the
@@ -1136,22 +1136,22 @@ export default function InvoicesPage() {
         // deposit step).
         if (hasDeposit) {
           return [
-            { status: "DEPOSIT_PAID", label: pendingDepositMarkLabel, color: "bg-amber-500 hover:bg-amber-600" },
+            { status: "DEPOSIT_PAID", label: pendingDepositMarkLabel, color: "bg-ink text-on-ink hover:bg-ink-hover" },
           ];
         }
         return [
-          { status: "PAID", label: paidLabel, color: "bg-green-500 hover:bg-green-600" },
+          { status: "PAID", label: paidLabel, color: "bg-ink text-on-ink hover:bg-ink-hover" },
         ];
       }
       case "DEPOSIT_PAID": return [
-        { status: "INITIATED", label: balanceInitiateLabel, color: "bg-blue-500 hover:bg-blue-600" },
+        { status: "INITIATED", label: balanceInitiateLabel, color: "bg-ink text-on-ink hover:bg-ink-hover" },
       ];
       case "PARTIALLY_PAID": return [
-        { status: "INITIATED", label: initiateLabel, color: "bg-blue-500 hover:bg-blue-600" },
+        { status: "INITIATED", label: initiateLabel, color: "bg-ink text-on-ink hover:bg-ink-hover" },
       ];
       case "OVERDUE": return [
-        { status: "INITIATED", label: pendingDepositLabel, color: "bg-blue-500 hover:bg-blue-600" },
-        { status: "PAID", label: paidLabel, color: "bg-green-500 hover:bg-green-600" },
+        { status: "INITIATED", label: pendingDepositLabel, color: "bg-ink text-on-ink hover:bg-ink-hover" },
+        { status: "PAID", label: paidLabel, color: "bg-ink text-on-ink hover:bg-ink-hover" },
       ];
       case "PAID": return [];
       default: return [];
@@ -1161,18 +1161,18 @@ export default function InvoicesPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
       <ConfirmDialog />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Invoices</h2>
-          <p className="mt-0.5 text-xs sm:text-sm text-gray-500">{invoices.length} invoices &middot; Track and reconcile supplier invoices</p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Invoices</h1>
+          <p className="mt-0.5 text-sm text-text-2">What we owe suppliers, what is due, and what is late.</p>
         </div>
         <Button
           onClick={exportXlsx}
@@ -1181,53 +1181,53 @@ export default function InvoicesPage() {
           title={hasActiveFilter ? "Export the current filtered list" : "Export all invoices"}
         >
           <Download className="h-4 w-4" />
-          {hasActiveFilter ? "Export Filtered" : "Export All"}
+          {hasActiveFilter ? "Export filtered" : "Export all"}
         </Button>
       </div>
 
       {/* Summary cards — clickable to filter */}
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 sm:gap-3">
+      <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-7">
         {([
-          { key: "all" as const, label: "Total", amount: totalAll, count: totalAllCount, color: "text-gray-900", border: "border-gray-300", ring: "ring-gray-200" },
-          { key: "pending_invoice" as const, label: "Pending Invoice", amount: totalPendingInvoice, count: pendingInvoiceCount, color: pendingInvoiceCount > 0 ? "text-yellow-700" : "text-gray-400", border: "border-yellow-400", ring: "ring-yellow-100" },
-          { key: "payable" as const, label: "Payable", amount: totalPayable, count: payableCount, color: payableCount > 0 ? "text-orange-600" : "text-gray-400", border: "border-orange-400", ring: "ring-orange-100" },
-          { key: "due_today" as const, label: "Due Today", amount: dueTodayAmount, count: dueTodayCount, color: dueTodayCount > 0 ? "text-blue-600" : "text-gray-400", border: "border-blue-400", ring: "ring-blue-100" },
-          { key: "initiated" as const, label: "Initiated", amount: totalInitiated, count: initiatedCount, color: initiatedCount > 0 ? "text-indigo-600" : "text-gray-400", border: "border-indigo-400", ring: "ring-indigo-100" },
-          { key: "overdue" as const, label: "Overdue", amount: totalOverdue, count: overdueCount, color: overdueCount > 0 ? "text-red-600" : "text-gray-400", border: "border-red-400", ring: "ring-red-100" },
-          { key: "paid" as const, label: "Paid", amount: totalPaid, count: paidCount, color: "text-green-600", border: "border-green-400", ring: "ring-green-100" },
+          { key: "all" as const, label: "Total", amount: totalAll, count: totalAllCount, color: "text-text", border: "border-line-2", ring: "ring-line" },
+          { key: "pending_invoice" as const, label: "Pending invoice", amount: totalPendingInvoice, count: pendingInvoiceCount, color: pendingInvoiceCount > 0 ? "text-warn-text" : "text-text-3", border: "border-line", ring: "ring-line-2" },
+          { key: "payable" as const, label: "Payable", amount: totalPayable, count: payableCount, color: payableCount > 0 ? "text-warn-text" : "text-text-3", border: "border-line", ring: "ring-line-2" },
+          { key: "due_today" as const, label: "Due today", amount: dueTodayAmount, count: dueTodayCount, color: dueTodayCount > 0 ? "text-info-text" : "text-text-3", border: "border-line", ring: "ring-line-2" },
+          { key: "initiated" as const, label: "Initiated", amount: totalInitiated, count: initiatedCount, color: initiatedCount > 0 ? "text-info-text" : "text-text-3", border: "border-line", ring: "ring-line-2" },
+          { key: "overdue" as const, label: "Overdue", amount: totalOverdue, count: overdueCount, color: overdueCount > 0 ? "text-danger-text" : "text-text-3", border: "border-line", ring: "ring-line-2" },
+          { key: "paid" as const, label: "Paid", amount: totalPaid, count: paidCount, color: "text-ok-text", border: "border-line", ring: "ring-line-2" },
         ]).map((card) => (
           <button
             key={card.key}
             onClick={() => setCardFilter(cardFilter === card.key ? null : card.key)}
-            className={`rounded-lg border bg-white px-3 py-2.5 text-left transition-all hover:shadow-sm ${
-              cardFilter === card.key
-                ? `${card.border} ring-2 ${card.ring} shadow-sm`
-                : card.key === "due_today" && card.count > 0
-                  ? "border-blue-200 bg-blue-50/50 hover:border-blue-300"
-                  : card.key === "payable" && card.count > 0
-                  ? "border-orange-200 bg-orange-50/50 hover:border-orange-300"
-                  : card.key === "pending_invoice" && card.count > 0
-                  ? "border-yellow-200 bg-yellow-50/50 hover:border-yellow-300"
-                  : "border-gray-200 hover:border-gray-300"
-            }`}
+            className={`rounded-card border bg-surface px-3 py-2.5 text-left transition-all hover:shadow-sm ${
+ cardFilter === card.key
+ ?`${card.border} ring-2 ${card.ring} shadow-sm`
+ : card.key === "due_today" && card.count > 0
+ ? "border-line bg-info-soft hover:border-line"
+ : card.key === "payable" && card.count > 0
+ ? "border-line bg-warn-soft hover:border-line"
+ : card.key === "pending_invoice" && card.count > 0
+ ? "border-line bg-warn-soft hover:border-line"
+ : "border-line hover:border-line-2"
+}`}
           >
             <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-500">{card.label}</p>
+              <p className="text-xs text-text-2">{card.label}</p>
               {card.count > 0 && card.key !== "all" && (
-                <span className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${
-                  card.key === "payable" ? "bg-orange-500" : card.key === "due_today" ? "bg-blue-500" : card.key === "overdue" ? "bg-red-500" : card.key === "initiated" ? "bg-indigo-500" : card.key === "pending_invoice" ? "bg-yellow-500" : "bg-green-500"
-                }`}>
+                <span className={`flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-on-ink ${
+ card.key === "payable" ? "bg-warn-text" : card.key === "due_today" ? "bg-info-text" : card.key === "overdue" ? "bg-danger-text" : card.key === "initiated" ? "bg-info-text" : card.key === "pending_invoice" ? "bg-warn-text" : "bg-ok-text"
+}`}>
                   {card.count}
                 </span>
               )}
             </div>
-            <p className={`text-lg font-bold ${card.color}`}>{formatRM(card.amount)}</p>
+            <p className={`whitespace-nowrap font-mono text-[17px] font-semibold ${card.color}`}>{formatRM(card.amount)}</p>
             {card.key === "payable" && pendingInvoiceCount > 0 && (
               // Soft-hide: GRNI placeholders are excluded from Payable count/amount,
               // but the sub-line keeps the full liability visible for cashflow planning.
               <p
                 onClick={(e) => { e.stopPropagation(); setCardFilter("pending_invoice"); }}
-                className="mt-0.5 text-[10px] text-yellow-700 hover:underline cursor-pointer"
+                className="mt-0.5 text-[10px] text-warn-text hover:underline cursor-pointer"
                 title="Click to view Pending Invoice rows"
               >
                 + {formatRM(totalPendingInvoice)} awaiting invoice
@@ -1236,14 +1236,14 @@ export default function InvoicesPage() {
             {card.key === "due_today" && card.count > 0 && cardFilter === "due_today" && (
               <div
                 onClick={(e) => { e.stopPropagation(); batchInitiateDueToday(); }}
-                className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-500 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-600"
+                className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-info-text px-2 py-1.5 text-xs font-medium text-on-ink transition-colors hover:opacity-90"
               >
                 {batchInitiating ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
                   <>
                     <DollarSign className="h-3 w-3" />
-                    Initiate All Payments
+                    Initiate all payments
                   </>
                 )}
               </div>
@@ -1253,17 +1253,17 @@ export default function InvoicesPage() {
       </div>
       {(cardFilter || activeFilterCount > 0 || search || tab !== "unpaid" || typeFilter !== "all") && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-text-2">
             Showing:{" "}
-            <span className="font-medium text-gray-700">
-              {cardFilter === "due_today" ? "Due Today" : cardFilter === "pending_invoice" ? "Pending Invoice" : cardFilter === "payable" ? "Payable" : cardFilter === "all" ? "All" : cardFilter ? cardFilter.charAt(0).toUpperCase() + cardFilter.slice(1) : "Filtered"}
+            <span className="font-medium text-text-2">
+              {cardFilter === "due_today" ? "Due today" : cardFilter === "pending_invoice" ? "Pending invoice" : cardFilter === "payable" ? "Payable" : cardFilter === "all" ? "All" : cardFilter ? cardFilter.charAt(0).toUpperCase() + cardFilter.slice(1) : "Filtered"}
             </span>
             {" "}({invoices.length} invoice{invoices.length !== 1 ? "s" : ""}
-            {invoices.length > 0 && <> · <span className="font-medium text-gray-700 tabular-nums">{formatRM(invoices.reduce((a, i) => a + i.amount, 0))}</span></>}
+            {invoices.length > 0 && <> · <span className="font-medium text-text-2 tabular-nums">{formatRM(invoices.reduce((a, i) => a + i.amount, 0))}</span></>}
             )
           </span>
           {cardFilter && (
-            <button onClick={() => setCardFilter(null)} className="flex items-center gap-0.5 rounded-full border border-gray-200 px-2 py-0.5 text-[10px] text-gray-500 hover:bg-gray-50">
+            <button onClick={() => setCardFilter(null)} className="flex items-center gap-0.5 rounded-full border border-line px-2 py-0.5 text-[10px] text-text-2 hover:bg-sunken">
               <X className="h-3 w-3" /> Clear card
             </button>
           )}
@@ -1272,33 +1272,33 @@ export default function InvoicesPage() {
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
         <div className="relative w-full sm:flex-1 sm:min-w-[200px] sm:max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <Input placeholder="Search invoices..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0 sm:pb-0">
           {([["unpaid", "Unpaid"], ["paid", "Paid"], ["all", "All"]] as const).map(([value, label]) => (
-            <button key={value} onClick={() => setTab(value)} className={`shrink-0 rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>{label}</button>
+            <button key={value} onClick={() => setTab(value)} className={`shrink-0 rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}>{label}</button>
           ))}
         </div>
         <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-1 sm:mx-0 sm:px-0 sm:pb-0">
-          {([["all", "All Types"], ["supplier", "Supplier"], ["staff_claim", "Staff Claims"], ["payment_request", "Payment Requests"], ["transfer", "Transfers"]] as const).map(([value, label]) => (
-            <button key={value} onClick={() => setTypeFilter(value)} className={`shrink-0 rounded-full border px-3 py-1 text-xs transition-colors ${typeFilter === value ? "border-purple-400 bg-purple-50 text-purple-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>{label}</button>
+          {([["all", "All types"], ["supplier", "Supplier"], ["staff_claim", "Staff claims"], ["payment_request", "Payment requests"], ["transfer", "Transfers"]] as const).map(([value, label]) => (
+            <button key={value} onClick={() => setTypeFilter(value)} className={`shrink-0 rounded-full border px-3 py-1 text-xs transition-colors ${typeFilter === value ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}>{label}</button>
           ))}
         </div>
         <button
           onClick={() => setShowFilters(!showFilters)}
-          className={`relative flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${showFilters || activeFilterCount > 0 ? "border-blue-400 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+          className={`relative flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${showFilters || activeFilterCount > 0 ? "border-line bg-info-soft text-info-text" : "border-line text-text-2 hover:bg-sunken"}`}
         >
           <Filter className="h-3 w-3" />
           Filters
           {activeFilterCount > 0 && (
-            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white">{activeFilterCount}</span>
+            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-info-text text-[10px] font-bold text-on-ink">{activeFilterCount}</span>
           )}
         </button>
         {activeFilterCount > 0 && (
           <button
             onClick={() => { setOutletFilter([]); setSupplierFilter([]); setSupplierSearch(""); setBankFilter("all"); setDueDateFrom(""); setDueDateTo(""); setPaidDateFrom(""); setPaidDateTo(""); }}
-            className="flex items-center gap-1 rounded-full border border-gray-200 px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-50"
+            className="flex items-center gap-1 rounded-full border border-line px-2 py-1 text-[10px] text-text-2 hover:bg-sunken"
           >
             <X className="h-3 w-3" /> Clear filters
           </button>
@@ -1307,19 +1307,19 @@ export default function InvoicesPage() {
 
       {/* Expanded filter panel */}
       {showFilters && (
-        <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/30 p-4">
+        <div className="mt-3 rounded-lg border border-line bg-info-soft p-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Outlets — multi-select */}
             <div>
-              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-text-2">
                 <Building2 className="h-3 w-3" /> Outlets
                 {outletFilter.length > 0 && (
-                  <button onClick={() => setOutletFilter([])} className="ml-auto text-[10px] text-blue-500 hover:underline">Clear</button>
+                  <button onClick={() => setOutletFilter([])} className="ml-auto text-[10px] text-info-text hover:underline">Clear</button>
                 )}
               </label>
-              <div className="max-h-[140px] overflow-y-auto rounded-md border border-gray-200 bg-white p-1.5 space-y-0.5">
+              <div className="max-h-[140px] overflow-y-auto rounded-md border border-line bg-surface p-1.5 space-y-0.5">
                 {outletOptions.map((o) => (
-                  <label key={o.id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                  <label key={o.id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-text-2 hover:bg-sunken cursor-pointer">
                     <input
                       type="checkbox"
                       checked={outletFilter.includes(o.id)}
@@ -1327,7 +1327,7 @@ export default function InvoicesPage() {
                         if (e.target.checked) setOutletFilter((prev) => [...prev, o.id]);
                         else setOutletFilter((prev) => prev.filter((id) => id !== o.id));
                       }}
-                      className="rounded border-gray-300 text-blue-500 focus:ring-blue-400 h-3.5 w-3.5"
+                      className="rounded border-line-2 text-info-text focus:ring-line-2 h-3.5 w-3.5"
                     />
                     {o.name}
                   </label>
@@ -1340,28 +1340,28 @@ export default function InvoicesPage() {
                 invoice). Search filters client-side because the list is
                 small enough that a roundtrip per keystroke isn't worth it. */}
             <div>
-              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-text-2">
                 <Building2 className="h-3 w-3" /> Suppliers
                 {supplierFilter.length > 0 && (
-                  <span className="ml-1 rounded-full bg-blue-100 px-1.5 text-[10px] text-blue-700">{supplierFilter.length}</span>
+                  <span className="ml-1 rounded-full bg-info-soft px-1.5 text-[10px] text-info-text">{supplierFilter.length}</span>
                 )}
                 {supplierFilter.length > 0 && (
-                  <button onClick={() => setSupplierFilter([])} className="ml-auto text-[10px] text-blue-500 hover:underline">Clear</button>
+                  <button onClick={() => setSupplierFilter([])} className="ml-auto text-[10px] text-info-text hover:underline">Clear</button>
                 )}
               </label>
-              <div className="rounded-md border border-gray-200 bg-white">
+              <div className="rounded-md border border-line bg-surface">
                 <input
                   type="text"
                   placeholder="Search suppliers…"
                   value={supplierSearch}
                   onChange={(e) => setSupplierSearch(e.target.value)}
-                  className="w-full rounded-t-md border-b border-gray-200 px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:outline-none"
+                  className="w-full rounded-t-md border-b border-line px-2.5 py-1.5 text-xs text-text-2 placeholder-text-3 focus:outline-none"
                 />
                 <div className="max-h-[110px] overflow-y-auto p-1.5 space-y-0.5">
                   {filteredSupplierOptions.length === 0 ? (
-                    <p className="px-2 py-1 text-[11px] text-gray-400">No matches</p>
+                    <p className="px-2 py-1 text-[11px] text-text-3">No matches</p>
                   ) : filteredSupplierOptions.map((s) => (
-                    <label key={s.id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                    <label key={s.id} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-text-2 hover:bg-sunken cursor-pointer">
                       <input
                         type="checkbox"
                         checked={supplierFilter.includes(s.id)}
@@ -1369,7 +1369,7 @@ export default function InvoicesPage() {
                           if (e.target.checked) setSupplierFilter((prev) => [...prev, s.id]);
                           else setSupplierFilter((prev) => prev.filter((id) => id !== s.id));
                         }}
-                        className="rounded border-gray-300 text-blue-500 focus:ring-blue-400 h-3.5 w-3.5"
+                        className="rounded border-line-2 text-info-text focus:ring-line-2 h-3.5 w-3.5"
                       />
                       <span className="truncate">{s.name}</span>
                     </label>
@@ -1380,18 +1380,18 @@ export default function InvoicesPage() {
 
             {/* Bank filter */}
             <div>
-              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
+              <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-text-2">
                 <Landmark className="h-3 w-3" /> Bank
               </label>
-              <div className="flex flex-col gap-1 rounded-md border border-gray-200 bg-white p-1.5">
+              <div className="flex flex-col gap-1 rounded-md border border-line bg-surface p-1.5">
                 {([["all", "All Banks"], ["maybank", "Maybank"], ["non-maybank", "Non-Maybank"]] as const).map(([val, label]) => (
-                  <label key={val} className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50 cursor-pointer">
+                  <label key={val} className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-text-2 hover:bg-sunken cursor-pointer">
                     <input
                       type="radio"
                       name="bankFilter"
                       checked={bankFilter === val}
                       onChange={() => setBankFilter(val)}
-                      className="text-blue-500 focus:ring-blue-400 h-3.5 w-3.5"
+                      className="text-info-text focus:ring-line-2 h-3.5 w-3.5"
                     />
                     {label}
                   </label>
@@ -1402,26 +1402,26 @@ export default function InvoicesPage() {
             {/* Due date range */}
             <div className="space-y-2">
               <div>
-                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
-                  <CalendarDays className="h-3 w-3" /> Due From
+                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-text-2">
+                  <CalendarDays className="h-3 w-3" /> Due from
                 </label>
                 <input
                   type="date"
                   value={dueDateFrom}
                   onChange={(e) => setDueDateFrom(e.target.value)}
-                  className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm text-text-2 focus:border-line focus:outline-none focus:ring-1 focus:ring-line-2"
                 />
               </div>
               <div>
-                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
-                  <CalendarDays className="h-3 w-3" /> Due To
+                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-text-2">
+                  <CalendarDays className="h-3 w-3" /> Due to
                 </label>
                 <input
                   type="date"
                   value={dueDateTo}
                   onChange={(e) => setDueDateTo(e.target.value)}
                   min={dueDateFrom || undefined}
-                  className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm text-text-2 focus:border-line focus:outline-none focus:ring-1 focus:ring-line-2"
                 />
               </div>
             </div>
@@ -1429,26 +1429,26 @@ export default function InvoicesPage() {
             {/* Paid date range */}
             <div className="space-y-2">
               <div>
-                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
-                  <CheckCircle2 className="h-3 w-3" /> Paid From
+                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-text-2">
+                  <CheckCircle2 className="h-3 w-3" /> Paid from
                 </label>
                 <input
                   type="date"
                   value={paidDateFrom}
                   onChange={(e) => setPaidDateFrom(e.target.value)}
-                  className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm text-text-2 focus:border-line focus:outline-none focus:ring-1 focus:ring-line-2"
                 />
               </div>
               <div>
-                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-gray-600">
-                  <CheckCircle2 className="h-3 w-3" /> Paid To
+                <label className="mb-1.5 flex items-center gap-1 text-xs font-medium text-text-2">
+                  <CheckCircle2 className="h-3 w-3" /> Paid to
                 </label>
                 <input
                   type="date"
                   value={paidDateTo}
                   onChange={(e) => setPaidDateTo(e.target.value)}
                   min={paidDateFrom || undefined}
-                  className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm text-text-2 focus:border-line focus:outline-none focus:ring-1 focus:ring-line-2"
                 />
               </div>
             </div>
@@ -1458,9 +1458,9 @@ export default function InvoicesPage() {
               {activeFilterCount > 0 && (
                 <button
                   onClick={() => { setOutletFilter([]); setBankFilter("all"); setDueDateFrom(""); setDueDateTo(""); setPaidDateFrom(""); setPaidDateTo(""); }}
-                  className="flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
+                  className="flex items-center gap-1 rounded-md border border-line bg-danger-soft px-3 py-1.5 text-xs font-medium text-danger-text hover:bg-danger-soft transition-colors"
                 >
-                  <X className="h-3 w-3" /> Clear All Filters
+                  <X className="h-3 w-3" /> Clear all filters
                 </button>
               )}
             </div>
@@ -1471,9 +1471,9 @@ export default function InvoicesPage() {
       {/* Mobile card list */}
       <div className="mt-4 space-y-2 lg:hidden">
         {invoices.length === 0 && (
-          <div className="rounded-xl border border-gray-200 bg-white px-4 py-10 text-center">
-            <FileText className="mx-auto h-8 w-8 text-gray-300" />
-            <p className="mt-2 text-sm text-gray-500">
+          <div className="rounded-card border border-line bg-surface px-4 py-10 text-center">
+            <FileText className="mx-auto h-8 w-8 text-text-3" />
+            <p className="mt-2 text-sm text-text-2">
               {!debouncedSearch && tab === "all"
                 ? "No invoices yet. Invoices will be created from receivings."
                 : "No invoices match your filter."}
@@ -1483,72 +1483,72 @@ export default function InvoicesPage() {
         {invoices.map((inv) => {
           const actions = getActions(inv);
           return (
-            <div key={inv.id} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+            <div key={inv.id} className="rounded-card border border-line bg-surface p-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <p className="text-sm font-semibold text-gray-900">{inv.invoiceNumber}</p>
+                    <p className="text-sm font-semibold text-text">{inv.invoiceNumber}</p>
                     {inv.isPendingInvoice ? (
-                      <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-[9px] font-semibold text-yellow-800">AWAITING INVOICE</span>
+                      <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[9px] font-semibold text-warn-text">Awaiting invoice</span>
                     ) : (
                       <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{statusLabel(inv.status, inv.paymentType)}</Badge>
                     )}
                     {inv.aiPrefilledAt && (
-                      <span title={`AI-prefilled fields: ${inv.aiPrefilledFields.join(", ")}`} className="rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-semibold text-violet-700">AI PREFILLED — VERIFY</span>
+                      <span title={`AI-prefilled fields: ${inv.aiPrefilledFields.join(", ")}`} className="rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-semibold text-info-text">AI filled in: check</span>
                     )}
-                    {inv.paymentType === "STAFF_CLAIM" && <span className="rounded bg-purple-100 px-1 py-0.5 text-[9px] font-medium text-purple-600">CLAIM</span>}
-                    {inv.orderType === "PAYMENT_REQUEST" && <span className="rounded bg-blue-100 px-1 py-0.5 text-[9px] font-medium text-blue-600">REQUEST</span>}
-                    {inv.paymentType === "INTERNAL_TRANSFER" && <span className="rounded bg-orange-100 px-1 py-0.5 text-[9px] font-medium text-orange-600">TRANSFER</span>}
+                    {inv.paymentType === "STAFF_CLAIM" && <span className="rounded bg-info-soft px-1 py-0.5 text-[9px] font-medium text-info-text">Claim</span>}
+                    {inv.orderType === "PAYMENT_REQUEST" && <span className="rounded bg-info-soft px-1 py-0.5 text-[9px] font-medium text-info-text">Request</span>}
+                    {inv.paymentType === "INTERNAL_TRANSFER" && <span className="rounded bg-warn-soft px-1 py-0.5 text-[9px] font-medium text-warn-text">TRANSFER</span>}
                     {inv.expenseCategory && inv.expenseCategory !== "INGREDIENT" && (
-                      <span className="rounded bg-gray-100 px-1 py-0.5 text-[9px] font-medium uppercase text-gray-600">{inv.expenseCategory}</span>
+                      <span className="rounded bg-sunken px-1 py-0.5 text-[9px] font-medium uppercase text-text-2">{inv.expenseCategory}</span>
                     )}
                     {activeFlags(inv).length > 0 && (
                       <button
                         onClick={() => setReviewingFlags(inv)}
-                        className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 hover:bg-amber-200"
+                        className="inline-flex items-center gap-1 rounded bg-warn-soft px-1.5 py-0.5 text-[9px] font-semibold text-warn-text hover:bg-warn-soft"
                       >
                         <AlertTriangle className="h-3 w-3" />
                         REVIEW {activeFlags(inv).length > 1 ? `×${activeFlags(inv).length}` : ""}
                       </button>
                     )}
                     {inv.possiblePop && (
-                      <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700">
+                      <span className="inline-flex items-center gap-1 rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-semibold text-info-text">
                         <Check className="h-3 w-3" />
                         POP RM{inv.possiblePop.amount.toFixed(2)}
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 truncate text-xs text-gray-600">{inv.supplier}</p>
-                  <p className="truncate text-[11px] text-gray-400">
+                  <p className="mt-0.5 truncate text-xs text-text-2">{inv.supplier}</p>
+                  <p className="truncate text-[11px] text-text-3">
                     {inv.outlet}
                     {inv.claimedBy ? ` · ${inv.claimedBy}` : ""}
-                    {" · "}PO <code className="rounded bg-gray-100 px-1 py-0.5 text-[10px]">{inv.poNumber}</code>
+                    {" · "}PO <code className="rounded bg-sunken px-1 py-0.5 text-[10px]">{inv.poNumber}</code>
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-base font-bold text-gray-900">{formatRM(inv.amount)}</p>
+                  <p className="text-base font-bold text-text">{formatRM(inv.amount)}</p>
                   {(inv.status === "PARTIALLY_PAID" || inv.status === "DEPOSIT_PAID") && inv.amountPaid > 0 && (
-                    <p className="text-[10px] text-amber-600">Bal: {formatRM(inv.amount - inv.amountPaid)}</p>
+                    <p className="text-[10px] text-warn-text">Bal: {formatRM(inv.amount - inv.amountPaid)}</p>
                   )}
                 </div>
               </div>
 
-              <div className="mt-2 grid grid-cols-4 gap-2 text-[11px] text-gray-500">
+              <div className="mt-2 grid grid-cols-4 gap-2 text-[11px] text-text-2">
                 <div>
-                  <p className="text-[9px] uppercase tracking-wide text-gray-400">Issued</p>
-                  <p className="text-gray-600">{inv.issueDate}</p>
+                  <p className="text-[9px] uppercase tracking-wide text-text-3">Issued</p>
+                  <p className="text-text-2">{inv.issueDate}</p>
                 </div>
                 <div>
-                  <p className="text-[9px] uppercase tracking-wide text-gray-400">Delivered</p>
-                  <p className="text-gray-600">{inv.deliveryDate ?? "—"}</p>
+                  <p className="text-[9px] uppercase tracking-wide text-text-3">Delivered</p>
+                  <p className="text-text-2">{inv.deliveryDate ?? "—"}</p>
                 </div>
                 <div>
-                  <p className="text-[9px] uppercase tracking-wide text-gray-400">Due</p>
-                  <p className="text-gray-600">{inv.dueDate ?? "—"}</p>
+                  <p className="text-[9px] uppercase tracking-wide text-text-3">Due</p>
+                  <p className="text-text-2">{inv.dueDate ?? "—"}</p>
                 </div>
                 <div>
-                  <p className="text-[9px] uppercase tracking-wide text-gray-400">Paid</p>
-                  <p className="text-gray-600">{inv.paidAt ? inv.paidAt.slice(0, 10) : "—"}</p>
+                  <p className="text-[9px] uppercase tracking-wide text-text-3">Paid</p>
+                  <p className="text-text-2">{inv.paidAt ? inv.paidAt.slice(0, 10) : "—"}</p>
                 </div>
               </div>
 
@@ -1556,7 +1556,7 @@ export default function InvoicesPage() {
                 {inv.hasPhoto && (
                   <button
                     onClick={() => setViewingPhotos({ invoiceNumber: inv.invoiceNumber, photos: inv.photos })}
-                    className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-2 py-1 text-[11px] font-medium text-green-700"
+                    className="inline-flex items-center gap-1 rounded-md border border-line bg-ok-soft px-2 py-1 text-[11px] font-medium text-ok-text"
                   >
                     <ImageIcon className="h-3.5 w-3.5" />
                     {inv.photoCount} photo{inv.photoCount > 1 ? "s" : ""}
@@ -1564,7 +1564,7 @@ export default function InvoicesPage() {
                 )}
                 <button
                   onClick={() => openEdit(inv)}
-                  className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-600"
+                  className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 text-[11px] font-medium text-text-2"
                 >
                   <Pencil className="h-3.5 w-3.5" />
                   Edit
@@ -1573,16 +1573,16 @@ export default function InvoicesPage() {
                   {inv.isPendingInvoice && (
                     <button
                       onClick={() => openAttach(inv)}
-                      className="inline-flex items-center gap-1 rounded-md bg-yellow-500 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-yellow-600"
+                      className="inline-flex items-center gap-1 rounded-md bg-warn-text px-2.5 py-1.5 text-[11px] font-medium text-on-ink hover:opacity-90"
                     >
                       <FileText className="h-3.5 w-3.5" />
-                      Attach Invoice
+                      Attach invoice
                     </button>
                   )}
                   {inv.status === "INITIATED" && (
                     <button
                       onClick={() => openReject(inv)}
-                      className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50"
+                      className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[11px] font-medium text-danger-text hover:bg-danger-soft"
                     >
                       <Ban className="h-3.5 w-3.5" />
                       Reject
@@ -1598,7 +1598,7 @@ export default function InvoicesPage() {
                         });
                         await loadInvoices(undefined, { revalidate: true });
                       }}
-                      className="inline-flex items-center gap-1 rounded-md bg-violet-500 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-violet-600"
+                      className="inline-flex items-center gap-1 rounded-md bg-info-text px-2.5 py-1.5 text-[11px] font-medium text-on-ink hover:opacity-90"
                       title="Confirm the captured details and make this a payable"
                     >
                       <Check className="h-3.5 w-3.5" />
@@ -1609,7 +1609,7 @@ export default function InvoicesPage() {
                     <button
                       onClick={() => confirmPop(inv)}
                       disabled={confirmingPopId === inv.possiblePop.id}
-                      className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                      className="inline-flex items-center gap-1 rounded-md bg-info-text px-2.5 py-1.5 text-[11px] font-medium text-on-ink hover:opacity-90 disabled:opacity-50"
                     >
                       {confirmingPopId === inv.possiblePop.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                       Confirm POP
@@ -1620,7 +1620,7 @@ export default function InvoicesPage() {
                       key={a.status}
                       onClick={() => updateStatus(inv.id, a.status, inv)}
                       disabled={updatingId === inv.id}
-                      className={`rounded-md px-2.5 py-1.5 text-[11px] font-medium text-white ${a.color} disabled:opacity-50`}
+                      className={`rounded-md px-2.5 py-1.5 text-[11px] font-medium ${a.color} disabled:opacity-50`}
                     >
                       {updatingId === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : a.label}
                     </button>
@@ -1631,11 +1631,11 @@ export default function InvoicesPage() {
                       (e.g. Pay Balance on DEPOSIT_PAID). */}
                   {(["PAID", "DEPOSIT_PAID", "PARTIALLY_PAID"].includes(inv.status)) && inv.photos.length > 0 && (
                     <div className="flex items-center gap-1.5">
-                      {inv.status === "PAID" && actions.length === 0 && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                      {inv.status === "PAID" && actions.length === 0 && <CheckCircle2 className="h-4 w-4 text-ok-text" />}
                       <button
                         disabled={sendingPopId === inv.id}
                         onClick={() => setPopDialogInvoice(inv)}
-                        className="inline-flex items-center gap-1 rounded-md border border-green-200 bg-green-50 px-2 py-1 text-[11px] font-medium text-green-700 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-md border border-line bg-ok-soft px-2 py-1 text-[11px] font-medium text-ok-text disabled:opacity-50"
                       >
                         {sendingPopId === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Send POP"}
                       </button>
@@ -1649,45 +1649,45 @@ export default function InvoicesPage() {
       </div>
 
       {/* Desktop table */}
-      <div className="mt-4 hidden rounded-xl border border-gray-200 bg-white lg:block overflow-x-auto">
+      <div className="mt-4 hidden overflow-x-auto rounded-card border border-line bg-surface lg:block">
         <table className="w-full text-sm min-w-[720px]">
-          <thead><tr className="border-b bg-gray-50/50">
-            <th className="px-4 py-3 text-left font-medium text-gray-500">Invoice ID</th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">PO Ref</th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">Supplier</th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>
-            {typeFilter !== "supplier" && <th className="px-4 py-3 text-left font-medium text-gray-500">Claimed By</th>}
-            <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">
-              <button onClick={() => toggleSort("issueDate")} className="inline-flex items-center gap-1 hover:text-gray-700">
-                Issue Date <SortIcon col="issueDate" />
+          <thead><tr className="border-b border-line bg-sunken/50">
+            <th className="px-4 py-3 text-left font-medium text-text-2">Invoice ID</th>
+            <th className="px-4 py-3 text-left font-medium text-text-2">PO Ref</th>
+            <th className="px-4 py-3 text-left font-medium text-text-2">Supplier</th>
+            <th className="px-4 py-3 text-left font-medium text-text-2">Outlet</th>
+            {typeFilter !== "supplier" && <th className="px-4 py-3 text-left font-medium text-text-2">Claimed by</th>}
+            <th className="px-4 py-3 text-left font-medium text-text-2">Status</th>
+            <th className="px-4 py-3 text-left font-medium text-text-2">
+              <button onClick={() => toggleSort("issueDate")} className="inline-flex items-center gap-1 hover:text-text-2">
+                Issue date <SortIcon col="issueDate" />
               </button>
             </th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">
-              <button onClick={() => toggleSort("deliveryDate")} className="inline-flex items-center gap-1 hover:text-gray-700">
+            <th className="px-4 py-3 text-left font-medium text-text-2">
+              <button onClick={() => toggleSort("deliveryDate")} className="inline-flex items-center gap-1 hover:text-text-2">
                 Delivered <SortIcon col="deliveryDate" />
               </button>
             </th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">
-              <button onClick={() => toggleSort("dueDate")} className="inline-flex items-center gap-1 hover:text-gray-700">
-                Due Date <SortIcon col="dueDate" />
+            <th className="px-4 py-3 text-left font-medium text-text-2">
+              <button onClick={() => toggleSort("dueDate")} className="inline-flex items-center gap-1 hover:text-text-2">
+                Due date <SortIcon col="dueDate" />
               </button>
             </th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">
-              <button onClick={() => toggleSort("paidAt")} className="inline-flex items-center gap-1 hover:text-gray-700">
-                Paid Date <SortIcon col="paidAt" />
+            <th className="px-4 py-3 text-left font-medium text-text-2">
+              <button onClick={() => toggleSort("paidAt")} className="inline-flex items-center gap-1 hover:text-text-2">
+                Paid date <SortIcon col="paidAt" />
               </button>
             </th>
-            <th className="px-4 py-3 text-right font-medium text-gray-500">Amount (RM)</th>
-            <th className="px-4 py-3 text-left font-medium text-gray-500">Photo</th>
-            <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
+            <th className="px-4 py-3 text-right font-medium text-text-2">Amount (RM)</th>
+            <th className="px-4 py-3 text-left font-medium text-text-2">Photo</th>
+            <th className="px-4 py-3 text-right font-medium text-text-2">Actions</th>
           </tr></thead>
           <tbody>
             {invoices.length === 0 && (
               <tr>
                 <td colSpan={12} className="px-4 py-12 text-center">
-                  <FileText className="mx-auto h-8 w-8 text-gray-300" />
-                  <p className="mt-2 text-sm text-gray-500">
+                  <FileText className="mx-auto h-8 w-8 text-text-3" />
+                  <p className="mt-2 text-sm text-text-2">
                     {!debouncedSearch && tab === "all"
                       ? "No invoices yet. Invoices will be created from receivings."
                       : "No invoices match your filter."}
@@ -1698,19 +1698,19 @@ export default function InvoicesPage() {
             {invoices.map((inv) => {
               const actions = getActions(inv);
               return (
-                <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                  <td className="px-4 py-3 font-medium text-gray-900">
+                <tr key={inv.id} className="border-b border-line hover:bg-sunken/50">
+                  <td className="px-4 py-3 font-medium text-text">
                     {inv.invoiceNumber}
-                    {inv.paymentType === "STAFF_CLAIM" && <span className="ml-1.5 rounded bg-purple-100 px-1 py-0.5 text-[9px] font-medium text-purple-600">CLAIM</span>}
-                    {inv.orderType === "PAYMENT_REQUEST" && <span className="ml-1.5 rounded bg-blue-100 px-1 py-0.5 text-[9px] font-medium text-blue-600">REQUEST</span>}
+                    {inv.paymentType === "STAFF_CLAIM" && <span className="ml-1.5 rounded bg-info-soft px-1 py-0.5 text-[9px] font-medium text-info-text">Claim</span>}
+                    {inv.orderType === "PAYMENT_REQUEST" && <span className="ml-1.5 rounded bg-info-soft px-1 py-0.5 text-[9px] font-medium text-info-text">Request</span>}
                     {inv.expenseCategory && inv.expenseCategory !== "INGREDIENT" && (
-                      <span className="ml-1.5 rounded bg-gray-100 px-1 py-0.5 text-[9px] font-medium uppercase text-gray-600">{inv.expenseCategory}</span>
+                      <span className="ml-1.5 rounded bg-sunken px-1 py-0.5 text-[9px] font-medium uppercase text-text-2">{inv.expenseCategory}</span>
                     )}
-                    {inv.paymentType === "INTERNAL_TRANSFER" && <span className="ml-1.5 rounded bg-orange-100 px-1 py-0.5 text-[9px] font-medium text-orange-600">TRANSFER</span>}
+                    {inv.paymentType === "INTERNAL_TRANSFER" && <span className="ml-1.5 rounded bg-warn-soft px-1 py-0.5 text-[9px] font-medium text-warn-text">TRANSFER</span>}
                     {activeFlags(inv).length > 0 && (
                       <button
                         onClick={() => setReviewingFlags(inv)}
-                        className="ml-1.5 inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-700 hover:bg-amber-200"
+                        className="ml-1.5 inline-flex items-center gap-1 rounded bg-warn-soft px-1.5 py-0.5 text-[9px] font-semibold text-warn-text hover:bg-warn-soft"
                         title={`${activeFlags(inv).length} review flag${activeFlags(inv).length > 1 ? "s" : ""}`}
                       >
                         <AlertTriangle className="h-3 w-3" />
@@ -1719,7 +1719,7 @@ export default function InvoicesPage() {
                     )}
                     {inv.possiblePop && (
                       <span
-                        className="ml-1.5 inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700"
+                        className="ml-1.5 inline-flex items-center gap-1 rounded bg-info-soft px-1.5 py-0.5 text-[9px] font-semibold text-info-text"
                         title={`Uploaded POP RM${inv.possiblePop.amount.toFixed(2)}${inv.possiblePop.referenceNumber ? ` · ref ${inv.possiblePop.referenceNumber}` : ""} — confirm in Actions`}
                       >
                         <Check className="h-3 w-3" />
@@ -1727,23 +1727,23 @@ export default function InvoicesPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3"><code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">{inv.poNumber}</code></td>
-                  <td className="px-4 py-3 text-gray-600">{inv.supplier}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{inv.outlet}</td>
-                  {typeFilter !== "supplier" && <td className="px-4 py-3 text-xs text-gray-500">{inv.claimedBy ?? "—"}</td>}
+                  <td className="px-4 py-3"><code className="rounded bg-sunken px-1.5 py-0.5 text-xs">{inv.poNumber}</code></td>
+                  <td className="px-4 py-3 text-text-2">{inv.supplier}</td>
+                  <td className="px-4 py-3 text-xs text-text-2">{inv.outlet}</td>
+                  {typeFilter !== "supplier" && <td className="px-4 py-3 text-xs text-text-2">{inv.claimedBy ?? "—"}</td>}
                   <td className="px-4 py-3">
                     {inv.isPendingInvoice ? (
-                      <span className="inline-block rounded bg-yellow-100 px-1.5 py-0.5 text-[9px] font-semibold text-yellow-800">AWAITING INVOICE</span>
+                      <span className="inline-block rounded bg-warn-soft px-1.5 py-0.5 text-[9px] font-semibold text-warn-text">Awaiting invoice</span>
                     ) : (
                       <Badge className={`text-[10px] ${statusColor(inv.status)}`}>{statusLabel(inv.status, inv.paymentType)}</Badge>
                     )}
                     {(inv.status === "PARTIALLY_PAID" || inv.status === "DEPOSIT_PAID") && inv.amountPaid > 0 && (
-                      <p className="text-[9px] text-amber-600 mt-0.5">Bal: {formatRM(inv.amount - inv.amountPaid)}</p>
+                      <p className="text-[9px] text-warn-text mt-0.5">Bal: {formatRM(inv.amount - inv.amountPaid)}</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{inv.issueDate}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{inv.deliveryDate ?? "—"}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">
+                  <td className="px-4 py-3 text-xs text-text-2">{inv.issueDate}</td>
+                  <td className="px-4 py-3 text-xs text-text-2">{inv.deliveryDate ?? "—"}</td>
+                  <td className="px-4 py-3 text-xs text-text-2">
                     {(() => {
                       // Deposit-bearing invoice in the deposit leg → show
                       // "Deposit: <issueDate>" because deposit is due on
@@ -1753,15 +1753,15 @@ export default function InvoicesPage() {
                       const inDepositLeg = hasDep && (inv.amountPaid ?? 0) === 0
                         && (inv.status === "PENDING" || inv.status === "OVERDUE" || inv.status === "INITIATED");
                       if (inDepositLeg) {
-                        return <><span className="text-amber-600">Deposit:</span> {inv.issueDate}</>;
+                        return <><span className="text-warn-text">Deposit:</span> {inv.issueDate}</>;
                       }
                       const inBalanceLeg = hasDep && (inv.amountPaid ?? 0) > 0;
                       return inBalanceLeg
-                        ? <><span className="text-amber-600">Balance:</span> {inv.dueDate ?? "—"}</>
+                        ? <><span className="text-warn-text">Balance:</span> {inv.dueDate ?? "—"}</>
                         : (inv.dueDate ?? "—");
                     })()}
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{inv.paidAt ? inv.paidAt.slice(0, 10) : "—"}</td>
+                  <td className="px-4 py-3 text-xs text-text-2">{inv.paidAt ? inv.paidAt.slice(0, 10) : "—"}</td>
                   <td className="px-4 py-3 text-right font-medium">
                     {(() => {
                       const hasDep = (inv.depositPercent ?? 0) > 0;
@@ -1772,7 +1772,7 @@ export default function InvoicesPage() {
                         return (
                           <>
                             {depositAmt.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            <p className="text-[9px] text-gray-400 mt-0.5">of {inv.amount.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                            <p className="text-[9px] text-text-3 mt-0.5">of {inv.amount.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                           </>
                         );
                       }
@@ -1783,21 +1783,21 @@ export default function InvoicesPage() {
                     {inv.hasPhoto ? (
                       <button
                         onClick={() => setViewingPhotos({ invoiceNumber: inv.invoiceNumber, photos: inv.photos })}
-                        className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-green-600 hover:bg-green-50 transition-colors"
+                        className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-ok-text hover:bg-ok-soft transition-colors"
                         title={`View ${inv.photoCount} photo${inv.photoCount > 1 ? "s" : ""}`}
                       >
                         <ImageIcon className="h-4 w-4" />
                         <span className="text-[10px] font-medium">{inv.photoCount}</span>
                       </button>
                     ) : (
-                      <span className="text-xs text-gray-300">—</span>
+                      <span className="text-xs text-text-3">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-1">
                       <button
                         onClick={() => openEdit(inv)}
-                        className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                        className="rounded-md p-1 text-text-3 hover:bg-sunken hover:text-text-2"
                         title="Edit invoice"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -1805,17 +1805,17 @@ export default function InvoicesPage() {
                       {inv.isPendingInvoice && (
                         <button
                           onClick={() => openAttach(inv)}
-                          className="inline-flex items-center gap-1 rounded-md bg-yellow-500 px-2 py-1 text-[10px] font-medium text-white hover:bg-yellow-600"
+                          className="inline-flex items-center gap-1 rounded-md bg-warn-text px-2 py-1 text-[10px] font-medium text-on-ink hover:opacity-90"
                           title="Attach supplier invoice"
                         >
                           <FileText className="h-3 w-3" />
-                          Attach Invoice
+                          Attach invoice
                         </button>
                       )}
                       {inv.status === "INITIATED" && (
                         <button
                           onClick={() => openReject(inv)}
-                          className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-[10px] font-medium text-red-600 hover:bg-red-50"
+                          className="inline-flex items-center gap-1 rounded-md border border-line bg-surface px-2 py-1 text-[10px] font-medium text-danger-text hover:bg-danger-soft"
                           title="Reject — payment failed, revert to Pending"
                         >
                           <Ban className="h-3 w-3" />
@@ -1826,7 +1826,7 @@ export default function InvoicesPage() {
                         <button
                           onClick={() => confirmPop(inv)}
                           disabled={confirmingPopId === inv.possiblePop.id}
-                          className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                          className="inline-flex items-center gap-1 rounded-md bg-info-text px-2 py-1 text-[10px] font-medium text-on-ink hover:opacity-90 disabled:opacity-50"
                           title="Confirm this POP against this invoice — mark paid + attach"
                         >
                           {confirmingPopId === inv.possiblePop.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
@@ -1843,7 +1843,7 @@ export default function InvoicesPage() {
                             });
                             await loadInvoices(undefined, { revalidate: true });
                           }}
-                          className="inline-flex items-center gap-1 rounded-md bg-violet-500 px-2 py-1 text-[10px] font-medium text-white hover:bg-violet-600"
+                          className="inline-flex items-center gap-1 rounded-md bg-info-text px-2 py-1 text-[10px] font-medium text-on-ink hover:opacity-90"
                           title="Confirm the captured details and make this a payable"
                         >
                           <Check className="h-3 w-3" />
@@ -1855,7 +1855,7 @@ export default function InvoicesPage() {
                           key={a.status}
                           onClick={() => updateStatus(inv.id, a.status, inv)}
                           disabled={updatingId === inv.id}
-                          className={`rounded-md px-2 py-1 text-[10px] font-medium text-white ${a.color} disabled:opacity-50`}
+                          className={`rounded-md px-2 py-1 text-[10px] font-medium ${a.color} disabled:opacity-50`}
                         >
                           {updatingId === inv.id ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -1866,11 +1866,11 @@ export default function InvoicesPage() {
                       ))}
                       {(["PAID", "DEPOSIT_PAID", "PARTIALLY_PAID"].includes(inv.status)) && inv.photos.length > 0 && (
                         <div className="flex items-center gap-1.5">
-                          {inv.status === "PAID" && actions.length === 0 && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                          {inv.status === "PAID" && actions.length === 0 && <CheckCircle2 className="h-4 w-4 text-ok-text" />}
                           <button
                             disabled={sendingPopId === inv.id}
                             onClick={() => setPopDialogInvoice(inv)}
-                            className="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100 border border-green-200 transition-colors disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded-md bg-ok-soft px-2 py-1 text-[10px] font-medium text-ok-text hover:bg-ok-soft border border-line transition-colors disabled:opacity-50"
                             title="Send proof of payment"
                           >
                             {sendingPopId === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Send POP"}
@@ -1889,63 +1889,63 @@ export default function InvoicesPage() {
       {/* Edit invoice modal */}
       {editingInvoice && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setEditingInvoice(null)}>
-          <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-surface p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-gray-900">Edit Invoice</h3>
-              <button onClick={() => setEditingInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+              <h3 className="text-base font-semibold text-text">Edit invoice</h3>
+              <button onClick={() => setEditingInvoice(null)} className="rounded-md p-1 text-text-3 hover:bg-sunken hover:text-text-2">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="space-y-3">
-              <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
-                <span className="font-medium text-gray-700">{editingInvoice.supplier}</span> · {editingInvoice.outlet} · PO: {editingInvoice.poNumber}
+              <div className="rounded-lg bg-sunken px-3 py-2 text-xs text-text-2">
+                <span className="font-medium text-text-2">{editingInvoice.supplier}</span> · {editingInvoice.outlet} · PO: {editingInvoice.poNumber}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Invoice Number</label>
+                  <label className="mb-1 block text-xs font-medium text-text-2">Invoice number</label>
                   <Input value={editForm.invoiceNumber} onChange={(e) => setEditForm({ ...editForm, invoiceNumber: e.target.value })} placeholder="e.g. INV-0001" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Amount (RM)</label>
+                  <label className="mb-1 block text-xs font-medium text-text-2">Amount (RM)</label>
                   <Input type="number" step="0.01" value={editForm.amount} onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Invoice Date</label>
+                  <label className="mb-1 block text-xs font-medium text-text-2">Invoice date</label>
                   <input
                     type="date"
                     value={editForm.issueDate}
                     onChange={(e) => setEditForm({ ...editForm, issueDate: e.target.value })}
-                    className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm focus:border-line focus:outline-none focus:ring-1 focus:ring-line-2"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Due Date</label>
+                  <label className="mb-1 block text-xs font-medium text-text-2">Due date</label>
                   <input
                     type="date"
                     value={editForm.dueDate}
                     onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
-                    className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm focus:border-line focus:outline-none focus:ring-1 focus:ring-line-2"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Delivery Date <span className="text-gray-400">(actual arrival)</span></label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Delivery date <span className="text-text-3">(actual arrival)</span></label>
                 <input
                   type="date"
                   value={editForm.deliveryDate}
                   onChange={(e) => setEditForm({ ...editForm, deliveryDate: e.target.value })}
-                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm focus:border-line focus:outline-none focus:ring-1 focus:ring-line-2"
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Notes</label>
                 <Input value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} placeholder="Payment notes..." />
               </div>
 
@@ -1963,11 +1963,11 @@ export default function InvoicesPage() {
                   ? Math.round((amt - depAmt) * 100) / 100
                   : amt || 0;
                 return (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3">
-                    <p className="mb-2 text-xs font-semibold text-amber-900">Deposit (optional)</p>
+                  <div className="rounded-lg border border-line bg-warn-soft p-3">
+                    <p className="mb-2 text-xs font-semibold text-warn-text">Deposit (optional)</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="mb-1 block text-[11px] font-medium text-amber-900/80">Deposit %</label>
+                        <label className="mb-1 block text-[11px] font-medium text-warn-text">Deposit %</label>
                         <Input
                           type="number"
                           min="0"
@@ -1979,7 +1979,7 @@ export default function InvoicesPage() {
                         />
                       </div>
                       <div>
-                        <label className="mb-1 block text-[11px] font-medium text-amber-900/80">Balance due (days after invoice date)</label>
+                        <label className="mb-1 block text-[11px] font-medium text-warn-text">Balance due (days after invoice date)</label>
                         <Input
                           type="number"
                           min="0"
@@ -1992,22 +1992,22 @@ export default function InvoicesPage() {
                     </div>
                     {validPct && validAmt ? (
                       <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded bg-white px-2 py-1.5">
-                          <span className="text-amber-700">Deposit</span>
-                          <p className="font-semibold text-amber-900">{formatRM(depAmt)}</p>
+                        <div className="rounded bg-surface px-2 py-1.5">
+                          <span className="text-warn-text">Deposit</span>
+                          <p className="font-semibold text-warn-text">{formatRM(depAmt)}</p>
                         </div>
-                        <div className="rounded bg-white px-2 py-1.5">
-                          <span className="text-amber-700">Balance</span>
-                          <p className="font-semibold text-amber-900">{formatRM(balance)}</p>
+                        <div className="rounded bg-surface px-2 py-1.5">
+                          <span className="text-warn-text">Balance</span>
+                          <p className="font-semibold text-warn-text">{formatRM(balance)}</p>
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-1.5 text-[11px] text-amber-800/70">
+                      <p className="mt-1.5 text-[11px] text-warn-text">
                         Leave % blank for full payment. Set % to require a deposit before delivery — system splits the invoice into Pay Deposit + Pay Balance.
                       </p>
                     )}
                     {editingInvoice?.depositPaidAt && (
-                      <p className="mt-2 text-[11px] text-amber-700">
+                      <p className="mt-2 text-[11px] text-warn-text">
                         Deposit already paid on {new Date(editingInvoice.depositPaidAt).toLocaleDateString("en-MY")}. Editing the % won&apos;t reverse that — only adjusts what&apos;s recorded.
                       </p>
                     )}
@@ -2017,13 +2017,13 @@ export default function InvoicesPage() {
 
               {/* Photo upload */}
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Invoice Photos</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Invoice photos</label>
                 {editPhotos.length > 0 && (
                   <div className="mb-2 grid grid-cols-3 gap-2">
                     {editPhotos.map((url, i) => (
-                      <div key={i} className="group relative overflow-hidden rounded-lg border border-gray-200">
+                      <div key={i} className="group relative overflow-hidden rounded-lg border border-line">
                         {isPdf(url) ? (
-                          <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-24 w-full flex-col items-center justify-center bg-gray-50 text-gray-400 hover:text-blue-500">
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-24 w-full flex-col items-center justify-center bg-sunken text-text-3 hover:text-info-text">
                             <FileDown className="h-6 w-6" />
                             <span className="mt-1 text-[10px]">PDF</span>
                           </a>
@@ -2032,7 +2032,7 @@ export default function InvoicesPage() {
                         )}
                         <button
                           onClick={() => setEditPhotos(editPhotos.filter((_, j) => j !== i))}
-                          className="absolute right-1 top-1 rounded-full bg-red-500 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                          className="absolute right-1 top-1 rounded-full bg-danger-text p-0.5 text-on-ink opacity-0 transition-opacity group-hover:opacity-100"
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
@@ -2052,17 +2052,17 @@ export default function InvoicesPage() {
                     if (e.dataTransfer.files?.length) await processEditPhotoFiles(e.dataTransfer.files);
                   }}
                   className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-3 text-sm transition-colors ${
-                    editUploading ? "opacity-50 pointer-events-none border-gray-300" :
-                    editDragging ? "border-blue-500 bg-blue-50" :
-                    "border-gray-300 hover:border-blue-400 hover:bg-blue-50/30"
-                  }`}
+ editUploading ? "opacity-50 pointer-events-none border-line-2" :
+ editDragging ? "border-line bg-info-soft" :
+ "border-line-2 hover:border-line hover:bg-info-soft"
+}`}
                 >
                   {editUploading ? (
-                    <><Loader2 className="h-4 w-4 animate-spin text-blue-500" /> Uploading...</>
+                    <><Loader2 className="h-4 w-4 animate-spin text-info-text" /> Uploading...</>
                   ) : editDragging ? (
-                    <><Upload className="h-4 w-4 text-blue-600" /> <span className="font-medium text-blue-700">Drop to upload</span></>
+                    <><Upload className="h-4 w-4 text-info-text" /> <span className="font-medium text-info-text">Drop to upload</span></>
                   ) : (
-                    <><Upload className="h-4 w-4 text-gray-400" /> <span className="text-gray-500">Upload photos — or drag &amp; drop</span></>
+                    <><Upload className="h-4 w-4 text-text-3" /> <span className="text-text-2">Upload photos — or drag &amp; drop</span></>
                   )}
                   <input type="file" accept="image/*,.pdf" multiple className="hidden" onChange={handleEditPhotoUpload} />
                 </label>
@@ -2075,16 +2075,16 @@ export default function InvoicesPage() {
                   onClick={deleteInvoice}
                   disabled={editDeleting || editSaving}
                   title="Delete this draft/pending invoice"
-                  className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  className="rounded-md border border-line px-3 py-2 text-sm font-medium text-danger-text hover:bg-danger-soft disabled:opacity-50"
                 >
                   {editDeleting ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Delete"}
                 </button>
               )}
-              <button onClick={() => setEditingInvoice(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={() => setEditingInvoice(null)} className="flex-1 rounded-md border border-line px-3 py-2 text-sm text-text-2 hover:bg-sunken">Cancel</button>
               <button
                 onClick={saveEdit}
                 disabled={editSaving || !editForm.invoiceNumber}
-                className="flex-1 rounded-md bg-terracotta px-3 py-2 text-sm font-medium text-white hover:bg-terracotta-dark disabled:opacity-50"
+                className="flex-1 rounded-md bg-ink px-3 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {editSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Save Changes"}
               </button>
@@ -2097,22 +2097,22 @@ export default function InvoicesPage() {
           actual invoice details once the supplier sends them post-delivery. */}
       {attachingInvoice && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setAttachingInvoice(null)}>
-          <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-surface p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-base font-semibold text-gray-900">Attach Supplier Invoice</h3>
-                <p className="mt-0.5 text-xs text-gray-500">Goods already received. Fill in the supplier&apos;s invoice details so it&apos;s ready to pay.</p>
+                <h3 className="text-base font-semibold text-text">Attach supplier invoice</h3>
+                <p className="mt-0.5 text-xs text-text-2">Goods already received. Fill in the supplier&apos;s invoice details so it&apos;s ready to pay.</p>
               </div>
-              <button onClick={() => setAttachingInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+              <button onClick={() => setAttachingInvoice(null)} className="rounded-md p-1 text-text-3 hover:bg-sunken hover:text-text-2">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="space-y-3">
-              <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-3 py-2 text-xs text-gray-700">
+              <div className="rounded-lg bg-warn-soft border border-line px-3 py-2 text-xs text-text-2">
                 <span className="font-medium">{attachingInvoice.supplier}</span> · {attachingInvoice.outlet} · PO: {attachingInvoice.poNumber}
                 {attachingInvoice.supplierPaymentTerms && (
-                  <span className="ml-2 rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] font-medium text-yellow-800">Terms: {attachingInvoice.supplierPaymentTerms}</span>
+                  <span className="ml-2 rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-medium text-warn-text">Terms: {attachingInvoice.supplierPaymentTerms}</span>
                 )}
               </div>
 
@@ -2127,26 +2127,26 @@ export default function InvoicesPage() {
                 const hasVariance = Math.abs(billedVsReceived) > 0.5;
                 const lineVariances = attachRecon.lines.filter((l) => Math.abs(l.qtyVariance) > 0.0001);
                 return (
-                  <div className={`rounded-lg border px-3 py-2 text-xs ${hasVariance ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}>
+                  <div className={`rounded-lg border px-3 py-2 text-xs ${hasVariance ? "border-line bg-danger-soft" : "border-line bg-ok-soft"}`}>
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-700">Reconciliation</span>
+                      <span className="font-medium text-text-2">Reconciliation</span>
                       {!hasVariance && lineVariances.length === 0 && (
-                        <span className="text-[10px] font-medium text-emerald-700">✓ All aligned</span>
+                        <span className="text-[10px] font-medium text-ok-text">✓ All aligned</span>
                       )}
                       {hasVariance && (
-                        <span className="text-[10px] font-medium text-red-700">⚠ Billed {billedVsReceived >= 0 ? "+" : ""}{formatRM(billedVsReceived)} vs received</span>
+                        <span className="text-[10px] font-medium text-danger-text">⚠ Billed {billedVsReceived >= 0 ? "+" : ""}{formatRM(billedVsReceived)} vs received</span>
                       )}
                     </div>
                     <dl className="mt-1.5 space-y-0.5">
-                      <div className="flex items-baseline justify-between text-gray-600">
+                      <div className="flex items-baseline justify-between text-text-2">
                         <dt>PO ordered</dt>
                         <dd className="tabular-nums">{formatRM(attachRecon.poTotal)}</dd>
                       </div>
-                      <div className="flex items-baseline justify-between text-gray-600">
+                      <div className="flex items-baseline justify-between text-text-2">
                         <dt>Received total</dt>
                         <dd className="tabular-nums">{formatRM(attachRecon.receivedTotal)}</dd>
                       </div>
-                      <div className="flex items-baseline justify-between text-gray-700 font-medium">
+                      <div className="flex items-baseline justify-between text-text-2 font-medium">
                         <dt>Supplier billed</dt>
                         <dd className="tabular-nums">{formatRM(billed)}</dd>
                       </div>
@@ -2155,15 +2155,15 @@ export default function InvoicesPage() {
                       <button
                         type="button"
                         onClick={() => setShowVariances((v) => !v)}
-                        className="mt-1.5 text-[11px] font-medium text-red-700 underline-offset-2 hover:underline"
+                        className="mt-1.5 text-[11px] font-medium text-danger-text underline-offset-2 hover:underline"
                       >
                         {showVariances ? "Hide" : "Show"} variance lines ({lineVariances.length} qty mismatch{lineVariances.length === 1 ? "" : "es"})
                       </button>
                     )}
                     {hasVariance && (
                       <div className="mt-2">
-                        <label className="block text-[11px] font-medium text-red-800">
-                          Reason for variance <span className="text-red-500">*</span>
+                        <label className="block text-[11px] font-medium text-danger-text">
+                          Reason for variance <span className="text-danger-text">*</span>
                         </label>
                         <Input
                           value={attachVarianceReason}
@@ -2171,23 +2171,23 @@ export default function InvoicesPage() {
                           placeholder="e.g. supplier discount, damaged goods credit, billing error — accepted as-is"
                           className="mt-1 text-xs"
                         />
-                        <p className="mt-1 text-[10px] text-red-700">
+                        <p className="mt-1 text-[10px] text-danger-text">
                           Required when supplier billed amount differs from received total. Saved on the invoice for audit.
                         </p>
                       </div>
                     )}
                     {showVariances && lineVariances.length > 0 && (
                       <table className="mt-2 w-full text-[11px]">
-                        <thead className="text-gray-500">
+                        <thead className="text-text-2">
                           <tr><th className="text-left font-normal">Item</th><th className="text-right font-normal">Ordered</th><th className="text-right font-normal">Received</th><th className="text-right font-normal">Δ</th></tr>
                         </thead>
                         <tbody>
                           {lineVariances.map((l) => (
-                            <tr key={l.productId} className="border-t border-red-100">
-                              <td className="py-0.5 text-gray-700">{l.product}</td>
+                            <tr key={l.productId} className="border-t border-line">
+                              <td className="py-0.5 text-text-2">{l.product}</td>
                               <td className="text-right tabular-nums">{l.ordered.toFixed(2)} {l.uom}</td>
                               <td className="text-right tabular-nums">{l.received.toFixed(2)} {l.uom}</td>
-                              <td className={`text-right tabular-nums font-medium ${l.qtyVariance < 0 ? "text-red-600" : "text-amber-600"}`}>
+                              <td className={`text-right tabular-nums font-medium ${l.qtyVariance < 0 ? "text-danger-text" : "text-warn-text"}`}>
                                 {l.qtyVariance >= 0 ? "+" : ""}{l.qtyVariance.toFixed(2)}
                               </td>
                             </tr>
@@ -2201,7 +2201,7 @@ export default function InvoicesPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Supplier Invoice No. <span className="text-red-500">*</span></label>
+                  <label className="mb-1 block text-xs font-medium text-text-2">Supplier Invoice No. <span className="text-danger-text">*</span></label>
                   <Input
                     value={attachForm.invoiceNumber}
                     onChange={(e) => setAttachForm({ ...attachForm, invoiceNumber: e.target.value })}
@@ -2210,7 +2210,7 @@ export default function InvoicesPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Amount (RM)</label>
+                  <label className="mb-1 block text-xs font-medium text-text-2">Amount (RM)</label>
                   <Input
                     type="number"
                     step="0.01"
@@ -2222,7 +2222,7 @@ export default function InvoicesPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Issue Date</label>
+                  <label className="mb-1 block text-xs font-medium text-text-2">Issue date</label>
                   <input
                     type="date"
                     value={attachForm.issueDate}
@@ -2237,16 +2237,16 @@ export default function InvoicesPage() {
                         dueDate: termDays && newIssue ? addDays(newIssue, termDays) : prev.dueDate,
                       }));
                     }}
-                    className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm focus:border-line focus:outline-none focus:ring-1 focus:ring-line-2"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Due Date</label>
+                  <label className="mb-1 block text-xs font-medium text-text-2">Due date</label>
                   <input
                     type="date"
                     value={attachForm.dueDate}
                     onChange={(e) => setAttachForm({ ...attachForm, dueDate: e.target.value })}
-                    className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm focus:border-line focus:outline-none focus:ring-1 focus:ring-line-2"
                   />
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     {[7, 14, 30, 60].map((d) => (
@@ -2257,7 +2257,7 @@ export default function InvoicesPage() {
                           ...prev,
                           dueDate: prev.issueDate ? addDays(prev.issueDate, d) : prev.dueDate,
                         }))}
-                        className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] text-gray-600 hover:bg-gray-50"
+                        className="rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] text-text-2 hover:bg-sunken"
                       >
                         +{d}d
                       </button>
@@ -2268,13 +2268,13 @@ export default function InvoicesPage() {
 
               {/* Photos — start from any photos captured at receiving */}
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Invoice Photos</label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Invoice photos</label>
                 {attachPhotos.length > 0 && (
                   <div className="mb-2 grid grid-cols-3 gap-2">
                     {attachPhotos.map((url, i) => (
-                      <div key={i} className="group relative overflow-hidden rounded-lg border border-gray-200">
+                      <div key={i} className="group relative overflow-hidden rounded-lg border border-line">
                         {isPdf(url) ? (
-                          <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-24 w-full flex-col items-center justify-center bg-gray-50 text-gray-400 hover:text-blue-500">
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-24 w-full flex-col items-center justify-center bg-sunken text-text-3 hover:text-info-text">
                             <FileDown className="h-6 w-6" />
                             <span className="mt-1 text-[10px]">PDF</span>
                           </a>
@@ -2283,7 +2283,7 @@ export default function InvoicesPage() {
                         )}
                         <button
                           onClick={() => setAttachPhotos(attachPhotos.filter((_, j) => j !== i))}
-                          className="absolute right-1 top-1 rounded-full bg-red-500 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                          className="absolute right-1 top-1 rounded-full bg-danger-text p-0.5 text-on-ink opacity-0 transition-opacity group-hover:opacity-100"
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
@@ -2304,17 +2304,17 @@ export default function InvoicesPage() {
                     if (files?.length) await processAttachFiles(files);
                   }}
                   className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-3 text-sm transition-colors ${
-                    attachUploading ? "opacity-50 pointer-events-none border-gray-300" :
-                    attachDragging ? "border-yellow-500 bg-yellow-50" :
-                    "border-gray-300 hover:border-yellow-400 hover:bg-yellow-50/30"
-                  }`}
+ attachUploading ? "opacity-50 pointer-events-none border-line-2" :
+ attachDragging ? "border-line bg-warn-soft" :
+ "border-line-2 hover:border-line hover:bg-warn-soft"
+}`}
                 >
                   {attachUploading ? (
-                    <><Loader2 className="h-4 w-4 animate-spin text-yellow-500" /> Uploading...</>
+                    <><Loader2 className="h-4 w-4 animate-spin text-warn-text" /> Uploading...</>
                   ) : attachDragging ? (
-                    <><Upload className="h-4 w-4 text-yellow-600" /> <span className="text-yellow-700 font-medium">Drop to upload</span></>
+                    <><Upload className="h-4 w-4 text-warn-text" /> <span className="text-warn-text font-medium">Drop to upload</span></>
                   ) : (
-                    <><Upload className="h-4 w-4 text-gray-400" /> <span className="text-gray-500">Upload supplier invoice — or drag &amp; drop</span></>
+                    <><Upload className="h-4 w-4 text-text-3" /> <span className="text-text-2">Upload supplier invoice — or drag &amp; drop</span></>
                   )}
                   <input type="file" accept="image/*,.pdf" multiple className="hidden" onChange={handleAttachPhotoUpload} />
                 </label>
@@ -2322,11 +2322,11 @@ export default function InvoicesPage() {
             </div>
 
             <div className="mt-4 flex gap-2">
-              <button onClick={() => setAttachingInvoice(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={() => setAttachingInvoice(null)} className="flex-1 rounded-md border border-line px-3 py-2 text-sm text-text-2 hover:bg-sunken">Cancel</button>
               <button
                 onClick={submitAttach}
                 disabled={attachSaving || !attachForm.invoiceNumber.trim()}
-                className="flex-1 rounded-md bg-yellow-500 px-3 py-2 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-50"
+                className="flex-1 rounded-md bg-warn-text px-3 py-2 text-sm font-medium text-on-ink hover:opacity-90 disabled:opacity-50"
               >
                 {attachSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Attach & Move to Payable"}
               </button>
@@ -2340,13 +2340,13 @@ export default function InvoicesPage() {
           send pre-filled text into a group chat). */}
       {popDialogInvoice && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setPopDialogInvoice(null)}>
-          <div className="relative w-full max-w-md rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-full max-w-md rounded-t-xl sm:rounded-xl bg-surface p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="text-base font-semibold text-gray-900">Send Proof of Payment</h3>
-                <p className="mt-0.5 text-xs text-gray-500">{popDialogInvoice.invoiceNumber} · {popDialogInvoice.supplier} · {formatRM(popDialogInvoice.amount)}</p>
+                <h3 className="text-base font-semibold text-text">Send proof of payment</h3>
+                <p className="mt-0.5 text-xs text-text-2">{popDialogInvoice.invoiceNumber} · {popDialogInvoice.supplier} · {formatRM(popDialogInvoice.amount)}</p>
               </div>
-              <button onClick={() => setPopDialogInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+              <button onClick={() => setPopDialogInvoice(null)} className="rounded-md p-1 text-text-3 hover:bg-sunken hover:text-text-2">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -2355,7 +2355,7 @@ export default function InvoicesPage() {
               <button
                 onClick={() => sendPop(popDialogInvoice, "direct")}
                 disabled={sendingPopId === popDialogInvoice.id || !popDialogInvoice.supplierPhone}
-                className="w-full rounded-md bg-green-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                className="w-full rounded-md bg-ok-text px-3 py-2.5 text-sm font-medium text-on-ink hover:opacity-90 disabled:opacity-50"
               >
                 {sendingPopId === popDialogInvoice.id ? (
                   <Loader2 className="mx-auto h-4 w-4 animate-spin" />
@@ -2366,11 +2366,11 @@ export default function InvoicesPage() {
               <button
                 onClick={() => sendPop(popDialogInvoice, "picker")}
                 disabled={sendingPopId === popDialogInvoice.id}
-                className="w-full rounded-md border border-green-200 bg-white px-3 py-2.5 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+                className="w-full rounded-md border border-line bg-surface px-3 py-2.5 text-sm font-medium text-ok-text hover:bg-ok-soft disabled:opacity-50"
               >
                 Send to a group / pick chat →
               </button>
-              <p className="pt-1 text-[10px] text-gray-400 text-center">
+              <p className="pt-1 text-[10px] text-text-3 text-center">
                 WhatsApp doesn&apos;t allow direct group links. The group option opens WhatsApp&apos;s chat picker with the message pre-filled — tap the supplier&apos;s group, hit send.
               </p>
             </div>
@@ -2382,48 +2382,48 @@ export default function InvoicesPage() {
           stamps the rejection in notes so finance keeps an audit trail. */}
       {rejectingInvoice && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setRejectingInvoice(null)}>
-          <div className="relative w-full max-w-md rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-full max-w-md rounded-t-xl sm:rounded-xl bg-surface p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="flex items-center gap-1.5 text-base font-semibold text-gray-900">
-                  <Ban className="h-4 w-4 text-red-500" />
-                  Reject Payment
+                <h3 className="flex items-center gap-1.5 text-base font-semibold text-text">
+                  <Ban className="h-4 w-4 text-danger-text" />
+                  Reject payment
                 </h3>
-                <p className="mt-0.5 text-xs text-gray-500">Revert this invoice to Pending. Use when the initiated payment didn&apos;t go through.</p>
+                <p className="mt-0.5 text-xs text-text-2">Revert this invoice to Pending. Use when the initiated payment didn&apos;t go through.</p>
               </div>
-              <button onClick={() => setRejectingInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+              <button onClick={() => setRejectingInvoice(null)} className="rounded-md p-1 text-text-3 hover:bg-sunken hover:text-text-2">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="space-y-3">
-              <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                <p><span className="font-medium text-gray-800">{rejectingInvoice.invoiceNumber}</span> · {rejectingInvoice.supplier} · {formatRM(rejectingInvoice.amount)}</p>
+              <div className="rounded-lg bg-sunken px-3 py-2 text-xs text-text-2">
+                <p><span className="font-medium text-text">{rejectingInvoice.invoiceNumber}</span> · {rejectingInvoice.supplier} · {formatRM(rejectingInvoice.amount)}</p>
                 {rejectingInvoice.paymentRef && (
-                  <p className="mt-1 text-[11px] text-gray-500">Initiated ref: <code className="rounded bg-white px-1 py-0.5 text-[10px]">{rejectingInvoice.paymentRef}</code> (will be cleared)</p>
+                  <p className="mt-1 text-[11px] text-text-2">Initiated ref: <code className="rounded bg-surface px-1 py-0.5 text-[10px]">{rejectingInvoice.paymentRef}</code> (will be cleared)</p>
                 )}
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Reason <span className="text-gray-400 font-normal">(optional, recommended)</span></label>
+                <label className="mb-1 block text-xs font-medium text-text-2">Reason <span className="text-text-3 font-normal">(optional, recommended)</span></label>
                 <textarea
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
                   placeholder="e.g. wrong account number, supplier rejected, duplicate caught in review..."
                   rows={3}
-                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-red-300 focus:outline-none focus:ring-1 focus:ring-red-300"
+                  className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm focus:border-line focus:outline-none focus:ring-1 focus:ring-line-2"
                   autoFocus
                 />
-                <p className="mt-1 text-[10px] text-gray-400">Stored in invoice notes with today&apos;s date and the original payment ref.</p>
+                <p className="mt-1 text-[10px] text-text-3">Stored in invoice notes with today&apos;s date and the original payment ref.</p>
               </div>
             </div>
 
             <div className="mt-4 flex gap-2">
-              <button onClick={() => setRejectingInvoice(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={() => setRejectingInvoice(null)} className="flex-1 rounded-md border border-line px-3 py-2 text-sm text-text-2 hover:bg-sunken">Cancel</button>
               <button
                 onClick={submitReject}
                 disabled={rejectSaving}
-                className="flex-1 rounded-md bg-red-500 px-3 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                className="flex-1 rounded-md bg-danger-text px-3 py-2 text-sm font-medium text-on-ink hover:opacity-90 disabled:opacity-50"
               >
                 {rejectSaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Reject & Revert to Pending"}
               </button>
@@ -2439,25 +2439,25 @@ export default function InvoicesPage() {
         const early = days > 0;
         return (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setDueWarn(null)}>
-            <div className="relative w-full max-w-md rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="relative w-full max-w-md rounded-t-xl sm:rounded-xl bg-surface p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h3 className="flex items-center gap-1.5 text-base font-semibold text-gray-900">
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <h3 className="flex items-center gap-1.5 text-base font-semibold text-text">
+                    <AlertTriangle className="h-4 w-4 text-warn-text" />
                     Due date is not today
                   </h3>
-                  <p className="mt-0.5 text-xs text-gray-500">Payments are normally initiated on the due date.</p>
+                  <p className="mt-0.5 text-xs text-text-2">Payments are normally initiated on the due date.</p>
                 </div>
-                <button onClick={() => setDueWarn(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <button onClick={() => setDueWarn(null)} className="rounded-md p-1 text-text-3 hover:bg-sunken hover:text-text-2">
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
               <div className="space-y-3">
-                <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                  <p><span className="font-medium text-gray-800">{dueWarn.inv.invoiceNumber}</span> · {dueWarn.inv.supplier} · {formatRM(dueWarn.inv.amount)}</p>
+                <div className="rounded-lg bg-sunken px-3 py-2 text-xs text-text-2">
+                  <p><span className="font-medium text-text">{dueWarn.inv.invoiceNumber}</span> · {dueWarn.inv.supplier} · {formatRM(dueWarn.inv.amount)}</p>
                 </div>
-                <div className={`rounded-lg px-3 py-2 text-xs ${early ? "bg-amber-50 text-amber-800" : "bg-gray-50 text-gray-700"}`}>
+                <div className={`rounded-lg px-3 py-2 text-xs ${early ? "bg-warn-soft text-warn-text" : "bg-sunken text-text-2"}`}>
                   <p className="flex items-center gap-1.5">
                     <CalendarDays className="h-3.5 w-3.5" />
                     Due <span className="font-medium">{due}</span> — {early
@@ -2473,10 +2473,10 @@ export default function InvoicesPage() {
               </div>
 
               <div className="mt-4 flex gap-2">
-                <button onClick={() => setDueWarn(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                <button onClick={() => setDueWarn(null)} className="flex-1 rounded-md border border-line px-3 py-2 text-sm text-text-2 hover:bg-sunken">Cancel</button>
                 <button
                   onClick={() => { const w = dueWarn; setDueWarn(null); openPayDialog(w.inv, w.nextStatus); }}
-                  className="flex-1 rounded-md bg-amber-500 px-3 py-2 text-sm font-medium text-white hover:bg-amber-600"
+                  className="flex-1 rounded-md bg-warn-text px-3 py-2 text-sm font-medium text-on-ink hover:opacity-90"
                 >
                   Initiate anyway
                 </button>
@@ -2489,54 +2489,54 @@ export default function InvoicesPage() {
       {/* Payment dialog */}
       {payingInvoice && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" onClick={() => setPayingInvoice(null)}>
-          <div className="relative w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-surface p-4 sm:p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-gray-900">
+              <h3 className="text-base font-semibold text-text">
                 {payingInvoice.paymentType === "INTERNAL_TRANSFER"
                   ? payingTargetStatus === "INITIATED" ? "Initiate Settlement" : "Mark Settled"
                   : payingTargetStatus === "DEPOSIT_PAID" ? "Pay Deposit"
                   : payingTargetStatus === "INITIATED" ? "Initiate Payment" : "Mark Paid"}
               </h3>
-              <button onClick={() => setPayingInvoice(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+              <button onClick={() => setPayingInvoice(null)} className="rounded-md p-1 text-text-3 hover:bg-sunken hover:text-text-2">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Invoice summary */}
-            <div className="rounded-lg bg-gray-50 px-3 py-2.5 text-sm">
+            <div className="rounded-lg bg-sunken px-3 py-2.5 text-sm">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-gray-900">{payingInvoice.invoiceNumber}</span>
-                <span className="font-bold text-gray-900">{formatRM(payingInvoice.amount)}</span>
+                <span className="font-medium text-text">{payingInvoice.invoiceNumber}</span>
+                <span className="font-bold text-text">{formatRM(payingInvoice.amount)}</span>
               </div>
-              <p className="mt-0.5 text-xs text-gray-500">{payingInvoice.supplier} · {payingInvoice.outlet}</p>
+              <p className="mt-0.5 text-xs text-text-2">{payingInvoice.supplier} · {payingInvoice.outlet}</p>
             </div>
 
             {/* Deposit breakdown */}
             {payingInvoice.depositPercent && payingInvoice.depositPercent > 0 && (
-              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm">
-                <p className="text-xs font-medium text-amber-700 mb-1.5">Deposit Payment ({payingInvoice.depositPercent}%)</p>
+              <div className="mt-3 rounded-lg border border-line bg-warn-soft px-3 py-2.5 text-sm">
+                <p className="text-xs font-medium text-warn-text mb-1.5">Deposit Payment ({payingInvoice.depositPercent}%)</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-amber-800">Deposit</span>
-                  <span className="font-medium text-amber-900">{formatRM(payingInvoice.depositAmount ?? Math.round(payingInvoice.amount * payingInvoice.depositPercent / 100 * 100) / 100)}</span>
+                  <span className="text-warn-text">Deposit</span>
+                  <span className="font-medium text-warn-text">{formatRM(payingInvoice.depositAmount ?? Math.round(payingInvoice.amount * payingInvoice.depositPercent / 100 * 100) / 100)}</span>
                 </div>
                 <div className="flex items-center justify-between mt-0.5">
-                  <span className="text-amber-800">Balance</span>
-                  <span className="font-medium text-amber-900">{formatRM(payingInvoice.amount - (payingInvoice.depositAmount ?? Math.round(payingInvoice.amount * payingInvoice.depositPercent / 100 * 100) / 100))}</span>
+                  <span className="text-warn-text">Balance</span>
+                  <span className="font-medium text-warn-text">{formatRM(payingInvoice.amount - (payingInvoice.depositAmount ?? Math.round(payingInvoice.amount * payingInvoice.depositPercent / 100 * 100) / 100))}</span>
                 </div>
                 {payingInvoice.depositPaidAt && (
-                  <p className="mt-1.5 text-xs text-green-600">✓ Deposit paid on {new Date(payingInvoice.depositPaidAt).toLocaleDateString("en-MY")}{payingInvoice.depositRef ? ` — Ref: ${payingInvoice.depositRef}` : ""}</p>
+                  <p className="mt-1.5 text-xs text-ok-text">✓ Deposit paid on {new Date(payingInvoice.depositPaidAt).toLocaleDateString("en-MY")}{payingInvoice.depositRef ? ` — Ref: ${payingInvoice.depositRef}` : ""}</p>
                 )}
               </div>
             )}
 
             {/* Transfer details */}
             {payingInvoice.transfer && (
-              <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5">
-                <p className="text-xs font-medium text-orange-700">Stock Transfer</p>
-                <p className="mt-0.5 text-sm text-orange-900">{payingInvoice.transfer.fromOutlet} → {payingInvoice.transfer.toOutlet}</p>
+              <div className="mt-3 rounded-lg border border-line bg-warn-soft px-3 py-2.5">
+                <p className="text-xs font-medium text-warn-text">Stock transfer</p>
+                <p className="mt-0.5 text-sm text-warn-text">{payingInvoice.transfer.fromOutlet} → {payingInvoice.transfer.toOutlet}</p>
                 <div className="mt-1.5 space-y-0.5">
                   {payingInvoice.transfer.items.map((item, i) => (
-                    <p key={i} className="text-xs text-orange-700">{item.product} × {item.quantity}</p>
+                    <p key={i} className="text-xs text-warn-text">{item.product} × {item.quantity}</p>
                   ))}
                 </div>
               </div>
@@ -2544,10 +2544,10 @@ export default function InvoicesPage() {
 
             {/* Staff claim details */}
             {payingInvoice.paymentType === "STAFF_CLAIM" && payingInvoice.claimedBy && (
-              <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2.5">
-                <p className="text-xs font-medium text-purple-700">Staff Claim</p>
-                <p className="mt-0.5 text-sm text-purple-900">Claimed by: {payingInvoice.claimedBy}</p>
-                {payingInvoice.notes && <p className="mt-1 text-xs text-purple-600">{payingInvoice.notes}</p>}
+              <div className="mt-3 rounded-lg border border-line bg-info-soft px-3 py-2.5">
+                <p className="text-xs font-medium text-info-text">Staff claim</p>
+                <p className="mt-0.5 text-sm text-info-text">Claimed by: {payingInvoice.claimedBy}</p>
+                {payingInvoice.notes && <p className="mt-1 text-xs text-info-text">{payingInvoice.notes}</p>}
               </div>
             )}
 
@@ -2564,10 +2564,10 @@ export default function InvoicesPage() {
               if (!bank) {
                 if (isStaffClaim) {
                   return (
-                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                    <div className="mt-3 rounded-lg border border-line bg-warn-soft px-3 py-2.5">
                       <div className="flex items-center gap-1.5">
-                        <Landmark className="h-3.5 w-3.5 text-amber-600" />
-                        <p className="text-xs font-medium text-amber-800">
+                        <Landmark className="h-3.5 w-3.5 text-warn-text" />
+                        <p className="text-xs font-medium text-warn-text">
                           No bank details for {payingInvoice.claimedBy ?? "this staff member"} — add them in HR → Employees before paying out
                         </p>
                       </div>
@@ -2575,10 +2575,10 @@ export default function InvoicesPage() {
                   );
                 }
                 return (
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  <div className="mt-3 rounded-lg border border-line bg-warn-soft px-3 py-2.5">
                     <div className="flex items-center gap-1.5">
-                      <Landmark className="h-3.5 w-3.5 text-amber-600" />
-                      <p className="text-xs font-medium text-amber-800">
+                      <Landmark className="h-3.5 w-3.5 text-warn-text" />
+                      <p className="text-xs font-medium text-warn-text">
                         No bank details on file — check the invoice photos for the vendor&apos;s account info
                       </p>
                     </div>
@@ -2591,40 +2591,40 @@ export default function InvoicesPage() {
                   ? `Vendor Bank Details${payingInvoice.vendorName ? ` — ${payingInvoice.vendorName}` : ""}`
                   : "Bank Details";
               return (
-                <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+                <div className="mt-3 rounded-lg border border-line bg-info-soft px-3 py-2.5">
                   <div className="flex items-center gap-1.5 mb-2">
-                    <Landmark className="h-3.5 w-3.5 text-blue-600" />
-                    <p className="text-xs font-medium text-blue-700">{headerLabel}</p>
+                    <Landmark className="h-3.5 w-3.5 text-info-text" />
+                    <p className="text-xs font-medium text-info-text">{headerLabel}</p>
                   </div>
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-blue-600">Bank</span>
-                      <span className="text-sm font-medium text-blue-900">{bank.bankName}</span>
+                      <span className="text-xs text-info-text">Bank</span>
+                      <span className="text-sm font-medium text-info-text">{bank.bankName}</span>
                     </div>
                     {bank.accountNumber && (
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-blue-600">Account No.</span>
+                        <span className="text-xs text-info-text">Account No.</span>
                         <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-sm font-medium text-blue-900">{bank.accountNumber}</span>
+                          <span className="font-mono text-sm font-medium text-info-text">{bank.accountNumber}</span>
                           <button
                             onClick={() => copyToClipboard(bank.accountNumber!, "accNo")}
-                            className="rounded p-0.5 text-blue-400 hover:bg-blue-100 hover:text-blue-600"
+                            className="rounded p-0.5 text-info-text hover:bg-info-soft hover:text-info-text"
                           >
-                            {copiedField === "accNo" ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                            {copiedField === "accNo" ? <Check className="h-3 w-3 text-ok-text" /> : <Copy className="h-3 w-3" />}
                           </button>
                         </div>
                       </div>
                     )}
                     {bank.accountName && (
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-blue-600">Account Name</span>
+                        <span className="text-xs text-info-text">Account name</span>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-medium text-blue-900">{bank.accountName}</span>
+                          <span className="text-sm font-medium text-info-text">{bank.accountName}</span>
                           <button
                             onClick={() => copyToClipboard(bank.accountName!, "accName")}
-                            className="rounded p-0.5 text-blue-400 hover:bg-blue-100 hover:text-blue-600"
+                            className="rounded p-0.5 text-info-text hover:bg-info-soft hover:text-info-text"
                           >
-                            {copiedField === "accName" ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                            {copiedField === "accName" ? <Check className="h-3 w-3 text-ok-text" /> : <Copy className="h-3 w-3" />}
                           </button>
                         </div>
                       </div>
@@ -2645,10 +2645,10 @@ export default function InvoicesPage() {
               const projectedPaid = (payingInvoice.amountPaid || 0) + (validPartial ? partial : remaining);
               const projectedRemaining = Math.max(0, payingInvoice.amount - projectedPaid);
               return (
-                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+                <div className="mt-3 rounded-lg border border-line bg-warn-soft p-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-amber-900">Pay partial?</p>
-                    <p className="text-[11px] text-amber-700">Outstanding: {formatRM(remaining)}</p>
+                    <p className="text-xs font-semibold text-warn-text">Pay partial?</p>
+                    <p className="text-[11px] text-warn-text">Outstanding: {formatRM(remaining)}</p>
                   </div>
                   <Input
                     type="number"
@@ -2666,12 +2666,12 @@ export default function InvoicesPage() {
                     className="mt-2"
                   />
                   {validPartial && partial < remaining && (
-                    <p className="mt-1.5 text-[11px] text-amber-800">
+                    <p className="mt-1.5 text-[11px] text-warn-text">
                       After this: {formatRM(projectedRemaining)} still owed → status will become <strong>partial</strong>.
                     </p>
                   )}
                   {validPartial && partial > remaining && (
-                    <p className="mt-1.5 text-[11px] text-red-700">
+                    <p className="mt-1.5 text-[11px] text-danger-text">
                       Amount exceeds outstanding ({formatRM(remaining)}). Will cap at outstanding.
                     </p>
                   )}
@@ -2682,7 +2682,7 @@ export default function InvoicesPage() {
             {/* Payment reference — only for Mark Paid */}
             {payingTargetStatus === "PAID" && (
             <div className="mt-3">
-              <label className="mb-1 block text-xs font-medium text-gray-600">Payment Reference</label>
+              <label className="mb-1 block text-xs font-medium text-text-2">Payment reference</label>
               <Input
                 value={payForm.paymentRef}
                 onChange={(e) => setPayForm({ ...payForm, paymentRef: e.target.value })}
@@ -2694,13 +2694,13 @@ export default function InvoicesPage() {
             {/* Receipt upload — only for Mark Paid */}
             {payingTargetStatus === "PAID" && (
             <div className="mt-3">
-              <label className="mb-1 block text-xs font-medium text-gray-600">Receipt / Proof of Payment</label>
+              <label className="mb-1 block text-xs font-medium text-text-2">Receipt / Proof of Payment</label>
               {payReceipts.length > 0 && (
                 <div className="mb-2 grid grid-cols-3 gap-2">
                   {payReceipts.map((url, i) => (
-                    <div key={i} className="group relative overflow-hidden rounded-lg border border-gray-200">
+                    <div key={i} className="group relative overflow-hidden rounded-lg border border-line">
                       {isPdf(url) ? (
-                        <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-20 w-full flex-col items-center justify-center bg-gray-50 text-gray-400 hover:text-blue-500">
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="flex h-20 w-full flex-col items-center justify-center bg-sunken text-text-3 hover:text-info-text">
                           <FileDown className="h-5 w-5" />
                           <span className="mt-0.5 text-[10px]">PDF</span>
                         </a>
@@ -2709,7 +2709,7 @@ export default function InvoicesPage() {
                       )}
                       <button
                         onClick={() => setPayReceipts(payReceipts.filter((_, j) => j !== i))}
-                        className="absolute right-1 top-1 rounded-full bg-red-500 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        className="absolute right-1 top-1 rounded-full bg-danger-text p-0.5 text-on-ink opacity-0 transition-opacity group-hover:opacity-100"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -2729,17 +2729,17 @@ export default function InvoicesPage() {
                   if (e.dataTransfer.files?.length) await processPayReceiptFiles(e.dataTransfer.files);
                 }}
                 className={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-2.5 text-sm transition-colors ${
-                  payUploading ? "opacity-50 pointer-events-none border-gray-300" :
-                  payDragging ? "border-blue-500 bg-blue-50" :
-                  "border-gray-300 hover:border-blue-400 hover:bg-blue-50/30"
-                }`}
+ payUploading ? "opacity-50 pointer-events-none border-line-2" :
+ payDragging ? "border-line bg-info-soft" :
+ "border-line-2 hover:border-line hover:bg-info-soft"
+}`}
               >
                 {payUploading ? (
-                  <><Loader2 className="h-4 w-4 animate-spin text-blue-500" /> Uploading...</>
+                  <><Loader2 className="h-4 w-4 animate-spin text-info-text" /> Uploading...</>
                 ) : payDragging ? (
-                  <><Upload className="h-4 w-4 text-blue-600" /> <span className="font-medium text-blue-700">Drop to upload</span></>
+                  <><Upload className="h-4 w-4 text-info-text" /> <span className="font-medium text-info-text">Drop to upload</span></>
                 ) : (
-                  <><Upload className="h-4 w-4 text-gray-400" /> <span className="text-gray-500">Upload receipt (image or PDF) — or drag &amp; drop</span></>
+                  <><Upload className="h-4 w-4 text-text-3" /> <span className="text-text-2">Upload receipt (image or PDF) — or drag &amp; drop</span></>
                 )}
                 <input type="file" accept="image/*,.pdf,application/pdf" multiple className="hidden" onChange={handlePayReceiptUpload} />
               </label>
@@ -2747,13 +2747,13 @@ export default function InvoicesPage() {
             )}
 
             <div className="mt-4 flex gap-2">
-              <button onClick={() => setPayingInvoice(null)} className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={() => setPayingInvoice(null)} className="flex-1 rounded-md border border-line px-3 py-2 text-sm text-text-2 hover:bg-sunken">Cancel</button>
               <button
                 onClick={submitPayment}
                 disabled={paySaving}
-                className={`flex-1 rounded-md px-3 py-2 text-sm font-medium text-white disabled:opacity-50 ${
-                  payingTargetStatus === "PAID" ? "bg-green-500 hover:bg-green-600" : "bg-blue-500 hover:bg-blue-600"
-                }`}
+                className={`flex-1 rounded-md px-3 py-2 text-sm font-medium text-on-ink disabled:opacity-50 ${
+ payingTargetStatus === "PAID" ? "bg-ink text-on-ink hover:bg-ink-hover" : "bg-ink text-on-ink hover:bg-ink-hover"
+}`}
               >
                 {paySaving ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : (
                   payingInvoice.paymentType === "INTERNAL_TRANSFER"
@@ -2768,15 +2768,15 @@ export default function InvoicesPage() {
 
       {/* Photo viewer modal — fullscreen */}
       {viewingPhotos && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-white" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center justify-between px-4 py-2 border-b shrink-0 bg-gray-50">
-            <h3 className="text-sm font-semibold text-gray-900">
+        <div className="fixed inset-0 z-50 flex flex-col bg-surface" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-4 py-2 border-b shrink-0 bg-sunken">
+            <h3 className="text-sm font-semibold text-text">
               {viewingPhotos.invoiceNumber}
-              <span className="ml-2 text-xs font-normal text-gray-400">{viewingPhotos.photos.length} file{viewingPhotos.photos.length > 1 ? "s" : ""}</span>
+              <span className="ml-2 text-xs font-normal text-text-3">{viewingPhotos.photos.length} file{viewingPhotos.photos.length > 1 ? "s" : ""}</span>
               {viewingPhotos.photos.length > 1 && (
-                <span className="ml-3 text-xs text-gray-400">
+                <span className="ml-3 text-xs text-text-3">
                   {viewingPhotos.photos.map((url, i) => (
-                    <button key={i} onClick={() => { const el = document.getElementById(`photo-${i}`); el?.scrollIntoView({ behavior: "smooth" }); }} className="inline-block mx-1 px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-600 text-[10px] font-medium">
+                    <button key={i} onClick={() => { const el = document.getElementById(`photo-${i}`); el?.scrollIntoView({ behavior: "smooth" }); }} className="inline-block mx-1 px-2 py-0.5 rounded bg-line hover:bg-line text-text-2 text-[10px] font-medium">
                       {i + 1}
                     </button>
                   ))}
@@ -2784,10 +2784,10 @@ export default function InvoicesPage() {
               )}
             </h3>
             <div className="flex items-center gap-2">
-              <a href={viewingPhotos.photos[0]} target="_blank" rel="noopener noreferrer" className="rounded-md px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50">
+              <a href={viewingPhotos.photos[0]} target="_blank" rel="noopener noreferrer" className="rounded-md px-3 py-1.5 text-xs font-medium text-info-text hover:bg-info-soft">
                 Open in new tab &rarr;
               </a>
-              <button onClick={() => setViewingPhotos(null)} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-200 hover:text-gray-600">
+              <button onClick={() => setViewingPhotos(null)} className="rounded-md p-1.5 text-text-3 hover:bg-line hover:text-text-2">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -2797,7 +2797,7 @@ export default function InvoicesPage() {
               isPdf(url) ? (
                 <iframe key={i} id={`photo-${i}`} src={url + "#toolbar=1&navpanes=0"} className="w-full h-full" style={{ minHeight: "calc(100vh - 48px)" }} title={`Document ${i + 1}`} />
               ) : (
-                <div key={i} id={`photo-${i}`} className="flex items-center justify-center bg-gray-100 p-4" style={{ minHeight: "calc(100vh - 48px)" }}>
+                <div key={i} id={`photo-${i}`} className="flex items-center justify-center bg-sunken p-4" style={{ minHeight: "calc(100vh - 48px)" }}>
                   <img
                     src={fixImageUrl(url)}
                     alt={`Invoice photo ${i + 1}`}
@@ -2820,18 +2820,18 @@ export default function InvoicesPage() {
       {/* Flag review dialog */}
       {reviewingFlags && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={() => setReviewingFlags(null)}>
-          <div className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-white p-4 sm:p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-xl bg-surface p-4 sm:p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-text">
+                  <AlertTriangle className="h-5 w-5 text-warn-text" />
                   Review flags
                 </h3>
-                <p className="mt-0.5 text-xs text-gray-500">
+                <p className="mt-0.5 text-xs text-text-2">
                   {reviewingFlags.invoiceNumber} · {reviewingFlags.supplier} · {formatRM(reviewingFlags.amount)}
                 </p>
               </div>
-              <button onClick={() => setReviewingFlags(null)} className="rounded-md p-1 text-gray-400 hover:bg-gray-100">
+              <button onClick={() => setReviewingFlags(null)} className="rounded-md p-1 text-text-3 hover:bg-sunken">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -2840,17 +2840,17 @@ export default function InvoicesPage() {
               {(reviewingFlags.flags ?? []).map((f) => (
                 <div
                   key={f.code}
-                  className={`rounded-lg border p-3 ${f.dismissed ? "border-gray-200 bg-gray-50" : "border-amber-200 bg-amber-50"}`}
+                  className={`rounded-lg border p-3 ${f.dismissed ? "border-line bg-sunken" : "border-line bg-warn-soft"}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
-                      <p className={`text-sm font-semibold ${f.dismissed ? "text-gray-500 line-through" : "text-amber-900"}`}>
+                      <p className={`text-sm font-semibold ${f.dismissed ? "text-text-2 line-through" : "text-warn-text"}`}>
                         {FLAG_TITLE[f.code]}
                       </p>
-                      <p className={`mt-1 text-xs ${f.dismissed ? "text-gray-400" : "text-amber-800"}`}>
+                      <p className={`mt-1 text-xs ${f.dismissed ? "text-text-3" : "text-warn-text"}`}>
                         {f.message}
                       </p>
-                      <p className="mt-1 text-[10px] text-gray-400">
+                      <p className="mt-1 text-[10px] text-text-3">
                         Detected {new Date(f.detectedAt).toLocaleString()}
                         {f.dismissed && f.dismissedAt && ` · Accepted ${new Date(f.dismissedAt).toLocaleString()}`}
                       </p>
@@ -2859,7 +2859,7 @@ export default function InvoicesPage() {
                       <button
                         onClick={() => dismissFlag(reviewingFlags.id, f.code)}
                         disabled={flagActionCode === f.code}
-                        className="shrink-0 rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                        className="shrink-0 rounded-md bg-warn-text px-3 py-1 text-xs font-medium text-on-ink hover:opacity-90 disabled:opacity-50"
                       >
                         {flagActionCode === f.code ? <Loader2 className="h-3 w-3 animate-spin" /> : "Accept"}
                       </button>
@@ -2868,13 +2868,13 @@ export default function InvoicesPage() {
                 </div>
               ))}
               {(reviewingFlags.flags ?? []).length === 0 && (
-                <p className="text-sm text-gray-500">No flags on this invoice.</p>
+                <p className="text-sm text-text-2">No flags on this invoice.</p>
               )}
             </div>
 
-            <div className="mt-4 flex flex-col gap-2 border-t pt-3 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-4 flex flex-col gap-2 border-t pt-3 text-xs text-text-2 sm:flex-row sm:items-center sm:justify-between">
               <span>&quot;Accept&quot; dismisses the flag — keep evidence in the invoice notes if needed.</span>
-              <button onClick={() => setReviewingFlags(null)} className="shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100">
+              <button onClick={() => setReviewingFlags(null)} className="shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-text-2 hover:bg-sunken">
                 Close
               </button>
             </div>

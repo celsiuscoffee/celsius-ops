@@ -8,13 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { useFetch } from "@/lib/use-fetch";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { toast } from "@celsius/ui";
 import {
   Search,
@@ -24,6 +17,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Camera,
+  ArrowLeft,
   ClipboardCheck,
   Plus,
   Truck,
@@ -221,6 +215,7 @@ export default function ReceivingsPage() {
     setReceiveItems([]);
     setReceiveNotes("");
     setShowReceive(true);
+    window.scrollTo(0, 0);
 
     // Auto-select order if provided
     if (autoSelectOrderId) {
@@ -358,41 +353,42 @@ export default function ReceivingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
-        <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
       </div>
     );
   }
 
   return (
-    <div className="p-3 sm:p-6">
+    <div className="px-4 pt-6 pb-10 md:px-8">
+      {!showReceive && (<>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Receivings</h2>
-          <p className="mt-0.5 text-xs sm:text-sm text-gray-500">{receivings.length} delivery records</p>
+          <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Deliveries</h1>
+          <p className="mt-0.5 text-sm text-text-2">What arrived from suppliers, and whether it matched the order.</p>
         </div>
-        <Button className="bg-terracotta hover:bg-terracotta-dark w-full sm:w-auto" onClick={() => openReceiveDialog()}>
-          <ClipboardCheck className="mr-1.5 h-4 w-4" />Record Delivery
+        <Button className="w-full bg-ink text-on-ink hover:bg-ink-hover sm:w-auto" onClick={() => openReceiveDialog()}>
+          <ClipboardCheck className="mr-1.5 h-4 w-4" />Record delivery
         </Button>
       </div>
 
       {/* Summary — clickable to filter */}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
         {([
-          { key: "awaiting" as const, label: "Awaiting Delivery", count: awaitingOrders.length, color: "text-purple-600", border: "border-purple-400", ring: "ring-purple-100" },
-          { key: "all_received" as const, label: "Total Received", count: receivings.length, color: "text-gray-900", border: "border-gray-400", ring: "ring-gray-100" },
-          { key: "complete" as const, label: "Complete", count: receivings.filter((r) => r.status === "COMPLETE").length, color: "text-green-600", border: "border-green-400", ring: "ring-green-100" },
-          { key: "partial" as const, label: "Partial / Disputed", count: receivings.filter((r) => r.status !== "COMPLETE").length, color: "text-amber-600", border: "border-amber-400", ring: "ring-amber-100" },
+          { key: "awaiting" as const, label: "Awaiting delivery", count: awaitingOrders.length, color: "text-info-text", border: "border-line", ring: "ring-line-2" },
+          { key: "all_received" as const, label: "Total received", count: receivings.length, color: "text-text", border: "border-line-2", ring: "ring-line" },
+          { key: "complete" as const, label: "Complete", count: receivings.filter((r) => r.status === "COMPLETE").length, color: "text-ok-text", border: "border-line", ring: "ring-line-2" },
+          { key: "partial" as const, label: "Partial / Disputed", count: receivings.filter((r) => r.status !== "COMPLETE").length, color: "text-warn-text", border: "border-line", ring: "ring-line-2" },
         ]).map((card) => (
           <button
             key={card.key}
             onClick={() => setCardFilter(cardFilter === card.key ? null : card.key)}
-            className={`rounded-lg border bg-white px-4 py-3 text-left transition-all hover:shadow-sm cursor-pointer ${
-              cardFilter === card.key
-                ? `${card.border} ring-2 ${card.ring} shadow-sm`
-                : "border-gray-200 hover:border-gray-300"
-            }`}
+            className={`rounded-lg border bg-surface px-4 py-3 text-left transition-all hover:shadow-sm cursor-pointer ${
+ cardFilter === card.key
+ ?`${card.border} ring-2 ${card.ring} shadow-sm`
+ : "border-line hover:border-line-2"
+}`}
           >
-            <p className="text-xs text-gray-500">{card.label}</p>
+            <p className="text-xs text-text-2">{card.label}</p>
             <p className={`text-xl font-bold ${card.color}`}>{card.count}</p>
           </button>
         ))}
@@ -401,33 +397,33 @@ export default function ReceivingsPage() {
       {/* Awaiting Delivery */}
       {awaitingOrders.length > 0 && (!cardFilter || cardFilter === "awaiting") && (
         <div className="mt-4">
-          <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700">
-            <Truck className="h-4 w-4 text-purple-500" />
-            Awaiting Delivery
-            <Badge className="bg-purple-500 text-[10px]">{awaitingOrders.length}</Badge>
+          <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-text-2">
+            <Truck className="h-4 w-4 text-info-text" />
+            Awaiting delivery
+            <Badge className="bg-info-soft text-info-text text-[10px]">{awaitingOrders.length}</Badge>
           </h3>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {awaitingOrders.map((o) => (
               <Card
                 key={o.id}
-                className={`cursor-pointer px-4 py-3 transition-colors hover:bg-gray-50 ${o.status === "PARTIALLY_RECEIVED" ? "border-amber-300 bg-amber-50/30" : o.isTransfer ? "border-blue-200 bg-blue-50/30" : ""}`}
+                className={`cursor-pointer px-4 py-3 transition-colors hover:bg-sunken ${o.status === "PARTIALLY_RECEIVED" ? "border-line bg-warn-soft" : o.isTransfer ? "border-line bg-info-soft" : ""}`}
                 onClick={() => openReceiveDialog(o.id)}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{o.supplier}</p>
-                    <p className="text-xs text-gray-500">{o.orderNumber} &middot; {o.items} {o.items === 1 ? 'item' : 'items'}{o.totalAmount > 0 ? ` · ${formatRM(o.totalAmount)}` : ""}</p>
+                    <p className="text-sm font-medium text-text">{o.supplier}</p>
+                    <p className="text-xs text-text-2">{o.orderNumber} &middot; {o.items} {o.items === 1 ? 'item' : 'items'}{o.totalAmount > 0 ? ` · ${formatRM(o.totalAmount)}` : ""}</p>
                   </div>
                   <div className="text-right">
-                    <Badge className={`text-[10px] ${o.status === "PARTIALLY_RECEIVED" ? "bg-amber-500" : o.isTransfer ? "bg-blue-500" : "bg-purple-500"}`}>
-                      {o.isTransfer ? "TRANSFER" : o.status.replace(/_/g, " ")}
+                    <Badge className={`text-[10px] ${o.status === "PARTIALLY_RECEIVED" ? "bg-warn-soft text-warn-text" : o.isTransfer ? "bg-info-soft text-info-text" : "bg-info-soft text-info-text"}`}>
+                      {o.isTransfer ? "Transfer" : ({ PARTIALLY_RECEIVED: "Short delivered", AWAITING_DELIVERY: "Awaiting delivery", SENT: "Sent", APPROVED: "Confirmed" } as Record<string, string>)[o.status] ?? o.status.replace(/_/g, " ").toLowerCase()}
                     </Badge>
                     {o.deliveryDate && (
-                      <p className="mt-0.5 text-[10px] text-gray-400">Due: {o.deliveryDate}</p>
+                      <p className="mt-0.5 text-[10px] text-text-3">Due: {o.deliveryDate}</p>
                     )}
                   </div>
                 </div>
-                <p className="mt-1 text-[10px] text-gray-400">{o.outlet}</p>
+                <p className="mt-1 text-[10px] text-text-3">{o.outlet}</p>
               </Card>
             ))}
           </div>
@@ -437,7 +433,7 @@ export default function ReceivingsPage() {
       {/* Search & Tabs */}
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
         <div className="relative w-full sm:flex-1 sm:max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <Input placeholder="Search by PO#, supplier, or outlet..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex gap-1.5">
@@ -445,7 +441,7 @@ export default function ReceivingsPage() {
             <button
               key={value}
               onClick={() => setTab(value)}
-              className={`rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-terracotta bg-terracotta/5 text-terracotta-dark" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${tab === value ? "border-text bg-raised font-semibold text-text" : "border-line text-text-2 hover:bg-sunken"}`}
             >
               {label}
             </button>
@@ -454,27 +450,27 @@ export default function ReceivingsPage() {
       </div>
 
       {/* Receivings Table */}
-      <div className="mt-4 rounded-xl border border-gray-200 bg-white overflow-x-auto">
+      <div className="mt-4 rounded-xl border border-line bg-surface overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
+            <tr className="border-b border-line bg-sunken/50">
               <th className="w-8 px-3 py-3"></th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">PO Reference</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Outlet</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Supplier</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Items</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Photos</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Received By</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">Date</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">PO Reference</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Outlet</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Supplier</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Status</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Items</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Photos</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Received by</th>
+              <th className="px-4 py-3 text-left font-medium text-text-2">Date</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-4 py-12 text-center">
-                  <Package className="mx-auto h-8 w-8 text-gray-300" />
-                  <p className="mt-2 text-sm text-gray-500">
+                  <Package className="mx-auto h-8 w-8 text-text-3" />
+                  <p className="mt-2 text-sm text-text-2">
                     {receivings.length === 0
                       ? "No receivings yet. Click 'Record Delivery' to log a delivery."
                       : "No receivings match your search."}
@@ -485,42 +481,42 @@ export default function ReceivingsPage() {
             {filtered.map((rec) => (
               <Fragment key={rec.id}>
                 <tr
-                  className="border-b border-gray-50 hover:bg-gray-50/50 cursor-pointer"
+                  className="border-b border-line hover:bg-sunken/50 cursor-pointer"
                   onClick={() => setExpandedId(expandedId === rec.id ? null : rec.id)}
                 >
                   <td className="px-3 py-3">
-                    <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${expandedId === rec.id ? "rotate-180" : ""}`} />
+                    <ChevronDown className={`h-4 w-4 text-text-3 transition-transform ${expandedId === rec.id ? "rotate-180" : ""}`} />
                   </td>
                   <td className="px-4 py-3">
-                    <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-terracotta">{rec.orderNumber}</code>
+                    <code className="rounded bg-sunken px-1.5 py-0.5 text-xs font-medium text-brand-text">{rec.orderNumber}</code>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{rec.outlet}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{rec.supplier}</td>
+                  <td className="px-4 py-3 text-text-2 text-xs">{rec.outlet}</td>
+                  <td className="px-4 py-3 font-medium text-text">{rec.supplier}</td>
                   <td className="px-4 py-3">
-                    <Badge className={`text-[10px] ${rec.status === "COMPLETE" ? "bg-green-500" : rec.status === "PARTIAL" ? "bg-amber-500" : "bg-red-500"}`}>
-                      {rec.status}
+                    <Badge className={`text-[10px] ${rec.status === "COMPLETE" ? "bg-ok-soft text-ok-text" : rec.status === "PARTIAL" ? "bg-warn-soft text-warn-text" : "bg-danger-soft text-danger-text"}`}>
+                      {rec.status === "COMPLETE" ? "Complete" : rec.status === "PARTIAL" ? "Partial" : rec.status.charAt(0) + rec.status.slice(1).toLowerCase()}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-600">{rec.items.length} {rec.items.length === 1 ? 'item' : 'items'}</td>
+                  <td className="px-4 py-3 text-xs text-text-2">{rec.items.length} {rec.items.length === 1 ? 'item' : 'items'}</td>
                   <td className="px-4 py-3">
                     {rec.photoCount > 0 ? (
-                      <span className="flex items-center gap-1 text-xs text-gray-500"><Camera className="h-3 w-3" />{rec.photoCount}</span>
+                      <span className="flex items-center gap-1 text-xs text-text-2"><Camera className="h-3 w-3" />{rec.photoCount}</span>
                     ) : (
-                      <span className="text-xs text-gray-400">—</span>
+                      <span className="text-xs text-text-3">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs text-gray-600">{rec.receivedBy}</td>
-                  <td className="px-4 py-3 text-xs text-gray-400">
+                  <td className="px-4 py-3 text-xs text-text-2">{rec.receivedBy}</td>
+                  <td className="px-4 py-3 text-xs text-text-3">
                     {new Date(rec.receivedAt).toLocaleDateString("en-MY")}
                   </td>
                 </tr>
                 {expandedId === rec.id && (
                   <tr>
-                    <td colSpan={9} className="bg-gray-50 px-8 py-3">
-                      <p className="mb-2 text-xs font-semibold text-gray-500 uppercase">Received Items</p>
+                    <td colSpan={9} className="bg-sunken px-8 py-3">
+                      <p className="mb-2 text-[13px] font-medium text-text-2">Received items</p>
                       <table className="w-full text-xs">
                         <thead>
-                          <tr className="text-gray-400">
+                          <tr className="text-text-3">
                             <th className="pb-1 text-left font-medium">Product</th>
                             <th className="pb-1 text-left font-medium">SKU</th>
                             <th className="pb-1 text-right font-medium">Ordered</th>
@@ -534,28 +530,28 @@ export default function ReceivingsPage() {
                             const match = item.orderedQty === null || item.receivedQty === item.orderedQty;
                             const short = item.orderedQty !== null && item.receivedQty < item.orderedQty;
                             return (
-                              <tr key={item.id} className="border-t border-gray-200/50">
-                                <td className="py-1.5 text-gray-700">{item.product}</td>
-                                <td className="py-1.5"><code className="text-gray-500">{item.sku}</code></td>
-                                <td className="py-1.5 text-right text-gray-500">{item.orderedQty ?? "—"}</td>
-                                <td className="py-1.5 text-right text-gray-700 font-medium">{item.receivedQty}</td>
+                              <tr key={item.id} className="border-t border-line/50">
+                                <td className="py-1.5 text-text-2">{item.product}</td>
+                                <td className="py-1.5"><code className="text-text-2">{item.sku}</code></td>
+                                <td className="py-1.5 text-right text-text-2">{item.orderedQty ?? "—"}</td>
+                                <td className="py-1.5 text-right text-text-2 font-medium">{item.receivedQty}</td>
                                 <td className="py-1.5">
                                   {match ? (
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-ok-text" />
                                   ) : short ? (
-                                    <span className="flex items-center gap-1 text-red-500">
+                                    <span className="flex items-center gap-1 text-danger-text">
                                       <AlertTriangle className="h-3 w-3" />
                                       Short{item.discrepancyReason ? ` (${item.discrepancyReason})` : ""}
                                     </span>
                                   ) : null}
                                 </td>
-                                <td className="py-1.5 text-gray-500">{item.expiryDate ?? "—"}</td>
+                                <td className="py-1.5 text-text-2">{item.expiryDate ?? "—"}</td>
                               </tr>
                             );
                           })}
                         </tbody>
                       </table>
-                      {rec.notes && <p className="mt-2 text-xs text-gray-500">Notes: {rec.notes}</p>}
+                      {rec.notes && <p className="mt-2 text-xs text-text-2">Notes: {rec.notes}</p>}
                     </td>
                   </tr>
                 )}
@@ -564,26 +560,29 @@ export default function ReceivingsPage() {
           </tbody>
         </table>
       </div>
+      </>)}
 
-      {/* Record Delivery Dialog */}
-      <Dialog open={showReceive} onOpenChange={setShowReceive}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Record Delivery</DialogTitle>
-          </DialogHeader>
+      {/* Record delivery: a full page, not a modal (one row per item delivered) */}
+      {showReceive && (
+        <div className="max-w-[960px]">
+          <button onClick={() => setShowReceive(false)} className="inline-flex items-center gap-1.5 text-sm text-text-2 hover:text-text">
+            <ArrowLeft className="h-4 w-4" /> All receivings
+          </button>
+          <h1 className="mt-3 text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Record delivery</h1>
+          <p className="mt-0.5 text-sm text-text-2">Count what arrived against the order. Anything short stays open for the supplier to send.</p>
 
-          <div className="space-y-4">
+          <div className="mt-5 space-y-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Purchase Order</label>
+              <label className="mb-1 block text-xs font-medium text-text-2">Purchase order</label>
               {selectedOrderId ? (
-                <div className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                <div className="w-full rounded-md border border-line bg-sunken px-3 py-2 text-sm text-text-2">
                   {pendingOrders.find((o) => o.id === selectedOrderId)?.orderNumber} — {pendingOrders.find((o) => o.id === selectedOrderId)?.supplier} ({pendingOrders.find((o) => o.id === selectedOrderId)?.outlet})
                 </div>
               ) : (
                 <select
                   value={selectedOrderId}
                   onChange={(e) => selectOrder(e.target.value)}
-                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-line px-3 py-2 text-sm"
                 >
                   <option value="">Select a PO or Transfer...</option>
                   {pendingOrders.map((o) => (
@@ -594,26 +593,26 @@ export default function ReceivingsPage() {
                 </select>
               )}
               {pendingOrders.length === 0 && (
-                <p className="mt-1 text-xs text-gray-400">No pending orders or transfers to receive.</p>
+                <p className="mt-1 text-xs text-text-3">No pending orders or transfers to receive.</p>
               )}
             </div>
 
             {/* Receive items */}
             {selectedOrderId && receiveItems.length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">This order has no items.</p>
+              <p className="text-sm text-text-2 text-center py-4">This order has no items.</p>
             )}
             {receiveItems.length > 0 && (
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Enter Received Quantities</label>
-                <div className="rounded-md border border-gray-200 overflow-x-auto">
+                <label className="mb-1 block text-xs font-medium text-text-2">Enter received quantities</label>
+                <div className="rounded-md border border-line overflow-x-auto">
                   <table className="w-full text-xs min-w-[720px]">
                     <thead>
-                      <tr className="border-b bg-gray-50 text-gray-500">
+                      <tr className="border-b bg-sunken text-text-2">
                         <th className="px-3 py-2 text-left font-medium">Product</th>
                         <th className="px-3 py-2 text-right font-medium">Ordered</th>
-                        <th className="px-3 py-2 text-right font-medium">Prev Recv</th>
+                        <th className="px-3 py-2 text-right font-medium">Prev recv</th>
                         <th className="px-3 py-2 text-right font-medium">Balance</th>
-                        <th className="px-3 py-2 text-center font-medium w-24">This Delivery</th>
+                        <th className="px-3 py-2 text-center font-medium w-24">This delivery</th>
                         <th className="px-3 py-2 text-left font-medium">Status</th>
                         <th className="px-3 py-2 text-left font-medium">Reason</th>
                       </tr>
@@ -624,35 +623,35 @@ export default function ReceivingsPage() {
                         const isShort = item.receivedQty < remaining;
                         const isOver = item.receivedQty > remaining;
                         return (
-                          <tr key={idx} className="border-b border-gray-50">
+                          <tr key={idx} className="border-b border-line">
                             <td className="px-3 py-2">
-                              <div className="font-medium text-gray-700">{item.product}</div>
-                              <code className="text-gray-400">{item.sku}</code>
+                              <div className="font-medium text-text-2">{item.product}</div>
+                              <code className="text-text-3">{item.sku}</code>
                             </td>
-                            <td className="px-3 py-2 text-right text-gray-600">{item.orderedQty}</td>
-                            <td className="px-3 py-2 text-right text-gray-400">
+                            <td className="px-3 py-2 text-right text-text-2">{item.orderedQty}</td>
+                            <td className="px-3 py-2 text-right text-text-3">
                               {item.alreadyReceived > 0 ? item.alreadyReceived : "—"}
                             </td>
-                            <td className="px-3 py-2 text-right font-medium text-purple-600">{remaining}</td>
+                            <td className="px-3 py-2 text-right font-medium text-info-text">{remaining}</td>
                             <td className="px-3 py-2">
                               <input
                                 type="number"
                                 value={item.receivedQty}
                                 onChange={(e) => updateReceivedQty(idx, parseInt(e.target.value) || 0)}
-                                className={`w-16 rounded border px-2 py-1 text-center ${isShort ? "border-red-300 bg-red-50" : "border-gray-200"}`}
+                                className={`w-16 rounded border px-2 py-1 text-center ${isShort ? "border-line bg-danger-soft" : "border-line"}`}
                                 min={0}
                               />
                             </td>
                             <td className="px-3 py-2">
                               {item.receivedQty === remaining ? (
-                                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                <CheckCircle2 className="h-4 w-4 text-ok-text" />
                               ) : isShort ? (
-                                <span className="flex items-center gap-1 text-red-500">
+                                <span className="flex items-center gap-1 text-danger-text">
                                   <AlertTriangle className="h-3 w-3" />
                                   Short {remaining - item.receivedQty}
                                 </span>
                               ) : isOver ? (
-                                <span className="text-blue-500 text-xs">Over +{item.receivedQty - remaining}</span>
+                                <span className="text-info-text text-xs">Over +{item.receivedQty - remaining}</span>
                               ) : null}
                             </td>
                             <td className="px-3 py-2">
@@ -660,7 +659,7 @@ export default function ReceivingsPage() {
                                 <select
                                   value={item.discrepancyReason}
                                   onChange={(e) => updateDiscrepancy(idx, e.target.value)}
-                                  className="rounded border border-gray-200 px-2 py-1 text-xs"
+                                  className="rounded border border-line px-2 py-1 text-xs"
                                 >
                                   <option value="">Reason...</option>
                                   <option value="short">Short delivery</option>
@@ -680,23 +679,24 @@ export default function ReceivingsPage() {
             )}
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Notes</label>
+              <label className="mb-1 block text-xs font-medium text-text-2">Notes</label>
               <Input placeholder="Any delivery notes..." value={receiveNotes} onChange={(e) => setReceiveNotes(e.target.value)} />
             </div>
           </div>
 
-          <DialogFooter>
+          <div className="mt-5 flex flex-col-reverse gap-2 border-t border-line pt-4 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setShowReceive(false)}>Cancel</Button>
             <Button
               onClick={submitReceiving}
               disabled={saving || !selectedOrderId || receiveItems.length === 0}
-              className="bg-terracotta hover:bg-terracotta-dark disabled:opacity-50"
+              className="bg-ink text-on-ink hover:bg-ink-hover disabled:opacity-50"
             >
               {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ClipboardCheck className="mr-1.5 h-4 w-4" />}
-              Confirm Delivery
+              Confirm delivery
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

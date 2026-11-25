@@ -18,46 +18,52 @@ import { useFetch } from "@/lib/use-fetch";
 // navigation sources cannot drift apart again (they had, twice).
 export const TAB_GROUPS: { module: string; tabs: { href: string; label: string }[] }[] = [
   {
+    // Roster (declutter, 17 Nov 2026): one shift is planned, worked and approved
+    // here — the week grid, then the pages that edit or approve parts of it.
+    module: "Roster",
+    tabs: [
+      { href: "/hr/roster", label: "Roster" },
+      { href: "/hr/schedules", label: "Edit schedules" },
+      { href: "/hr/attendance", label: "Clock-ins" },
+      { href: "/hr/overtime", label: "Overtime" },
+      { href: "/hr/shift-swaps", label: "Shift swaps" },
+      { href: "/hr/leave", label: "Leave" },
+      // Hours worked, for pay. Was its own "Hours" strip, which no page linked
+      // to, so staff could not find the weekly PT sign-off (19 Nov 2026).
+      { href: "/hr/pt-hours", label: "PT hours" },
+      { href: "/hr/roster-attendance", label: "Rostered vs clocked" },
+    ],
+  },
+  {
+    // Scheduling set-up, rarely touched.
+    module: "Scheduling set-up",
+    tabs: [
+      { href: "/hr/availability", label: "Availability" },
+      { href: "/hr/coverage", label: "Coverage rules" },
+    ],
+  },
+  {
+    // Leave set-up lives under HR Settings (Time Off group); linked here so
+    // leave rules are one tap from each other. Requests are in Roster.
+    module: "Leave set-up",
+    tabs: [
+      { href: "/hr/settings", label: "Balances" },
+      { href: "/hr/settings/leave-policies", label: "Policies" },
+      { href: "/hr/settings/public-holidays", label: "Public holidays" },
+    ],
+  },
+  {
     module: "People",
     tabs: [
       { href: "/hr/employees", label: "Employees" },
+      { href: "/hr", label: "Overview" },
       // PT Rates sits with People, not Payroll: it's keyed on hr:employees so a
       // staffing manager sets hourly rates without the payroll module — and the
-      // Payroll tab group is hidden from managers entirely. Until now the page
-      // was in NO group, so it rendered with no lateral nav at all.
-      { href: "/hr/pt-rates", label: "PT Rates" },
-      { href: "/hr/access-presets", label: "App Access" },
+      // Payroll tab group is hidden from managers entirely.
+      { href: "/hr/pt-rates", label: "PT rates" },
+      { href: "/hr/access-presets", label: "App access" },
       { href: "/hr/certifications", label: "Certifications" },
       { href: "/hr/memos", label: "Memos" },
-    ],
-  },
-  {
-    module: "Leave",
-    tabs: [
-      { href: "/hr/leave", label: "Requests" },
-      // Balances + policies live under HR Settings (Time Off group); linked
-      // here so the Leave module is self-contained like BrioHR's.
-      { href: "/hr/settings", label: "Balances" },
-      { href: "/hr/settings/leave-policies", label: "Policies" },
-      { href: "/hr/settings/public-holidays", label: "Public Holidays" },
-    ],
-  },
-  {
-    module: "Time & Attendance",
-    tabs: [
-      { href: "/hr/attendance", label: "Attendance" },
-      { href: "/hr/roster-attendance", label: "Roster" },
-      { href: "/hr/pt-hours", label: "PT Hours" },
-      { href: "/hr/overtime", label: "Overtime" },
-      { href: "/hr/shift-swaps", label: "Shift Swaps" },
-    ],
-  },
-  {
-    module: "Scheduling",
-    tabs: [
-      { href: "/hr/schedules", label: "Schedules" },
-      { href: "/hr/availability", label: "Availability" },
-      { href: "/hr/coverage", label: "Coverage Rules" },
     ],
   },
   {
@@ -66,14 +72,14 @@ export const TAB_GROUPS: { module: string; tabs: { href: string; label: string }
       { href: "/hr/payroll", label: "Monthly" },
       { href: "/hr/payroll/weekly", label: "Weekly" },
       { href: "/hr/allowances", label: "Allowances" },
-      { href: "/hr/compliance", label: "Statutory Calendar" },
+      { href: "/hr/compliance", label: "Statutory calendar" },
     ],
   },
   {
     module: "Performance",
     tabs: [
       { href: "/hr/performance", label: "Performance" },
-      { href: "/hr/review-penalties", label: "Review Penalties" },
+      { href: "/hr/review-penalties", label: "Review penalties" },
     ],
   },
 ];
@@ -109,8 +115,8 @@ export function HrModuleTabs() {
             className={
               "whitespace-nowrap border-b-2 px-3 pb-2 pt-1 text-sm font-medium transition " +
               (active
-                ? "border-terracotta text-terracotta"
-                : "border-transparent text-muted-foreground hover:border-gray-300 hover:text-foreground")
+                ? "border-text bg-raised font-semibold text-text"
+                : "border-transparent text-muted-foreground hover:border-line-2 hover:text-foreground")
             }
           >
             {t.label}

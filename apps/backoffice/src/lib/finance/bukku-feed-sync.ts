@@ -52,6 +52,52 @@ function monthEnd(m: string): Date {
   return new Date(Date.UTC(y, mo, 0));
 }
 
+type AnchorStatement = { periodStart: string; periodEnd: string; closing: number };
+
+// Where the feed rebuild starts. Default is the latest PDF statement (full
+// rebuild). When feed months exist past it, resume instead from the last
+// complete month before (latest feed line − overlapDays): earlier months are
+// already reconciled closings, and the overlap re-reads the recent days in
+// case Bukku back-fills a late-posted line.
+export function chooseFeedAnchor(
+  pdf: { periodEnd: string; closing: number },
+  feeds: AnchorStatement[],
+  overlapDays = 7,
+): { anchorYmd: string; anchorBal: number; source: "pdf" | "feed" } {
+  const fromPdf = { anchorYmd: pdf.periodEnd, anchorBal: pdf.closing, source: "pdf" as const };
+  if (feeds.length === 0) return fromPdf;
+  const lastLine = feeds.reduce((m, s) => (s.periodEnd > m ? s.periodEnd : m), feeds[0].periodEnd);
+  const resumeMonth = new Date(Date.parse(lastLine) - overlapDays * 86_400_000).toISOString().slice(0, 7);
+  const prior = feeds
+    .filter((s) => s.periodStart.slice(0, 7) < resumeMonth)
+    .sort((a, b) => b.periodStart.localeCompare(a.periodStart))[0];
+  if (!prior) return fromPdf;
+  const anchorYmd = ymd(monthEnd(prior.periodStart.slice(0, 7)));
+  if (pdf.periodEnd >= anchorYmd) return fromPdf;
+  return { anchorYmd, anchorBal: prior.closing, source: "feed" };
+}
+
+// Accounts the cron should escalate: a sync/feed error, or a ledger whose
+// latest line is older than `staleDays`. Maybank posts daily, so a few days
+// with nothing new means the pull is broken even when no error is thrown.
+export function feedProblems(
+  accounts: FeedSyncAccountResult[],
+  today: string,
+  staleDays = 3,
+): { account: string; problem: string }[] {
+  const cutoff = new Date(Date.parse(today) - staleDays * 86_400_000).toISOString().slice(0, 10);
+  const out: { account: string; problem: string }[] = [];
+  for (const a of accounts) {
+    const account = a.accountName ?? `${a.subdomain} …${a.accountTail}`;
+    if (a.skipped && /^(feed error|sync error|time budget)/.test(a.skipped)) {
+      out.push({ account, problem: a.skipped });
+    } else if (a.latestDate && a.latestDate < cutoff) {
+      out.push({ account, problem: `stale: latest line ${a.latestDate}` });
+    }
+  }
+  return out;
+}
+
 // Normalized procurement supplier names for the classifier's vendor-registry
 // pass: onboarding a supplier is enough for their bank payments to classify as
 // RAW_MATERIALS — no classifier rule edit needed. Names are uppercased,
@@ -114,17 +160,42 @@ async function syncAccount(
     return { ...base, skipped: "no PDF anchor" };
   }
   const accountName = anchor.accountName;
-  const anchorYmd = ymd(anchor.periodEnd);
-  const anchorBal = Number(anchor.closingBalance);
 
-  // Bound the fetch to lines after the anchor — the daily cron never pulls
-  // the full history (the PDF anchor advances monthly to keep this small).
+  // Resume from the last complete feed month when it is newer than the PDF:
+  // rebuilding everything since the PDF made the rewrite transaction outgrow
+  // its 120s limit once PDFs stopped being uploaded (P2028, every run rolled
+  // back from 2026-09). A newer PDF still wins and fully re-anchors.
+  const feedStatements = await prisma.bankStatement.findMany({
+    where: { accountName, notes: FEED_NOTE },
+    select: { periodStart: true, periodEnd: true, closingBalance: true },
+  });
+  const start = chooseFeedAnchor(
+    { periodEnd: ymd(anchor.periodEnd), closing: Number(anchor.closingBalance) },
+    feedStatements.flatMap((s) => (s.periodStart && s.periodEnd
+      ? [{ periodStart: ymd(s.periodStart), periodEnd: ymd(s.periodEnd), closing: Number(s.closingBalance) }]
+      : [])),
+  );
+  const anchorYmd = start.anchorYmd;
+  const anchorBal = start.anchorBal;
+  // Feed rows this run rebuilds: all of them when re-anchoring on a PDF (as
+  // before), otherwise only the months after the resume point.
+  const rebuildScope = start.source === "pdf"
+    ? { accountName, notes: FEED_NOTE }
+    : { accountName, notes: FEED_NOTE, periodEnd: { gt: new Date(anchorYmd + "T00:00:00Z") } };
+
+  // Bound the fetch to lines after the anchor.
   const lines = mapRawFeedToLines(await fetchRawFeedLines(creds, feedId, linkedAccountId, { stopAtOrBeforeYmd: anchorYmd }))
     .filter((l) => l.txnDate > anchorYmd)
     .sort((a, b) => a.txnDate.localeCompare(b.txnDate) || a.bukkuId - b.bukkuId);
 
   if (lines.length === 0) {
-    return { ...base, accountName, anchorDate: anchorYmd, anchorBalance: anchorBal, skipped: "already current" };
+    // Report how far the ledger actually reaches, so the cron can tell
+    // "nothing new today" from "nothing new for weeks".
+    const latestDate = feedStatements.reduce(
+      (m, s) => (s.periodEnd && ymd(s.periodEnd) > m ? ymd(s.periodEnd) : m),
+      anchorYmd,
+    );
+    return { ...base, accountName, anchorDate: anchorYmd, anchorBalance: anchorBal, latestDate, skipped: "already current" };
   }
 
   // Group by month, reconstruct closings from the anchor.
@@ -174,7 +245,7 @@ async function syncAccount(
       `${ymd(l.txnDate)}|${l.direction}|${Number(l.amount).toFixed(2)}|${l.description}`;
     await prisma.$transaction(async (tx) => {
       const oldLines = await tx.bankStatementLine.findMany({
-        where: { statement: { accountName, notes: FEED_NOTE } },
+        where: { statement: rebuildScope },
         select: {
           txnDate: true, amount: true, direction: true, description: true,
           category: true, classifiedBy: true, ruleName: true, isInterCo: true, outletId: true,
@@ -190,7 +261,7 @@ async function syncAccount(
         if (q) q.push(l); else carry.set(k, [l]);
       }
 
-      await tx.bankStatement.deleteMany({ where: { accountName, notes: FEED_NOTE } });
+      await tx.bankStatement.deleteMany({ where: rebuildScope });
       for (let i = 0; i < plans.length; i++) {
         const s = plans[i];
         const isCurrent = i === plans.length - 1;
@@ -222,7 +293,7 @@ async function syncAccount(
       // this is a handful of updateMany calls, not one per line.
       if (carry.size) {
         const fresh = await tx.bankStatementLine.findMany({
-          where: { statement: { accountName, notes: FEED_NOTE } },
+          where: { statement: rebuildScope },
           select: { id: true, txnDate: true, amount: true, direction: true, description: true },
           orderBy: [{ txnDate: "asc" }, { id: "asc" }],
         });
@@ -260,7 +331,7 @@ async function syncAccount(
   };
 }
 
-export async function syncBukkuFeedLedger(opts: { commit?: boolean } = {}): Promise<{
+export async function syncBukkuFeedLedger(opts: { commit?: boolean; budgetMs?: number } = {}): Promise<{
   commit: boolean;
   accounts: FeedSyncAccountResult[];
 }> {
@@ -268,6 +339,9 @@ export async function syncBukkuFeedLedger(opts: { commit?: boolean } = {}): Prom
   const admin = await prisma.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } });
   if (!admin) throw new Error("syncBukkuFeedLedger: no ADMIN user for uploadedById");
 
+  // Stop starting new accounts once the budget is spent, so the cron returns
+  // (and escalates) instead of Vercel killing it mid-account with no trace.
+  const deadline = Date.now() + (opts.budgetMs ?? Infinity);
   const results: FeedSyncAccountResult[] = [];
   for (const creds of await bukkuCompanies()) {
     let feeds;
@@ -285,7 +359,26 @@ export async function syncBukkuFeedLedger(opts: { commit?: boolean } = {}): Prom
       if (!feed.is_linked) continue;
       for (const fa of feed.accounts ?? []) {
         if (!fa.linked_account_id) continue;
-        results.push(await syncAccount(creds, feed.id, fa.linked_account_id, fa.ext_number, admin.id, commit));
+        if (Date.now() > deadline) {
+          results.push({
+            subdomain: creds.subdomain, accountTail: (fa.ext_number || "").replace(/\D/g, "").slice(-4),
+            accountName: null, anchorDate: null, anchorBalance: null, newLines: 0, latestDate: null,
+            endingBalance: null, statements: 0, committed: false, skipped: "time budget exhausted — retried next run",
+          });
+          continue;
+        }
+        // One account's failure must not starve the accounts after it — an
+        // uncaught throw here froze every feed from that point on.
+        try {
+          results.push(await syncAccount(creds, feed.id, fa.linked_account_id, fa.ext_number, admin.id, commit));
+        } catch (e) {
+          console.error(`[bukku-feed-sync] ${creds.subdomain} …${fa.ext_number}`, e);
+          results.push({
+            subdomain: creds.subdomain, accountTail: (fa.ext_number || "").replace(/\D/g, "").slice(-4),
+            accountName: null, anchorDate: null, anchorBalance: null, newLines: 0, latestDate: null,
+            endingBalance: null, statements: 0, committed: false, skipped: `sync error: ${(e as Error).message}`,
+          });
+        }
       }
     }
   }

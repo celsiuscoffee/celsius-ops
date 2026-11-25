@@ -96,9 +96,9 @@ export function DateRangePicker({
                   onClick={() => pickDay(ds)}
                   onMouseEnter={() => pending && setHover(ds)}
                   className={`py-1 text-xs tabular-nums rounded transition-colors ${
-                    isEdge ? "bg-terracotta text-white font-semibold"
-                    : inRange ? "bg-terracotta/15 text-foreground"
-                    : "hover:bg-muted/60"} ${isToday && !isEdge ? "ring-1 ring-terracotta/40" : ""}`}>
+                    isEdge ? "bg-ink text-on-ink font-semibold"
+                    : inRange ? "bg-brand-soft text-foreground"
+                    : "hover:bg-muted/60"} ${isToday && !isEdge ? "ring-1 ring-brand/40" : ""}`}>
                   {day}
                 </button>
               );
@@ -106,7 +106,7 @@ export function DateRangePicker({
           </div>
           <div className="mt-2 flex items-center justify-between border-t pt-2 text-[11px]">
             <button type="button" onClick={() => { const t = today; onChange(t, t); setPending(null); setOpen(false); }}
-              className="text-terracotta hover:underline">Today</button>
+              className="text-brand-text hover:underline">Today</button>
             {pending
               ? <span className="text-muted-foreground">Pick the end date…</span>
               : <span className="text-muted-foreground tabular-nums">{start && end ? `${label(start)} → ${label(end)}` : ""}</span>}

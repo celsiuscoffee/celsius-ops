@@ -7,22 +7,17 @@ type Props = PropsWithChildren<{
   spacing?: "tight" | "default" | "loose";
 }>;
 
-// Labeled section with a small terracotta dot before the label,
-// the dot is the visual rhythm marker that quietly repeats across
-// the app.
+// A labelled group on a screen: the label in sentence case, quiet text-2.
 export function Section({ title, action, children, spacing = "default" }: Props) {
-  const top = spacing === "tight" ? "mt-5" : spacing === "loose" ? "mt-10" : "mt-7";
+  const top = spacing === "tight" ? "mt-4" : spacing === "loose" ? "mt-8" : "mt-6";
   return (
     <View className={top}>
       {title || action ? (
-        <View className="mb-3 flex-row items-center justify-between">
+        <View className="mb-2 min-h-6 flex-row items-center justify-between">
           {title ? (
-            <View className="flex-row items-center gap-2">
-              <View className="h-1.5 w-1.5 rounded-full bg-primary" />
-              <Text className="text-xs font-body-bold uppercase tracking-wider text-muted">
-                {title}
-              </Text>
-            </View>
+            <Text accessibilityRole="header" className="text-sm font-body-semi text-text-2">
+              {title}
+            </Text>
           ) : (
             <View />
           )}

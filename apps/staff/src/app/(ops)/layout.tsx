@@ -6,7 +6,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto h-full max-w-lg">
       <SessionWatchdog />
-      <main className="pb-24">
+      <main className="pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
         <RouteAccessGuard>{children}</RouteAccessGuard>
       </main>
       <BottomNav />

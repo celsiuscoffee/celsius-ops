@@ -36,7 +36,10 @@ export type InvoiceFlagCode =
   | "DUPLICATE_SUSPECT"
   // invoiceNumber/amount was edited AFTER money moved, by OWNER/ADMIN with a
   // reason. meta records who, what and why.
-  | "EDITED_AFTER_PAYMENT";
+  | "EDITED_AFTER_PAYMENT"
+  // A GRNI placeholder zeroed because the supplier's real bill was recorded
+  // as a separate invoice. meta.originalAmount keeps what it carried.
+  | "SUPERSEDED_PLACEHOLDER";
 
 export type InvoiceFlag = {
   code: InvoiceFlagCode;
@@ -62,6 +65,7 @@ const FLAG_LABEL: Record<InvoiceFlagCode, string> = {
   OVERPAID: "Paid more than the invoice amount",
   DUPLICATE_SUSPECT: "Probable duplicate invoice (recorded anyway)",
   EDITED_AFTER_PAYMENT: "Number/amount edited after payment",
+  SUPERSEDED_PLACEHOLDER: "Placeholder replaced by the supplier's invoice",
 };
 
 export function flagLabel(code: InvoiceFlagCode) {

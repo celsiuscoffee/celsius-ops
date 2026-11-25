@@ -49,18 +49,18 @@ export default function StaffSkillsOverviewPage() {
   }
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 px-4 pt-6 pb-10 md:px-8">
       <AuditNav />
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Staff Skills</h2>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h2 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Staff Skills</h2>
+        <p className="mt-0.5 text-sm text-text-2">
           Audited staff and their latest skill scores. Click a person to see improvement over time.
         </p>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
           <Input
             placeholder="Search staff or template…"
             value={search}
@@ -71,7 +71,7 @@ export default function StaffSkillsOverviewPage() {
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
-          className="rounded-md border border-gray-200 px-3 py-2 text-sm"
+          className="rounded-md border border-line px-3 py-2 text-sm"
         >
           <option value="ALL">All Roles</option>
           {allRoles.map((r) => (
@@ -82,16 +82,16 @@ export default function StaffSkillsOverviewPage() {
 
       {isLoading && (
         <div className="flex justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-terracotta" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand-text" />
         </div>
       )}
 
       {!isLoading && byPerson.size === 0 && (
         <Card>
           <CardContent className="py-12 text-center">
-            <Users className="mx-auto h-10 w-10 text-gray-300" />
-            <p className="mt-3 text-sm text-gray-500">No staff-skills audits yet</p>
-            <p className="mt-1 text-xs text-gray-400">
+            <Users className="mx-auto h-10 w-10 text-text-3" />
+            <p className="mt-3 text-sm text-text-2">No staff-skills audits yet</p>
+            <p className="mt-1 text-xs text-text-3">
               Create a STAFF audit template, then run the audit from the staff app.
             </p>
           </CardContent>
@@ -101,14 +101,14 @@ export default function StaffSkillsOverviewPage() {
       <div className="space-y-3">
         {Array.from(byPerson.values()).map(({ auditee, rows: personRows }) => (
           <Link key={auditee.id} href={`/ops/staff-skills/${auditee.id}`}>
-            <Card className="hover:border-terracotta/40 transition">
+            <Card className="hover:border-ink/40 transition">
               <CardContent className="p-4">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-terracotta/10 text-terracotta font-semibold">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-text font-semibold">
                     {auditee.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900">{auditee.name}</p>
+                    <p className="text-sm font-semibold text-text">{auditee.name}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       {personRows.map((r) => (
                         <Badge
@@ -126,7 +126,7 @@ export default function StaffSkillsOverviewPage() {
                       ))}
                     </div>
                   </div>
-                  <ChevronRight className="h-4 w-4 text-gray-300 shrink-0" />
+                  <ChevronRight className="h-4 w-4 text-text-3 shrink-0" />
                 </div>
               </CardContent>
             </Card>

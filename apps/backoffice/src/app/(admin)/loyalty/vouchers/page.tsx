@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { TicketPercent } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { KeyNumber } from "@/components/ui/key-number";
+import { summariseVouchers } from "@/lib/loyalty/vouchers-summary";
 
 interface IssuedVoucher {
   id: string;
@@ -35,68 +36,52 @@ export default function ActiveVouchersPage() {
     })();
   }, []);
 
+  const [now] = useState(() => Date.now());
+  const summary = useMemo(() => summariseVouchers(vouchers, now), [vouchers, now]);
+  const date = (iso: string) => new Date(iso).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" });
+  const label = (src: string | null) => (src ? src.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()) : "Other");
+
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <TicketPercent className="w-6 h-6" />
-          Vouchers Issued
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-          Per-customer voucher wallet — issued by Missions, Mystery Reward, Birthday treats, Referrals,
-          or manual grants. Includes active, used, and expired states.
-          <br />
-          <span className="text-xs text-muted-foreground/80">
-            Not the same as <strong>Points Redemptions</strong> (when a customer spends Points on a Points Shop reward — separate log).
-          </span>
-        </p>
+    <div className="px-4 pt-6 pb-10 md:px-8">
+      <h1 className="text-2xl font-semibold leading-[30px] tracking-[-0.01em] text-text">Rewards</h1>
+      <p className="mt-0.5 text-sm text-text-2">Vouchers handed to customers by missions, birthdays, referrals and grants: are they being used?</p>
+      <p className="mt-1 text-[12px] text-text-3">Points spent in the points shop are under Redemptions.</p>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber label="Active now" value={loading ? null : summary.active.count.toLocaleString()}
+          tone={summary.active.expiringSoon > 0 ? "warn" : undefined}
+          note={summary.active.expiringSoon > 0 ? <><b className="font-semibold text-text-2">{summary.active.expiringSoon}</b> expire in 7 days</> : "none expire this week"} />
+        <KeyNumber label="Used, issued in 30 days" value={loading ? null : summary.issued30.share == null ? "–" : `${Math.round(summary.issued30.share * 100)}%`}
+          note={<><b className="font-semibold text-text-2">{summary.issued30.used}</b> of {summary.issued30.count} issued</>} />
+        <KeyNumber label="Expired unused, 30 days" value={loading ? null : summary.wasted30.toLocaleString()}
+          tone={summary.wasted30 > 0 ? "warn" : undefined}
+          note={summary.wasted30 > 0 ? "customers never came back for these" : "none went to waste"} />
+        <KeyNumber word label="Top source, 30 days" value={loading ? null : summary.topSource ? label(summary.topSource.source) : "–"}
+          note={summary.topSource ? <><b className="font-semibold text-text-2">{summary.topSource.count}</b> {summary.topSource.count === 1 ? "voucher" : "vouchers"} issued</> : "nothing issued"} />
       </div>
 
-      {loading ? (
-        <div className="text-sm text-muted-foreground">Loading…</div>
-      ) : (
-        <div className="rounded-xl border bg-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="text-left px-4 py-3">Voucher</th>
-                <th className="text-left px-4 py-3">Member</th>
-                <th className="text-left px-4 py-3">Source</th>
-                <th className="text-left px-4 py-3">Status</th>
-                <th className="text-left px-4 py-3">Issued</th>
-                <th className="text-left px-4 py-3">Expires</th>
-                <th className="text-left px-4 py-3">Redeemed</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {vouchers.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">No vouchers issued yet.</td></tr>
-              ) : (
-                vouchers.map((v) => (
-                  <tr key={v.id} className="hover:bg-muted/20">
-                    <td className="px-4 py-3 font-medium">{v.title ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm">{v.member_name ?? <span className="text-muted-foreground italic">No name</span>}</div>
-                      <div className="text-xs text-muted-foreground">{v.member_phone ?? v.member_id.slice(0, 8) + "…"}</div>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground capitalize">{v.source_type ? v.source_type.replace(/_/g, " ") : "—"}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                        v.status === "active" ? "bg-emerald-500/10 text-emerald-500" :
-                        v.status === "used"   ? "bg-sky-500/10 text-sky-500" :
-                                                "bg-muted text-muted-foreground"
-                      }`}>{v.status}</span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(v.issued_at).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{v.expires_at ? new Date(v.expires_at).toLocaleDateString() : "—"}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{v.redeemed_at ? new Date(v.redeemed_at).toLocaleDateString() : "—"}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="mt-6 overflow-hidden rounded-card border border-line bg-surface">
+        <p className="border-b border-line px-4 py-3 text-sm font-semibold text-text">
+          {loading ? "Loading…" : `${vouchers.length.toLocaleString()} vouchers, newest first`}
+        </p>
+        {!loading && vouchers.length === 0 && <p className="px-4 py-12 text-center text-sm text-text-3">No vouchers issued yet.</p>}
+        {vouchers.map((v) => {
+          const used = v.status === "used" || !!v.redeemed_at;
+          const chip = used ? "bg-info-soft text-info-text" : v.status === "active" ? "bg-ok-soft text-ok-text" : "bg-sunken text-text-3";
+          return (
+            <div key={v.id} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-b-0">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-text">{v.title ?? "Voucher"} <span className="font-normal text-text-3">· {label(v.source_type)}</span></p>
+                <p className="mt-0.5 truncate text-[12px] text-text-3">
+                  {v.member_name ?? "No name"} · {v.member_phone ?? v.member_id.slice(0, 8) + "…"} · issued {date(v.issued_at)}
+                  {used && v.redeemed_at ? ` · used ${date(v.redeemed_at)}` : v.expires_at ? ` · expires ${date(v.expires_at)}` : ""}
+                </p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] ${chip}`}>{used ? "Used" : v.status === "active" ? "Active" : v.status.replace(/^\w/, (c) => c.toUpperCase())}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

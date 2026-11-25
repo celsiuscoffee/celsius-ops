@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Bot, Banknote, Loader2, CheckCircle2, FileText, CalendarDays, Download, FileSpreadsheet, Trash2, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { HrPageHeader } from "@/components/hr/page-header";
+import { KeyNumber } from "@/components/ui/key-number";
 
 type PayrollRun = {
   id: string;
@@ -80,6 +81,13 @@ export default function PayrollPage() {
   );
 
   const runs = data?.runs || [];
+  // Latest and previous run by period, for the key numbers. These only read
+  // totals the run list already shows; no pay is worked out here.
+  const byPeriod = [...runs].sort((a, b) => (b.period_year * 12 + b.period_month) - (a.period_year * 12 + a.period_month));
+  const latest = byPeriod[0];
+  const previous = byPeriod[1];
+  const waitingToConfirm = runs.filter((r) => r.status === "ai_computed").length;
+  const STATUS_WORD: Record<string, string> = { ai_computed: "Computed", confirmed: "Confirmed", paid: "Paid", draft: "Draft" };
 
   // Fetch-based download (not window.location) so the route can refuse with a
   // JSON 409 we can actually SHOW — the bank file omits staff with no bank
@@ -215,33 +223,47 @@ export default function PayrollPage() {
     }
   };
 
+  // Key numbers round to whole ringgit so they fit a phone; the run list keeps sen.
+  const rmWhole = (n: number) => `RM ${Math.round(Number(n || 0)).toLocaleString("en-MY")}`;
   const fmt = (n: number) => `RM ${Number(n || 0).toLocaleString("en-MY", { minimumFractionDigits: 2 })}`;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6 px-4 pt-6 pb-10 md:px-8">
       <HrPageHeader
-        title="Payroll (Monthly · Full-Timers)"
+        title="Payroll"
+        description="Monthly pay for full-time staff: which months are computed, confirmed and paid, and what each one cost."
         action={
           <Link
             href="/hr/payroll/weekly"
-            className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+            className="inline-flex h-10 items-center gap-1.5 rounded-ctl border border-line px-3 text-sm font-medium hover:bg-sunken"
           >
             <CalendarDays className="h-4 w-4" />
-            Weekly (Part-Timers)
+            Weekly pay (part-time)
           </Link>
         }
       />
 
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KeyNumber word label="Latest month" value={data ? (latest ? `${MONTHS[latest.period_month - 1]} ${latest.period_year}` : "None yet") : null}
+          note={latest ? (STATUS_WORD[latest.status] ?? latest.status.replace("_", " ")) : "no runs yet"} />
+        <KeyNumber label="Net pay, latest month" value={data ? (latest ? rmWhole(latest.total_net) : "–") : null}
+          note={latest ? <>gross <b className="font-semibold text-text-2">{rmWhole(latest.total_gross)}</b></> : "—"} />
+        <KeyNumber label="Cost to us, latest month" value={data ? (latest ? rmWhole(latest.total_employer_cost) : "–") : null}
+          note={previous ? <>{MONTHS[previous.period_month - 1]}: <b className="font-semibold text-text-2">{rmWhole(previous.total_employer_cost)}</b></> : "no month before to compare"} />
+        <KeyNumber label="Waiting to confirm" value={data ? String(waitingToConfirm) : null} tone={waitingToConfirm > 0 ? "warn" : undefined}
+          note={waitingToConfirm > 0 ? "computed, not confirmed yet" : "nothing waiting"} />
+      </div>
+
       {/* Compute Controls */}
-      <div className="rounded-xl border bg-card p-5">
+      <div className="rounded-card border border-line bg-surface p-5">
         <h2 className="mb-4 flex items-center gap-2 font-semibold">
-          <Bot className="h-5 w-5 text-terracotta" />
-          AI Payroll Calculator
+          <Bot className="h-5 w-5 text-brand-text" />
+          Compute a month
         </h2>
         <div className="flex flex-wrap items-end gap-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">Month</span>
-            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="rounded-lg border bg-background px-3 py-2 text-sm">
+            <span className="mb-1 block text-xs font-medium text-text-2">Month</span>
+            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
               {/* A cycle that has not ended cannot be computed — basic salary
                   would compute in full against attendance that does not exist
                   yet. The API refuses it too; this stops it being picked. */}
@@ -256,8 +278,8 @@ export default function PayrollPage() {
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">Year</span>
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-lg border bg-background px-3 py-2 text-sm">
+            <span className="mb-1 block text-xs font-medium text-text-2">Year</span>
+            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm">
               <option value={2025}>2025</option>
               <option value={2026}>2026</option>
             </select>
@@ -265,21 +287,21 @@ export default function PayrollPage() {
           <button
             onClick={handleCompute}
             disabled={computing}
-            className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg border border-line px-4 py-2 text-sm font-medium hover:bg-sunken disabled:opacity-50"
           >
             {computing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-            Quick Compute
+            Quick compute
           </button>
           <Link
             href="/hr/payroll/run"
-            className="flex items-center gap-2 rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-white hover:bg-terracotta-dark"
+            className="flex items-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-on-ink hover:bg-ink-hover"
           >
-            <Bot className="h-4 w-4" /> Run Payroll
+            <Bot className="h-4 w-4" /> Run payroll
           </Link>
         </div>
         {result && (
-          <div className="mt-4 rounded-lg bg-muted/50 p-3 text-sm">
-            {result.notes.map((n, i) => <p key={i} className="text-muted-foreground">{n}</p>)}
+          <div className="mt-4 rounded-lg bg-sunken p-3 text-sm">
+            {result.notes.map((n, i) => <p key={i} className="text-text-2">{n}</p>)}
           </div>
         )}
       </div>
@@ -292,20 +314,20 @@ export default function PayrollPage() {
           const isViewing = viewRunId === run.id;
 
           return (
-            <div key={run.id} className="rounded-xl border bg-card shadow-sm">
-              <div className="flex items-center justify-between p-4">
+            <div key={run.id} className="rounded-card border border-line bg-surface">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-semibold">{MONTHS[run.period_month - 1]} {run.period_year}</p>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      isConfirmed ? "bg-green-100 text-green-700" :
-                      isComputed ? "bg-blue-100 text-blue-700" :
-                      "bg-gray-100 text-gray-600"
+                      isConfirmed ? "bg-ok-soft text-ok-text" :
+                      isComputed ? "bg-info-soft text-info-text" :
+                      "bg-sunken text-text-2"
                     }`}>
-                      {run.status.replace("_", " ")}
+                      {STATUS_WORD[run.status] ?? run.status.replace("_", " ")}
                     </span>
                   </div>
-                  <div className="mt-1 flex gap-4 text-sm text-muted-foreground">
+                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-[13px] text-text-2">
                     <span>Gross: {fmt(run.total_gross)}</span>
                     <span>Net: {fmt(run.total_net)}</span>
                     <span>Employer: {fmt(run.total_employer_cost)}</span>
@@ -314,7 +336,7 @@ export default function PayrollPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setViewRunId(isViewing ? null : run.id)}
-                    className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                    className="inline-flex h-9 items-center gap-1 rounded-ctl border border-line px-3 text-xs font-medium hover:bg-sunken"
                   >
                     <FileText className="inline h-3 w-3 mr-1" />{isViewing ? "Hide" : "Details"}
                   </button>
@@ -322,7 +344,7 @@ export default function PayrollPage() {
                     <button
                       onClick={() => handleConfirm(run.id)}
                       disabled={confirming === run.id}
-                      className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                      className="inline-flex h-9 items-center gap-1 rounded-ctl bg-ink px-3 text-xs font-medium text-on-ink hover:bg-ink-hover disabled:opacity-50"
                     >
                       {confirming === run.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                       Confirm
@@ -330,12 +352,12 @@ export default function PayrollPage() {
                   )}
                   {isConfirmed && (
                     <>
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      <CheckCircle2 className="h-5 w-5 text-ok-text" />
                       <button
                         onClick={() => handleRevert(run.id)}
                         disabled={reverting === run.id}
                         title="Revert to computed so the run can be recomputed (keeps the run)"
-                        className="flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
+                        className="inline-flex h-9 items-center gap-1 rounded-ctl border border-line px-3 text-xs font-medium hover:bg-sunken disabled:opacity-50"
                       >
                         {reverting === run.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Undo2 className="h-3 w-3" />}
                         Revert
@@ -349,7 +371,7 @@ export default function PayrollPage() {
                       onClick={() => handleDelete(run.id)}
                       disabled={deletingId === run.id}
                       title="Delete run"
-                      className="flex items-center rounded-lg border border-red-200 px-2 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-ctl border border-danger/30 text-xs font-medium text-danger-text hover:bg-danger-soft disabled:opacity-50"
                     >
                       {deletingId === run.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                     </button>
@@ -363,43 +385,43 @@ export default function PayrollPage() {
                   <div className="mb-3 flex flex-wrap gap-2">
                     <button
                       onClick={() => downloadFile(`/api/hr/payroll/payslip?run_id=${run.id}`)}
-                      className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-ctl border border-line px-3 text-xs font-medium hover:bg-sunken"
                     >
                       <FileText className="h-3 w-3" /> Payslips (all, PDF)
                     </button>
                     <button
                       onClick={() => downloadFile(`/api/hr/payroll/submission-files?run_id=${run.id}&type=maybank`)}
-                      className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-ctl border border-line px-3 text-xs font-medium hover:bg-sunken"
                     >
                       <Download className="h-3 w-3" /> Maybank M2u
                     </button>
                     <button
                       onClick={() => downloadFile(`/api/hr/payroll/submission-files?run_id=${run.id}&type=kwsp`)}
-                      className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-ctl border border-line px-3 text-xs font-medium hover:bg-sunken"
                     >
                       <FileSpreadsheet className="h-3 w-3" /> KWSP Form A
                     </button>
                     <button
                       onClick={() => downloadFile(`/api/hr/payroll/submission-files?run_id=${run.id}&type=perkeso`)}
-                      className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-ctl border border-line px-3 text-xs font-medium hover:bg-sunken"
                     >
                       <FileSpreadsheet className="h-3 w-3" /> PERKESO
                     </button>
                     <button
                       onClick={() => downloadFile(`/api/hr/payroll/submission-files?run_id=${run.id}&type=cp39`)}
-                      className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-ctl border border-line px-3 text-xs font-medium hover:bg-sunken"
                     >
                       <FileSpreadsheet className="h-3 w-3" /> CP39 (PCB)
                     </button>
                     <button
                       onClick={() => downloadFile(`/api/hr/payroll/submission-files?run_id=${run.id}&type=hrdf`)}
-                      className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-ctl border border-line px-3 text-xs font-medium hover:bg-sunken"
                     >
                       <FileSpreadsheet className="h-3 w-3" /> HRDF
                     </button>
                     <button
                       onClick={() => downloadFile(`/api/hr/payroll/submission-files?run_id=${run.id}&type=by_outlet`)}
-                      className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-ctl border border-line px-3 text-xs font-medium hover:bg-sunken"
                       title="Per-outlet cost (gross + employer contributions) with subtotals — what each outlet owes HQ"
                     >
                       <FileSpreadsheet className="h-3 w-3" /> By outlet (CSV)
@@ -408,7 +430,7 @@ export default function PayrollPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b text-left text-muted-foreground">
+                        <tr className="border-b text-left text-text-2">
                           <th className="pb-2 pr-3">Employee</th>
                           <th className="pb-2 pr-3 text-right">Basic</th>
                           <th className="pb-2 pr-3 text-right">OT</th>
@@ -451,7 +473,7 @@ export default function PayrollPage() {
                             <td className="py-2 pl-2">
                               <button
                                 onClick={() => downloadFile(`/api/hr/payroll/payslip?run_id=${run.id}&user_id=${item.user_id}`)}
-                                className="text-terracotta hover:underline text-xs"
+                                className="text-brand-text hover:underline text-xs"
                                 title="Download payslip PDF"
                               >
                                 PDF
@@ -466,17 +488,17 @@ export default function PayrollPage() {
               )}
 
               {run.ai_notes && !isViewing && (
-                <p className="border-t px-4 py-2 text-xs text-muted-foreground">{run.ai_notes}</p>
+                <p className="border-t px-4 py-2 text-xs text-text-2">{run.ai_notes}</p>
               )}
             </div>
           );
         })}
 
         {runs.length === 0 && (
-          <div className="rounded-xl border bg-card py-16 text-center">
-            <Banknote className="mx-auto mb-3 h-12 w-12 text-gray-300" />
-            <p className="text-lg font-semibold">No payroll runs yet</p>
-            <p className="text-sm text-muted-foreground">Use the AI calculator above to compute</p>
+          <div className="rounded-card border border-line bg-surface py-16 text-center">
+            <Banknote className="mx-auto mb-3 h-12 w-12 text-text-3" />
+            <p className="text-lg font-semibold text-text">No payroll runs yet</p>
+            <p className="text-sm text-text-2">Pick a month above and compute it.</p>
           </div>
         )}
       </div>

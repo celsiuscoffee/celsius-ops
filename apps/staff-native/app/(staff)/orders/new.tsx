@@ -25,7 +25,6 @@ import {
   Sparkles,
   X as XIcon,
 } from "lucide-react-native";
-import { useColorScheme } from "nativewind";
 import { Screen } from "../../../components/Screen";
 import { PageHeader } from "../../../components/PageHeader";
 import { Field, Pill, SkeletonList } from "../../../components/ui";
@@ -36,6 +35,7 @@ import {
   fetchAIDecisions,
   type PORecommendation,
 } from "../../../lib/ops/ai-decisions";
+import { useCelsius } from "../../../lib/celsius-ui";
 
 // Mirrors backoffice /api/inventory/suppliers/products. Each supplier
 // carries its own product list (with negotiated price + the supplier's
@@ -72,6 +72,7 @@ type CartLine = {
 };
 
 export default function NewPO() {
+  const C = useCelsius().color;
   const router = useRouter();
   const session = useStaff((s) => s.session);
   // Sending a PO to a supplier is manager-only, matches the gating in
@@ -81,8 +82,7 @@ export default function NewPO() {
     session?.role === "OWNER" ||
     session?.role === "ADMIN" ||
     session?.role === "MANAGER";
-  const { colorScheme } = useColorScheme();
-  const iconColor = colorScheme === "dark" ? "#FAFAFA" : "#160800";
+  const iconColor = C.text;
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -342,7 +342,7 @@ export default function NewPO() {
     return (
       <Screen edges={["top", "left", "right"]}>
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator color="#C2452D" />
+          <ActivityIndicator color={C["text-3"]} />
         </View>
       </Screen>
     );
@@ -367,7 +367,7 @@ export default function NewPO() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
                   <PageHeader
-            title="New PO"
+            title="New purchase order"
             subtitle={session?.outletName ?? "Your outlet"}
             back
           />
@@ -378,13 +378,13 @@ export default function NewPO() {
             <Pressable
               key={t}
               onPress={() => setTab(t)}
-              className={`rounded-full px-3 py-1.5 ${
-                tab === t ? "bg-primary" : "bg-primary-50"
+              className={`h-11 justify-center rounded-full px-4 ${
+                tab === t ? "bg-ink" : "bg-sunken"
               }`}
             >
               <Text
                 className={`text-xs font-body-bold capitalize ${
-                  tab === t ? "text-white" : "text-primary"
+                  tab === t ? "text-on-ink" : "text-text-2"
                 }`}
               >
                 {t === "smart" ? "Smart" : "Manual"}
@@ -398,7 +398,7 @@ export default function NewPO() {
             showsVerticalScrollIndicator={false}
             contentContainerClassName="pb-24"
           >
-            <Text className="mb-2 text-xs font-body text-muted-fg">
+            <Text className="mb-2 text-xs font-body text-text-2">
               AI-ranked restock recommendations based on current stock levels
               and recent usage. Tap to pre-fill the cart.{" "}
               {session?.outletId
@@ -408,22 +408,22 @@ export default function NewPO() {
             {aiLoading ? (
               <SkeletonList count={3} />
             ) : aiError ? (
-              <View className="rounded-3xl border border-dashed border-danger/40 bg-danger/5 px-4 py-8 items-center">
-                <Sparkles color="#B91C1C" size={28} />
-                <Text className="mt-2 text-sm font-body-bold text-danger">
+              <View className="rounded-2xl border border-dashed border-danger bg-danger-soft px-4 py-8 items-center">
+                <Sparkles color={C.danger} size={28} />
+                <Text className="mt-2 text-sm font-body-bold text-danger-text">
                   Couldn't load recommendations
                 </Text>
-                <Text className="mt-1 text-xs font-body text-muted-fg text-center">
+                <Text className="mt-1 text-xs font-body text-text-2 text-center">
                   {aiError}
                 </Text>
               </View>
             ) : aiRecs.length === 0 ? (
-              <View className="rounded-3xl border border-dashed border-border bg-surface px-4 py-8 items-center">
-                <Sparkles color="#C2452D" size={28} />
-                <Text className="mt-2 text-base font-body-bold text-espresso">
+              <View className="rounded-2xl border border-dashed border-line bg-surface px-4 py-8 items-center">
+                <Sparkles color={C["text-2"]} size={28} />
+                <Text className="mt-2 text-base font-body-bold text-text">
                   Nothing to restock right now
                 </Text>
-                <Text className="mt-1 text-xs font-body text-muted-fg text-center">
+                <Text className="mt-1 text-xs font-body text-text-2 text-center">
                   Stock is healthy{" "}
                   {session?.outletId
                     ? "at your outlet"
@@ -451,18 +451,18 @@ export default function NewPO() {
                     <Pressable
                       key={`${rec.supplierId}-${rec.outletId}`}
                       onPress={() => applyRecommendation(rec)}
-                      className="rounded-3xl border border-border bg-surface px-4 py-3.5 active:bg-primary-50"
+                      className="rounded-2xl border border-line bg-surface px-4 py-3.5 active:bg-sunken"
                     >
                       <View className="flex-row items-start justify-between gap-2">
                         <Text
-                          className="flex-1 text-base font-body-bold text-espresso"
+                          className="flex-1 text-base font-body-bold text-text"
                           numberOfLines={1}
                         >
                           {rec.supplierName}
                         </Text>
                         <Pill label={urgencyLabel} tone={urgencyTone} />
                       </View>
-                      <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                      <Text className="mt-0.5 text-xs font-body text-text-2">
                         {rec.items.length} item
                         {rec.items.length === 1 ? "" : "s"} ·{" "}
                         {rec.leadTimeDays > 0
@@ -470,10 +470,10 @@ export default function NewPO() {
                           : "lead unknown"}
                       </Text>
                       <View className="mt-2 flex-row items-center justify-between">
-                        <Text className="text-base font-body-bold text-espresso tabular-nums">
+                        <Text className="text-base font-body-bold text-text tabular-nums">
                           RM {Number(rec.totalAmount ?? 0).toFixed(2)}
                         </Text>
-                        <Text className="text-xs font-body-bold text-primary">
+                        <Text className="text-xs font-body-bold text-text">
                           Tap to apply →
                         </Text>
                       </View>
@@ -498,17 +498,17 @@ export default function NewPO() {
           <Field label="Supplier">
             <Pressable
               onPress={() => setSupplierPicker(true)}
-              className="h-14 flex-row items-center justify-between rounded-2xl border border-border bg-surface px-4 active:bg-primary-50"
+              className="h-14 flex-row items-center justify-between rounded-2xl border border-line bg-surface px-4 active:bg-sunken"
             >
               <Text
                 className={`flex-1 text-base font-body ${
-                  supplier ? "text-espresso" : "text-muted"
+                  supplier ? "text-text" : "text-text-3"
                 }`}
                 numberOfLines={1}
               >
                 {supplier?.name ?? "Select supplier"}
               </Text>
-              <ChevronDown color="#9CA3AF" size={20} />
+              <ChevronDown color={C["text-3"]} size={20} />
             </Pressable>
           </Field>
 
@@ -518,9 +518,9 @@ export default function NewPO() {
               value={deliveryDate}
               onChangeText={setDeliveryDate}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={C["text-3"]}
               autoCapitalize="none"
-              className="h-14 rounded-2xl border border-border bg-surface px-4 text-base font-body text-espresso"
+              className="h-14 rounded-2xl border border-line bg-surface px-4 text-base font-body text-text"
             />
           </Field>
 
@@ -532,28 +532,28 @@ export default function NewPO() {
               the catalog is stale. */}
           {!supplierId ? (
             <View
-              className="mt-5 flex-1 items-center justify-center rounded-3xl border border-dashed border-border bg-surface px-6 py-10 opacity-60"
+              className="mt-5 flex-1 items-center justify-center rounded-2xl border border-dashed border-line bg-surface px-6 py-10 opacity-60"
             >
-              <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary-50">
-                <PackageIcon color="#C2452D" size={28} />
+              <View className="h-16 w-16 items-center justify-center rounded-2xl bg-sunken">
+                <PackageIcon color={C["text-2"]} size={28} />
               </View>
-              <Text className="mt-3 text-base font-body-bold text-espresso">
+              <Text className="mt-3 text-base font-body-bold text-text">
                 Pick a supplier first
               </Text>
-              <Text className="mt-1 px-4 text-center text-xs font-body text-muted-fg">
+              <Text className="mt-1 px-4 text-center text-xs font-body text-text-2">
                 Their product catalog will appear here for one-tap
                 ordering.
               </Text>
             </View>
           ) : pickerSource.length === 0 ? (
-            <View className="mt-5 items-center rounded-3xl border border-dashed border-border bg-surface px-6 py-10">
-              <View className="h-16 w-16 items-center justify-center rounded-2xl bg-amber-50">
-                <PackageIcon color="#D97706" size={28} />
+            <View className="mt-5 items-center rounded-2xl border border-dashed border-line bg-surface px-6 py-10">
+              <View className="h-16 w-16 items-center justify-center rounded-2xl bg-warn-soft">
+                <PackageIcon color={C.warn} size={28} />
               </View>
-              <Text className="mt-3 text-base font-body-bold text-espresso">
+              <Text className="mt-3 text-base font-body-bold text-text">
                 No products linked
               </Text>
-              <Text className="mt-1 px-4 text-center text-xs font-body text-muted-fg">
+              <Text className="mt-1 px-4 text-center text-xs font-body text-text-2">
                 Add supplier-product mappings in backoffice → suppliers
                 first.
               </Text>
@@ -564,39 +564,39 @@ export default function NewPO() {
                   the supplier/date fields so the user always sees
                   what's in the cart while scrolling the catalog. */}
               <View className="mt-5 flex-row items-center justify-between">
-                <Text className="text-xs font-body-semi uppercase tracking-wider text-muted">
+                <Text className="text-sm font-body-semi text-text-2">
                   Items · {cart.length} of {pickerSource.length} selected
                 </Text>
                 {cart.length > 0 ? (
-                  <Text className="text-sm font-body-bold text-primary tabular-nums">
+                  <Text className="text-sm font-body-bold text-text tabular-nums">
                     RM {total.toFixed(2)}
                   </Text>
                 ) : null}
               </View>
 
               {/* Inline search */}
-              <View className="mt-2 flex-row items-center gap-2 rounded-2xl border border-border bg-surface px-3">
-                <Search color="#9CA3AF" size={18} />
+              <View className="mt-2 flex-row items-center gap-2 rounded-2xl border border-line bg-surface px-3">
+                <Search color={C["text-3"]} size={18} />
                 <TextInput
                   value={search}
                   onChangeText={setSearch}
                   placeholder={`Search ${pickerSource.length} products`}
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={C["text-3"]}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  className="h-12 flex-1 text-base font-body text-espresso"
+                  className="h-12 flex-1 text-base font-body text-text"
                 />
                 {search ? (
                   <Pressable onPress={() => setSearch("")} hitSlop={8}>
-                    <XIcon color="#9CA3AF" size={16} />
+                    <XIcon color={C["text-3"]} size={16} />
                   </Pressable>
                 ) : null}
               </View>
 
               <View className="mt-3 gap-2">
                 {filtered.length === 0 ? (
-                  <View className="rounded-2xl border border-dashed border-border bg-surface px-4 py-6 items-center">
-                    <Text className="text-sm font-body text-muted-fg">
+                  <View className="rounded-2xl border border-dashed border-line bg-surface px-4 py-6 items-center">
+                    <Text className="text-sm font-body text-text-2">
                       No products match "{search}".
                     </Text>
                   </View>
@@ -614,19 +614,19 @@ export default function NewPO() {
                         key={`${p.id}-${p.packageId ?? "base"}-${idx}`}
                         className={`rounded-2xl border px-4 py-3 ${
                           inCart
-                            ? "border-primary/40 bg-primary-50/50"
-                            : "border-border bg-surface"
+                            ? "border-line-2 bg-sunken"
+                            : "border-line bg-surface"
                         }`}
                       >
                         <View className="flex-row items-start justify-between gap-3">
                           <View className="flex-1">
                             <Text
-                              className="text-base font-body-bold text-espresso"
+                              className="text-base font-body-bold text-text"
                               numberOfLines={2}
                             >
                               {p.name}
                             </Text>
-                            <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                            <Text className="mt-0.5 text-xs font-body text-text-2">
                               {p.sku ? `${p.sku} · ` : ""}
                               {p.packageLabel}
                               {p.price > 0
@@ -638,32 +638,32 @@ export default function NewPO() {
                               [+] add button (large tap target); when
                               qty>0 we show the full [- N +] stepper. */}
                           {inCart ? (
-                            <View className="h-9 flex-row items-center rounded-full bg-surface border border-primary/30">
+                            <View className="h-9 flex-row items-center rounded-full bg-surface border border-line-2">
                               <Pressable
                                 onPress={() => setProductQty(p, qty - 1)}
                                 hitSlop={6}
-                                className="h-9 w-9 items-center justify-center rounded-full active:bg-primary-50"
+                                className="h-11 w-11 items-center justify-center rounded-full active:bg-sunken"
                               >
-                                <Minus color="#C2452D" size={16} />
+                                <Minus color={C["text-2"]} size={16} />
                               </Pressable>
-                              <Text className="min-w-7 text-center text-sm font-body-bold text-primary tabular-nums">
+                              <Text className="min-w-7 text-center text-sm font-body-bold text-text tabular-nums">
                                 {qty}
                               </Text>
                               <Pressable
                                 onPress={() => setProductQty(p, qty + 1)}
                                 hitSlop={6}
-                                className="h-9 w-9 items-center justify-center rounded-full active:bg-primary-50"
+                                className="h-11 w-11 items-center justify-center rounded-full active:bg-sunken"
                               >
-                                <Plus color="#C2452D" size={16} />
+                                <Plus color={C["text-2"]} size={16} />
                               </Pressable>
                             </View>
                           ) : (
                             <Pressable
                               onPress={() => setProductQty(p, 1)}
                               hitSlop={6}
-                              className="h-9 w-9 items-center justify-center rounded-full bg-primary active:opacity-90"
+                              className="h-11 w-11 items-center justify-center rounded-full bg-ink active:opacity-90"
                             >
-                              <Plus color="#FFFFFF" size={16} />
+                              <Plus color={C["on-ink"]} size={16} />
                             </Pressable>
                           )}
                         </View>
@@ -673,11 +673,11 @@ export default function NewPO() {
                         {inCart ? (
                           <View className="mt-3 flex-row items-center justify-between gap-3">
                             <View className="flex-1 flex-row items-center gap-2">
-                              <Text className="text-[10px] font-body-semi uppercase tracking-wide text-muted">
+                              <Text className="text-xs font-body-semi text-text-3">
                                 Price
                               </Text>
-                              <View className="flex-1 flex-row items-center rounded-xl border border-border bg-surface px-2">
-                                <Text className="text-xs font-body text-muted-fg">
+                              <View className="flex-1 flex-row items-center rounded-xl border border-line bg-surface px-2">
+                                <Text className="text-xs font-body text-text-2">
                                   RM
                                 </Text>
                                 <TextInput
@@ -689,12 +689,12 @@ export default function NewPO() {
                                   }
                                   keyboardType="decimal-pad"
                                   placeholder="0.00"
-                                  placeholderTextColor="#9CA3AF"
-                                  className="h-9 flex-1 px-1 text-base font-body-bold text-espresso text-right tabular-nums"
+                                  placeholderTextColor={C["text-3"]}
+                                  className="h-9 flex-1 px-1 text-base font-body-bold text-text text-right tabular-nums"
                                 />
                               </View>
                             </View>
-                            <Text className="text-base font-body-bold text-espresso tabular-nums">
+                            <Text className="text-base font-body-bold text-text tabular-nums">
                               RM {(Number(qty ?? 0) * Number(unitPrice ?? 0)).toFixed(2)}
                             </Text>
                           </View>
@@ -713,9 +713,9 @@ export default function NewPO() {
                     value={notes}
                     onChangeText={setNotes}
                     placeholder="e.g. urgent, needed by morning shift"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={C["text-3"]}
                     multiline
-                    className="min-h-14 rounded-2xl border border-border bg-surface px-4 py-3 text-base font-body text-espresso"
+                    className="min-h-14 rounded-2xl border border-line bg-surface px-4 py-3 text-base font-body text-text"
                   />
                 </Field>
               ) : null}
@@ -729,12 +729,12 @@ export default function NewPO() {
           <View
             style={{
               paddingBottom: 12,
-              shadowColor: "#160800",
+              shadowColor: C.text,
               shadowOffset: { width: 0, height: -4 },
               shadowOpacity: 0.06,
               shadowRadius: 12,
             }}
-            className="absolute inset-x-0 bottom-0 bg-background px-4 pt-3 pb-3"
+            className="absolute inset-x-0 bottom-0 bg-bg px-4 pt-3 pb-3"
           >
             <View className="flex-row gap-2">
               <Pressable
@@ -742,14 +742,14 @@ export default function NewPO() {
                 disabled={!canSubmit || !!submitting}
                 className={`h-14 flex-1 items-center justify-center rounded-2xl border ${
                   canSubmit && !submitting
-                    ? "border-primary active:bg-primary-50"
-                    : "border-border opacity-50"
+                    ? "border-ink active:bg-sunken"
+                    : "border-line opacity-50"
                 }`}
               >
                 {submitting === "draft" ? (
-                  <ActivityIndicator color="#C2452D" />
+                  <ActivityIndicator color={C["text-3"]} />
                 ) : (
-                  <Text className="text-sm font-body-bold text-primary">
+                  <Text className="text-sm font-body-bold text-text">
                     Save as draft
                   </Text>
                 )}
@@ -762,16 +762,16 @@ export default function NewPO() {
                   disabled={!canSubmit || !!submitting}
                   className={`h-14 flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl ${
                     canSubmit && !submitting
-                      ? "bg-primary active:opacity-90"
-                      : "bg-primary/40"
+                      ? "bg-ink active:opacity-90"
+                      : "bg-ink opacity-40"
                   }`}
                 >
                   {submitting === "send" ? (
-                    <ActivityIndicator color="#FFFFFF" />
+                    <ActivityIndicator color={C["on-ink"]} />
                   ) : (
                     <>
-                      <Send color="#FFFFFF" size={16} />
-                      <Text className="text-sm font-body-bold text-white">
+                      <Send color={C["on-ink"]} size={16} />
+                      <Text className="text-sm font-body-bold text-on-ink">
                         Send via WhatsApp
                       </Text>
                     </>
@@ -793,9 +793,9 @@ export default function NewPO() {
           setSupplierSearch("");
         }}
       >
-        <View className="flex-1 bg-background">
-          <View className="flex-row items-center justify-between border-b border-border px-5 py-4">
-            <Text className="text-base font-display text-espresso">
+        <View className="flex-1 bg-bg">
+          <View className="flex-row items-center justify-between border-b border-line px-5 py-4">
+            <Text className="text-base font-display text-text">
               Pick supplier
             </Text>
             <Pressable
@@ -803,7 +803,7 @@ export default function NewPO() {
                 setSupplierPicker(false);
                 setSupplierSearch("");
               }}
-              className="px-2 py-1"
+              className="min-h-11 justify-center px-3"
             >
               <XIcon color={iconColor} size={20} />
             </Pressable>
@@ -811,20 +811,20 @@ export default function NewPO() {
           {/* Search bar, name OR phone match. 40+ active suppliers
               makes scrolling painful without this. */}
           <View className="px-4 pt-3">
-            <View className="flex-row items-center gap-2 rounded-2xl border border-border bg-surface px-3">
-              <Search color="#9CA3AF" size={18} />
+            <View className="flex-row items-center gap-2 rounded-2xl border border-line bg-surface px-3">
+              <Search color={C["text-3"]} size={18} />
               <TextInput
                 value={supplierSearch}
                 onChangeText={setSupplierSearch}
                 placeholder="Search suppliers"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={C["text-3"]}
                 autoCapitalize="none"
                 autoCorrect={false}
-                className="h-12 flex-1 text-base font-body text-espresso"
+                className="h-12 flex-1 text-base font-body text-text"
               />
               {supplierSearch ? (
                 <Pressable onPress={() => setSupplierSearch("")} hitSlop={8}>
-                  <XIcon color="#9CA3AF" size={16} />
+                  <XIcon color={C["text-3"]} size={16} />
                 </Pressable>
               ) : null}
             </View>
@@ -846,12 +846,12 @@ export default function NewPO() {
               if (filteredSuppliers.length === 0) {
                 return (
                   <View className="mt-10 items-center px-6">
-                    <Text className="text-center text-base font-body-bold text-espresso">
+                    <Text className="text-center text-base font-body-bold text-text">
                       {q
                         ? "No suppliers match"
                         : "No active suppliers"}
                     </Text>
-                    <Text className="mt-1 text-center text-xs font-body text-muted-fg">
+                    <Text className="mt-1 text-center text-xs font-body text-text-2">
                       {q
                         ? "Try a different name or phone fragment."
                         : "Add suppliers in backoffice → suppliers first."}
@@ -871,26 +871,26 @@ export default function NewPO() {
                       setSupplierPicker(false);
                       setSupplierSearch("");
                     }}
-                    className={`flex-row items-center justify-between gap-3 rounded-2xl border px-4 py-3 active:bg-primary-50 ${
+                    className={`flex-row items-center justify-between gap-3 rounded-2xl border px-4 py-3 active:bg-sunken ${
                       isSelected
-                        ? "border-primary bg-primary-50"
-                        : "border-border bg-surface"
+                        ? "border-ink bg-sunken"
+                        : "border-line bg-surface"
                     } ${isEmpty ? "opacity-60" : ""}`}
                   >
                     <View className="flex-1">
                       <Text
-                        className="text-base font-body-bold text-espresso"
+                        className="text-base font-body-bold text-text"
                         numberOfLines={1}
                       >
                         {s.name}
                       </Text>
-                      <Text className="mt-0.5 text-xs font-body text-muted-fg">
+                      <Text className="mt-0.5 text-xs font-body text-text-2">
                         {count} item{count === 1 ? "" : "s"}
                         {s.phone ? ` · ${s.phone}` : ""}
                       </Text>
                     </View>
                     {isSelected ? (
-                      <Check color="#C2452D" size={20} />
+                      <Check color={C["text-2"]} size={20} />
                     ) : null}
                   </Pressable>
                 );

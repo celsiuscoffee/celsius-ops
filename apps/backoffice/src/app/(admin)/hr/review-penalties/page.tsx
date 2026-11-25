@@ -119,16 +119,16 @@ export default function ReviewPenaltiesPage() {
   };
 
   return (
-    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto px-4 pt-6 pb-10 md:px-8">
       <div className="mb-6">
         <HrPageHeader
-          title="Review Penalties"
-          description="Review 1–2★ Google reviews and attribute penalties to responsible staff."
+          title="Review penalties"
+          description="Google reviews of 1 or 2 stars, and which staff member each penalty is charged to."
           action={
             <button
               onClick={sync}
               disabled={syncing}
-              className="flex items-center gap-2 px-4 py-2 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 rounded bg-ink text-on-ink hover:bg-ink-hover disabled:opacity-50"
             >
               {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               Sync from GBP
@@ -142,7 +142,7 @@ export default function ReviewPenaltiesPage() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-2 capitalize border-b-2 ${tab === t ? "border-amber-600 font-semibold" : "border-transparent text-gray-600"}`}
+            className={`px-4 py-2 capitalize border-b-2 ${tab === t ? "border-text font-semibold text-text" : "border-transparent text-text-2"}`}
           >
             {t}
           </button>
@@ -152,41 +152,41 @@ export default function ReviewPenaltiesPage() {
       {isLoading && <div className="py-10 text-center"><Loader2 className="w-6 h-6 animate-spin inline" /></div>}
 
       {!isLoading && items.length === 0 && (
-        <div className="py-10 text-center text-gray-500">No {tab} review penalties.</div>
+        <div className="py-10 text-center text-text-2">No {tab} review penalties.</div>
       )}
 
       <div className="space-y-3">
         {items.map((rp) => (
-          <div key={rp.id} className="border rounded-lg p-4 bg-white">
+          <div key={rp.id} className="border border-line rounded-lg p-4 bg-surface">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="flex">
                     {Array.from({ length: 5 }).map((_, i) => (
-                      <Star key={i} className={`w-4 h-4 ${i < rp.rating ? "fill-amber-400 text-amber-400" : "text-gray-300"}`} />
+                      <Star key={i} className={`w-4 h-4 ${i < rp.rating ? "fill-warn text-warn-text" : "text-text-3"}`} />
                     ))}
                   </div>
                   <span className="font-medium">{rp.reviewer_name || "Anonymous"}</span>
-                  <span className="text-xs text-gray-500">• {rp.outletName}</span>
-                  <span className="text-xs text-gray-500">• {rp.review_date}</span>
+                  <span className="text-xs text-text-2">• {rp.outletName}</span>
+                  <span className="text-xs text-text-2">• {new Date(rp.review_date).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}</span>
                 </div>
                 {rp.review_text && (
-                  <p className="text-sm text-gray-700 mb-2 italic">&ldquo;{rp.review_text}&rdquo;</p>
+                  <p className="text-sm text-text-2 mb-2 italic">&ldquo;{rp.review_text}&rdquo;</p>
                 )}
                 {rp.status === "pending" && rp.suggestedAttribution.length > 0 && (
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-text-2">
                     {rp.suggestedAttribution[0]?.source === "schedule" ? "Scheduled that day" : "On shift at review time"}:{" "}
                     {rp.suggestedAttribution.map((s) => s.fullName || s.name).join(", ")}
                   </p>
                 )}
                 {rp.status === "applied" && (
-                  <p className="text-xs text-green-700">
+                  <p className="text-xs text-ok-text">
                     <CheckCircle2 className="w-3 h-3 inline mr-1" />
                     Applied RM{rp.penalty_amount} to: {rp.attributed.map((a) => a.fullName || a.name).join(", ")}
                   </p>
                 )}
                 {rp.status === "dismissed" && (
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-text-2">
                     <XCircle className="w-3 h-3 inline mr-1" />
                     Dismissed{rp.dismiss_reason ? `: ${rp.dismiss_reason}` : ""}
                   </p>
@@ -195,7 +195,7 @@ export default function ReviewPenaltiesPage() {
               {rp.status === "pending" && (
                 <button
                   onClick={() => openReview(rp)}
-                  className="px-3 py-1.5 rounded bg-amber-600 text-white text-sm hover:bg-amber-700"
+                  className="px-3 py-1.5 rounded bg-ink text-on-ink text-sm hover:bg-ink-hover"
                 >
                   Review
                 </button>
@@ -208,38 +208,38 @@ export default function ReviewPenaltiesPage() {
       {/* Review modal */}
       {reviewing && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-auto p-6">
+          <div className="bg-surface rounded-lg max-w-lg w-full max-h-[90vh] overflow-auto p-6">
             <div className="flex items-start justify-between mb-4">
-              <h2 className="text-lg font-bold">Review Penalty</h2>
-              <button onClick={() => setReviewing(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <h2 className="text-lg font-bold">Review penalty</h2>
+              <button onClick={() => setReviewing(null)} className="text-text-3 hover:text-text-2">✕</button>
             </div>
 
-            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded">
+            <div className="mb-4 p-3 bg-warn-soft border border-warn/30 rounded">
               <div className="flex items-center gap-2 mb-1">
-                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <AlertTriangle className="w-4 h-4 text-warn-text" />
                 <span className="font-medium">{reviewing.rating}★ review at {reviewing.outletName}</span>
               </div>
-              <p className="text-sm text-gray-700 italic">
+              <p className="text-sm text-text-2 italic">
                 {reviewing.review_text ? `"${reviewing.review_text}"` : "(no text)"}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {reviewing.reviewer_name || "Anonymous"} • {reviewing.review_date}
+              <p className="text-xs text-text-2 mt-1">
+                {reviewing.reviewer_name || "Anonymous"} • {new Date(reviewing.review_date).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}
               </p>
             </div>
 
             <div className="mb-4">
               <label className="block text-sm font-medium mb-1">Attribute to staff on shift that day:</label>
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs text-text-2 mb-2">
                 {reviewing.suggestedAttribution[0]?.source === "schedule"
                   ? "No attendance logs for that day — showing scheduled staff."
                   : "Staff who were clocked in at the moment this review was posted."}
               </p>
               {reviewing.suggestedAttribution.length === 0 ? (
-                <p className="text-sm text-gray-500">No staff on shift that day.</p>
+                <p className="text-sm text-text-2">No staff on shift that day.</p>
               ) : (
                 <div className="space-y-2">
                   {reviewing.suggestedAttribution.map((s) => (
-                    <label key={s.user_id} className="flex items-center gap-2 p-2 border rounded cursor-pointer hover:bg-gray-50">
+                    <label key={s.user_id} className="flex items-center gap-2 p-2 border border-line rounded cursor-pointer hover:bg-sunken">
                       <input
                         type="checkbox"
                         checked={selectedUsers.has(s.user_id)}
@@ -247,7 +247,7 @@ export default function ReviewPenaltiesPage() {
                       />
                       <span>{s.fullName || s.name}</span>
                       {s.source === "attendance" && (
-                        <span className="ml-auto text-[10px] text-green-700 bg-green-50 px-1.5 py-0.5 rounded">clocked in</span>
+                        <span className="ml-auto text-[10px] text-ok-text bg-ok-soft px-1.5 py-0.5 rounded">clocked in</span>
                       )}
                     </label>
                   ))}
@@ -261,11 +261,11 @@ export default function ReviewPenaltiesPage() {
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full border rounded px-3 py-2"
+                className="w-full border border-line rounded px-3 py-2"
                 min="0"
                 step="0.01"
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-text-2 mt-1">
                 Edit if splitting across staff (e.g. RM50 ÷ {selectedUsers.size || 1} = RM{((Number(amount) || 0) / Math.max(1, selectedUsers.size)).toFixed(2)} each — but penalty shown is per-staff.)
               </p>
             </div>
@@ -277,7 +277,7 @@ export default function ReviewPenaltiesPage() {
                 value={dismissReason}
                 onChange={(e) => setDismissReason(e.target.value)}
                 placeholder="e.g. Complaint was about product, not staff"
-                className="w-full border rounded px-3 py-2"
+                className="w-full border border-line rounded px-3 py-2"
               />
             </div>
 
@@ -285,14 +285,14 @@ export default function ReviewPenaltiesPage() {
               <button
                 onClick={dismiss}
                 disabled={busy}
-                className="px-4 py-2 rounded border text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="px-4 py-2 rounded border border-line text-text-2 hover:bg-sunken disabled:opacity-50"
               >
                 Dismiss
               </button>
               <button
                 onClick={apply}
                 disabled={busy || selectedUsers.size === 0}
-                className="px-4 py-2 rounded bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+                className="px-4 py-2 rounded bg-ink text-on-ink hover:bg-ink-hover disabled:opacity-50"
               >
                 {busy ? "Saving…" : `Apply to ${selectedUsers.size} staff`}
               </button>
