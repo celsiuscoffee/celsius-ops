@@ -17,8 +17,11 @@ current month.
   (2) That session also **committed the three per-outlet iPay88 MerchantKeys in
   plain text** (`.env.example`, `ntt-data/client.ts`, STATE.md) and pushed them;
   scrubbed from the tree but they remain in git history — owner to have NTT DATA
-  rotate them and set the new ones in Vercel `celsius-pickup-app` as
-  `IPAY88_MERCHANTS`. Never write merchant keys into the repo.
+  rotate them. Never write merchant keys into the repo.
+  **2026-11-26: `IPAY88_MERCHANTS` set in Vercel `celsius-pickup-app`**
+  (sensitive, production + preview) with the three current keys, owner's go.
+  Still missing: `IPAY88_PAYMENT_IDS` (card/FPX/Apple/Google/DuitNow codes must
+  come from NTT DATA) — without them every iPay88 method stays hidden.
   (3) Its conflict resolution (commit `8577a99`) **silently reverted #1262 and
   #1263 in `apps/pos-native`**; restored. The tree now equals the pristine PR head
   `6e7426d` merged with main (verified by tree hash). Lesson: after resolving a
