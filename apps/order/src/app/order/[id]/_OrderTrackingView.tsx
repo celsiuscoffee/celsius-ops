@@ -48,7 +48,10 @@ function rm(cents: number | null | undefined): string {
 // RM Direct-mode payment methods whose confirmation rides on a best-effort
 // webhook. Kept in sync with the same set in /api/cron/reconcile-pending and
 // /api/payments/poll so the on-screen backstop covers exactly those methods.
-const RM_METHODS = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card"]);
+// apple_pay / google_pay are hosted-checkout (iPay88) orders here: web
+// checkout stores Stripe wallet payments as "wallet", so a web order only
+// carries these ids when it was routed to iPay88.
+const RM_METHODS = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card", "apple_pay", "google_pay"]);
 
 // Horizontal 3-step pipeline matching apps/pickup-native/components
 // /OrderStepper.tsx. The final step reads "Ready / Pick up now" for

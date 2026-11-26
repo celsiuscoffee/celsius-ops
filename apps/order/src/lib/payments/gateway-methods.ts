@@ -1,4 +1,4 @@
-export type GatewayProvider = "stripe" | "revenue_monster";
+export type GatewayProvider = "stripe" | "revenue_monster" | "ipay88";
 
 export type GatewayMethod = {
   method_id: string;
@@ -41,15 +41,39 @@ export const DEFAULT_GATEWAY_METHODS: GatewayMethod[] = [
 export const METHOD_ORDER = ["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card", "apple_pay", "google_pay"];
 
 /**
- * Default provider→method sets (enabled methods only) for server-side
- * routing in `initiate`, derived from DEFAULT_GATEWAY_METHODS.
+ * Provider→method sets (enabled methods only) for server-side routing,
+ * from the payment_gateway_config rows — or DEFAULT_GATEWAY_METHODS when
+ * the table is empty.
  */
-export function defaultMethodSets(): { stripe: Set<string>; rm: Set<string> } {
-  const stripe = new Set<string>();
-  const rm = new Set<string>();
-  for (const m of DEFAULT_GATEWAY_METHODS) {
+export function methodSets(rows: GatewayMethod[] | null | undefined): {
+  stripe: Set<string>;
+  rm: Set<string>;
+  ipay88: Set<string>;
+} {
+  const sets = { stripe: new Set<string>(), rm: new Set<string>(), ipay88: new Set<string>() };
+  for (const m of rows && rows.length > 0 ? rows : DEFAULT_GATEWAY_METHODS) {
     if (!m.enabled) continue;
-    (m.provider === "stripe" ? stripe : rm).add(m.method_id);
+    if (m.provider === "stripe") sets.stripe.add(m.method_id);
+    else if (m.provider === "ipay88") sets.ipay88.add(m.method_id);
+    else sets.rm.add(m.method_id);
   }
-  return { stripe, rm };
+  return sets;
+}
+
+/** Default sets for server-side routing in `initiate`. */
+export function defaultMethodSets(): { stripe: Set<string>; rm: Set<string>; ipay88: Set<string> } {
+  return methodSets(null);
+}
+
+/**
+ * The provider value clients see. Released native builds (and the web
+ * checkout) only know "stripe" (open the Stripe sheet) and "revenue_monster"
+ * (call /api/payments/create and open the returned hosted-page URL), and
+ * treat anything else as Stripe. iPay88 is a hosted page reached through the
+ * same /api/payments/create call, so it is reported as "revenue_monster" —
+ * which lets every installed app pay through iPay88 without an app update.
+ * The real provider rides along in `gateway` for anything that needs it.
+ */
+export function clientProvider(p: GatewayProvider): "stripe" | "revenue_monster" {
+  return p === "stripe" ? "stripe" : "revenue_monster";
 }

@@ -8,7 +8,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { checkCronAuth } from "@celsius/shared";
-import { queryCheckoutStatus } from "@/lib/revenue-monster/client";
+import { queryOrderCheckout } from "@/lib/payments/checkout-query";
 import { markRmOrderPaid, markRmOrderFailed } from "@/lib/revenue-monster/order-status";
 
 // Runs every 15 minutes. Marks any "pending" order older than 10 minutes as "failed".
@@ -69,19 +69,28 @@ export async function GET(request: NextRequest) {
         return "failed";
       }
       try {
-        const r = await queryCheckoutStatus(o.payment_checkout_id);
+        const r = await queryOrderCheckout({
+          payment_checkout_id: o.payment_checkout_id,
+          store_id: o.store_id,
+          total: o.total,
+        });
+        const prefix = r.gateway === "ipay88" ? "ipay88" : "rm";
         if (r.status === "SUCCESS") {
           await markRmOrderPaid({ orderId: o.id }, r.transactionId);
           return "settled";
         }
-        if (r.status === "FAILED" || r.status === "EXPIRED" || r.status === "CANCELLED") {
-          await markRmOrderFailed({ orderId: o.id }, `rm_${r.status.toLowerCase()}`);
+        // UNPAID = iPay88 holds no paid record for this RefNo past the
+        // 60-min window — an abandoned checkout. A late success still
+        // settles via the signed callback or reconcile-failed (failed →
+        // paid is accepted), so this can't lose a payment.
+        if (r.status === "FAILED" || r.status === "EXPIRED" || r.status === "CANCELLED" || r.status === "UNPAID") {
+          await markRmOrderFailed({ orderId: o.id }, `${prefix}_${r.status.toLowerCase()}`);
           return "failed";
         }
         noteIfStuck(o);
         return "deferred"; // still pending/unknown at RM — retry next sweep
       } catch (e) {
-        console.warn(`[expire-orders] RM query failed for ${o.order_number}; deferring`, e);
+        console.warn(`[expire-orders] gateway query failed for ${o.order_number}; deferring`, e);
         noteIfStuck(o);
         return "deferred";
       }
@@ -127,7 +136,7 @@ export async function GET(request: NextRequest) {
           payment_checkout_id: o.payment_checkout_id,
         });
         Sentry.captureMessage(
-          `[stuck-pending] ${o.order_number} (${where}) ${amount} pending ${ageMin} min — gateway still answers PENDING; check the RM portal whether the customer was charged`,
+          `[stuck-pending] ${o.order_number} (${where}) ${amount} pending ${ageMin} min — gateway still answers PENDING; check the ${o.payment_checkout_id?.startsWith("ipay88:") ? "iPay88" : "RM"} portal whether the customer was charged`,
         );
       });
     }

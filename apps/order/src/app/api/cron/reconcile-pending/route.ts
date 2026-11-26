@@ -6,7 +6,7 @@ import Stripe from "stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { earnLoyaltyPoints, deductLoyaltyPoints } from "@/lib/loyalty/points";
 import { checkCronAuth } from "@celsius/shared";
-import { queryCheckoutStatus } from "@/lib/revenue-monster/client";
+import { isIpay88Checkout, queryOrderCheckout } from "@/lib/payments/checkout-query";
 import { markRmOrderPaid, markRmOrderFailed } from "@/lib/revenue-monster/order-status";
 
 // Finds "pending" orders between 45s and 55 minutes old and reconciles them
@@ -33,6 +33,7 @@ type OrderLite = {
   reward_id: string | null;
   payment_method: string | null;
   payment_checkout_id: string | null;
+  total: number | null;
 };
 
 const RM_METHODS = new Set(["fpx", "tng", "boost", "shopeepay", "grabpay", "duitnow", "card"]);
@@ -70,10 +71,10 @@ export async function GET(request: NextRequest) {
 }
 
 async function runReconcile(): Promise<NextResponse> {
+  // Stripe is optional: with it unconfigured (retired in favour of iPay88 /
+  // RM), Stripe-routed rows are counted unresolved instead of failing the
+  // whole sweep — which would also stop hosted-checkout orders settling.
   const stripe = getStripe();
-  if (!stripe) {
-    throw new Error("Stripe not configured");
-  }
 
   const supabase = getSupabaseAdmin();
   const now      = Date.now();
@@ -88,7 +89,7 @@ async function runReconcile(): Promise<NextResponse> {
   // skipped in the loop.
   const { data: pending, error } = await supabase
     .from("orders")
-    .select("id, order_number, status, store_id, loyalty_id, loyalty_points_earned, reward_id, payment_method, payment_checkout_id")
+    .select("id, order_number, status, store_id, loyalty_id, loyalty_points_earned, reward_id, payment_method, payment_checkout_id, total")
     .in("status", ["pending", "failed"])
     .lt("created_at", olderThan)
     .gt("created_at", youngerThan);
@@ -107,12 +108,24 @@ async function runReconcile(): Promise<NextResponse> {
       // order-page poll uses. Webhooks are best-effort on RM Direct
       // mode, so this catches the dropped-webhook case for any RM
       // method (TNG, FPX, Boost, ShopeePay, GrabPay, DuitNow, card).
-      if (order.payment_method && RM_METHODS.has(order.payment_method)) {
+      //
+      // iPay88-routed orders (payment_checkout_id "ipay88:<RefNo>", any
+      // method incl. Apple/Google Pay) take the same branch — the query
+      // dispatches to iPay88's Requery. UNPAID (no paid record yet) is left
+      // alone here; the customer may still be on iPay88's page.
+      if (
+        isIpay88Checkout(order.payment_checkout_id) ||
+        (order.payment_method && RM_METHODS.has(order.payment_method))
+      ) {
         if (!order.payment_checkout_id) {
           result.unresolved += 1;
           continue;
         }
-        const rm = await queryCheckoutStatus(order.payment_checkout_id);
+        const rm = await queryOrderCheckout({
+          payment_checkout_id: order.payment_checkout_id,
+          store_id: order.store_id,
+          total: order.total,
+        });
         if (rm.status === "SUCCESS") {
           const paid = await markRmOrderPaid({ orderId: order.id }, rm.transactionId);
           if (paid) result.advanced += 1;
@@ -121,7 +134,10 @@ async function runReconcile(): Promise<NextResponse> {
           // No-op for rows already failed (markRmOrderFailed is gated on
           // status='pending'); only counts a fresh pending → failed flip.
           if (order.status === "pending") {
-            await markRmOrderFailed({ orderId: order.id }, `rm_${rm.status.toLowerCase()}`);
+            await markRmOrderFailed(
+              { orderId: order.id },
+              `${rm.gateway === "ipay88" ? "ipay88" : "rm"}_${rm.status.toLowerCase()}`,
+            );
             result.failed += 1;
           }
         } else {
@@ -134,6 +150,11 @@ async function runReconcile(): Promise<NextResponse> {
       // declined first attempt while the customer can still retry the same
       // intent, so a late success can land on a row already flipped to
       // failed. Only the succeeded branch below may touch them.
+
+      if (!stripe) {
+        result.unresolved += 1;
+        continue;
+      }
 
       // Stripe indexes metadata for search within a few seconds of intent creation.
       const search = await stripe.paymentIntents.search({

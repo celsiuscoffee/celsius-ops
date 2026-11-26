@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { DEFAULT_GATEWAY_METHODS, METHOD_ORDER, type GatewayProvider } from "@/lib/payments/gateway-methods";
+import { DEFAULT_GATEWAY_METHODS, METHOD_ORDER, clientProvider, type GatewayProvider } from "@/lib/payments/gateway-methods";
+import { isIpay88Ready } from "@/lib/ipay88/client";
 
 /**
  * GET /api/payments/gateway-config
@@ -20,6 +21,11 @@ import { DEFAULT_GATEWAY_METHODS, METHOD_ORDER, type GatewayProvider } from "@/l
  *
  * The customer never sees the provider — the native app uses it internally
  * to decide whether to open the Stripe sheet or RM's hosted page.
+ *
+ * iPay88-routed methods are reported as provider "revenue_monster" (see
+ * clientProvider): installed apps only know stripe | revenue_monster, and the
+ * "revenue_monster" path — /api/payments/create + open the returned URL — is
+ * exactly how an iPay88 payment starts. `gateway` carries the real provider.
  *
  * Defaults (used only when the table is empty or the row is missing) match
  * the historical "Stripe handles cards + wallets, RM handles MY e-wallets"
@@ -61,6 +67,13 @@ export async function GET() {
 
   return NextResponse.json({
     paymentsEnabled,
-    methods: sorted,
+    methods: sorted.map((m) => ({
+      method_id: m.method_id,
+      // An iPay88 method with no PaymentId / merchant account would dead-end
+      // on iPay88's error page — show it as unavailable instead.
+      enabled: m.enabled && (m.provider !== "ipay88" || isIpay88Ready(m.method_id)),
+      provider: clientProvider(m.provider),
+      gateway: m.provider,
+    })),
   });
 }
