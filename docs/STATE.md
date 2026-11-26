@@ -11,7 +11,14 @@ current month.
 
 ## Verified facts
 
-- 2026-11-25 — **PR #1245 (iPay88) repaired; still a draft, NOT merged, nothing iPay88 on main.**
+- 2026-11-26 — **iPay88 MERGED (#1245, squash `7140036`), off by default.** pickup-native
+  OTA run #29 green and verified: "runtime 1.0.3 (channel production) confirmed",
+  i.e. it reached the in-field store binaries. Nothing routes to iPay88 until a
+  method is switched in backoffice Settings → Integrations; only tng/boost/
+  grabpay/shopeepay have PaymentIds. Next: owner switches ONE e-wallet at ONE
+  outlet, pays a small real order, confirms it settles to that outlet's Sdn Bhd;
+  then ship the parked finance handling (`eec28bf`) before payouts pile up.
+- 2026-11-25 — **PR #1245 (iPay88) repaired** (history of that repair below).
   (1) A 27 Oct session bolted on a fake "NTT Data" client (`lib/ntt-data`,
   invented `api.nttdata.my` endpoint) — NTT DATA eCommerce IS iPay88; removed.
   (2) That session also **committed the three per-outlet iPay88 MerchantKeys in
