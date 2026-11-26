@@ -20,8 +20,11 @@ current month.
   rotate them. Never write merchant keys into the repo.
   **2026-11-26: `IPAY88_MERCHANTS` set in Vercel `celsius-pickup-app`**
   (sensitive, production + preview) with the three current keys, owner's go.
-  Still missing: `IPAY88_PAYMENT_IDS` (card/FPX/Apple/Google/DuitNow codes must
-  come from NTT DATA) — without them every iPay88 method stays hidden.
+  `IPAY88_PAYMENT_IDS` set same day with the PUBLISHED e-wallet codes only
+  (tng 4538, boost 4210, grabpay 4523, shopeepay 4801 — owner's call, not yet
+  confirmed by NTT DATA; a wrong code = iPay88 rejects, never a false "paid").
+  Card/FPX/Apple/Google/DuitNow codes still to come from NTT DATA; those
+  methods stay hidden on iPay88 until added.
   (3) Its conflict resolution (commit `8577a99`) **silently reverted #1262 and
   #1263 in `apps/pos-native`**; restored. The tree now equals the pristine PR head
   `6e7426d` merged with main (verified by tree hash). Lesson: after resolving a
